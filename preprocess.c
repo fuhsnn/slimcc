@@ -784,7 +784,7 @@ static void read_line_marker(Token **rest, Token *tok) {
 
   if (tok->kind != TK_NUM || tok->ty->kind != TY_INT)
     error_tok(tok, "invalid line marker");
-  start->file->line_delta = tok->val - start->line_no;
+  start->file->line_delta = tok->val - start->line_no - 1;
 
   tok = tok->next;
   if (tok->kind == TK_EOF)
