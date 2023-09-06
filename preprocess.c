@@ -68,6 +68,7 @@ static HashMap macros;
 static CondIncl *cond_incl;
 static HashMap pragma_once;
 static int include_next_idx;
+static HashMap include_guards;
 
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
@@ -757,12 +758,20 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok) {
   if (hashmap_get(&pragma_once, path))
     return tok;
 
+  char *guard_name = hashmap_get(&include_guards, path);
+  if (guard_name && hashmap_get(&macros, guard_name))
+    return tok;
+
   Token *end = NULL;
   Token *start = tokenize_file(path, &end);
   if (!start)
     error_tok(filename_tok, "%s: cannot open file: %s", path, strerror(errno));
   if (!end)
     return tok;
+
+  if (is_hash(start) && equal(start->next, "ifndef") &&
+      start->next->next->kind == TK_IDENT && equal(end, "endif"))
+    start->next->guard_file = end->guard_file = path;
 
   end->next = tok;
   return start;
@@ -900,6 +909,13 @@ static Token *preprocess2(Token *tok) {
     if (equal(tok, "endif")) {
       if (!cond_incl)
         error_tok(start, "stray #endif");
+
+      if (tok->guard_file && tok->guard_file == cond_incl->tok->guard_file) {
+        Token *name_tok = cond_incl->tok->next;
+        char *guard_name = strndup(name_tok->loc, name_tok->len);
+        hashmap_put(&include_guards, tok->guard_file, guard_name);
+      }
+
       cond_incl = cond_incl->next;
       tok = skip_line(tok->next);
       continue;
