@@ -1592,4 +1592,5 @@ void codegen(Obj *prog, FILE *out) {
   assign_lvar_offsets(prog);
   emit_data(prog);
   emit_text(prog);
+  println("  .section  .note.GNU-stack,\"\",@progbits");
 }

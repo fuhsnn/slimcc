@@ -597,18 +597,9 @@ static char *find_libpath(void) {
 }
 
 static char *find_gcc_libpath(void) {
-  char *paths[] = {
-    "/usr/lib/gcc/x86_64-linux-gnu/*/crtbegin.o",
-    "/usr/lib/gcc/x86_64-pc-linux-gnu/*/crtbegin.o", // For Gentoo
-    "/usr/lib/gcc/x86_64-redhat-linux/*/crtbegin.o", // For Fedora
-  };
-
-  for (int i = 0; i < sizeof(paths) / sizeof(*paths); i++) {
-    char *path = find_file(paths[i]);
-    if (path)
-      return dirname(path);
-  }
-
+  char *path = find_file("/usr/lib*/gcc/x86_64*-linux*/*/crtbegin.o");
+  if (path)
+    return dirname(path);
   error("gcc library path is not found");
 }
 
