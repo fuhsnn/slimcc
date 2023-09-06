@@ -490,7 +490,7 @@ Token *tokenize_string_literal(Token *tok, Type *basety) {
 }
 
 // Tokenize a given string and returns new tokens.
-Token *tokenize(File *file) {
+Token *tokenize(File *file, Token **end) {
   current_file = file;
 
   char *p = file->contents;
@@ -634,7 +634,9 @@ Token *tokenize(File *file) {
     error_at(p, "invalid token");
   }
 
-  cur = cur->next = new_token(TK_EOF, p, p);
+  if (end && cur != &head)
+    *end = cur;
+  cur->next = new_token(TK_EOF, p, p);
   add_line_numbers(head.next);
   return head.next;
 }
@@ -778,7 +780,7 @@ static void convert_universal_chars(char *p) {
   *q = '\0';
 }
 
-Token *tokenize_file(char *path) {
+Token *tokenize_file(char *path, Token **end) {
   char *p = read_file(path);
   if (!p)
     return NULL;
@@ -804,5 +806,5 @@ Token *tokenize_file(char *path) {
   input_files[file_no + 1] = NULL;
   file_no++;
 
-  return tokenize(file);
+  return tokenize(file, end);
 }

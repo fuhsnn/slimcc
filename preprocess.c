@@ -219,7 +219,7 @@ static char *quote_string(char *str) {
 
 static Token *new_str_token(char *str, Token *tmpl) {
   char *buf = quote_string(str);
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf));
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
 }
 
 // Copy all tokens until the next newline, terminate them with
@@ -239,7 +239,7 @@ static Token *copy_line(Token **rest, Token *tok) {
 
 static Token *new_num_token(int val, Token *tmpl) {
   char *buf = format("%d\n", val);
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf));
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
 }
 
 static Token *read_const_expr(Token **rest, Token *tok) {
@@ -500,7 +500,7 @@ static Token *paste(Token *lhs, Token *rhs) {
   char *buf = format("%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
   // Tokenize the resulting string.
-  Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf));
+  Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf), NULL);
   if (tok->next->kind != TK_EOF)
     error_tok(lhs, "pasting forms '%s', an invalid token", buf);
   return tok;
@@ -757,11 +757,15 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok) {
   if (hashmap_get(&pragma_once, path))
     return tok;
 
-  Token *tok2 = tokenize_file(path);
-  if (!tok2)
+  Token *end = NULL;
+  Token *start = tokenize_file(path, &end);
+  if (!start)
     error_tok(filename_tok, "%s: cannot open file: %s", path, strerror(errno));
+  if (!end)
+    return tok;
 
-  return append(tok2, tok);
+  end->next = tok;
+  return start;
 }
 
 // Read #line arguments
@@ -939,7 +943,7 @@ static Token *preprocess2(Token *tok) {
 }
 
 void define_macro(char *name, char *buf) {
-  Token *tok = tokenize(new_file("<built-in>", 1, buf));
+  Token *tok = tokenize(new_file("<built-in>", 1, buf), NULL);
   add_macro(name, true, tok);
 }
 

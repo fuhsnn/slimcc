@@ -494,26 +494,16 @@ static void print_dependencies(void) {
   }
 }
 
-static Token *must_tokenize_file(char *path) {
-  Token *tok = tokenize_file(path);
+static Token *must_tokenize_file(char *path, Token **end) {
+  Token *tok = tokenize_file(path, end);
   if (!tok)
     error("%s: %s", path, strerror(errno));
   return tok;
 }
 
-static Token *append_tokens(Token *tok1, Token *tok2) {
-  if (!tok1 || tok1->kind == TK_EOF)
-    return tok2;
-
-  Token *t = tok1;
-  while (t->next->kind != TK_EOF)
-    t = t->next;
-  t->next = tok2;
-  return tok1;
-}
-
 static void cc1(void) {
-  Token *tok = NULL;
+  Token head = {0};
+  Token *cur = &head;
 
   // Process -include option
   for (int i = 0; i < opt_include.len; i++) {
@@ -528,14 +518,15 @@ static void cc1(void) {
         error("-include: %s: %s", incl, strerror(errno));
     }
 
-    Token *tok2 = must_tokenize_file(path);
-    tok = append_tokens(tok, tok2);
+    Token *end = NULL;
+    cur->next = must_tokenize_file(path, &end);
+    if (end)
+      cur = end;
   }
 
   // Tokenize and parse.
-  Token *tok2 = must_tokenize_file(base_file);
-  tok = append_tokens(tok, tok2);
-  tok = preprocess(tok);
+  cur->next = must_tokenize_file(base_file, NULL);
+  Token *tok = preprocess(head.next);
 
   // If -M or -MD are given, print file dependencies.
   if (opt_M || opt_MD) {
