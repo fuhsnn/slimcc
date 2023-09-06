@@ -5,6 +5,6 @@
 **/a.out
 /tmp*
 /thirdparty
-/chibicc
+/slimcc
 /test/*.exe
 /stage2

@@ -1,6 +1,6 @@
 // This is an implementation of the open-addressing hash table.
 
-#include "chibicc.h"
+#include "slimcc.h"
 
 // Initial hash bucket size
 #define INIT_SIZE 16

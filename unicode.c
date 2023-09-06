@@ -1,4 +1,4 @@
-#include "chibicc.h"
+#include "slimcc.h"
 
 // Encode a given character in UTF-8.
 int encode_utf8(char *buf, uint32_t c) {

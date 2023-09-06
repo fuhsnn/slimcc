@@ -1,4 +1,4 @@
-#include "chibicc.h"
+#include "slimcc.h"
 
 typedef enum {
   FILE_NONE, FILE_C, FILE_ASM, FILE_OBJ, FILE_AR, FILE_DSO,
@@ -35,7 +35,7 @@ static StringArray input_paths;
 static StringArray tmpfiles;
 
 static void usage(int status) {
-  fprintf(stderr, "chibicc [ -o <path> ] <file>\n");
+  fprintf(stderr, "slimcc [ -o <path> ] <file>\n");
   exit(status);
 }
 
@@ -51,7 +51,7 @@ static bool take_arg(char *arg) {
 }
 
 static void add_default_include_paths(char *argv0) {
-  // We expect that chibicc-specific include files are installed
+  // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
   strarray_push(&include_paths, format("%s/include", dirname(strdup(argv0))));
 
@@ -378,7 +378,7 @@ static void cleanup(void) {
 }
 
 static char *create_tmpfile(void) {
-  char *path = strdup("/tmp/chibicc-XXXXXX");
+  char *path = strdup("/tmp/slimcc-XXXXXX");
   int fd = mkstemp(path);
   if (fd == -1)
     error("mkstemp failed: %s", strerror(errno));

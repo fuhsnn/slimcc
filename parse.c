@@ -16,7 +16,7 @@
 // So it is very easy to lookahead arbitrary number of tokens in this
 // parser.
 
-#include "chibicc.h"
+#include "slimcc.h"
 
 // Scope for local variables, global variables, typedefs
 // or enum constants
