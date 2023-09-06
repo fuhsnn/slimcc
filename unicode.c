@@ -1,5 +1,13 @@
 #include "slimcc.h"
 
+static inline uint8_t mask(uint32_t bits) {
+  return (1 << bits) - 1;
+}
+
+static inline uint8_t mask2(uint32_t bits, uint32_t shift) {
+  return mask(bits) << shift;
+}
+
 // Encode a given character in UTF-8.
 int encode_utf8(char *buf, uint32_t c) {
   if (c <= 0x7F) {
@@ -8,22 +16,22 @@ int encode_utf8(char *buf, uint32_t c) {
   }
 
   if (c <= 0x7FF) {
-    buf[0] = 0b11000000 | (c >> 6);
-    buf[1] = 0b10000000 | (c & 0b00111111);
+    buf[0] = mask2(2, 6) | (c >> 6);
+    buf[1] = mask2(1, 7) | (c & mask(6));
     return 2;
   }
 
   if (c <= 0xFFFF) {
-    buf[0] = 0b11100000 | (c >> 12);
-    buf[1] = 0b10000000 | ((c >> 6) & 0b00111111);
-    buf[2] = 0b10000000 | (c & 0b00111111);
+    buf[0] = mask2(3, 5) | (c >> 12);
+    buf[1] = mask2(1, 7) | ((c >> 6) & mask(6));
+    buf[2] = mask2(1, 7) | (c & mask(6));
     return 3;
   }
 
-  buf[0] = 0b11110000 | (c >> 18);
-  buf[1] = 0b10000000 | ((c >> 12) & 0b00111111);
-  buf[2] = 0b10000000 | ((c >> 6) & 0b00111111);
-  buf[3] = 0b10000000 | (c & 0b00111111);
+  buf[0] = mask2(4, 4) | (c >> 18);
+  buf[1] = mask2(1, 7) | ((c >> 12) & mask(6));
+  buf[2] = mask2(1, 7) | ((c >> 6) & mask(6));
+  buf[3] = mask2(1, 7) | (c & mask(6));
   return 4;
 }
 
@@ -44,23 +52,23 @@ uint32_t decode_utf8(char **new_pos, char *p) {
   int len;
   uint32_t c;
 
-  if ((unsigned char)*p >= 0b11110000) {
+  if ((unsigned char)*p >= mask2(4, 4)) {
     len = 4;
-    c = *p & 0b111;
-  } else if ((unsigned char)*p >= 0b11100000) {
+    c = *p & mask(3);
+  } else if ((unsigned char)*p >= mask2(3, 5)) {
     len = 3;
-    c = *p & 0b1111;
-  } else if ((unsigned char)*p >= 0b11000000) {
+    c = *p & mask(4);
+  } else if ((unsigned char)*p >= mask2(2, 6)) {
     len = 2;
-    c = *p & 0b11111;
+    c = *p & mask(5);
   } else {
     error_at(start, "invalid UTF-8 sequence");
   }
 
   for (int i = 1; i < len; i++) {
-    if ((unsigned char)p[i] >> 6 != 0b10)
+    if ((unsigned char)p[i] >> 6 != mask2(1, 1))
       error_at(start, "invalid UTF-8 sequence");
-    c = (c << 6) | (p[i] & 0b111111);
+    c = (c << 6) | (p[i] & mask(6));
   }
 
   *new_pos = p + len;

@@ -38,7 +38,7 @@ static void rehash(HashMap *map) {
   assert(cap > 0);
 
   // Create a new hashmap and copy all key-values.
-  HashMap map2 = {};
+  HashMap map2 = {0};
   map2.buckets = calloc(cap, sizeof(HashEntry));
   map2.capacity = cap;
 

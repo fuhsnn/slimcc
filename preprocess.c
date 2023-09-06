@@ -59,7 +59,6 @@ struct CondIncl {
   bool included;
 };
 
-typedef struct Hideset Hideset;
 struct Hideset {
   Hideset *next;
   char *name;
@@ -109,7 +108,7 @@ static Hideset *new_hideset(char *name) {
 }
 
 static Hideset *hideset_union(Hideset *hs1, Hideset *hs2) {
-  Hideset head = {};
+  Hideset head = {0};
   Hideset *cur = &head;
 
   for (; hs1; hs1 = hs1->next)
@@ -126,7 +125,7 @@ static bool hideset_contains(Hideset *hs, char *s, int len) {
 }
 
 static Hideset *hideset_intersection(Hideset *hs1, Hideset *hs2) {
-  Hideset head = {};
+  Hideset head = {0};
   Hideset *cur = &head;
 
   for (; hs1; hs1 = hs1->next)
@@ -136,7 +135,7 @@ static Hideset *hideset_intersection(Hideset *hs1, Hideset *hs2) {
 }
 
 static Token *add_hideset(Token *tok, Hideset *hs) {
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   for (; tok; tok = tok->next) {
@@ -152,7 +151,7 @@ static Token *append(Token *tok1, Token *tok2) {
   if (tok1->kind == TK_EOF)
     return tok2;
 
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   for (; tok1->kind != TK_EOF; tok1 = tok1->next)
@@ -227,7 +226,7 @@ static Token *new_str_token(char *str, Token *tmpl) {
 // an EOF token and then returns them. This function is used to
 // create a new list of tokens for `#if` arguments.
 static Token *copy_line(Token **rest, Token *tok) {
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   for (; !tok->at_bol; tok = tok->next)
@@ -246,7 +245,7 @@ static Token *new_num_token(int val, Token *tmpl) {
 static Token *read_const_expr(Token **rest, Token *tok) {
   tok = copy_line(rest, tok);
 
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   while (tok->kind != TK_EOF) {
@@ -333,7 +332,7 @@ static Macro *add_macro(char *name, bool is_objlike, Token *body) {
 }
 
 static MacroParam *read_macro_params(Token **rest, Token *tok, char **va_args_name) {
-  MacroParam head = {};
+  MacroParam head = {0};
   MacroParam *cur = &head;
 
   while (!equal(tok, ")")) {
@@ -386,7 +385,7 @@ static void read_macro_definition(Token **rest, Token *tok) {
 }
 
 static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
   int level = 0;
 
@@ -421,7 +420,7 @@ read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name
   Token *start = tok;
   tok = tok->next->next;
 
-  MacroArg head = {};
+  MacroArg head = {0};
   MacroArg *cur = &head;
 
   MacroParam *pp = params;
@@ -516,7 +515,7 @@ static bool has_varargs(MacroArg *args) {
 
 // Replace func-like macro parameters with given arguments.
 static Token *subst(Token *tok, MacroArg *args) {
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   while (tok->kind != TK_EOF) {
@@ -837,7 +836,7 @@ static void read_line_marker(Token **rest, Token *tok) {
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
 static Token *preprocess2(Token *tok) {
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   while (tok->kind != TK_EOF) {

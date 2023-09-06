@@ -119,7 +119,7 @@ static void parse_args(int argc, char **argv) {
       if (!argv[++i])
         usage(1);
 
-  StringArray idirafter = {};
+  StringArray idirafter = {0};
 
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-###")) {
@@ -574,7 +574,7 @@ static void assemble(char *input, char *output) {
 
 static char *find_file(char *pattern) {
   char *path = NULL;
-  glob_t buf = {};
+  glob_t buf = {0};
   glob(pattern, 0, NULL, &buf);
   if (buf.gl_pathc > 0)
     path = strdup(buf.gl_pathv[buf.gl_pathc - 1]);
@@ -604,7 +604,7 @@ static char *find_gcc_libpath(void) {
 }
 
 static void run_linker(StringArray *inputs, char *output) {
-  StringArray arr = {};
+  StringArray arr = {0};
 
   strarray_push(&arr, "ld");
   strarray_push(&arr, "-o");
@@ -702,7 +702,7 @@ int main(int argc, char **argv) {
   if (input_paths.len > 1 && opt_o && (opt_c || opt_S | opt_E))
     error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
 
-  StringArray ld_args = {};
+  StringArray ld_args = {0};
 
   for (int i = 0; i < input_paths.len; i++) {
     char *input = input_paths.data[i];

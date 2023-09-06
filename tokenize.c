@@ -17,6 +17,7 @@ void error(char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
+  va_end(ap);
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -58,6 +59,7 @@ void error_at(char *loc, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   verror_at(current_file->name, current_file->contents, line_no, loc, fmt, ap);
+  va_end(ap);
   exit(1);
 }
 
@@ -65,6 +67,7 @@ void error_tok(Token *tok, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+  va_end(ap);
   exit(1);
 }
 
@@ -491,7 +494,7 @@ Token *tokenize(File *file) {
   current_file = file;
 
   char *p = file->contents;
-  Token head = {};
+  Token head = {0};
   Token *cur = &head;
 
   at_bol = true;
@@ -796,7 +799,7 @@ Token *tokenize_file(char *path) {
   File *file = new_file(path, file_no + 1, p);
 
   // Save the filename for assembler .file directive.
-  input_files = realloc(input_files, sizeof(char *) * (file_no + 2));
+  input_files = realloc(input_files, sizeof(File *) * (file_no + 2));
   input_files[file_no] = file;
   input_files[file_no + 1] = NULL;
   file_no++;
