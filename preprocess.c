@@ -418,14 +418,12 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
 
 static MacroArg *
 read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name) {
-  Token *start = tok;
   tok = tok->next->next;
 
   MacroArg head = {0};
   MacroArg *cur = &head;
 
-  MacroParam *pp = params;
-  for (; pp; pp = pp->next) {
+  for (MacroParam *pp = params; pp; pp = pp->next) {
     if (cur != &head)
       tok = skip(tok, ",");
     cur = cur->next = read_macro_arg_one(&tok, tok, false);
@@ -438,15 +436,13 @@ read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name
       arg = calloc(1, sizeof(MacroArg));
       arg->tok = new_eof(tok);
     } else {
-      if (pp != params)
+      if (params)
         tok = skip(tok, ",");
       arg = read_macro_arg_one(&tok, tok, true);
     }
     arg->name = va_args_name;;
     arg->is_va_args = true;
     cur = cur->next = arg;
-  } else if (pp) {
-    error_tok(start, "too many arguments");
   }
 
   skip(tok, ")");
