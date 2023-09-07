@@ -70,6 +70,7 @@ static HashMap include_guards;
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
+static Token *subst(Token *tok, MacroArg *args);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -432,10 +433,35 @@ static Token *expand_arg(MacroArg *arg) {
   return arg->expanded = head.next;
 }
 
-static MacroArg *find_arg(MacroArg *args, Token *tok) {
-  for (MacroArg *ap = args; ap; ap = ap->next)
-    if (tok->len == strlen(ap->name) && !strncmp(tok->loc, ap->name, tok->len))
+static MacroArg *find_arg(Token **rest, Token *tok, MacroArg *args) {
+  for (MacroArg *ap = args; ap; ap = ap->next) {
+    if (equal(tok, ap->name)) {
+      if (rest)
+        *rest = tok->next;
       return ap;
+    }
+  }
+
+  // __VA_OPT__(x) is treated like a parameter which expands to parameter-
+  // substituted (x) if macro-expanded __VA_ARGS__ is not empty.
+  if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
+    MacroArg *arg = read_macro_arg_one(&tok, tok->next->next, true);
+
+    MacroArg *va = NULL;
+    for (MacroArg *ap = args; ap; ap = ap->next)
+      if (ap->is_va_args)
+        va = ap;
+
+    if (va && expand_arg(va)->kind != TK_EOF)
+      arg->tok = subst(arg->tok, args);
+    else
+      arg->tok = new_eof(tok);
+
+    arg->expanded = arg->tok;
+    if (rest)
+      *rest = tok->next;
+    return arg;
+  }
   return NULL;
 }
 
@@ -491,27 +517,21 @@ static Token *paste(Token *lhs, Token *rhs) {
   return tok;
 }
 
-static bool has_varargs(MacroArg *args) {
-  for (MacroArg *ap = args; ap; ap = ap->next)
-    if (!strcmp(ap->name, "__VA_ARGS__"))
-      return ap->tok->kind != TK_EOF;
-  return false;
-}
-
 // Replace func-like macro parameters with given arguments.
 static Token *subst(Token *tok, MacroArg *args) {
   Token head = {0};
   Token *cur = &head;
 
   while (tok->kind != TK_EOF) {
+    Token *start = tok;
+
     // "#" followed by a parameter is replaced with stringized actuals.
     if (equal(tok, "#")) {
-      MacroArg *arg = find_arg(args, tok->next);
+      MacroArg *arg = find_arg(&tok, tok->next, args);
       if (!arg)
         error_tok(tok->next, "'#' is not followed by a macro parameter");
-      cur = cur->next = stringize(tok, arg->tok);
-      align_token(cur, tok);
-      tok = tok->next->next;
+      cur = cur->next = stringize(start, arg->tok);
+      align_token(cur, start);
       continue;
     }
 
@@ -519,7 +539,7 @@ static Token *subst(Token *tok, MacroArg *args) {
     // to the empty token list. Otherwise, its expaned to `,` and
     // __VA_ARGS__.
     if (equal(tok, ",") && equal(tok->next, "##")) {
-      MacroArg *arg = find_arg(args, tok->next->next);
+      MacroArg *arg = find_arg(NULL, tok->next->next, args);
       if (arg && arg->is_va_args) {
         if (arg->tok->kind == TK_EOF) {
           tok = tok->next->next->next;
@@ -538,68 +558,50 @@ static Token *subst(Token *tok, MacroArg *args) {
       if (tok->next->kind == TK_EOF)
         error_tok(tok, "'##' cannot appear at end of macro expansion");
 
-      MacroArg *arg = find_arg(args, tok->next);
+      MacroArg *arg = find_arg(&tok, tok->next, args);
       if (arg) {
-        if (arg->tok->kind != TK_EOF) {
-          *cur = *paste(cur, arg->tok);
-          for (Token *t = arg->tok->next; t->kind != TK_EOF; t = t->next)
-            cur = cur->next = copy_token(t);
-        }
-        tok = tok->next->next;
+        if (arg->tok->kind == TK_EOF)
+          continue;
+
+        *cur = *paste(cur, arg->tok);
+        for (Token *t = arg->tok->next; t->kind != TK_EOF; t = t->next)
+          cur = cur->next = copy_token(t);
         continue;
       }
-
       *cur = *paste(cur, tok->next);
       tok = tok->next->next;
       continue;
     }
 
-    MacroArg *arg = find_arg(args, tok);
-
-    if (arg && equal(tok->next, "##")) {
-      Token *rhs = tok->next->next;
-
+    MacroArg *arg = find_arg(&tok, tok, args);
+    if (arg && equal(tok, "##")) {
       if (arg->tok->kind == TK_EOF) {
-        MacroArg *arg2 = find_arg(args, rhs);
+        MacroArg *arg2 = find_arg(&tok, tok->next, args);
         if (arg2) {
           for (Token *t = arg2->tok; t->kind != TK_EOF; t = t->next)
             cur = cur->next = copy_token(t);
-        } else {
-          cur = cur->next = copy_token(rhs);
+          continue;
         }
-        tok = rhs->next;
+        cur = cur->next = copy_token(tok->next);
+        tok = tok->next->next;
         continue;
       }
-
       for (Token *t = arg->tok; t->kind != TK_EOF; t = t->next)
         cur = cur->next = copy_token(t);
-      tok = tok->next;
       continue;
     }
 
-    // If __VA_ARG__ is empty, __VA_OPT__(x) is expanded to the
-    // empty token list. Otherwise, __VA_OPT__(x) is expanded to x.
-    if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
-      MacroArg *arg = read_macro_arg_one(&tok, tok->next->next, true);
-      if (has_varargs(args))
-        for (Token *t = arg->tok; t->kind != TK_EOF; t = t->next)
-          cur = cur->next = t;
-      tok = skip(tok, ")");
-      continue;
-    }
-
-    // Handle a macro token. Macro arguments are completely macro-expanded
+    // Handle a parameter token. Macro arguments are completely macro-expanded
     // before they are substituted into a macro body.
     if (arg) {
       Token *t = expand_arg(arg);
-      align_token(t, tok);
+      align_token(t, start);
       for (; t->kind != TK_EOF; t = t->next)
         cur = cur->next = copy_token(t);
-      tok = tok->next;
       continue;
     }
 
-    // Handle a non-macro token.
+    // Handle a non-parameter token.
     cur = cur->next = copy_token(tok);
     tok = tok->next;
     continue;
