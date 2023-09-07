@@ -112,20 +112,6 @@ static void pop_macro_lock(Token *tok) {
   }
 }
 
-// Append tok2 to the end of tok1.
-static Token *append(Token *tok1, Token *tok2) {
-  if (tok1->kind == TK_EOF)
-    return tok2;
-
-  Token head = {0};
-  Token *cur = &head;
-
-  for (; tok1->kind != TK_EOF; tok1 = tok1->next)
-    cur = cur->next = copy_token(tok1);
-  cur->next = tok2;
-  return head.next;
-}
-
 static Token *skip_cond_incl2(Token *tok) {
   while (tok->kind != TK_EOF) {
     if (is_hash(tok) &&
@@ -601,6 +587,38 @@ static Token *subst(Token *tok, MacroArg *args) {
   return head.next;
 }
 
+static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
+  Token head = {0};
+  Token *cur = &head;
+
+  for (; tok->kind != TK_EOF; tok = tok->next) {
+    if (equal(tok, "##")) {
+      if (cur == &head || tok->next->kind == TK_EOF)
+        error_tok(tok, "'##' cannot appear at either end of macro expansion");
+
+      tok = tok->next;
+      *cur = *paste(cur, tok);
+    } else {
+      cur = cur->next = copy_token(tok);
+    }
+    cur->origin = orig;
+  }
+  cur->next = tok2;
+  return head.next;
+}
+
+static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
+  Token head = {0};
+  Token *cur = &head;
+
+  for (; tok->kind != TK_EOF; tok = tok->next) {
+    cur = cur->next = tok;
+    cur->origin = orig;
+  }
+  cur->next = tok2;
+  return head.next;
+}
+
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
 static bool expand_macro(Token **rest, Token * tok) {
@@ -635,16 +653,12 @@ static bool expand_macro(Token **rest, Token * tok) {
   Token *body;
   if (m->is_objlike) {
     stop_tok = tok->next;
-    body = m->body;
+    *rest = insert_objlike(m->body, stop_tok, tok);
   } else {
     MacroArg *args = read_macro_args(&stop_tok, tok, m->params, m->va_args_name);
     body = subst(m->body, args);
+    *rest = insert_funclike(body, stop_tok, tok);
   }
-
-  for (Token *t = body; t->kind != TK_EOF; t = t->next)
-    t->origin = tok;
-
-  *rest = append(body, stop_tok);
 
   if (*rest != stop_tok) {
     push_macro_lock(m, stop_tok);
