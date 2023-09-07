@@ -435,7 +435,7 @@ static char *join_tokens(Token *tok, Token *end) {
   // Compute the length of the resulting token.
   int len = 1;
   for (Token *t = tok; t != end && t->kind != TK_EOF; t = t->next) {
-    if (t != tok && t->has_space)
+    if ((t->has_space || t->at_bol) && len != 1)
       len++;
     len += t->len;
   }
@@ -445,7 +445,7 @@ static char *join_tokens(Token *tok, Token *end) {
   // Copy token texts.
   int pos = 0;
   for (Token *t = tok; t != end && t->kind != TK_EOF; t = t->next) {
-    if (t != tok && t->has_space)
+    if ((t->has_space || t->at_bol) && pos != 0)
       buf[pos++] = ' ';
     strncpy(buf + pos, t->loc, t->len);
     pos += t->len;
@@ -464,6 +464,11 @@ static Token *stringize(Token *hash, Token *arg) {
   return new_str_token(s, hash);
 }
 
+static void align_token(Token *tok1, Token *tok2) {
+  tok1->at_bol = tok2->at_bol;
+  tok1->has_space = tok2->has_space;
+}
+
 // Concatenate two tokens to create a new token.
 static Token *paste(Token *lhs, Token *rhs) {
   // Paste the two tokens.
@@ -471,6 +476,7 @@ static Token *paste(Token *lhs, Token *rhs) {
 
   // Tokenize the resulting string.
   Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf), NULL);
+  align_token(tok, lhs);
   if (tok->next->kind != TK_EOF)
     error_tok(lhs, "pasting forms '%s', an invalid token", buf);
   return tok;
@@ -495,6 +501,7 @@ static Token *subst(Token *tok, MacroArg *args) {
       if (!arg)
         error_tok(tok->next, "'#' is not followed by a macro parameter");
       cur = cur->next = stringize(tok, arg->tok);
+      align_token(cur, tok);
       tok = tok->next->next;
       continue;
     }
@@ -613,6 +620,7 @@ static bool expand_macro(Token **rest, Token * tok) {
   if (m->handler) {
     *rest = m->handler(tok);
     (*rest)->next = tok->next;
+    align_token(*rest, tok);
     return true;
   }
 
@@ -638,11 +646,13 @@ static bool expand_macro(Token **rest, Token * tok) {
 
   *rest = append(body, stop_tok);
 
-  if (*rest != stop_tok)
+  if (*rest != stop_tok) {
     push_macro_lock(m, stop_tok);
-
-  (*rest)->at_bol = tok->at_bol;
-  (*rest)->has_space = tok->has_space;
+    align_token(*rest, tok);
+  } else if (!m->is_objlike) {
+    (*rest)->at_bol |= tok->at_bol;
+    (*rest)->has_space |= tok->has_space;
+  }
   return true;
 }
 
