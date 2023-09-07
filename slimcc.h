@@ -24,7 +24,6 @@ typedef struct Type Type;
 typedef struct Node Node;
 typedef struct Member Member;
 typedef struct Relocation Relocation;
-typedef struct Hideset Hideset;
 
 //
 // strings.c
@@ -82,7 +81,7 @@ struct Token {
   int line_delta;   // Line number
   bool at_bol;      // True if this token is at beginning of line
   bool has_space;   // True if this token follows a space character
-  Hideset *hideset; // For macro expansion
+  bool dont_expand; // True if a macro token is encountered during the macro's expansion
   Token *origin;    // If this is expanded from a macro, the original token
   char *guard_file; // The path of a potentially include-guarded file
 };

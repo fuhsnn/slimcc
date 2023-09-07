@@ -12,15 +12,8 @@
 // token T is expanded to U and then to T and the macro expansion
 // stops at that point.
 //
-// To achieve the above behavior, we attach for each token a set of
-// macro names from which the token is expanded. The set is called
-// "hideset". Hideset is initially empty, and every time we expand a
-// macro, the macro name is added to the resulting tokens' hidesets.
-//
-// The above macro expansion algorithm is explained in this document
-// written by Dave Prossor, which is used as a basis for the
-// standard's wording:
-// https://github.com/rui314/chibicc/wiki/cpp.algo.pdf
+// To achieve the above behavior, we lock an expanding macro until
+// the next token following its expansion ("stop_tok") is reached.
 
 #include "slimcc.h"
 
@@ -44,6 +37,9 @@ typedef struct Macro Macro;
 struct Macro {
   char *name;
   bool is_objlike; // Object-like or function-like
+  bool is_locked;
+  Token *stop_tok;
+  Macro *locked_next;
   MacroParam *params;
   char *va_args_name;
   Token *body;
@@ -59,10 +55,10 @@ struct CondIncl {
   bool included;
 };
 
-struct Hideset {
-  Hideset *next;
-  char *name;
-};
+// A linked list of locked macros. Since macro nesting happens in
+// LIFO fashion (inner expansions end first), we only need to check
+// the lastest one for unlocking.
+static Macro *locked_macros;
 
 static HashMap macros;
 static CondIncl *cond_incl;
@@ -102,49 +98,18 @@ static Token *new_eof(Token *tok) {
   return t;
 }
 
-static Hideset *new_hideset(char *name) {
-  Hideset *hs = calloc(1, sizeof(Hideset));
-  hs->name = name;
-  return hs;
+static void push_macro_lock(Macro *m, Token *tok) {
+  m->is_locked = true;
+  m->stop_tok = tok;
+  m->locked_next = locked_macros;
+  locked_macros = m;
 }
 
-static Hideset *hideset_union(Hideset *hs1, Hideset *hs2) {
-  Hideset head = {0};
-  Hideset *cur = &head;
-
-  for (; hs1; hs1 = hs1->next)
-    cur = cur->next = new_hideset(hs1->name);
-  cur->next = hs2;
-  return head.next;
-}
-
-static bool hideset_contains(Hideset *hs, char *s, int len) {
-  for (; hs; hs = hs->next)
-    if (strlen(hs->name) == len && !strncmp(hs->name, s, len))
-      return true;
-  return false;
-}
-
-static Hideset *hideset_intersection(Hideset *hs1, Hideset *hs2) {
-  Hideset head = {0};
-  Hideset *cur = &head;
-
-  for (; hs1; hs1 = hs1->next)
-    if (hideset_contains(hs2, hs1->name, strlen(hs1->name)))
-      cur = cur->next = new_hideset(hs1->name);
-  return head.next;
-}
-
-static Token *add_hideset(Token *tok, Hideset *hs) {
-  Token head = {0};
-  Token *cur = &head;
-
-  for (; tok; tok = tok->next) {
-    Token *t = copy_token(tok);
-    t->hideset = hideset_union(t->hideset, hs);
-    cur = cur->next = t;
+static void pop_macro_lock(Token *tok) {
+  while (locked_macros && locked_macros->stop_tok == tok) {
+    locked_macros->is_locked = false;
+    locked_macros = locked_macros->locked_next;
   }
-  return head.next;
 }
 
 // Append tok2 to the end of tok1.
@@ -391,6 +356,13 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   int level = 0;
 
   for (;;) {
+    pop_macro_lock(tok);
+    if (locked_macros && tok->kind == TK_IDENT) {
+      Macro *m = find_macro(tok);
+      if (m && m->is_locked)
+        tok->dont_expand = true;
+    }
+
     if (level == 0 && equal(tok, ")"))
       break;
     if (level == 0 && !read_rest && equal(tok, ","))
@@ -418,6 +390,8 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
 
 static MacroArg *
 read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name) {
+  pop_macro_lock(tok->next);
+  pop_macro_lock(tok->next->next);
   tok = tok->next->next;
 
   MacroArg head = {0};
@@ -445,8 +419,7 @@ read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name
     cur = cur->next = arg;
   }
 
-  skip(tok, ")");
-  *rest = tok;
+  *rest = skip(tok, ")");
   return head.next;
 }
 
@@ -623,13 +596,18 @@ static Token *subst(Token *tok, MacroArg *args) {
 
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
-static bool expand_macro(Token **rest, Token *tok) {
-  if (hideset_contains(tok->hideset, tok->loc, tok->len))
+static bool expand_macro(Token **rest, Token * tok) {
+  if (tok->dont_expand)
     return false;
 
   Macro *m = find_macro(tok);
   if (!m)
     return false;
+
+  if (m->is_locked) {
+    tok->dont_expand = true;
+    return false;
+  }
 
   // Built-in dynamic macro application such as __LINE__
   if (m->handler) {
@@ -638,43 +616,33 @@ static bool expand_macro(Token **rest, Token *tok) {
     return true;
   }
 
-  // Object-like macro application
-  if (m->is_objlike) {
-    Hideset *hs = hideset_union(tok->hideset, new_hideset(m->name));
-    Token *body = add_hideset(m->body, hs);
-    for (Token *t = body; t->kind != TK_EOF; t = t->next)
-      t->origin = tok;
-    *rest = append(body, tok->next);
-    (*rest)->at_bol = tok->at_bol;
-    (*rest)->has_space = tok->has_space;
-    return true;
-  }
-
   // If a funclike macro token is not followed by an argument list,
   // treat it as a normal identifier.
-  if (!equal(tok->next, "("))
+  if (!m->is_objlike && !equal(tok->next, "("))
     return false;
 
-  // Function-like macro application
-  Token *macro_token = tok;
-  MacroArg *args = read_macro_args(&tok, tok, m->params, m->va_args_name);
-  Token *rparen = tok;
+  // The token right after the macro. For funclike, after parentheses.
+  Token *stop_tok;
 
-  // Tokens that consist a func-like macro invocation may have different
-  // hidesets, and if that's the case, it's not clear what the hideset
-  // for the new tokens should be. We take the interesection of the
-  // macro token and the closing parenthesis and use it as a new hideset
-  // as explained in the Dave Prossor's algorithm.
-  Hideset *hs = hideset_intersection(macro_token->hideset, rparen->hideset);
-  hs = hideset_union(hs, new_hideset(m->name));
+  Token *body;
+  if (m->is_objlike) {
+    stop_tok = tok->next;
+    body = m->body;
+  } else {
+    MacroArg *args = read_macro_args(&stop_tok, tok, m->params, m->va_args_name);
+    body = subst(m->body, args);
+  }
 
-  Token *body = subst(m->body, args);
-  body = add_hideset(body, hs);
   for (Token *t = body; t->kind != TK_EOF; t = t->next)
-    t->origin = macro_token;
-  *rest = append(body, tok->next);
-  (*rest)->at_bol = macro_token->at_bol;
-  (*rest)->has_space = macro_token->has_space;
+    t->origin = tok;
+
+  *rest = append(body, stop_tok);
+
+  if (*rest != stop_tok)
+    push_macro_lock(m, stop_tok);
+
+  (*rest)->at_bol = tok->at_bol;
+  (*rest)->has_space = tok->has_space;
   return true;
 }
 
@@ -797,14 +765,14 @@ static void read_line_marker(Token **rest, Token *tok) {
 static Token *preprocess2(Token *tok) {
   Token head = {0};
   Token *cur = &head;
+  Macro *start_m = locked_macros;
 
-  while (tok->kind != TK_EOF) {
+  for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
     // If it is a macro, expand it.
     if (expand_macro(&tok, tok))
       continue;
 
-    // Pass through if it is not a "#".
-    if (!is_hash(tok)) {
+    if (!is_hash(tok) || locked_macros) {
       tok->line_delta = tok->file->line_delta;
       tok->filename = tok->file->display_name;
       cur = cur->next = tok;
@@ -950,6 +918,8 @@ static Token *preprocess2(Token *tok) {
 
     error_tok(tok, "invalid preprocessor directive");
   }
+
+  assert(start_m == locked_macros);
 
   cur->next = tok;
   return head.next;
