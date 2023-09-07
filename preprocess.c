@@ -29,6 +29,7 @@ struct MacroArg {
   char *name;
   bool is_va_args;
   Token *tok;
+  Token *expanded;
 };
 
 typedef Token *macro_handler_fn(Token *);
@@ -68,6 +69,7 @@ static HashMap include_guards;
 
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
+static bool expand_macro(Token **rest, Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -409,6 +411,27 @@ read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name
   return head.next;
 }
 
+static Token *expand_arg(MacroArg *arg) {
+  if (arg->expanded)
+    return arg->expanded;
+
+  Token *tok = arg->tok;
+  Token head = {0};
+  Token *cur = &head;
+  Macro *start_m = locked_macros;
+
+  for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
+    if (expand_macro(&tok, tok))
+      continue;
+
+    cur = cur->next = copy_token(tok);
+    tok = tok->next;
+  }
+  assert(start_m == locked_macros);
+  cur->next = new_eof(tok);
+  return arg->expanded = head.next;
+}
+
 static MacroArg *find_arg(MacroArg *args, Token *tok) {
   for (MacroArg *ap = args; ap; ap = ap->next)
     if (tok->len == strlen(ap->name) && !strncmp(tok->loc, ap->name, tok->len))
@@ -568,9 +591,8 @@ static Token *subst(Token *tok, MacroArg *args) {
     // Handle a macro token. Macro arguments are completely macro-expanded
     // before they are substituted into a macro body.
     if (arg) {
-      Token *t = preprocess2(arg->tok);
-      t->at_bol = tok->at_bol;
-      t->has_space = tok->has_space;
+      Token *t = expand_arg(arg);
+      align_token(t, tok);
       for (; t->kind != TK_EOF; t = t->next)
         cur = cur->next = copy_token(t);
       tok = tok->next;
