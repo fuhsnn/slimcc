@@ -1,12 +1,7 @@
 #include "slimcc.h"
 
-static inline uint8_t mask(uint32_t bits) {
-  return (1 << bits) - 1;
-}
-
-static inline uint8_t mask2(uint32_t bits, uint32_t shift) {
-  return mask(bits) << shift;
-}
+#define MASK(bits) (uint8_t)((1 << (bits)) - 1)
+#define MASK2(bits, shift) (uint8_t)(MASK(bits) << (shift))
 
 // Encode a given character in UTF-8.
 int encode_utf8(char *buf, uint32_t c) {
@@ -16,22 +11,22 @@ int encode_utf8(char *buf, uint32_t c) {
   }
 
   if (c <= 0x7FF) {
-    buf[0] = mask2(2, 6) | (c >> 6);
-    buf[1] = mask2(1, 7) | (c & mask(6));
+    buf[0] = MASK2(2, 6) | (c >> 6);
+    buf[1] = MASK2(1, 7) | (c & MASK(6));
     return 2;
   }
 
   if (c <= 0xFFFF) {
-    buf[0] = mask2(3, 5) | (c >> 12);
-    buf[1] = mask2(1, 7) | ((c >> 6) & mask(6));
-    buf[2] = mask2(1, 7) | (c & mask(6));
+    buf[0] = MASK2(3, 5) | (c >> 12);
+    buf[1] = MASK2(1, 7) | ((c >> 6) & MASK(6));
+    buf[2] = MASK2(1, 7) | (c & MASK(6));
     return 3;
   }
 
-  buf[0] = mask2(4, 4) | (c >> 18);
-  buf[1] = mask2(1, 7) | ((c >> 12) & mask(6));
-  buf[2] = mask2(1, 7) | ((c >> 6) & mask(6));
-  buf[3] = mask2(1, 7) | (c & mask(6));
+  buf[0] = MASK2(4, 4) | (c >> 18);
+  buf[1] = MASK2(1, 7) | ((c >> 12) & MASK(6));
+  buf[2] = MASK2(1, 7) | ((c >> 6) & MASK(6));
+  buf[3] = MASK2(1, 7) | (c & MASK(6));
   return 4;
 }
 
@@ -52,23 +47,23 @@ uint32_t decode_utf8(char **new_pos, char *p) {
   int len;
   uint32_t c;
 
-  if ((unsigned char)*p >= mask2(4, 4)) {
+  if ((unsigned char)*p >= MASK2(4, 4)) {
     len = 4;
-    c = *p & mask(3);
-  } else if ((unsigned char)*p >= mask2(3, 5)) {
+    c = *p & MASK(3);
+  } else if ((unsigned char)*p >= MASK2(3, 5)) {
     len = 3;
-    c = *p & mask(4);
-  } else if ((unsigned char)*p >= mask2(2, 6)) {
+    c = *p & MASK(4);
+  } else if ((unsigned char)*p >= MASK2(2, 6)) {
     len = 2;
-    c = *p & mask(5);
+    c = *p & MASK(5);
   } else {
     error_at(start, "invalid UTF-8 sequence");
   }
 
   for (int i = 1; i < len; i++) {
-    if ((unsigned char)p[i] >> 6 != mask2(1, 1))
+    if ((unsigned char)p[i] >> 6 != MASK2(1, 1))
       error_at(start, "invalid UTF-8 sequence");
-    c = (c << 6) | (p[i] & mask(6));
+    c = (c << 6) | (p[i] & MASK(6));
   }
 
   *new_pos = p + len;
