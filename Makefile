@@ -19,7 +19,7 @@ test/%.exe: slimcc test/%.c
 
 test: $(TESTS)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
-	test/driver.sh ./slimcc
+	sh test/driver.sh ./slimcc
 
 test-all: test test-stage2
 
@@ -39,7 +39,7 @@ stage2/test/%.exe: stage2/slimcc test/%.c
 
 test-stage2: $(TESTS:test/%=stage2/test/%)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
-	test/driver.sh ./stage2/slimcc
+	sh test/driver.sh ./stage2/slimcc
 
 # Misc.
 
