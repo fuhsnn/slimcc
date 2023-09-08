@@ -226,7 +226,7 @@ void add_type(Node *node) {
     node->ty = ty_int;
     return;
   case ND_FUNCALL:
-    node->ty = node->func_ty->return_ty;
+    assert(!!node->ty);
     return;
   case ND_NOT:
   case ND_LOGOR:

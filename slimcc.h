@@ -77,7 +77,6 @@ struct Token {
   char *str;        // String literal contents including terminating '\0'
 
   File *file;       // Source location
-  char *filename;   // Filename
   int line_no;      // Line number
   int line_delta;   // Line number
   bool at_bol;      // True if this token is at beginning of line
@@ -124,7 +123,6 @@ struct Obj {
   Obj *next;
   char *name;    // Variable name
   Type *ty;      // Type
-  Token *tok;    // representative token
   bool is_local; // local or global/function
   int align;     // alignment
 
@@ -247,7 +245,6 @@ struct Node {
   Member *member;
 
   // Function call
-  Type *func_ty;
   Node *args;
   bool pass_by_stack;
   Obj *ret_buffer;
@@ -272,10 +269,6 @@ struct Node {
   Node *cas_addr;
   Node *cas_old;
   Node *cas_new;
-
-  // Atomic op= operators
-  Obj *atomic_addr;
-  Node *atomic_expr;
 
   // Variable
   Obj *var;
@@ -357,7 +350,6 @@ struct Type {
 struct Member {
   Member *next;
   Type *ty;
-  Token *tok; // for error message
   Token *name;
   int idx;
   int align;

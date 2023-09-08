@@ -106,7 +106,6 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
   tok->loc = start;
   tok->len = end - start;
   tok->file = current_file;
-  tok->filename = current_file->display_name;
   tok->at_bol = at_bol;
   tok->has_space = has_space;
 

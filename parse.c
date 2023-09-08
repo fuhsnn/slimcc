@@ -53,9 +53,7 @@ typedef struct {
 // is a tree data structure.
 typedef struct Initializer Initializer;
 struct Initializer {
-  Initializer *next;
   Type *ty;
-  Token *tok;
   bool is_flexible;
 
   // If it's not an aggregate type and has an initializer,
@@ -833,7 +831,6 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
 
 static Node *new_alloca(Node *sz) {
   Node *node = new_unary(ND_FUNCALL, new_var_node(builtin_alloca, sz->tok), sz->tok);
-  node->func_ty = builtin_alloca->ty;
   node->ty = builtin_alloca->ty->return_ty;
   node->args = sz;
   add_type(sz);
@@ -2914,7 +2911,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   *rest = skip(tok, ")");
 
   Node *node = new_unary(ND_FUNCALL, fn, tok);
-  node->func_ty = ty;
   node->ty = ty->return_ty;
   node->args = head.next;
 

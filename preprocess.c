@@ -37,7 +37,6 @@ typedef Token *macro_handler_fn(Token *);
 
 typedef struct Macro Macro;
 struct Macro {
-  char *name;
   bool is_objlike; // Object-like or function-like
   bool is_locked;
   Token *stop_tok;
@@ -300,7 +299,6 @@ static Macro *find_macro(Token *tok) {
 
 static Macro *add_macro(char *name, bool is_objlike, Token *body) {
   Macro *m = calloc(1, sizeof(Macro));
-  m->name = name;
   m->is_objlike = is_objlike;
   m->body = body;
   hashmap_put(&macros, name, m);
@@ -844,7 +842,6 @@ static Token *preprocess2(Token *tok) {
 
     if (!is_hash(tok) || locked_macros) {
       tok->line_delta = tok->file->line_delta;
-      tok->filename = tok->file->display_name;
       cur = cur->next = tok;
       tok = tok->next;
       continue;
