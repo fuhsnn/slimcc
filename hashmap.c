@@ -89,12 +89,6 @@ static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
     if (match(ent, key, keylen))
       return ent;
 
-    if (ent->key == TOMBSTONE) {
-      ent->key = key;
-      ent->keylen = keylen;
-      return ent;
-    }
-
     if (ent->key == NULL) {
       ent->key = key;
       ent->keylen = keylen;
