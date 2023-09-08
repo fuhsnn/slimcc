@@ -410,7 +410,7 @@ read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name
         tok = skip(tok, ",");
       arg = read_macro_arg_one(&tok, tok, true);
     }
-    arg->name = va_args_name;;
+    arg->name = va_args_name;
     arg->is_va_args = true;
     cur = cur->next = arg;
   }
@@ -657,7 +657,7 @@ static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
 
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
-static bool expand_macro(Token **rest, Token * tok) {
+static bool expand_macro(Token **rest, Token *tok) {
   if (tok->dont_expand)
     return false;
 
@@ -686,13 +686,12 @@ static bool expand_macro(Token **rest, Token * tok) {
   // The token right after the macro. For funclike, after parentheses.
   Token *stop_tok;
 
-  Token *body;
   if (m->is_objlike) {
     stop_tok = tok->next;
     *rest = insert_objlike(m->body, stop_tok, tok);
   } else {
     MacroArg *args = read_macro_args(&stop_tok, tok, m->params, m->va_args_name);
-    body = subst(m->body, args);
+    Token *body = subst(m->body, args);
     *rest = insert_funclike(body, stop_tok, tok);
   }
 
