@@ -28,6 +28,7 @@ struct MacroArg {
   MacroArg *next;
   char *name;
   bool is_va_args;
+  bool omit_comma;
   Token *tok;
   Token *expanded;
 };
@@ -401,18 +402,15 @@ read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name
   }
 
   if (va_args_name) {
-    MacroArg *arg;
-    if (equal(tok, ")")) {
-      arg = calloc(1, sizeof(MacroArg));
-      arg->tok = new_eof(tok);
-    } else {
-      if (params)
-        tok = skip(tok, ",");
-      arg = read_macro_arg_one(&tok, tok, true);
-    }
+    Token *start = tok;
+    if (!equal(tok, ")") && params)
+      tok = skip(tok, ",");
+
+    MacroArg *arg = read_macro_arg_one(&tok, tok, true);
+    arg->omit_comma = equal(start, ")");
     arg->name = va_args_name;
     arg->is_va_args = true;
-    cur = cur->next = arg;
+    cur->next = arg;
   }
 
   *rest = skip(tok, ")");
@@ -546,18 +544,18 @@ static Token *subst(Token *tok, MacroArg *args) {
       continue;
     }
 
-    // [GNU] If __VA_ARG__ is empty, `,##__VA_ARGS__` is expanded
-    // to the empty token list. Otherwise, its expaned to `,` and
+    // [GNU] If __VA_ARGS__ is empty, `,##__VA_ARGS__` is expanded
+    // to an empty token list. Otherwise, it's expanded to `,` and
     // __VA_ARGS__.
     if (equal(tok, ",") && equal(tok->next, "##")) {
       MacroArg *arg = find_arg(NULL, tok->next->next, args);
       if (arg && arg->is_va_args) {
-        if (arg->tok->kind == TK_EOF) {
+        if (arg->omit_comma) {
           tok = tok->next->next->next;
-        } else {
-          cur = cur->next = copy_token(tok);
-          tok = tok->next->next;
+          continue;
         }
+        cur = cur->next = copy_token(tok);
+        tok = tok->next->next;
         continue;
       }
     }
