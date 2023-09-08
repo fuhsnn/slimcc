@@ -101,6 +101,13 @@ static Token *new_eof(Token *tok) {
   return t;
 }
 
+static Token *new_pmark(Token *tok){
+  Token *t = copy_token(tok);
+  t->kind = TK_PMARK;
+  t->len = 0;
+  return t;
+}
+
 static void push_macro_lock(Macro *m, Token *tok) {
   m->is_locked = true;
   m->stop_tok = tok;
@@ -470,6 +477,8 @@ static char *join_tokens(Token *tok, Token *end) {
   // Compute the length of the resulting token.
   int len = 1;
   for (Token *t = tok; t != end && t->kind != TK_EOF; t = t->next) {
+    if (t->kind == TK_PMARK)
+      continue;
     if ((t->has_space || t->at_bol) && len != 1)
       len++;
     len += t->len;
@@ -480,6 +489,8 @@ static char *join_tokens(Token *tok, Token *end) {
   // Copy token texts.
   int pos = 0;
   for (Token *t = tok; t != end && t->kind != TK_EOF; t = t->next) {
+    if (t->kind == TK_PMARK)
+      continue;
     if ((t->has_space || t->at_bol) && pos != 0)
       buf[pos++] = ' ';
     strncpy(buf + pos, t->loc, t->len);
@@ -558,12 +569,19 @@ static Token *subst(Token *tok, MacroArg *args) {
       if (tok->next->kind == TK_EOF)
         error_tok(tok, "'##' cannot appear at end of macro expansion");
 
+      if (cur->kind == TK_PMARK) {
+        tok = tok->next;
+        continue;
+      }
+
       MacroArg *arg = find_arg(&tok, tok->next, args);
       if (arg) {
         if (arg->tok->kind == TK_EOF)
           continue;
 
-        *cur = *paste(cur, arg->tok);
+        if (arg->tok->kind != TK_PMARK)
+          *cur = *paste(cur, arg->tok);
+
         for (Token *t = arg->tok->next; t->kind != TK_EOF; t = t->next)
           cur = cur->next = copy_token(t);
         continue;
@@ -574,27 +592,18 @@ static Token *subst(Token *tok, MacroArg *args) {
     }
 
     MacroArg *arg = find_arg(&tok, tok, args);
-    if (arg && equal(tok, "##")) {
-      if (arg->tok->kind == TK_EOF) {
-        MacroArg *arg2 = find_arg(&tok, tok->next, args);
-        if (arg2) {
-          for (Token *t = arg2->tok; t->kind != TK_EOF; t = t->next)
-            cur = cur->next = copy_token(t);
-          continue;
-        }
-        cur = cur->next = copy_token(tok->next);
-        tok = tok->next->next;
+    if (arg) {
+      Token *t;
+      if (equal(tok, "##"))
+        t = arg->tok;
+      else
+        t = expand_arg(arg);
+
+      if (t->kind == TK_EOF) {
+        cur = cur->next = new_pmark(t);
         continue;
       }
-      for (Token *t = arg->tok; t->kind != TK_EOF; t = t->next)
-        cur = cur->next = copy_token(t);
-      continue;
-    }
 
-    // Handle a parameter token. Macro arguments are completely macro-expanded
-    // before they are substituted into a macro body.
-    if (arg) {
-      Token *t = expand_arg(arg);
       align_token(t, start);
       for (; t->kind != TK_EOF; t = t->next)
         cur = cur->next = copy_token(t);
@@ -636,6 +645,9 @@ static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
   Token *cur = &head;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
+    if (tok->kind == TK_PMARK)
+      continue;
+
     cur = cur->next = tok;
     cur->origin = orig;
   }

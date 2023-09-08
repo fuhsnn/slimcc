@@ -50,6 +50,7 @@ typedef enum {
   TK_STR,     // String literals
   TK_NUM,     // Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
+  TK_PMARK,   // Placermarkers
   TK_EOF,     // End-of-file markers
 } TokenKind;
 
