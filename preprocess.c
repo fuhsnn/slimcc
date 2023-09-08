@@ -200,13 +200,26 @@ static Token *copy_line(Token **rest, Token *tok) {
   return head.next;
 }
 
+// Split tokens before the next newline into an EOF-terminated list.
+static Token *split_line(Token **rest, Token *tok) {
+  Token head = {.next = tok};
+  Token *cur = &head;
+
+  while (!cur->next->at_bol)
+    cur = cur->next;
+
+  *rest = cur->next;
+  cur->next = new_eof(tok);
+  return head.next;
+}
+
 static Token *new_num_token(int val, Token *tmpl) {
   char *buf = format("%d\n", val);
   return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
 }
 
 static Token *read_const_expr(Token **rest, Token *tok) {
-  tok = copy_line(rest, tok);
+  tok = split_line(rest, tok);
 
   Token head = {0};
   Token *cur = &head;
@@ -338,12 +351,12 @@ static void read_macro_definition(Token **rest, Token *tok) {
     char *va_args_name = NULL;
     MacroParam *params = read_macro_params(&tok, tok->next, &va_args_name);
 
-    Macro *m = add_macro(name, false, copy_line(rest, tok));
+    Macro *m = add_macro(name, false, split_line(rest, tok));
     m->params = params;
     m->va_args_name = va_args_name;
   } else {
     // Object-like macro
-    add_macro(name, true, copy_line(rest, tok));
+    add_macro(name, true, split_line(rest, tok));
   }
 }
 
