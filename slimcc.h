@@ -152,6 +152,7 @@ struct Obj {
 
   // Local variable
   int offset;
+  Obj *param_next;
 
   // Global variable or function
   bool is_function;
@@ -166,8 +167,8 @@ struct Obj {
 
   // Function
   bool is_inline;
-  Obj *params;
   Node *body;
+  Obj *large_rtn;
   Obj *va_area;
   Obj *alloca_bottom;
   int lvar_stack_size;
@@ -379,9 +380,8 @@ struct Type {
   // Function type
   Scope *scopes;
   Type *return_ty;
-  Type *params;
+  Obj *param_list;
   bool is_variadic;
-  Type *next;
 };
 
 // Struct member

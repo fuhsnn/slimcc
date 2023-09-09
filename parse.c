@@ -137,6 +137,7 @@ static Node *primary(Token **rest, Token *tok);
 static Token *parse_typedef(Token *tok, Type *basety);
 static Obj *func_prototype(Type *ty, VarAttr *attr);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
+static Node *compute_vla_size(Type *ty, Token *tok);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -571,9 +572,13 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     return func_type(ty);
   }
 
-  Type head = {0};
-  Type *cur = &head;
+  Obj head = {0};
+  Obj *cur = &head;
   bool is_variadic = false;
+  Type *fn_ty = func_type(ty);
+
+  enter_scope();
+  fn_ty->scopes = scope;
 
   while (!equal(tok, ")")) {
     if (cur != &head)
@@ -595,25 +600,25 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
       // "array of T" is converted to "pointer to T" only in the parameter
       // context. For example, *argv[] is converted to **argv by this.
       ty2 = pointer_to(ty2->base);
-      ty2->name = name;
     } else if (ty2->kind == TY_FUNC) {
       // Likewise, a function is converted to a pointer to a function
       // only in the parameter context.
       ty2 = pointer_to(ty2);
-      ty2->name = name;
     }
 
-    cur = cur->next = copy_type(ty2);
+    char *var_name = name ? get_ident(name) : "";
+    cur = cur->param_next = new_lvar(var_name, ty2);
   }
 
   if (cur == &head)
     is_variadic = true;
 
-  ty = func_type(ty);
-  ty->params = head.next;
-  ty->is_variadic = is_variadic;
+  leave_scope();
+
+  fn_ty->param_list = head.param_next;
+  fn_ty->is_variadic = is_variadic;
   *rest = tok->next;
-  return ty;
+  return fn_ty;
 }
 
 // array-dimensions = ("static" | "restrict")* const-expr? "]" type-suffix
@@ -2857,7 +2862,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     error_tok(fn->tok, "not a function");
 
   Type *ty = (fn->ty->kind == TY_FUNC) ? fn->ty : fn->ty->base;
-  Type *param_ty = ty->params;
+  Obj *param = ty->param_list;
 
   Node head = {0};
   Node *cur = &head;
@@ -2869,13 +2874,13 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     Node *arg = assign(&tok, tok);
     add_type(arg);
 
-    if (!param_ty && !ty->is_variadic)
+    if (!param && !ty->is_variadic)
       error_tok(tok, "too many arguments");
 
-    if (param_ty) {
-      if (param_ty->kind != TY_STRUCT && param_ty->kind != TY_UNION)
-        arg = new_cast(arg, param_ty);
-      param_ty = param_ty->next;
+    if (param) {
+      if (param->ty->kind != TY_STRUCT && param->ty->kind != TY_UNION)
+        arg = new_cast(arg, param->ty);
+      param = param->param_next;
     } else if (arg->ty->kind == TY_FLOAT) {
       // If parameter type is omitted (e.g. in "..."), float
       // arguments are promoted to double.
@@ -2885,7 +2890,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     cur = cur->next = arg;
   }
 
-  if (param_ty)
+  if (param)
     error_tok(tok, "too few arguments");
 
   *rest = skip(tok, ")");
@@ -3124,15 +3129,6 @@ static Token *parse_typedef(Token *tok, Type *basety) {
   return tok;
 }
 
-static void create_param_lvars(Type *param) {
-  if (param) {
-    create_param_lvars(param->next);
-    if (!param->name)
-      error_tok(param->name_pos, "parameter name omitted");
-    new_lvar(get_ident(param->name), param);
-  }
-}
-
 // This function matches gotos or labels-as-values with labels.
 //
 // We cannot resolve gotos as we parse a function because gotos
@@ -3204,17 +3200,19 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   fn->ty = ty;
 
   current_fn = fn;
-  enter_scope();
-  ty->scopes = scope;
-  create_param_lvars(ty->params);
+
+  if (ty->scopes) {
+    scope = ty->scopes;
+  } else {
+    enter_scope();
+    ty->scopes = scope;
+  }
 
   // A buffer for a struct/union return value is passed
   // as the hidden first parameter.
   Type *rty = ty->return_ty;
   if ((rty->kind == TY_STRUCT || rty->kind == TY_UNION) && rty->size > 16)
-    new_lvar("", pointer_to(rty));
-
-  fn->params = scope->locals;
+    fn->large_rtn = new_lvar("", pointer_to(rty));
 
   if (ty->is_variadic)
     fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
@@ -3303,7 +3301,7 @@ static void scan_globals(void) {
 
 static void declare_builtin_functions(void) {
   Type *ty = func_type(pointer_to(ty_void));
-  ty->params = copy_type(ty_int);
+  ty->param_list = new_var("", ty_int);
   builtin_alloca = new_gvar("alloca", ty);
   builtin_alloca->is_static = true;
 }

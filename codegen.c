@@ -706,7 +706,7 @@ static void copy_struct_reg(void) {
 
 static void copy_struct_mem(void) {
   Type *ty = current_fn->ty->return_ty;
-  Obj *var = current_fn->params;
+  Obj *var = current_fn->ty->param_list;
 
   println("  mov %d(%%rbp), %%rdi", var->offset);
 
@@ -1396,6 +1396,11 @@ static void assign_lvar_offsets(Obj *prog) {
     if (!fn->is_function || !fn->is_definition)
       continue;
 
+    if (fn->large_rtn) {
+      fn->large_rtn->param_next = fn->ty->param_list;
+      fn->ty->param_list = fn->large_rtn;
+    }
+
     // If a function has many parameters, some parameters are
     // inevitably passed by stack rather than by register.
     // The first passed-by-stack parameter resides at RBP+16.
@@ -1404,7 +1409,7 @@ static void assign_lvar_offsets(Obj *prog) {
     int gp = 0, fp = 0;
 
     // Assign offsets to pass-by-stack parameters.
-    for (Obj *var = fn->params; var; var = var->next) {
+    for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
       Type *ty = var->ty;
 
       switch (ty->kind) {
@@ -1564,7 +1569,7 @@ static void emit_text(Obj *prog) {
     // Save arg registers if function is variadic
     if (fn->va_area) {
       int gp = 0, fp = 0;
-      for (Obj *var = fn->params; var; var = var->next) {
+      for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
         if (is_flonum(var->ty))
           fp++;
         else
@@ -1600,7 +1605,7 @@ static void emit_text(Obj *prog) {
 
     // Save passed-by-register arguments to the stack
     int gp = 0, fp = 0;
-    for (Obj *var = fn->params; var; var = var->next) {
+    for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
       if (var->offset > 0)
         continue;
 

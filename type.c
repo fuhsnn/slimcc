@@ -71,10 +71,10 @@ bool is_compatible(Type *t1, Type *t2) {
     if (t1->is_variadic != t2->is_variadic)
       return false;
 
-    Type *p1 = t1->params;
-    Type *p2 = t2->params;
-    for (; p1 && p2; p1 = p1->next, p2 = p2->next)
-      if (!is_compatible(p1, p2))
+    Obj *p1 = t1->param_list;
+    Obj *p2 = t2->param_list;
+    for (; p1 && p2; p1 = p1->param_next, p2 = p2->param_next)
+      if (!is_compatible(p1->ty, p2->ty))
         return false;
     return p1 == NULL && p2 == NULL;
   }
