@@ -1353,17 +1353,39 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
+static int assign_lvar_offsets2(Scope *sc, int bottom) {
+  for (Obj *var = sc->locals; var; var = var->next) {
+    if (var->offset)
+      continue;
+
+    // AMD64 System V ABI has a special alignment rule for an array of
+    // length at least 16 bytes. We need to align such array to at least
+    // 16-byte boundaries. See p.14 of
+    // https://github.com/hjl-tools/x86-psABI/wiki/x86-64-psABI-draft.pdf.
+    int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
+      ? MAX(16, var->align) : var->align;
+
+    bottom += var->ty->size;
+    bottom = align_to(bottom, align);
+    var->offset = -bottom;
+  }
+
+  for (Scope *sub = sc->children; sub; sub = sub->sibling_next)
+    bottom = assign_lvar_offsets2(sub, bottom);
+
+  return bottom;
+}
+
 // Assign offsets to local variables.
 static void assign_lvar_offsets(Obj *prog) {
   for (Obj *fn = prog; fn; fn = fn->next) {
-    if (!fn->is_function)
+    if (!fn->is_function || !fn->is_definition)
       continue;
 
     // If a function has many parameters, some parameters are
     // inevitably passed by stack rather than by register.
     // The first passed-by-stack parameter resides at RBP+16.
     int top = 16;
-    int bottom = 0;
 
     int gp = 0, fp = 0;
 
@@ -1401,24 +1423,7 @@ static void assign_lvar_offsets(Obj *prog) {
       top += var->ty->size;
     }
 
-    // Assign offsets to pass-by-register parameters and local variables.
-    for (Obj *var = fn->locals; var; var = var->next) {
-      if (var->offset)
-        continue;
-
-      // AMD64 System V ABI has a special alignment rule for an array of
-      // length at least 16 bytes. We need to align such array to at least
-      // 16-byte boundaries. See p.14 of
-      // https://github.com/hjl-tools/x86-psABI/wiki/x86-64-psABI-draft.pdf.
-      int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
-        ? MAX(16, var->align) : var->align;
-
-      bottom += var->ty->size;
-      bottom = align_to(bottom, align);
-      var->offset = -bottom;
-    }
-
-    fn->lvar_stack_size = bottom;
+    fn->lvar_stack_size = assign_lvar_offsets2(fn->ty->scopes, 0);
   }
 }
 

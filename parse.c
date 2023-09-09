@@ -27,17 +27,6 @@ typedef struct {
   int enum_val;
 } VarScope;
 
-// Represents a block scope.
-typedef struct Scope Scope;
-struct Scope {
-  Scope *next;
-
-  // C has two block scopes; one is for variables/typedefs and
-  // the other is for struct/union/enum tags.
-  HashMap vars;
-  HashMap tags;
-};
-
 // Variable attributes such as typedef or extern.
 typedef struct {
   bool is_typedef;
@@ -77,10 +66,6 @@ struct InitDesg {
   Member *member;
   Obj *var;
 };
-
-// All local variable instances created during parsing are
-// accumulated to this list.
-static Obj *locals;
 
 // Likewise, global variables are accumulated to this list.
 static Obj *globals;
@@ -159,17 +144,18 @@ static int align_down(int n, int align) {
 
 static void enter_scope(void) {
   Scope *sc = calloc(1, sizeof(Scope));
-  sc->next = scope;
-  scope = sc;
+  sc->parent = scope;
+  sc->sibling_next = scope->children;
+  scope = scope->children = sc;
 }
 
 static void leave_scope(void) {
-  scope = scope->next;
+  scope = scope->parent;
 }
 
 // Find a variable by name.
 static VarScope *find_var(Token *tok) {
-  for (Scope *sc = scope; sc; sc = sc->next) {
+  for (Scope *sc = scope; sc; sc = sc->parent) {
     VarScope *sc2 = hashmap_get2(&sc->vars, tok->loc, tok->len);
     if (sc2)
       return sc2;
@@ -178,7 +164,7 @@ static VarScope *find_var(Token *tok) {
 }
 
 static Type *find_tag(Token *tok) {
-  for (Scope *sc = scope; sc; sc = sc->next) {
+  for (Scope *sc = scope; sc; sc = sc->parent) {
     Type *ty = hashmap_get2(&sc->tags, tok->loc, tok->len);
     if (ty)
       return ty;
@@ -307,8 +293,8 @@ static Obj *new_var(char *name, Type *ty) {
 static Obj *new_lvar(char *name, Type *ty) {
   Obj *var = new_var(name, ty);
   var->is_local = true;
-  var->next = locals;
-  locals = var;
+  var->next = scope->locals;
+  scope->locals = var;
   return var;
 }
 
@@ -2802,7 +2788,7 @@ static Node *postfix(Token **rest, Token *tok) {
     Type *ty = typename(&tok, tok->next);
     tok = skip(tok, ")");
 
-    if (scope->next == NULL) {
+    if (scope->parent == NULL) {
       Obj *var = new_anon_gvar(ty);
       gvar_initializer(rest, tok, var);
       return new_var_node(var, start);
@@ -3165,8 +3151,8 @@ static void resolve_goto_labels(void) {
 
 static Obj *find_func(char *name) {
   Scope *sc = scope;
-  while (sc->next)
-    sc = sc->next;
+  while (sc->parent)
+    sc = sc->parent;
 
   VarScope *sc2 = hashmap_get(&sc->vars, name);
   if (sc2 && sc2->var && sc2->var->is_function)
@@ -3210,10 +3196,11 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   if (fn->is_definition)
     error_tok(tok, "redefinition of %s", fn->name);
   fn->is_definition = true;
+  fn->ty = ty;
 
   current_fn = fn;
-  locals = NULL;
   enter_scope();
+  ty->scopes = scope;
   create_param_lvars(ty->params);
 
   // A buffer for a struct/union return value is passed
@@ -3222,7 +3209,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   if ((rty->kind == TY_STRUCT || rty->kind == TY_UNION) && rty->size > 16)
     new_lvar("", pointer_to(rty));
 
-  fn->params = locals;
+  fn->params = scope->locals;
 
   if (ty->is_variadic)
     fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
@@ -3239,7 +3226,6 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
     new_string_literal(fn->name, array_of(ty_char, strlen(fn->name) + 1));
 
   fn->body = compound_stmt(rest, tok->next);
-  fn->locals = locals;
   leave_scope();
   resolve_goto_labels();
   current_fn = NULL;
@@ -3256,7 +3242,7 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
 
     if (ty->kind == TY_FUNC) {
       if (equal(tok, "{")) {
-        if (!first || scope->next)
+        if (!first || scope->parent)
           error_tok(tok, "function definition is not allowed here");
         func_definition(&tok, tok, ty, attr);
         return tok;

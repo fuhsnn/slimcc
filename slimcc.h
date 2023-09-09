@@ -26,6 +26,30 @@ typedef struct Member Member;
 typedef struct Relocation Relocation;
 
 //
+// hashmap.c
+//
+
+typedef struct {
+  char *key;
+  int keylen;
+  void *val;
+} HashEntry;
+
+typedef struct {
+  HashEntry *buckets;
+  int capacity;
+  int used;
+} HashMap;
+
+void *hashmap_get(HashMap *map, char *key);
+void *hashmap_get2(HashMap *map, char *key, int keylen);
+void hashmap_put(HashMap *map, char *key, void *val);
+void hashmap_put2(HashMap *map, char *key, int keylen, void *val);
+void hashmap_delete(HashMap *map, char *key);
+void hashmap_delete2(HashMap *map, char *key, int keylen);
+void hashmap_test(void);
+
+//
 // strings.c
 //
 
@@ -144,7 +168,6 @@ struct Obj {
   bool is_inline;
   Obj *params;
   Node *body;
-  Obj *locals;
   Obj *va_area;
   Obj *alloca_bottom;
   int lvar_stack_size;
@@ -278,6 +301,20 @@ struct Node {
   long double fval;
 };
 
+// Represents a block scope.
+typedef struct Scope Scope;
+struct Scope {
+  Scope *parent;
+  Scope *children;
+  Scope *sibling_next;
+
+  Obj *locals;
+  // C has two block scopes; one is for variables/typedefs and
+  // the other is for struct/union/enum tags.
+  HashMap vars;
+  HashMap tags;
+};
+
 Node *new_cast(Node *expr, Type *ty);
 int64_t const_expr(Token **rest, Token *tok);
 Obj *parse(Token *tok);
@@ -340,6 +377,7 @@ struct Type {
   bool is_packed;
 
   // Function type
+  Scope *scopes;
   Type *return_ty;
   Type *params;
   bool is_variadic;
@@ -407,30 +445,6 @@ uint32_t decode_utf8(char **new_pos, char *p);
 bool is_ident1(uint32_t c);
 bool is_ident2(uint32_t c);
 int display_width(char *p, int len);
-
-//
-// hashmap.c
-//
-
-typedef struct {
-  char *key;
-  int keylen;
-  void *val;
-} HashEntry;
-
-typedef struct {
-  HashEntry *buckets;
-  int capacity;
-  int used;
-} HashMap;
-
-void *hashmap_get(HashMap *map, char *key);
-void *hashmap_get2(HashMap *map, char *key, int keylen);
-void hashmap_put(HashMap *map, char *key, void *val);
-void hashmap_put2(HashMap *map, char *key, int keylen, void *val);
-void hashmap_delete(HashMap *map, char *key);
-void hashmap_delete2(HashMap *map, char *key, int keylen);
-void hashmap_test(void);
 
 //
 // main.c
