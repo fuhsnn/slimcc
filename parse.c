@@ -150,9 +150,8 @@ static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 static Token *parse_typedef(Token *tok, Type *basety);
-static bool is_function(Token *tok);
-static Token *function(Token *tok, Type *basety, VarAttr *attr);
-static Token *global_variable(Token *tok, Type *basety, VarAttr *attr);
+static Obj *func_prototype(Type *ty, VarAttr *attr);
+static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -316,8 +315,6 @@ static Obj *new_lvar(char *name, Type *ty) {
 static Obj *new_gvar(char *name, Type *ty) {
   Obj *var = new_var(name, ty);
   var->next = globals;
-  var->is_static = true;
-  var->is_definition = true;
   globals = var;
   return var;
 }
@@ -328,7 +325,10 @@ static char *new_unique_name(void) {
 }
 
 static Obj *new_anon_gvar(Type *ty) {
-  return new_gvar(new_unique_name(), ty);
+  Obj *var = new_gvar(new_unique_name(), ty);
+  var->is_definition = true;
+  var->is_static = true;
+  return var;
 }
 
 static Obj *new_string_literal(char *p, Type *ty) {
@@ -848,6 +848,10 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       tok = skip(tok, ",");
 
     Type *ty = declarator(&tok, tok, basety);
+    if (ty->kind == TY_FUNC) {
+      func_prototype(ty, attr);
+      continue;
+    }
     if (ty->kind == TY_VOID)
       error_tok(tok, "variable declared void");
     if (!ty->name)
@@ -1769,13 +1773,8 @@ static Node *compound_stmt(Token **rest, Token *tok) {
         continue;
       }
 
-      if (is_function(tok)) {
-        tok = function(tok, basety, &attr);
-        continue;
-      }
-
       if (attr.is_extern) {
-        tok = global_variable(tok, basety, &attr);
+        tok = global_declaration(tok, basety, &attr);
         continue;
       }
 
@@ -3187,34 +3186,30 @@ static void mark_live(Obj *var) {
   }
 }
 
-static Token *function(Token *tok, Type *basety, VarAttr *attr) {
-  Type *ty = declarator(&tok, tok, basety);
+static Obj *func_prototype(Type *ty, VarAttr *attr) {
   if (!ty->name)
     error_tok(ty->name_pos, "function name omitted");
   char *name_str = get_ident(ty->name);
 
   Obj *fn = find_func(name_str);
-  if (fn) {
-    // Redeclaration
-    if (!fn->is_function)
-      error_tok(tok, "redeclared as a different kind of symbol");
-    if (fn->is_definition && equal(tok, "{"))
-      error_tok(tok, "redefinition of %s", name_str);
-    if (!fn->is_static && attr->is_static)
-      error_tok(tok, "static declaration follows a non-static declaration");
-    fn->is_definition = fn->is_definition || equal(tok, "{");
-  } else {
+  if (!fn) {
     fn = new_gvar(name_str, ty);
     fn->is_function = true;
-    fn->is_definition = equal(tok, "{");
     fn->is_static = attr->is_static || (attr->is_inline && !attr->is_extern);
     fn->is_inline = attr->is_inline;
+  } else if (!fn->is_static && attr->is_static) {
+    error_tok(ty->name, "static declaration follows a non-static declaration");
   }
-
   fn->is_root = !(fn->is_static && fn->is_inline);
+  return fn;
+}
 
-  if (consume(&tok, tok, ";"))
-    return tok;
+static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
+  Obj *fn = func_prototype(ty, attr);
+
+  if (fn->is_definition)
+    error_tok(tok, "redefinition of %s", fn->name);
+  fn->is_definition = true;
 
   current_fn = fn;
   locals = NULL;
@@ -3233,8 +3228,6 @@ static Token *function(Token *tok, Type *basety, VarAttr *attr) {
     fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
   fn->alloca_bottom = new_lvar("__alloca_size__", pointer_to(ty_char));
 
-  tok = skip(tok, "{");
-
   // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
   // automatically defined as a local variable containing the
   // current function name.
@@ -3245,22 +3238,33 @@ static Token *function(Token *tok, Type *basety, VarAttr *attr) {
   push_scope("__FUNCTION__")->var =
     new_string_literal(fn->name, array_of(ty_char, strlen(fn->name) + 1));
 
-  fn->body = compound_stmt(&tok, tok);
+  fn->body = compound_stmt(rest, tok->next);
   fn->locals = locals;
   leave_scope();
   resolve_goto_labels();
-  return tok;
+  current_fn = NULL;
 }
 
-static Token *global_variable(Token *tok, Type *basety, VarAttr *attr) {
+static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
 
-  while (!consume(&tok, tok, ";")) {
+  for (; !consume(&tok, tok, ";"); first = false) {
     if (!first)
       tok = skip(tok, ",");
-    first = false;
 
     Type *ty = declarator(&tok, tok, basety);
+
+    if (ty->kind == TY_FUNC) {
+      if (equal(tok, "{")) {
+        if (!first || scope->next)
+          error_tok(tok, "function definition is not allowed here");
+        func_definition(&tok, tok, ty, attr);
+        return tok;
+      }
+      func_prototype(ty, attr);
+      continue;
+    }
+
     if (!ty->name)
       error_tok(ty->name_pos, "variable name omitted");
 
@@ -3277,17 +3281,6 @@ static Token *global_variable(Token *tok, Type *basety, VarAttr *attr) {
       var->is_tentative = true;
   }
   return tok;
-}
-
-// Lookahead tokens and returns true if a given token is a start
-// of a function definition or declaration.
-static bool is_function(Token *tok) {
-  if (equal(tok, ";"))
-    return false;
-
-  Type dummy = {0};
-  Type *ty = declarator(&tok, tok, &dummy);
-  return ty->kind == TY_FUNC;
 }
 
 // Remove redundant tentative definitions.
@@ -3321,7 +3314,7 @@ static void declare_builtin_functions(void) {
   Type *ty = func_type(pointer_to(ty_void));
   ty->params = copy_type(ty_int);
   builtin_alloca = new_gvar("alloca", ty);
-  builtin_alloca->is_definition = false;
+  builtin_alloca->is_static = true;
 }
 
 // program = (typedef | function-definition | global-variable)*
@@ -3339,14 +3332,8 @@ Obj *parse(Token *tok) {
       continue;
     }
 
-    // Function
-    if (is_function(tok)) {
-      tok = function(tok, basety, &attr);
-      continue;
-    }
-
-    // Global variable
-    tok = global_variable(tok, basety, &attr);
+    // Global declarations
+    tok = global_declaration(tok, basety, &attr);
   }
 
   for (Obj *var = globals; var; var = var->next)
