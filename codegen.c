@@ -11,6 +11,13 @@ static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 static Obj *current_fn;
 
+struct {
+  int *data;
+  int capacity;
+  int depth;
+  int bottom;
+} static tmp_stack;
+
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 
@@ -26,6 +33,46 @@ static void println(char *fmt, ...) {
 static int count(void) {
   static int i = 1;
   return i++;
+}
+
+static int push_tmpstack(void) {
+  if (tmp_stack.depth == tmp_stack.capacity) {
+    tmp_stack.capacity += 4;
+    tmp_stack.data = realloc(tmp_stack.data, sizeof(int) * tmp_stack.capacity);
+  }
+
+  tmp_stack.bottom += 8;
+  int offset = -tmp_stack.bottom;
+
+  tmp_stack.data[tmp_stack.depth] = offset;
+  tmp_stack.depth++;
+  return offset;
+}
+
+static int pop_tmpstack(void) {
+  tmp_stack.depth--;
+  return tmp_stack.data[tmp_stack.depth];
+}
+
+static int push_tmp(void) {
+  int offset = push_tmpstack();
+  println("  mov %%rax, %d(%%rbp)", offset);
+  return offset;
+}
+
+static void pop_tmp(char *arg) {
+  int offset = pop_tmpstack();
+  println("  mov %d(%%rbp), %s", offset, arg);
+}
+
+static void push_tmpf(void) {
+  int offset = push_tmpstack();
+  println("  movsd %%xmm0, %d(%%rbp)", offset);
+}
+
+static void pop_tmpf(int reg) {
+  int offset = pop_tmpstack();
+  println("  movsd %d(%%rbp), %%xmm%d", offset, reg);
 }
 
 static void push(void) {
@@ -227,7 +274,7 @@ static void load(Type *ty) {
 
 // Store %rax to an address that the stack top is pointing to.
 static void store(Type *ty) {
-  pop("%rdi");
+  pop_tmp("%rdi");
 
   switch (ty->kind) {
   case TY_STRUCT:
@@ -775,7 +822,7 @@ static void gen_expr(Node *node) {
     return;
   case ND_ASSIGN:
     gen_addr(node->lhs);
-    push();
+    int tmp_offset = push_tmp();
     gen_expr(node->rhs);
 
     if (node->lhs->kind == ND_MEMBER && node->lhs->member->is_bitfield) {
@@ -788,7 +835,7 @@ static void gen_expr(Node *node) {
       println("  and $%ld, %%rdi", (1L << mem->bit_width) - 1);
       println("  shl $%d, %%rdi", mem->bit_offset);
 
-      println("  mov (%%rsp), %%rax");
+      println("  mov %d(%%rbp), %%rax", tmp_offset);
       load(mem->ty);
 
       long mask = ((1L << mem->bit_width) - 1) << mem->bit_offset;
@@ -972,14 +1019,14 @@ static void gen_expr(Node *node) {
     return;
   case ND_CAS: {
     gen_expr(node->cas_addr);
-    push();
+    push_tmp();
     gen_expr(node->cas_new);
-    push();
+    push_tmp();
     gen_expr(node->cas_old);
     println("  mov %%rax, %%r8");
     load(node->cas_old->ty->base);
-    pop("%rdx"); // new
-    pop("%rdi"); // addr
+    pop_tmp("%rdx"); // new
+    pop_tmp("%rdi"); // addr
 
     int sz = node->cas_addr->ty->base->size;
     println("  lock cmpxchg %s, (%%rdi)", reg_dx(sz));
@@ -992,9 +1039,9 @@ static void gen_expr(Node *node) {
   }
   case ND_EXCH: {
     gen_expr(node->lhs);
-    push();
+    push_tmp();
     gen_expr(node->rhs);
-    pop("%rdi");
+    pop_tmp("%rdi");
 
     int sz = node->lhs->ty->base->size;
     println("  xchg %s, (%%rdi)", reg_ax(sz));
@@ -1006,9 +1053,9 @@ static void gen_expr(Node *node) {
   case TY_FLOAT:
   case TY_DOUBLE: {
     gen_expr(node->rhs);
-    pushf();
+    push_tmpf();
     gen_expr(node->lhs);
-    popf(1);
+    pop_tmpf(1);
 
     char *sz = (node->lhs->ty->kind == TY_FLOAT) ? "ss" : "sd";
 
@@ -1094,9 +1141,9 @@ static void gen_expr(Node *node) {
   }
 
   gen_expr(node->rhs);
-  push();
+  push_tmp();
   gen_expr(node->lhs);
-  pop("%rdi");
+  pop_tmp("%rdi");
 
   char *ax, *di, *dx;
 
@@ -1371,7 +1418,7 @@ static void assign_lvar_offsets(Obj *prog) {
       var->offset = -bottom;
     }
 
-    fn->stack_size = align_to(bottom, 16);
+    fn->lvar_stack_size = bottom;
   }
 }
 
@@ -1486,11 +1533,13 @@ static void emit_text(Obj *prog) {
     println("  .type %s, @function", fn->name);
     println("%s:", fn->name);
     current_fn = fn;
+    tmp_stack.bottom = fn->lvar_stack_size;
 
     // Prologue
     println("  push %%rbp");
     println("  mov %%rsp, %%rbp");
-    println("  sub $%d, %%rsp", fn->stack_size);
+    long reserved_pos = ftell(output_file);
+    println("                           ");
     println("  mov %%rsp, %d(%%rbp)", fn->alloca_bottom->offset);
 
     // Save arg registers if function is variadic
@@ -1566,6 +1615,14 @@ static void emit_text(Obj *prog) {
     // Emit code
     gen_stmt(fn->body);
     assert(depth == 0);
+    assert(tmp_stack.depth == 0);
+
+    long cur_pos = ftell(output_file);
+
+    fseek(output_file, reserved_pos, SEEK_SET);
+    println("  sub $%d, %%rsp", align_to(tmp_stack.bottom, 16));
+
+    fseek(output_file, cur_pos, SEEK_SET);
 
     // [https://www.sigbus.info/n1570#5.1.2.2.3p1] The C spec defines
     // a special rule for the main function. Reaching the end of the

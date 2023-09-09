@@ -147,7 +147,7 @@ struct Obj {
   Obj *locals;
   Obj *va_area;
   Obj *alloca_bottom;
-  int stack_size;
+  int lvar_stack_size;
 
   // Static inline function
   bool is_live;
