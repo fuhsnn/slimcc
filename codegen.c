@@ -11,6 +11,8 @@ static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 static Obj *current_fn;
 
+bool dont_reuse_stack;
+
 struct {
   int *data;
   int capacity;
@@ -41,8 +43,15 @@ static int push_tmpstack(void) {
     tmp_stack.data = realloc(tmp_stack.data, sizeof(int) * tmp_stack.capacity);
   }
 
-  tmp_stack.bottom += 8;
-  int offset = -tmp_stack.bottom;
+  int offset;
+  if (opt_optimize && !dont_reuse_stack) {
+      int bottom = current_fn->lvar_stack_size + (tmp_stack.depth + 1) * 8;
+    tmp_stack.bottom = MAX(tmp_stack.bottom, bottom);
+    offset = -bottom;
+  } else {
+    tmp_stack.bottom += 8;
+    offset = -tmp_stack.bottom;
+  }
 
   tmp_stack.data[tmp_stack.depth] = offset;
   tmp_stack.depth++;
@@ -1370,10 +1379,15 @@ static int assign_lvar_offsets2(Scope *sc, int bottom) {
     var->offset = -bottom;
   }
 
-  for (Scope *sub = sc->children; sub; sub = sub->sibling_next)
-    bottom = assign_lvar_offsets2(sub, bottom);
-
-  return bottom;
+  int max_depth = bottom;
+  for (Scope *sub = sc->children; sub; sub = sub->sibling_next) {
+    int sub_depth= assign_lvar_offsets2(sub, bottom);
+    if (opt_optimize && !dont_reuse_stack)
+      max_depth = MAX(max_depth, sub_depth);
+    else
+      bottom = max_depth = sub_depth;
+  }
+  return max_depth;
 }
 
 // Assign offsets to local variables.

@@ -3066,6 +3066,11 @@ static Node *primary(Token **rest, Token *tok) {
         strarray_push(&current_fn->refs, sc->var->name);
       else
         sc->var->is_root = true;
+
+      char *name = sc->var->name;
+      if (opt_optimize && (strstr(name, "setjmp") || strstr(name, "savectx") ||
+          strstr(name, "vfork") || strstr(name, "getcontext")))
+        dont_reuse_stack = true;
     }
 
     if (sc) {
