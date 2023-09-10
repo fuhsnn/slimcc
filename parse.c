@@ -134,7 +134,7 @@ static Node *postfix(Token **rest, Token *tok);
 static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
-static Token *parse_typedef(Token *tok, Type *basety);
+static Node *parse_typedef(Token **rest, Token *tok, Type *basety);
 static Obj *func_prototype(Type *ty, VarAttr *attr);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
@@ -805,6 +805,9 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
 // Generate code for computing a VLA size.
 static Node *compute_vla_size(Type *ty, Token *tok) {
   Node *node = new_node(ND_NULL_EXPR, tok);
+  if (ty->vla_size)
+    return node;
+
   if (ty->base)
     node = new_binary(ND_COMMA, node, compute_vla_size(ty->base, tok), tok);
 
@@ -1758,13 +1761,14 @@ static Node *compound_stmt(Token **rest, Token *tok) {
 
   enter_scope();
 
-  while (!equal(tok, "}")) {
+  for (; !equal(tok, "}"); add_type(cur)) {
     if (is_typename(tok) && !equal(tok->next, ":")) {
       VarAttr attr = {0};
       Type *basety = declspec(&tok, tok, &attr);
 
       if (attr.is_typedef) {
-        tok = parse_typedef(tok, basety);
+        Node *vla_calc = parse_typedef(&tok, tok, basety);
+        cur = cur->next = new_unary(ND_EXPR_STMT, vla_calc, tok);
         continue;
       }
 
@@ -1774,10 +1778,9 @@ static Node *compound_stmt(Token **rest, Token *tok) {
       }
 
       cur = cur->next = declaration(&tok, tok, basety, &attr);
-    } else {
-      cur = cur->next = stmt(&tok, tok);
+      continue;
     }
-    add_type(cur);
+    cur = cur->next = stmt(&tok, tok);
   }
 
   leave_scope();
@@ -3117,10 +3120,11 @@ static Node *primary(Token **rest, Token *tok) {
   error_tok(tok, "expected an expression");
 }
 
-static Token *parse_typedef(Token *tok, Type *basety) {
+static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
   bool first = true;
+  Node *node = new_node(ND_NULL_EXPR, tok);
 
-  while (!consume(&tok, tok, ";")) {
+  while (!consume(rest, tok, ";")) {
     if (!first)
       tok = skip(tok, ",");
     first = false;
@@ -3129,8 +3133,9 @@ static Token *parse_typedef(Token *tok, Type *basety) {
     if (!ty->name)
       error_tok(ty->name_pos, "typedef name omitted");
     push_scope(get_ident(ty->name))->type_def = ty;
+    node = new_binary(ND_COMMA, node, compute_vla_size(ty, tok), tok);
   }
-  return tok;
+  return node;
 }
 
 // This function matches gotos or labels-as-values with labels.
@@ -3328,7 +3333,7 @@ Obj *parse(Token *tok) {
 
     // Typedef
     if (attr.is_typedef) {
-      tok = parse_typedef(tok, basety);
+      parse_typedef(&tok, tok, basety);
       continue;
     }
 
