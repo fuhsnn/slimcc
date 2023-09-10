@@ -1324,6 +1324,7 @@ static Node *init_desg_expr(InitDesg *desg, Token *tok) {
 
 static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
   if (ty->kind == TY_ARRAY) {
+    assert(!init->expr);
     Node *node = new_node(ND_NULL_EXPR, tok);
     for (int i = 0; i < ty->array_len; i++) {
       InitDesg desg2 = {desg, i};
@@ -1333,7 +1334,12 @@ static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token
     return node;
   }
 
-  if (ty->kind == TY_STRUCT && !init->expr) {
+  if (init->expr) {
+    Node *lhs = init_desg_expr(desg, tok);
+    return new_binary(ND_ASSIGN, lhs, init->expr, tok);
+  }
+
+  if (ty->kind == TY_STRUCT) {
     Node *node = new_node(ND_NULL_EXPR, tok);
 
     for (Member *mem = ty->members; mem; mem = mem->next) {
@@ -1350,11 +1356,7 @@ static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token
     return create_lvar_init(init->children[mem->idx], mem->ty, &desg2, tok);
   }
 
-  if (!init->expr)
-    return new_node(ND_NULL_EXPR, tok);
-
-  Node *lhs = init_desg_expr(desg, tok);
-  return new_binary(ND_ASSIGN, lhs, init->expr, tok);
+  return new_node(ND_NULL_EXPR, tok);
 }
 
 // A variable definition with an initializer is a shorthand notation
@@ -1371,15 +1373,17 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer *init = initializer(rest, tok, var->ty, &var->ty);
   InitDesg desg = {NULL, 0, NULL, var};
 
+  Node *expr = create_lvar_init(init, var->ty, &desg, tok);
+  if (opt_optimize && init->expr)
+    return expr;
+
   // If a partial initializer list is given, the standard requires
   // that unspecified elements are set to 0. Here, we simply
   // zero-initialize the entire memory region of a variable before
   // initializing it with user-supplied values.
   Node *lhs = new_node(ND_MEMZERO, tok);
   lhs->var = var;
-
-  Node *rhs = create_lvar_init(init, var->ty, &desg, tok);
-  return new_binary(ND_COMMA, lhs, rhs, tok);
+  return new_binary(ND_COMMA, lhs, expr, tok);
 }
 
 static uint64_t read_buf(char *buf, int sz) {
