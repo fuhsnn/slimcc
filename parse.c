@@ -343,6 +343,11 @@ static void push_tag_scope(Token *tok, Type *ty) {
   hashmap_put2(&scope->tags, tok->loc, tok->len, ty);
 }
 
+static void chain_expr(Node **lhs, Node *rhs) {
+  if (rhs)
+    *lhs = !*lhs ? rhs : new_binary(ND_COMMA, *lhs, rhs, rhs->tok);
+}
+
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 //             | "typedef" | "static" | "extern" | "inline"
 //             | "_Thread_local" | "__thread"
@@ -576,7 +581,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
   Obj *cur = &head;
   bool is_variadic = false;
   Type *fn_ty = func_type(ty);
-  Node *vla_calc = new_node(ND_NULL_EXPR, tok);
+  Node *vla_calc = NULL;
 
   enter_scope();
   fn_ty->scopes = scope;
@@ -597,7 +602,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
 
     Token *name = ty2->name;
 
-    vla_calc = new_binary(ND_COMMA, vla_calc, compute_vla_size(ty2, tok), tok);
+    chain_expr(&vla_calc, compute_vla_size(ty2, tok));
 
     if (ty2->kind == TY_ARRAY || ty2->kind == TY_VLA) {
       // "array of T" is converted to "pointer to T" only in the parameter
@@ -804,12 +809,12 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
 
 // Generate code for computing a VLA size.
 static Node *compute_vla_size(Type *ty, Token *tok) {
-  Node *node = new_node(ND_NULL_EXPR, tok);
   if (ty->vla_size)
-    return node;
+    return NULL;
 
+  Node *node = NULL;
   if (ty->base)
-    node = new_binary(ND_COMMA, node, compute_vla_size(ty->base, tok), tok);
+    node = compute_vla_size(ty->base, tok);
 
   if (ty->kind != TY_VLA)
     return node;
@@ -821,10 +826,11 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
     base_sz = new_num(ty->base->size, tok);
 
   ty->vla_size = new_lvar("", ty_ulong);
-  Node *expr = new_binary(ND_ASSIGN, new_var_node(ty->vla_size, tok),
-                          new_binary(ND_MUL, ty->vla_len, base_sz, tok),
-                          tok);
-  return new_binary(ND_COMMA, node, expr, tok);
+  chain_expr(&node, new_binary(ND_ASSIGN, new_var_node(ty->vla_size, tok),
+                               new_binary(ND_MUL, ty->vla_len, base_sz, tok),
+                               tok));
+  add_type(node);
+  return node;
 }
 
 static Node *new_alloca(Node *sz) {
@@ -837,8 +843,7 @@ static Node *new_alloca(Node *sz) {
 
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
-  Node head = {0};
-  Node *cur = &head;
+  Node *expr = NULL;
   int i = 0;
 
   while (!equal(tok, ";")) {
@@ -867,7 +872,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     // Generate code for computing a VLA size. We need to do this
     // even if ty is not VLA because ty may be a pointer to VLA
     // (e.g. int (*foo)[n][m] where n and m are variables.)
-    cur = cur->next = new_unary(ND_EXPR_STMT, compute_vla_size(ty, tok), tok);
+    chain_expr(&expr, compute_vla_size(ty, tok));
 
     if (ty->kind == TY_VLA) {
       if (equal(tok, "="))
@@ -878,11 +883,9 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       // x = alloca(tmp)`.
       Obj *var = new_lvar(get_ident(ty->name), ty);
       Token *tok = ty->name;
-      Node *expr = new_binary(ND_ASSIGN, new_vla_ptr(var, tok),
-                              new_alloca(new_var_node(ty->vla_size, tok)),
-                              tok);
-
-      cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
+      chain_expr(&expr, new_binary(ND_ASSIGN, new_vla_ptr(var, tok),
+                                   new_alloca(new_var_node(ty->vla_size, tok)),
+                                   tok));
       continue;
     }
 
@@ -890,10 +893,8 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     if (attr && attr->align)
       var->align = attr->align;
 
-    if (equal(tok, "=")) {
-      Node *expr = lvar_initializer(&tok, tok->next, var);
-      cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
-    }
+    if (equal(tok, "="))
+      chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
 
     if (var->ty->size < 0)
       error_tok(ty->name, "variable has incomplete type");
@@ -901,10 +902,8 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       error_tok(ty->name, "variable declared void");
   }
 
-  Node *node = new_node(ND_BLOCK, tok);
-  node->body = head.next;
   *rest = tok->next;
-  return node;
+  return expr;
 }
 
 static Token *skip_excess_element(Token *tok) {
@@ -1325,11 +1324,10 @@ static Node *init_desg_expr(InitDesg *desg, Token *tok) {
 static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
   if (ty->kind == TY_ARRAY) {
     assert(!init->expr);
-    Node *node = new_node(ND_NULL_EXPR, tok);
+    Node *node = NULL;
     for (int i = 0; i < ty->array_len; i++) {
       InitDesg desg2 = {desg, i};
-      Node *rhs = create_lvar_init(init->children[i], ty->base, &desg2, tok);
-      node = new_binary(ND_COMMA, node, rhs, tok);
+      chain_expr(&node, create_lvar_init(init->children[i], ty->base, &desg2, tok));
     }
     return node;
   }
@@ -1340,12 +1338,10 @@ static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token
   }
 
   if (ty->kind == TY_STRUCT) {
-    Node *node = new_node(ND_NULL_EXPR, tok);
-
+    Node *node = NULL;
     for (Member *mem = ty->members; mem; mem = mem->next) {
       InitDesg desg2 = {desg, 0, mem};
-      Node *rhs = create_lvar_init(init->children[mem->idx], mem->ty, &desg2, tok);
-      node = new_binary(ND_COMMA, node, rhs, tok);
+      chain_expr(&node, create_lvar_init(init->children[mem->idx], mem->ty, &desg2, tok));
     }
     return node;
   }
@@ -1356,7 +1352,7 @@ static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token
     return create_lvar_init(init->children[mem->idx], mem->ty, &desg2, tok);
   }
 
-  return new_node(ND_NULL_EXPR, tok);
+  return NULL;
 }
 
 // A variable definition with an initializer is a shorthand notation
@@ -1381,9 +1377,10 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   // that unspecified elements are set to 0. Here, we simply
   // zero-initialize the entire memory region of a variable before
   // initializing it with user-supplied values.
-  Node *lhs = new_node(ND_MEMZERO, tok);
-  lhs->var = var;
-  return new_binary(ND_COMMA, lhs, expr, tok);
+  Node *node = new_node(ND_MEMZERO, tok);
+  node->var = var;
+  chain_expr(&node, expr);
+  return node;
 }
 
 static uint64_t read_buf(char *buf, int sz) {
@@ -1643,7 +1640,9 @@ static Node *stmt(Token **rest, Token *tok) {
 
     if (is_typename(tok)) {
       Type *basety = declspec(&tok, tok, NULL);
-      node->init = declaration(&tok, tok, basety, NULL);
+      Node *expr = declaration(&tok, tok, basety, NULL);
+      if (expr)
+        node->init = new_unary(ND_EXPR_STMT, expr, tok);
     } else {
       node->init = expr_stmt(&tok, tok);
     }
@@ -1771,8 +1770,9 @@ static Node *compound_stmt(Token **rest, Token *tok) {
       Type *basety = declspec(&tok, tok, &attr);
 
       if (attr.is_typedef) {
-        Node *vla_calc = parse_typedef(&tok, tok, basety);
-        cur = cur->next = new_unary(ND_EXPR_STMT, vla_calc, tok);
+        Node *expr = parse_typedef(&tok, tok, basety);
+        if (expr)
+          cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
         continue;
       }
 
@@ -1781,7 +1781,9 @@ static Node *compound_stmt(Token **rest, Token *tok) {
         continue;
       }
 
-      cur = cur->next = declaration(&tok, tok, basety, &attr);
+      Node *expr = declaration(&tok, tok, basety, &attr);
+      if (expr)
+        cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
       continue;
     }
     cur = cur->next = stmt(&tok, tok);
@@ -2996,10 +2998,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (ty->kind == TY_VLA) {
       if (ty->vla_size)
         return new_var_node(ty->vla_size, tok);
-
-      Node *lhs = compute_vla_size(ty, tok);
-      Node *rhs = new_var_node(ty->vla_size, tok);
-      return new_binary(ND_COMMA, lhs, rhs, tok);
+      return compute_vla_size(ty, tok);
     }
 
     return new_ulong(ty->size, start);
@@ -3126,7 +3125,7 @@ static Node *primary(Token **rest, Token *tok) {
 
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
   bool first = true;
-  Node *node = new_node(ND_NULL_EXPR, tok);
+  Node *node = NULL;
 
   while (!consume(rest, tok, ";")) {
     if (!first)
@@ -3137,7 +3136,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
     if (!ty->name)
       error_tok(ty->name_pos, "typedef name omitted");
     push_scope(get_ident(ty->name))->type_def = ty;
-    node = new_binary(ND_COMMA, node, compute_vla_size(ty, tok), tok);
+    chain_expr(&node, compute_vla_size(ty, tok));
   }
   return node;
 }
@@ -3244,7 +3243,6 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   fn->body = compound_stmt(rest, tok->next);
   if (ty->vla_calc) {
     Node *calc = new_unary(ND_EXPR_STMT, ty->vla_calc, tok);
-    add_type(calc);
     calc->next = fn->body->body;
     fn->body->body = calc;
   }
