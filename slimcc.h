@@ -381,6 +381,7 @@ struct Type {
   Scope *scopes;
   Type *return_ty;
   Obj *param_list;
+  Node *vla_calc;
   bool is_variadic;
 };
 

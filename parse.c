@@ -576,6 +576,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
   Obj *cur = &head;
   bool is_variadic = false;
   Type *fn_ty = func_type(ty);
+  Node *vla_calc = new_node(ND_NULL_EXPR, tok);
 
   enter_scope();
   fn_ty->scopes = scope;
@@ -596,7 +597,9 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
 
     Token *name = ty2->name;
 
-    if (ty2->kind == TY_ARRAY) {
+    vla_calc = new_binary(ND_COMMA, vla_calc, compute_vla_size(ty2, tok), tok);
+
+    if (ty2->kind == TY_ARRAY || ty2->kind == TY_VLA) {
       // "array of T" is converted to "pointer to T" only in the parameter
       // context. For example, *argv[] is converted to **argv by this.
       ty2 = pointer_to(ty2->base);
@@ -616,6 +619,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
   leave_scope();
 
   fn_ty->param_list = head.param_next;
+  fn_ty->vla_calc = vla_calc;
   fn_ty->is_variadic = is_variadic;
   *rest = tok->next;
   return fn_ty;
@@ -3229,6 +3233,13 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
     new_string_literal(fn->name, array_of(ty_char, strlen(fn->name) + 1));
 
   fn->body = compound_stmt(rest, tok->next);
+  if (ty->vla_calc) {
+    Node *calc = new_unary(ND_EXPR_STMT, ty->vla_calc, tok);
+    add_type(calc);
+    calc->next = fn->body->body;
+    fn->body->body = calc;
+  }
+
   leave_scope();
   resolve_goto_labels();
   current_fn = NULL;
