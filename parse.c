@@ -631,7 +631,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
     return array_of(ty, -1);
   }
 
-  Node *expr = conditional(&tok, tok);
+  Node *expr = assign(&tok, tok);
   tok = skip(tok, "]");
   ty = type_suffix(rest, tok, ty);
 
