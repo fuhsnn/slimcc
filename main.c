@@ -334,11 +334,13 @@ static void parse_args(int argc, char **argv) {
         !strncmp(argv[i], "-std=", 5) ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
+        !strcmp(argv[i], "-fno-lto") ||
         !strcmp(argv[i], "-fno-omit-frame-pointer") ||
         !strcmp(argv[i], "-fno-stack-protector") ||
         !strcmp(argv[i], "-fno-strict-aliasing") ||
         !strcmp(argv[i], "-m64") ||
         !strcmp(argv[i], "-mno-red-zone") ||
+        !strcmp(argv[i], "-pedantic") ||
         !strcmp(argv[i], "-w"))
       continue;
 
