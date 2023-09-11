@@ -688,6 +688,15 @@ static FileType get_file_type(char *filename) {
   if (endswith(filename, ".s"))
     return FILE_ASM;
 
+  char *p = strstr(filename, ".so.");
+  if (p) {
+    p += 3;
+    while (isdigit(*p) || (*p == '.' && isdigit(p[1])))
+      p++;
+    if (!*p)
+      return FILE_DSO;
+  }
+
   error("<command line>: unknown file extension: %s", filename);
 }
 
