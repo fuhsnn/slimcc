@@ -571,7 +571,7 @@ static void cc1(void) {
 }
 
 static void assemble(char *input, char *output) {
-  char *cmd[] = {"as", "-c", input, "-o", output, NULL};
+  char *cmd[] = {"as", input, "-o", output, NULL};
   run_subprocess(cmd);
 }
 

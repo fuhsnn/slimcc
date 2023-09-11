@@ -1,4 +1,4 @@
-CFLAGS=-std=c99 -g -fno-common -Wall -Wpedantic -Wno-return-type -Wno-switch
+CFLAGS=-std=c99 -g -fno-common -Wall -pedantic -Wno-return-type -Wno-switch
 
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
@@ -15,7 +15,7 @@ $(OBJS): slimcc.h
 
 test/%.exe: slimcc test/%.c
 	./slimcc -Iinclude -Itest -c -o test/$*.o test/$*.c
-	$(CC) -pthread -o $@ test/$*.o -xc test/common
+	$(CC) -std=c99 -pthread -o $@ test/$*.o -xc test/common
 
 test: $(TESTS)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
@@ -35,7 +35,7 @@ stage2/%.o: slimcc %.c
 stage2/test/%.exe: stage2/slimcc test/%.c
 	mkdir -p stage2/test
 	./stage2/slimcc -Iinclude -Itest -c -o stage2/test/$*.o test/$*.c
-	$(CC) -pthread -o $@ stage2/test/$*.o -xc test/common
+	$(CC) -std=c99 -pthread -o $@ stage2/test/$*.o -xc test/common
 
 test-stage2: $(TESTS:test/%=stage2/test/%)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
