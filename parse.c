@@ -863,6 +863,11 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     if (!ty->name)
       error_tok(ty->name_pos, "variable name omitted");
 
+    // Generate code for computing a VLA size. We need to do this
+    // even if ty is not VLA because ty may be a pointer to VLA
+    // (e.g. int (*foo)[n][m] where n and m are variables.)
+    chain_expr(&expr, compute_vla_size(ty, tok));
+
     if (attr && attr->is_static) {
       if (ty->kind == TY_VLA)
         error_tok(tok, "variable length arrays cannot be 'static'");
@@ -874,11 +879,6 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
         gvar_initializer(&tok, tok->next, var);
       continue;
     }
-
-    // Generate code for computing a VLA size. We need to do this
-    // even if ty is not VLA because ty may be a pointer to VLA
-    // (e.g. int (*foo)[n][m] where n and m are variables.)
-    chain_expr(&expr, compute_vla_size(ty, tok));
 
     if (ty->kind == TY_VLA) {
       if (equal(tok, "="))

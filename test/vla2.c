@@ -1,7 +1,8 @@
 #include "test.h"
+#include <stdint.h>
 
-void fn(int x){
-  typedef int A[++x], B[++x];
+void fn(int32_t x){
+  typedef int32_t A[++x], B[++x];
   A a1, *a2;
   ASSERT(24, sizeof(a1));
   ASSERT(24, sizeof(*a2));
@@ -12,14 +13,14 @@ void fn(int x){
   ASSERT(28, sizeof(*b1));
   ASSERT(28, sizeof(*b2));
 
-  typedef int (*C)[++x];
+  typedef int32_t (*C)[++x];
   C c1[++x], c2;
   ASSERT(160, sizeof(c1));
   ASSERT(8, sizeof(*c1));
   ASSERT(76, sizeof(**c1));
   ASSERT(76, sizeof(*c2));
 
-  typedef char D[x = 177];
+  typedef int8_t D[x = 177];
   D a;
   x = 7;
   D b;
@@ -29,8 +30,25 @@ void fn(int x){
   ASSERT(192, (&b[0] - &c[0]));
 }
 
+int fn2(int32_t i) {
+  static (*p)[i];
+  return sizeof *p;
+}
+
+int fn3(int i) {
+  typedef int32_t (*T)[i];
+  static T t;
+  return sizeof *t;
+}
+
 int main(void){
   fn(5);
+
+  ASSERT(12, fn2(3));
+  ASSERT(28, fn2(7));
+
+  ASSERT(44, fn3(11));
+  ASSERT(52, fn3(13));
 
   printf("OK\n");
 }
