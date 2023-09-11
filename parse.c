@@ -644,8 +644,11 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   tok = skip(tok, "]");
   ty = type_suffix(rest, tok, ty);
 
-  if (ty->kind == TY_VLA || !is_const_expr(expr))
+  if (ty->kind == TY_VLA || !is_const_expr(expr)) {
+    if (scope->parent == NULL)
+      error_tok(tok, "variably-modified type at file scope");
     return vla_of(ty, expr);
+  }
   return array_of(ty, eval(expr));
 }
 
@@ -861,6 +864,9 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       error_tok(ty->name_pos, "variable name omitted");
 
     if (attr && attr->is_static) {
+      if (ty->kind == TY_VLA)
+        error_tok(tok, "variable length arrays cannot be 'static'");
+
       // static local variable
       Obj *var = new_anon_gvar(ty);
       push_scope(get_ident(ty->name))->var = var;
@@ -2568,6 +2574,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       mem->name = mem->ty->name;
       mem->idx = idx++;
       mem->align = attr.align ? attr.align : mem->ty->align;
+
+      for (Type *t = mem->ty; t; t = t->base)
+        if (t->kind == TY_VLA)
+          error_tok(tok, "members cannot be of variably-modified type");
 
       if (consume(&tok, tok, ":")) {
         mem->is_bitfield = true;
