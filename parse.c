@@ -98,7 +98,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty);
 static Type *declarator(Token **rest, Token *tok, Type *ty);
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static void array_initializer2(Token **rest, Token *tok, Initializer *init, int i);
-static void struct_initializer2(Token **rest, Token *tok, Initializer *init, Member *mem);
+static void struct_initializer2(Token **rest, Token *tok, Initializer *init, Member *mem, bool post_desig);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_ty);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
@@ -1045,7 +1045,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
     Member *mem = struct_designator(&tok, tok, init->ty);
     designation(&tok, tok, init->children[mem->idx]);
     init->expr = NULL;
-    struct_initializer2(rest, tok, init, mem->next);
+    struct_initializer2(rest, tok, init, mem->next, true);
     return;
   }
 
@@ -1180,13 +1180,13 @@ static void struct_initializer1(Token **rest, Token *tok, Initializer *init) {
 }
 
 // struct-initializer2 = initializer ("," initializer)*
-static void struct_initializer2(Token **rest, Token *tok, Initializer *init, Member *mem) {
+static void struct_initializer2(Token **rest, Token *tok, Initializer *init, Member *mem, bool post_desig) {
   bool first = true;
 
   for (; mem && !is_end(tok); mem = mem->next) {
     Token *start = tok;
 
-    if (!first)
+    if (!first || post_desig)
       tok = skip(tok, ",");
     first = false;
 
@@ -1256,7 +1256,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
       return;
     }
 
-    struct_initializer2(rest, tok, init, init->ty->members);
+    struct_initializer2(rest, tok, init, init->ty->members, false);
     return;
   }
 
