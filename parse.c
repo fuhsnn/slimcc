@@ -1911,6 +1911,10 @@ static int64_t eval2(Node *node, char ***label) {
   case ND_LABEL_VAL:
     *label = &node->unique_label;
     return 0;
+  case ND_DEREF:
+    if (node->ty->kind != TY_ARRAY)
+      error_tok(node->tok, "not a compile-time constant");
+    return eval2(node->lhs, label);
   case ND_MEMBER:
     if (!label)
       error_tok(node->tok, "not a compile-time constant");
