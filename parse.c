@@ -262,7 +262,7 @@ static Initializer *new_initializer(Type *ty, bool is_flexible) {
     // Count the number of struct members.
     int len = 0;
     for (Member *mem = ty->members; mem; mem = mem->next)
-      len++;
+      mem->idx = len++;
 
     init->children = calloc(len, sizeof(Initializer *));
 
@@ -1242,6 +1242,9 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
       init->expr = expr;
       return;
     }
+
+    if (!init->ty->members)
+      error_tok(tok, "initializer for empty aggregate requires explicit braces");
 
     struct_initializer2(rest, tok, init, init->ty->members, false);
     return;
@@ -2536,7 +2539,6 @@ static Node *unary(Token **rest, Token *tok) {
 static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {0};
   Member *cur = &head;
-  int idx = 0;
 
   while (!equal(tok, "}")) {
     VarAttr attr = {0};
@@ -2548,7 +2550,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         consume(&tok, tok, ";")) {
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = basety;
-      mem->idx = idx++;
       mem->align = attr.align ? attr.align : mem->ty->align;
       cur = cur->next = mem;
       continue;
@@ -2563,7 +2564,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = declarator(&tok, tok, basety);
       mem->name = mem->ty->name;
-      mem->idx = idx++;
       mem->align = attr.align ? attr.align : mem->ty->align;
 
       for (Type *t = mem->ty; t; t = t->base)
@@ -2626,7 +2626,7 @@ static Token *attribute_list(Token *tok, Type *ty) {
 }
 
 // struct-union-decl = attribute? ident? ("{" struct-members)?
-static Type *struct_union_decl(Token **rest, Token *tok) {
+static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
   Type *ty = struct_type();
   tok = attribute_list(tok, ty);
 
@@ -2639,6 +2639,7 @@ static Type *struct_union_decl(Token **rest, Token *tok) {
 
   if (tag && !equal(tok, "{")) {
     *rest = tok;
+    *no_list = true;
 
     Type *ty2 = find_tag(tag);
     if (ty2)
@@ -2672,14 +2673,17 @@ static Type *struct_union_decl(Token **rest, Token *tok) {
 
 // struct-decl = struct-union-decl
 static Type *struct_decl(Token **rest, Token *tok) {
-  Type *ty = struct_union_decl(rest, tok);
+  bool no_list = false;
+  Type *ty = struct_union_decl(rest, tok, &no_list);
   ty->kind = TY_STRUCT;
 
-  if (ty->size < 0)
+  if (no_list)
     return ty;
 
   // Assign offsets within the struct to members.
   int bits = 0;
+  Member head = {0};
+  Member *cur = &head;
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
     if (mem->is_bitfield && mem->bit_width == 0) {
@@ -2701,20 +2705,29 @@ static Type *struct_decl(Token **rest, Token *tok) {
       bits += mem->ty->size * 8;
     }
 
+    if (!mem->name && mem->is_bitfield) {
+      cur->next = NULL;
+      continue;
+    }
+
     if (!ty->is_packed && ty->align < mem->align)
       ty->align = mem->align;
+
+    cur = cur->next = mem;
   }
 
+  ty->members = head.next;
   ty->size = align_to(bits, ty->align * 8) / 8;
   return ty;
 }
 
 // union-decl = struct-union-decl
 static Type *union_decl(Token **rest, Token *tok) {
-  Type *ty = struct_union_decl(rest, tok);
+  bool no_list = false;
+  Type *ty = struct_union_decl(rest, tok, &no_list);
   ty->kind = TY_UNION;
 
-  if (ty->size < 0)
+  if (no_list)
     return ty;
 
   // If union, we don't have to assign offsets because they
