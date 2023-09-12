@@ -1005,24 +1005,11 @@ static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected a field designator");
 
-  for (Member *mem = ty->members; mem; mem = mem->next) {
-    // Anonymous struct member
-    if (mem->ty->kind == TY_STRUCT && !mem->name) {
-      if (get_struct_member(mem->ty, tok)) {
-        *rest = start;
-        return mem;
-      }
-      continue;
-    }
-
-    // Regular struct member
-    if (mem->name->len == tok->len && !strncmp(mem->name->loc, tok->loc, tok->len)) {
-      *rest = tok->next;
-      return mem;
-    }
-  }
-
-  error_tok(tok, "struct has no such member");
+  Member *mem = get_struct_member(ty, tok);
+  if (!mem)
+    error_tok(tok, "struct has no such member");
+  *rest = mem->name ? tok->next : start;
+  return mem;
 }
 
 // designation = ("[" const-expr "]" | "." ident)* "="? initializer
@@ -2748,14 +2735,11 @@ static Member *get_struct_member(Type *ty, Token *tok) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
     // Anonymous struct member
     if ((mem->ty->kind == TY_STRUCT || mem->ty->kind == TY_UNION) &&
-        !mem->name) {
-      if (get_struct_member(mem->ty, tok))
-        return mem;
-      continue;
-    }
+        !mem->name && get_struct_member(mem->ty, tok))
+      return mem;
 
     // Regular struct member
-    if (mem->name->len == tok->len &&
+    if (mem->name && (mem->name->len == tok->len) &&
         !strncmp(mem->name->loc, tok->loc, tok->len))
       return mem;
   }
