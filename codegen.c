@@ -378,7 +378,10 @@ static char i64f32[] = "cvtsi2ssq %rax, %xmm0";
 static char i64f64[] = "cvtsi2sdq %rax, %xmm0";
 static char i64f80[] = "movq %rax, -8(%rsp); fildll -8(%rsp)";
 
-static char u64f32[] = "cvtsi2ssq %rax, %xmm0";
+static char u64f32[] =
+  "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2ss %rax,%xmm0; jmp 2f; "
+  "1: mov %rax,%rdi; and $1,%eax; pxor %xmm0,%xmm0; shr %rdi; "
+  "or %rax,%rdi; cvtsi2ss %rdi,%xmm0; addss %xmm0,%xmm0; 2:";
 static char u64f64[] =
   "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2sd %rax,%xmm0; jmp 2f; "
   "1: mov %rax,%rdi; and $1,%eax; pxor %xmm0,%xmm0; shr %rdi; "
