@@ -114,6 +114,7 @@ void error(char *fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
 void error_at(char *loc, char *fmt, ...) __attribute__((format(printf, 2, 3), noreturn));
 void error_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3), noreturn));
 void warn_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3)));
+void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);

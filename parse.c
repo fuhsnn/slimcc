@@ -89,6 +89,9 @@ static Node *current_switch;
 
 static Obj *builtin_alloca;
 
+
+static bool *eval_recover;
+
 static bool is_typename(Token *tok);
 static Type *declspec(Token **rest, Token *tok, VarAttr *attr);
 static Type *typename(Token **rest, Token *tok);
@@ -1837,6 +1840,18 @@ static int64_t eval(Node *node) {
   return eval2(node, NULL);
 }
 
+static int64_t eval_error(Token *tok, char *fmt, ...) {
+  if (eval_recover) {
+    *eval_recover = true;
+    return 0;
+  }
+  va_list ap;
+  va_start(ap, fmt);
+  verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+  va_end(ap);
+  exit(1);
+}
+
 // Evaluate a given node as a constant expression.
 //
 // A constant expression is either just a number or ptr+n where ptr
@@ -1920,33 +1935,33 @@ static int64_t eval2(Node *node, char ***label) {
     return 0;
   case ND_DEREF:
     if (node->ty->kind != TY_ARRAY)
-      error_tok(node->tok, "not a compile-time constant");
+      return eval_error(node->tok, "not a compile-time constant");
     return eval2(node->lhs, label);
   case ND_MEMBER:
     if (!label)
-      error_tok(node->tok, "not a compile-time constant");
+      return eval_error(node->tok, "not a compile-time constant");
     if (node->ty->kind != TY_ARRAY)
-      error_tok(node->tok, "invalid initializer");
+      return eval_error(node->tok, "invalid initializer");
     return eval_rval(node->lhs, label) + node->member->offset;
   case ND_VAR:
     if (!label)
-      error_tok(node->tok, "not a compile-time constant");
+      return eval_error(node->tok, "not a compile-time constant");
     if (node->var->ty->kind != TY_ARRAY && node->var->ty->kind != TY_FUNC)
-      error_tok(node->tok, "invalid initializer");
+      return eval_error(node->tok, "invalid initializer");
     *label = &node->var->name;
     return 0;
   case ND_NUM:
     return node->val;
   }
 
-  error_tok(node->tok, "not a compile-time constant");
+  return eval_error(node->tok, "not a compile-time constant");
 }
 
 static int64_t eval_rval(Node *node, char ***label) {
   switch (node->kind) {
   case ND_VAR:
     if (node->var->is_local)
-      error_tok(node->tok, "not a compile-time constant");
+      return eval_error(node->tok, "not a compile-time constant");
     *label = &node->var->name;
     return 0;
   case ND_DEREF:
@@ -1955,45 +1970,17 @@ static int64_t eval_rval(Node *node, char ***label) {
     return eval_rval(node->lhs, label) + node->member->offset;
   }
 
-  error_tok(node->tok, "invalid initializer");
+  return eval_error(node->tok, "invalid initializer");
 }
 
 static bool is_const_expr(Node *node) {
-  add_type(node);
+  bool failed = false;
 
-  switch (node->kind) {
-  case ND_ADD:
-  case ND_SUB:
-  case ND_MUL:
-  case ND_DIV:
-  case ND_BITAND:
-  case ND_BITOR:
-  case ND_BITXOR:
-  case ND_SHL:
-  case ND_SHR:
-  case ND_EQ:
-  case ND_NE:
-  case ND_LT:
-  case ND_LE:
-  case ND_LOGAND:
-  case ND_LOGOR:
-    return is_const_expr(node->lhs) && is_const_expr(node->rhs);
-  case ND_COND:
-    if (!is_const_expr(node->cond))
-      return false;
-    return is_const_expr(eval(node->cond) ? node->then : node->els);
-  case ND_COMMA:
-    return is_const_expr(node->rhs);
-  case ND_NEG:
-  case ND_NOT:
-  case ND_BITNOT:
-  case ND_CAST:
-    return is_const_expr(node->lhs);
-  case ND_NUM:
-    return true;
-  }
-
-  return false;
+  assert(!eval_recover);
+  eval_recover = &failed;
+  eval(node);
+  eval_recover = NULL;
+  return !failed;
 }
 
 int64_t const_expr(Token **rest, Token *tok) {
@@ -2033,7 +2020,7 @@ static double eval_double(Node *node) {
     return node->fval;
   }
 
-  error_tok(node->tok, "not a compile-time constant");
+  return eval_error(node->tok, "not a compile-time constant");
 }
 
 // Convert op= operators to expressions containing an assignment.
