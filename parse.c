@@ -1188,25 +1188,26 @@ static void struct_initializer2(Token **rest, Token *tok, Initializer *init, Mem
 }
 
 static void union_initializer(Token **rest, Token *tok, Initializer *init) {
-  // Unlike structs, union initializers take only one initializer,
-  // and that initializes the first union member by default.
-  // You can initialize other member using a designated initializer.
-  if (equal(tok, "{") && equal(tok->next, ".")) {
-    Member *mem = struct_designator(&tok, tok->next, init->ty);
-    init->mem = mem;
-    designation(&tok, tok, init->children[mem->idx]);
-    *rest = skip(tok, "}");
-    return;
-  }
+  tok = skip(tok, "{");
 
-  init->mem = init->ty->members;
+  bool first = true;
 
-  if (equal(tok, "{")) {
-    initializer2(&tok, tok->next, init->children[0]);
-    consume(&tok, tok, ",");
-    *rest = skip(tok, "}");
-  } else {
-    initializer2(rest, tok, init->children[0]);
+  for (; !consume_end(rest, tok); first = false) {
+    if (!first)
+      tok = skip(tok, ",");
+
+    if (equal(tok, ".")) {
+      init->mem = struct_designator(&tok, tok, init->ty);
+      designation(&tok, tok, init->children[init->mem->idx]);
+      continue;
+    }
+
+    if (first && init->ty->members) {
+      init->mem = init->ty->members;
+      initializer2(&tok, tok, init->children[0]);
+    } else {
+      tok = skip_excess_element(tok);
+    }
   }
 }
 
@@ -1251,7 +1252,22 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
   }
 
   if (init->ty->kind == TY_UNION) {
-    union_initializer(rest, tok, init);
+    if (equal(tok, "{")) {
+      union_initializer(rest, tok, init);
+      return;
+    }
+
+    Node *expr = assign(rest, tok);
+    add_type(expr);
+    if (expr->ty->kind == TY_UNION) {
+      init->expr = expr;
+      return;
+    }
+    if (!init->ty->members)
+      error_tok(tok, "initializer for empty aggregate requires explicit braces");
+
+    init->mem = init->ty->members;
+    initializer2(rest, tok, init->children[0]);
     return;
   }
 
@@ -1343,9 +1359,10 @@ static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token
   }
 
   if (ty->kind == TY_UNION) {
-    Member *mem = init->mem ? init->mem : ty->members;
-    InitDesg desg2 = {desg, 0, mem};
-    return create_lvar_init(init->children[mem->idx], mem->ty, &desg2, tok);
+    if (!init->mem)
+      return NULL;
+    InitDesg desg2 = {desg, 0, init->mem};
+    return create_lvar_init(init->children[init->mem->idx], init->mem->ty, &desg2, tok);
   }
 
   return NULL;
@@ -2733,12 +2750,22 @@ static Type *union_decl(Token **rest, Token *tok) {
   // If union, we don't have to assign offsets because they
   // are already initialized to zero. We need to compute the
   // alignment and the size though.
+  Member head = {0};
+  Member *cur = &head;
   for (Member *mem = ty->members; mem; mem = mem->next) {
+    if (!mem->name && mem->is_bitfield) {
+      cur->next = NULL;
+      continue;
+    }
+
     if (ty->align < mem->align)
       ty->align = mem->align;
     if (ty->size < mem->ty->size)
       ty->size = mem->ty->size;
+
+    cur = cur->next = mem;
   }
+  ty->members = head.next;
   ty->size = align_to(ty->size, ty->align);
   return ty;
 }

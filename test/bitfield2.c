@@ -59,10 +59,33 @@ int struct_init(void) {
   ASSERT(33, ({ struct { int :1; int a; int :1; struct { int :1; int b; int:1; int c; }; } s = {11,22,33}; s.c; }));
 }
 
+void union_init() {
+
+  ASSERT(33, ({ union { int :1,:1; int a; } s = {33}; s.a; }));
+  ASSERT(33, ({ struct { union { int :1,:1; }; int a;} s = {{23},33}; s.a;}));
+  ASSERT(33, ({ struct { union { int :1,:1; }; int a;} s = {{23},33}; s.a;}));
+
+  ASSERT(11, ({ struct { int a; union { int :1,:7; }; int b; } s = {11,{},33}; s.a; }));
+  ASSERT(33, ({ struct { int a; union { int :1,:7; }; int b; } s = {11,{},33}; s.b; }));
+
+  ASSERT(11, ({ union { struct { int a,:1,b,:1,:1,c,:1; }; } s = {.a=11,22,33}; s.a; }));
+  ASSERT(22, ({ union { struct { int a,:1,b,:1,:1,c,:1; }; } s = {.a=11,22,33}; s.b; }));
+  ASSERT(33, ({ union { struct { int a,:1,b,:1,:1,c,:1; }; } s = {.a=11,22,33}; s.c; }));
+
+
+  ASSERT(22, ({ union { struct { int a, :1; int b, :1, :1; int c, :1; }; } s = {.a=11,22,33}; s.b; }));
+
+  ASSERT(0, ({ union { union { }; int a; } s = {{}}; s.a; }));
+
+  ASSERT(0, ({ union { struct { int :1,:1; }; int a; } s = {{}}; s.a; }));
+
+  ASSERT(22, ({ struct { int a; union { int:1; int b; }; } s = {11,22}; s.b; }));
+}
 
 int main(void) {
   bitextract();
   struct_init();
+  union_init();
 
 
   printf("OK\n");
