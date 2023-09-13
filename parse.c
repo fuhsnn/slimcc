@@ -2753,6 +2753,14 @@ static Type *union_decl(Token **rest, Token *tok) {
   Member head = {0};
   Member *cur = &head;
   for (Member *mem = ty->members; mem; mem = mem->next) {
+    int sz;
+    if (mem->is_bitfield)
+      sz = align_to(mem->bit_width, 8) / 8;
+    else
+      sz = mem->ty->size;
+
+    ty->size = MAX(ty->size, sz);
+
     if (!mem->name && mem->is_bitfield) {
       cur->next = NULL;
       continue;
@@ -2760,8 +2768,6 @@ static Type *union_decl(Token **rest, Token *tok) {
 
     if (ty->align < mem->align)
       ty->align = mem->align;
-    if (ty->size < mem->ty->size)
-      ty->size = mem->ty->size;
 
     cur = cur->next = mem;
   }

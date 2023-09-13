@@ -1,4 +1,5 @@
 #include "test.h"
+#include <stdint.h>
 
 union {char a; int b;} g11[2] = {{1}, {3}};
 union {int a[2];} g12[2] = {{{1, 2}}};
@@ -145,6 +146,13 @@ int main() {
   ASSERT(3, ({ union { struct { int a; struct { int b, c; }; }; } x={.b=1,2,.a=3}; x.a; }));
   ASSERT(1, ({ union { struct { int a; struct { int b, c; }; }; } x={.b=1,2,.a=3}; x.b; }));
   ASSERT(2, ({ union { struct { int a; struct { int b, c; }; }; } x={.b=1,2,.a=3}; x.c; }));
+
+
+  ASSERT(5, ({ union U { int8_t a; int64_t :37; }; sizeof(union U); }));
+  ASSERT(1, ({ union U { int8_t a; int64_t :37; }; _Alignof(union U); }));
+
+  ASSERT(6, ({ union U { int16_t a; int64_t :47; }; sizeof(union U); }));
+  ASSERT(2, ({ union U { int16_t a; int64_t :47; }; _Alignof(union U); }));
 
   printf("OK\n");
   return 0;
