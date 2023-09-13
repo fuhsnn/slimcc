@@ -1,6 +1,37 @@
 #include "test.h"
 struct M { int : 0; int f2 : 12; };
 
+int bitextract(void){
+struct Fields {
+    _Bool    a :1;
+    long long  :3;
+    unsigned b :4;
+    _Bool    c :1;
+    unsigned d :3;
+    unsigned e :2;
+    long       :2;
+};
+
+  struct Fields s1 = {11,22,33,44,55,66,77};
+  struct Fields s2 = {77,66,55,44,33,22,11};
+
+  ASSERT(4, sizeof(struct Fields));
+  ASSERT(4, _Alignof(struct Fields));
+  ASSERT(0, memcmp(&(int){14689}, &s1, 2));
+  ASSERT(0, memcmp(&(int){6433}, &s2, 2));
+  ASSERT(1, s1.a);
+  ASSERT(6, s1.b);
+  ASSERT(1, s1.c);
+  ASSERT(4, s1.d);
+  ASSERT(3, s1.e);
+
+  ASSERT(1, s2.a);
+  ASSERT(2, s2.b);
+  ASSERT(1, s2.c);
+  ASSERT(4, s2.d);
+  ASSERT(1, s2.e);
+}
+
 int struct_init(void) {
   struct M m = {11,22};
   ASSERT(11, ({ m.f2; }));
@@ -30,6 +61,7 @@ int struct_init(void) {
 
 
 int main(void) {
+  bitextract();
   struct_init();
 
 
