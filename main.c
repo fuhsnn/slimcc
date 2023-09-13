@@ -8,6 +8,7 @@ StringArray include_paths;
 bool opt_fcommon = true;
 bool opt_fpic;
 bool opt_optimize;
+bool opt_g;
 
 static FileType opt_x;
 static StringArray opt_include;
@@ -316,8 +317,18 @@ static void parse_args(int argc, char **argv) {
       exit(0);
     }
 
+    if (!strncmp(argv[i], "-g", 2)) {
+      if (argv[i][2] == '0')
+        opt_g = false;
+      else
+        opt_g = true;
+      continue;
+    }
+
     if (!strncmp(argv[i], "-O", 2)) {
-      if (argv[i][2] != '0')
+      if (argv[i][2] == '0')
+        opt_optimize = false;
+      else
         opt_optimize = true;
       continue;
     }
@@ -330,7 +341,6 @@ static void parse_args(int argc, char **argv) {
 
     // These options are ignored for now.
     if (!strncmp(argv[i], "-W", 2) ||
-        !strncmp(argv[i], "-g", 2) ||
         !strncmp(argv[i], "-std=", 5) ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
