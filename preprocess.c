@@ -825,7 +825,17 @@ static void read_line_marker(Token **rest, Token *tok) {
 
   if (tok->kind != TK_STR)
     error_tok(tok, "filename expected");
-  start->file->display_name = tok->str;
+
+  start->file->display_file = add_input_file(tok->str, NULL);
+}
+
+static void add_loc_info(Token *tok) {
+  Token *tmpl = tok;
+  while (tmpl->origin)
+    tmpl = tmpl->origin;
+
+  tok->display_file_no = tmpl->file->display_file->file_no;
+  tok->display_line_no = tmpl->line_no + tmpl->file->line_delta;
 }
 
 // Visit all tokens in `tok` while evaluating preprocessing
@@ -841,7 +851,8 @@ static Token *preprocess2(Token *tok) {
       continue;
 
     if (!is_hash(tok) || locked_macros) {
-      tok->line_delta = tok->file->line_delta;
+      if (opt_g)
+        add_loc_info(tok);
       cur = cur->next = tok;
       tok = tok->next;
       continue;
@@ -1018,7 +1029,7 @@ static Macro *add_builtin(char *name, macro_handler_fn *fn) {
 static Token *file_macro(Token *tmpl) {
   while (tmpl->origin)
     tmpl = tmpl->origin;
-  return new_str_token(tmpl->file->display_name, tmpl);
+  return new_str_token(tmpl->file->display_file->name, tmpl);
 }
 
 static Token *line_macro(Token *tmpl) {
@@ -1216,7 +1227,5 @@ Token *preprocess(Token *tok) {
   convert_pp_tokens(tok);
   join_adjacent_string_literals(tok);
 
-  for (Token *t = tok; t; t = t->next)
-    t->line_no += t->line_delta;
   return tok;
 }

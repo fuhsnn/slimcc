@@ -78,15 +78,16 @@ typedef enum {
   TK_EOF,     // End-of-file markers
 } TokenKind;
 
-typedef struct {
+typedef struct File File;
+struct File {
   char *name;
   int file_no;
   char *contents;
 
   // For #line directive
-  char *display_name;
+  File *display_file;
   int line_delta;
-} File;
+};
 
 // Token type
 typedef struct Token Token;
@@ -102,7 +103,8 @@ struct Token {
 
   File *file;       // Source location
   int line_no;      // Line number
-  int line_delta;   // Line number
+  int display_line_no;
+  int display_file_no;
   bool at_bol;      // True if this token is at beginning of line
   bool has_space;   // True if this token follows a space character
   bool dont_expand; // True if a macro token is encountered during the macro's expansion
@@ -124,6 +126,7 @@ File *new_file(char *name, int file_no, char *contents);
 Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end);
+File *add_input_file(char *path, char *content);
 
 #define unreachable() \
   error("internal error at %s:%d", __FILE__, __LINE__)
@@ -460,4 +463,5 @@ extern StringArray include_paths;
 extern bool opt_fpic;
 extern bool opt_fcommon;
 extern bool opt_optimize;
+extern bool opt_g;
 extern char *base_file;

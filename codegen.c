@@ -747,9 +747,22 @@ static void builtin_alloca(void) {
   println("  mov %%rax, %d(%%rbp)", current_fn->alloca_bottom->offset);
 }
 
+static void print_loc(Token *tok) {
+  static int file_no, line_no;
+
+  if (file_no == tok->display_file_no && line_no == tok->display_line_no)
+    return;
+
+  println("  .loc %d %d", tok->display_file_no, tok->display_line_no);
+
+  file_no = tok->display_file_no;
+  line_no = tok->display_line_no;
+}
+
 // Generate code for a given node.
 static void gen_expr(Node *node) {
-  println("  .loc %d %d", node->tok->file->file_no, node->tok->line_no);
+  if (opt_g)
+    print_loc(node->tok);
 
   switch (node->kind) {
   case ND_NULL_EXPR:
@@ -1250,7 +1263,8 @@ static void gen_expr(Node *node) {
 }
 
 static void gen_stmt(Node *node) {
-  println("  .loc %d %d", node->tok->file->file_no, node->tok->line_no);
+  if (opt_g)
+    print_loc(node->tok);
 
   switch (node->kind) {
   case ND_IF: {
@@ -1674,10 +1688,11 @@ static void emit_text(Obj *prog) {
 void codegen(Obj *prog, FILE *out) {
   output_file = out;
 
-  File **files = get_input_files();
-  for (int i = 0; files[i]; i++)
-    println("  .file %d \"%s\"", files[i]->file_no, files[i]->name);
-
+  if (opt_g) {
+    File **files = get_input_files();
+    for (int i = 0; files[i]; i++)
+      println("  .file %d \"%s\"", files[i]->file_no, files[i]->name);
+  }
   assign_lvar_offsets(prog);
   emit_data(prog);
   emit_text(prog);

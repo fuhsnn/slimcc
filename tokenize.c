@@ -685,7 +685,7 @@ File **get_input_files(void) {
 File *new_file(char *name, int file_no, char *contents) {
   File *file = calloc(1, sizeof(File));
   file->name = name;
-  file->display_name = name;
+  file->display_file = file;
   file->file_no = file_no;
   file->contents = contents;
   return file;
@@ -779,6 +779,25 @@ static void convert_universal_chars(char *p) {
   *q = '\0';
 }
 
+File *add_input_file(char *path, char *contents) {
+  static HashMap input_files_map;
+
+  File *file = hashmap_get(&input_files_map, path);
+  if (file)
+    return file;
+
+  static int file_no;
+  file = new_file(path, file_no + 1, contents);
+
+  input_files = realloc(input_files, sizeof(File *) * (file_no + 2));
+  input_files[file_no] = file;
+  input_files[file_no + 1] = NULL;
+  file_no++;
+
+  hashmap_put(&input_files_map, path, file);
+  return file;
+}
+
 Token *tokenize_file(char *path, Token **end) {
   char *p = read_file(path);
   if (!p)
@@ -795,15 +814,6 @@ Token *tokenize_file(char *path, Token **end) {
   remove_backslash_newline(p);
   convert_universal_chars(p);
 
-  // Save the filename for assembler .file directive.
-  static int file_no;
-  File *file = new_file(path, file_no + 1, p);
 
-  // Save the filename for assembler .file directive.
-  input_files = realloc(input_files, sizeof(File *) * (file_no + 2));
-  input_files[file_no] = file;
-  input_files[file_no + 1] = NULL;
-  file_no++;
-
-  return tokenize(file, end);
+  return tokenize(add_input_file(path, p), end);
 }
