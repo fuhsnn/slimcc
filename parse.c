@@ -1524,6 +1524,21 @@ static bool is_typename(Token *tok) {
   return hashmap_get2(&map, tok->loc, tok->len) || find_typedef(tok);
 }
 
+static void static_assertion(Token **rest, Token *tok) {
+  tok = skip(tok, "(");
+  int64_t result = const_expr(&tok, tok);
+  if (!result)
+    error_tok(tok, "static assertion failed");
+
+  if (equal(tok, ",")) {
+    if (tok->next->kind != TK_STR)
+      error_tok(tok, "expected string literal");
+    tok = tok->next->next;
+  }
+  tok = skip(tok, ")");
+  *rest = skip(tok, ";");
+}
+
 // asm-stmt = "asm" ("volatile" | "inline")* "(" string-literal ")"
 static Node *asm_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_ASM, tok);
@@ -1659,6 +1674,8 @@ static Node *stmt(Token **rest, Token *tok) {
       Node *expr = declaration(&tok, tok, basety, NULL);
       if (expr)
         node->init = new_unary(ND_EXPR_STMT, expr, tok);
+    } else if (equal(tok, "_Static_assert")) {
+      static_assertion(&tok, tok->next);
     } else {
       node->init = expr_stmt(&tok, tok);
     }
@@ -1781,6 +1798,11 @@ static Node *compound_stmt(Token **rest, Token *tok) {
   enter_scope();
 
   for (; !equal(tok, "}"); add_type(cur)) {
+    if (equal(tok, "_Static_assert")) {
+      static_assertion(&tok, tok->next);
+      continue;
+    }
+
     if (is_typename(tok) && !equal(tok->next, ":")) {
       VarAttr attr = {0};
       Type *basety = declspec(&tok, tok, &attr);
@@ -2545,6 +2567,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
 
   while (!equal(tok, "}")) {
+    if (equal(tok, "_Static_assert")) {
+      static_assertion(&tok, tok->next);
+      continue;
+    }
+
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr);
     bool first = true;
@@ -3361,6 +3388,11 @@ Obj *parse(Token *tok) {
   globals = NULL;
 
   while (tok->kind != TK_EOF) {
+    if (equal(tok, "_Static_assert")) {
+      static_assertion(&tok, tok->next);
+      continue;
+    }
+
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr);
 
