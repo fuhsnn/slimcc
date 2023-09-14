@@ -3049,10 +3049,16 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
-  if (equal(tok, "sizeof") && equal(tok->next, "(") && is_typename(tok->next->next)) {
-    Type *ty = typename(&tok, tok->next->next);
-    *rest = skip(tok, ")");
-
+  if (equal(tok, "sizeof")) {
+    Type *ty;
+    if (equal(tok->next, "(") && is_typename(tok->next->next)) {
+      ty = typename(&tok, tok->next->next);
+      *rest = skip(tok, ")");
+    } else {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+    }
     if (ty->kind == TY_VLA) {
       if (ty->vla_size)
         return new_var_node(ty->vla_size, tok);
@@ -3060,14 +3066,6 @@ static Node *primary(Token **rest, Token *tok) {
     }
 
     return new_ulong(ty->size, start);
-  }
-
-  if (equal(tok, "sizeof")) {
-    Node *node = unary(rest, tok->next);
-    add_type(node);
-    if (node->ty->kind == TY_VLA)
-      return new_var_node(node->ty->vla_size, tok);
-    return new_ulong(node->ty->size, tok);
   }
 
   if (equal(tok, "_Alignof") && equal(tok->next, "(") && is_typename(tok->next->next)) {
