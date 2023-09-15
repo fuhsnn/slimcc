@@ -1320,19 +1320,31 @@ static void gen_stmt(Node *node) {
     gen_expr(node->cond);
 
     for (Node *n = node->case_next; n; n = n->case_next) {
-      char *ax = (node->cond->ty->size == 8) ? "%rax" : "%eax";
-      char *di = (node->cond->ty->size == 8) ? "%rdi" : "%edi";
+      char *ax, *di, *dx;
+
+      if (node->cond->ty->size == 8) {
+        ax = "%rax";
+        di = "%rdi";
+        dx = "%rdx";
+      } else {
+        ax = "%eax";
+        di = "%edi";
+        dx = "%edx";
+      }
 
       if (n->begin == n->end) {
-        println("  cmp $%ld, %s", n->begin, ax);
+        println("  mov $%ld, %s", n->begin, dx);
+        println("  cmp %s, %s", dx, ax);
         println("  je %s", n->label);
         continue;
       }
 
       // [GNU] Case ranges
       println("  mov %s, %s", ax, di);
-      println("  sub $%ld, %s", n->begin, di);
-      println("  cmp $%ld, %s", n->end - n->begin, di);
+      println("  mov $%ld, %s", n->begin, dx);
+      println("  sub %s, %s", dx, di);
+      println("  mov $%ld, %s", n->end - n->begin, dx);
+      println("  cmp %s, %s", dx, di);
       println("  jbe %s", n->label);
     }
 

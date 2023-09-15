@@ -1624,17 +1624,29 @@ static Node *stmt(Token **rest, Token *tok) {
       error_tok(tok, "stray case");
 
     Node *node = new_node(ND_CASE, tok);
-    int begin = const_expr(&tok, tok->next);
-    int end;
+    int64_t begin = const_expr(&tok, tok->next);
+    int64_t end;
 
-    if (equal(tok, "...")) {
-      // [GNU] Case ranges, e.g. "case 1 ... 5:"
+    add_type(current_switch->cond);
+
+    // [GNU] Case ranges, e.g. "case 1 ... 5:"
+    if (equal(tok, "..."))
       end = const_expr(&tok, tok->next);
-      if (end < begin)
-        error_tok(tok, "empty case range specified");
-    } else {
+    else
       end = begin;
+
+    if (current_switch->cond->ty->size == 4) {
+      if (!current_switch->cond->ty->is_unsigned) {
+        begin = (int32_t) begin;
+        end = (int32_t) end;
+      } else {
+        begin = (uint32_t) begin;
+        end = (uint32_t) end;
+      }
     }
+    if ((!current_switch->cond->ty->is_unsigned && (end < begin)) ||
+      ((current_switch->cond->ty->is_unsigned && ((uint64_t)end < begin))))
+      error_tok(tok, "empty case range specified");
 
     tok = skip(tok, ":");
     node->label = new_unique_name();
