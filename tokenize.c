@@ -95,7 +95,6 @@ bool consume(Token **rest, Token *tok, char *str) {
     *rest = tok->next;
     return true;
   }
-  *rest = tok;
   return false;
 }
 

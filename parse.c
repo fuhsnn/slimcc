@@ -575,10 +575,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
 // func-params = ("void" | param ("," param)* ("," "...")?)? ")"
 // param       = declspec declarator
 static Type *func_params(Token **rest, Token *tok, Type *ty) {
-  if (equal(tok, "void") && equal(tok->next, ")")) {
-    *rest = tok->next->next;
+  if (equal(tok, "void") && consume(rest, tok->next, ")"))
     return func_type(ty);
-  }
 
   Obj head = {0};
   Obj *cur = &head;
@@ -1848,10 +1846,8 @@ static Node *compound_stmt(Token **rest, Token *tok) {
 
 // expr-stmt = expr? ";"
 static Node *expr_stmt(Token **rest, Token *tok) {
-  if (equal(tok, ";")) {
-    *rest = tok->next;
+  if (consume(rest, tok, ";"))
     return new_node(ND_BLOCK, tok);
-  }
 
   Node *node = new_node(ND_EXPR_STMT, tok);
   node->lhs = expr(&tok, tok);

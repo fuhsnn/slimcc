@@ -228,7 +228,8 @@ static Token *read_const_expr(Token **rest, Token *tok) {
     // is defined. Otherwise "0".
     if (equal(tok, "defined")) {
       Token *start = tok;
-      bool has_paren = consume(&tok, tok->next, "(");
+      tok = tok->next;
+      bool has_paren = consume(&tok, tok, "(");
 
       if (tok->kind != TK_IDENT)
         error_tok(start, "macro name must be an identifier");
