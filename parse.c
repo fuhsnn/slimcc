@@ -351,6 +351,23 @@ static void chain_expr(Node **lhs, Node *rhs) {
     *lhs = !*lhs ? rhs : new_binary(ND_COMMA, *lhs, rhs, rhs->tok);
 }
 
+static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma) {
+  Token *tok = *tok_rest;
+  if (consume(rest, tok, end))
+    return false;
+
+  if (skip_comma) {
+    tok = skip(tok, ",");
+
+    // curly brackets allow trailing comma
+    if (!strcmp(end, "}") && consume(rest, tok, "}"))
+      return false;
+
+    *tok_rest = tok;
+  }
+  return true;
+}
+
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 //             | "typedef" | "static" | "extern" | "inline"
 //             | "_Thread_local" | "__thread"
@@ -587,14 +604,10 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
   enter_scope();
   fn_ty->scopes = scope;
 
-  while (!equal(tok, ")")) {
-    if (cur != &head)
-      tok = skip(tok, ",");
-
+  while (comma_list(rest, &tok, ")", cur != &head)) {
     if (equal(tok, "...")) {
       is_variadic = true;
-      tok = tok->next;
-      skip(tok, ")");
+      *rest = skip(tok->next, ")");
       break;
     }
 
@@ -627,7 +640,6 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
   fn_ty->param_list = head.param_next;
   fn_ty->vla_calc = vla_calc;
   fn_ty->is_variadic = is_variadic;
-  *rest = tok->next;
   return fn_ty;
 }
 
@@ -732,20 +744,6 @@ static bool is_end(Token *tok) {
   return equal(tok, "}") || (equal(tok, ",") && equal(tok->next, "}"));
 }
 
-static bool consume_end(Token **rest, Token *tok) {
-  if (equal(tok, "}")) {
-    *rest = tok->next;
-    return true;
-  }
-
-  if (equal(tok, ",") && equal(tok->next, "}")) {
-    *rest = tok->next->next;
-    return true;
-  }
-
-  return false;
-}
-
 // enum-specifier = ident? "{" enum-list? "}"
 //                | ident ("{" enum-list? "}")?
 //
@@ -773,12 +771,9 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   tok = skip(tok, "{");
 
   // Read an enum-list.
-  int i = 0;
   int val = 0;
-  while (!consume_end(rest, tok)) {
-    if (i++ > 0)
-      tok = skip(tok, ",");
-
+  bool first = true;
+  for (; comma_list(rest, &tok, "}", !first); first = false) {
     char *name = get_ident(tok);
     tok = tok->next;
 
@@ -848,12 +843,9 @@ static Node *new_alloca(Node *sz) {
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   Node *expr = NULL;
-  int i = 0;
 
-  while (!equal(tok, ";")) {
-    if (i++ > 0)
-      tok = skip(tok, ",");
-
+  bool first = true;
+  for (; comma_list(rest, &tok, ";", !first); first = false) {
     Type *ty = declarator(&tok, tok, basety);
     if (ty->kind == TY_FUNC) {
       func_prototype(ty, attr);
@@ -908,8 +900,6 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     if (var->ty->kind == TY_VOID)
       error_tok(ty->name, "variable declared void");
   }
-
-  *rest = tok->next;
   return expr;
 }
 
@@ -1056,16 +1046,11 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
 // (e.g. `int x[] = {1,2,3}`). If it's omitted, count the number
 // of initializer elements.
 static int count_array_init_elements(Token *tok, Type *ty) {
-  bool first = true;
   Initializer *dummy = new_initializer(ty->base, true);
 
   int i = 0, max = 0;
 
-  while (!consume_end(&tok, tok)) {
-    if (!first)
-      tok = skip(tok, ",");
-    first = false;
-
+  while (comma_list(&tok, &tok, "}", i)) {
     if (equal(tok, "[")) {
       i = const_expr(&tok, tok->next);
       if (equal(tok, "..."))
@@ -1091,13 +1076,9 @@ static void array_initializer1(Token **rest, Token *tok, Initializer *init) {
     *init = *new_initializer(array_of(init->ty->base, len), false);
   }
 
+  int i = 0;
   bool first = true;
-
-  for (int i = 0; !consume_end(rest, tok); i++) {
-    if (!first)
-      tok = skip(tok, ",");
-    first = false;
-
+  for (; comma_list(rest, &tok, "}", !first); first = false, i++) {
     if (equal(tok, "[")) {
       int begin, end;
       array_designator(&tok, tok, init->ty, &begin, &end);
@@ -1144,13 +1125,9 @@ static void struct_initializer1(Token **rest, Token *tok, Initializer *init) {
   tok = skip(tok, "{");
 
   Member *mem = init->ty->members;
+
   bool first = true;
-
-  while (!consume_end(rest, tok)) {
-    if (!first)
-      tok = skip(tok, ",");
-    first = false;
-
+  for (; comma_list(rest, &tok, "}", !first); first = false) {
     if (equal(tok, ".")) {
       mem = struct_designator(&tok, tok, init->ty);
       designation(&tok, tok, init->children[mem->idx]);
@@ -1192,11 +1169,7 @@ static void union_initializer(Token **rest, Token *tok, Initializer *init) {
   tok = skip(tok, "{");
 
   bool first = true;
-
-  for (; !consume_end(rest, tok); first = false) {
-    if (!first)
-      tok = skip(tok, ",");
-
+  for (; comma_list(rest, &tok, "}", !first); first = false) {
     if (equal(tok, ".")) {
       init->mem = struct_designator(&tok, tok, init->ty);
       designation(&tok, tok, init->children[init->mem->idx]);
@@ -2582,7 +2555,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr);
-    bool first = true;
 
     // Anonymous struct member
     if ((basety->kind == TY_STRUCT || basety->kind == TY_UNION) &&
@@ -2595,11 +2567,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     }
 
     // Regular struct members
-    while (!consume(&tok, tok, ";")) {
-      if (!first)
-        tok = skip(tok, ",");
-      first = false;
-
+    bool first = true;
+    for (; comma_list(&tok, &tok, ";", !first); first = false) {
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = declarator(&tok, tok, basety);
       mem->name = mem->ty->name;
@@ -2637,12 +2606,7 @@ static Token *attribute_list(Token *tok, Type *ty) {
     tok = skip(tok, "(");
 
     bool first = true;
-
-    while (!consume(&tok, tok, ")")) {
-      if (!first)
-        tok = skip(tok, ",");
-      first = false;
-
+    for (; comma_list(&tok, &tok, ")", !first); first = false) {
       if (consume(&tok, tok, "packed")) {
         ty->is_packed = true;
         continue;
@@ -2660,7 +2624,6 @@ static Token *attribute_list(Token *tok, Type *ty) {
 
     tok = skip(tok, ")");
   }
-
   return tok;
 }
 
@@ -2946,10 +2909,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Node head = {0};
   Node *cur = &head;
 
-  while (!equal(tok, ")")) {
-    if (cur != &head)
-      tok = skip(tok, ",");
-
+  while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
     add_type(arg);
 
@@ -2971,8 +2931,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   if (param)
     error_tok(tok, "too few arguments");
-
-  *rest = skip(tok, ")");
 
   Node *node = new_unary(ND_FUNCALL, fn, tok);
   node->ty = ty->return_ty;
@@ -3004,9 +2962,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
 
   Node *ret = NULL;
 
-  while (!consume(rest, tok, ")")) {
-    tok = skip(tok, ",");
-
+  while (comma_list(rest, &tok, ")", true)) {
     if (equal(tok, "default")) {
       tok = skip(tok->next, ":");
       Node *node = assign(&tok, tok);
@@ -3188,14 +3144,9 @@ static Node *primary(Token **rest, Token *tok) {
 }
 
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
-  bool first = true;
   Node *node = NULL;
-
-  while (!consume(rest, tok, ";")) {
-    if (!first)
-      tok = skip(tok, ",");
-    first = false;
-
+  bool first = true;
+  for (; comma_list(rest, &tok, ";", !first); first = false) {
     Type *ty = declarator(&tok, tok, basety);
     if (!ty->name)
       error_tok(ty->name_pos, "typedef name omitted");
@@ -3318,11 +3269,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
 
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
-
-  for (; !consume(&tok, tok, ";"); first = false) {
-    if (!first)
-      tok = skip(tok, ",");
-
+  for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Type *ty = declarator(&tok, tok, basety);
 
     if (ty->kind == TY_FUNC) {
