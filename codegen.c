@@ -876,15 +876,11 @@ static void gen_expr(Node *node) {
       store(node->ty);
       println("  mov %%r8, %%rax");
 
-      if (mem->ty->kind == TY_BOOL)
-        return;
-
-      int shift = 64 - mem->bit_width - mem->bit_offset;
-      println("  shl $%d, %%rax", shift);
-      if (mem->ty->is_unsigned)
-        println("  shr $%d, %%rax", shift);
-      else
+      if (!mem->ty->is_unsigned && mem->ty->kind != TY_BOOL) {
+        int shift = 64 - mem->bit_width - mem->bit_offset;
+        println("  shl $%d, %%rax", shift);
         println("  sar $%d, %%rax", shift);
+      }
       return;
     }
 
