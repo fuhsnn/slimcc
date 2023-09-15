@@ -103,7 +103,16 @@ int assign_expr(void) {
 
 int large_field(void) {
   ASSERT(1, ({ struct { unsigned long long i: 56; } s = {.i = 0xFFFFFFFFFFFFFFFF }; s.i == 0xFFFFFFFFFFFFFF; }) );
+}
 
+struct {
+    int b :3;
+    int i, j;
+} s = {.i = 2, 3};
+
+int uninit_global(void) {
+  ASSERT(2, s.i);
+  ASSERT(3, s.j);
 }
 
 int main(void) {
@@ -112,6 +121,7 @@ int main(void) {
   union_init();
   assign_expr();
   large_field();
+  uninit_global();
 
   printf("OK\n");
 
