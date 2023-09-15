@@ -117,3 +117,51 @@ Ty20 struct_test27(void) {
 Ty21 struct_test28(void) {
   return (Ty21){1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
 }
+
+typedef struct {
+  char g;
+} G;
+
+typedef struct {
+  float f;
+} F;
+
+typedef struct {
+  char l;
+  float d;
+} A;
+
+
+float struct_test101(
+  G g0, G g1, G g2, G g3, G g4, G g5,
+  F f0, F f1, F f2, F f3, F f4, F f5, F f6, F f7,
+  G gs0, F fs0, G gs1, F fs1
+) {
+  return g0.g + g1.g + g2.g + g3.g + g4.g + g5.g +
+  f0.f + f1.f + f2.f + f3.f + f4.f + f5.f + f6.f + f7.f +
+  gs0.g + gs1.g + fs0.f + fs1.f;
+}
+
+float struct_test111(
+  F f0, F f1, F f2, F f3, F f4, F f5, F f6, F f7,
+  G g0, G g1, G g2, G g3, G g4, G g5,
+  G gs0, F fs0, G gs1, F fs1
+) {
+  return
+  g0.g + g1.g + g2.g + g3.g + g4.g + g5.g +
+  f0.f + f1.f + f2.f + f3.f + f4.f + f5.f + f6.f + f7.f +
+  gs0.g + gs1.g + fs0.f + fs1.f;
+}
+
+
+float struct_test121(
+  A reg0, A reg1, A reg2, A reg3, A reg4, A reg5,
+  A s0,
+  F f6, F f7,
+  A s1)
+{
+  return
+  reg0.l + reg0.d + reg1.l + reg1.d + reg2.l + reg2.d +
+  reg3.l + reg3.d + reg4.l + reg4.d + reg5.l + reg5.d +
+  s0.l + s0.d + s1.l + s1.d + f6.f + f7.f;
+}

@@ -501,6 +501,21 @@ static bool has_flonum2(Type *ty) {
   return has_flonum(ty, 8, 16, 0);
 }
 
+static bool pass_by_reg(Type *ty, int gp, int fp) {
+  if (ty->size > 16)
+    return false;
+
+  int fp_inc = has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
+  int gp_inc = !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
+
+  if (fp_inc && (fp + fp_inc > FP_MAX))
+    return false;
+  if (gp_inc && (gp + gp_inc > GP_MAX))
+    return false;
+
+  return true;
+}
+
 static void push_struct(Type *ty) {
   int sz = align_to(ty->size, 8);
   println("  sub $%d, %%rsp", sz);
@@ -575,20 +590,12 @@ static int push_args(Node *node) {
     switch (ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
-      if (ty->size > 16) {
+      if (pass_by_reg(ty, gp, fp)) {
+        fp += has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
+        gp += !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
+      } else {
         arg->pass_by_stack = true;
         stack += align_to(ty->size, 8) / 8;
-      } else {
-        bool fp1 = has_flonum1(ty);
-        bool fp2 = has_flonum2(ty);
-
-        if (fp + fp1 + fp2 < FP_MAX && gp + !fp1 + !fp2 < GP_MAX) {
-          fp = fp + fp1 + fp2;
-          gp = gp + !fp1 + !fp2;
-        } else {
-          arg->pass_by_stack = true;
-          stack += align_to(ty->size, 8) / 8;
-        }
       }
       break;
     case TY_FLOAT:
@@ -981,24 +988,19 @@ static void gen_expr(Node *node) {
       switch (ty->kind) {
       case TY_STRUCT:
       case TY_UNION:
-        if (ty->size > 16)
+        if (!pass_by_reg(ty, gp, fp))
           continue;
 
-        bool fp1 = has_flonum1(ty);
-        bool fp2 = has_flonum2(ty);
+        if (has_flonum1(ty))
+          popf(fp++);
+        else
+          pop(argreg64[gp++]);
 
-        if (fp + fp1 + fp2 < FP_MAX && gp + !fp1 + !fp2 < GP_MAX) {
-          if (fp1)
+        if (ty->size > 8) {
+          if (has_flonum2(ty))
             popf(fp++);
           else
             pop(argreg64[gp++]);
-
-          if (ty->size > 8) {
-            if (fp2)
-              popf(fp++);
-            else
-              pop(argreg64[gp++]);
-          }
         }
         break;
       case TY_FLOAT:
@@ -1456,14 +1458,10 @@ static void assign_lvar_offsets(Obj *prog) {
       switch (ty->kind) {
       case TY_STRUCT:
       case TY_UNION:
-        if (ty->size <= 16) {
-          bool fp1 = has_flonum(ty, 0, 8, 0);
-          bool fp2 = has_flonum(ty, 8, 16, 8);
-          if (fp + fp1 + fp2 < FP_MAX && gp + !fp1 + !fp2 < GP_MAX) {
-            fp = fp + fp1 + fp2;
-            gp = gp + !fp1 + !fp2;
-            continue;
-          }
+        if (pass_by_reg(ty, gp, fp)) {
+          fp += has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
+          gp += !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
+          continue;
         }
         break;
       case TY_FLOAT:
