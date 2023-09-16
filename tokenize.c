@@ -537,12 +537,16 @@ Token *tokenize(File *file, Token **end) {
     if (isdigit(*p) || (*p == '.' && isdigit(p[1]))) {
       char *q = p++;
       for (;;) {
-        if (p[0] && p[1] && strchr("eEpP", p[0]) && strchr("+-", p[1]))
+        if (p[0] && p[1] && strchr("eEpP", p[0]) && strchr("+-", p[1])) {
           p += 2;
-        else if (isalnum(*p) || *p == '.')
+        } else if (*p == '.') {
           p++;
-        else
-          break;
+        } else {
+          char *pos;
+          if (!is_ident2(decode_utf8(&pos, p)))
+            break;
+          p = pos;
+        }
       }
       cur = cur->next = new_token(TK_PP_NUM, q, p);
       continue;
