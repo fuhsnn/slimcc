@@ -2707,16 +2707,15 @@ static Type *struct_decl(Token **rest, Token *tok) {
       bits += mem->ty->size * 8;
     }
 
-    if (!mem->name && mem->is_bitfield) {
-      cur->next = NULL;
+    if (!mem->name && mem->is_bitfield)
       continue;
-    }
 
     if (!ty->is_packed && ty->align < mem->align)
       ty->align = mem->align;
 
     cur = cur->next = mem;
   }
+  cur->next = NULL;
 
   ty->members = head.next;
   ty->size = align_to(bits, ty->align * 8) / 8;
@@ -2746,16 +2745,16 @@ static Type *union_decl(Token **rest, Token *tok) {
 
     ty->size = MAX(ty->size, sz);
 
-    if (!mem->name && mem->is_bitfield) {
-      cur->next = NULL;
+    if (!mem->name && mem->is_bitfield)
       continue;
-    }
 
     if (ty->align < mem->align)
       ty->align = mem->align;
 
     cur = cur->next = mem;
   }
+  cur->next = NULL;
+
   ty->members = head.next;
   ty->size = align_to(ty->size, ty->align);
   return ty;
