@@ -157,6 +157,7 @@ struct Obj {
   // Local variable
   int offset;
   Obj *param_next;
+  bool pass_by_stack;
 
   // Global variable or function
   bool is_function;
@@ -273,9 +274,9 @@ struct Node {
   Member *member;
 
   // Function call
-  Node *args;
-  bool pass_by_stack;
   Obj *ret_buffer;
+  Obj *args;
+  Node *args_expr;
 
   // Goto or labeled statement, or labels-as-values
   char *label;

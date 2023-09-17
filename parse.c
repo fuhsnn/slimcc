@@ -230,7 +230,6 @@ static Node *new_vla_ptr(Obj *var, Token *tok) {
 
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
-
   Node *node = calloc(1, sizeof(Node));
   node->kind = ND_CAST;
   node->tok = expr->tok;
@@ -835,7 +834,7 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
 static Node *new_alloca(Node *sz) {
   Node *node = new_unary(ND_FUNCALL, new_var_node(builtin_alloca, sz->tok), sz->tok);
   node->ty = builtin_alloca->ty->return_ty;
-  node->args = sz;
+  node->args_expr = sz;
   add_type(sz);
   return node;
 }
@@ -2905,35 +2904,50 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Type *ty = (fn->ty->kind == TY_FUNC) ? fn->ty : fn->ty->base;
   Obj *param = ty->param_list;
 
-  Node head = {0};
-  Node *cur = &head;
+  Obj head = {0};
+  Obj *cur = &head;
+  Node *expr = NULL;
+
+  enter_scope();
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
     add_type(arg);
 
-    if (!param && !ty->is_variadic)
-      error_tok(tok, "too many arguments");
-
     if (param) {
       if (param->ty->kind != TY_STRUCT && param->ty->kind != TY_UNION)
         arg = new_cast(arg, param->ty);
       param = param->param_next;
-    } else if (arg->ty->kind == TY_FLOAT) {
-      // If parameter type is omitted (e.g. in "..."), float
-      // arguments are promoted to double.
-      arg = new_cast(arg, ty_double);
+    } else {
+      if (!ty->is_variadic)
+        error_tok(tok, "too many arguments");
+
+      if (arg->ty->kind == TY_FLOAT)
+        arg = new_cast(arg, ty_double);
+      else if (arg->ty->kind == TY_ARRAY || arg->ty->kind == TY_VLA)
+        arg = new_cast(arg, pointer_to(arg->ty->base));
+      else if (!param && (arg->ty->kind == TY_FUNC))
+        arg = new_cast(arg, pointer_to(arg->ty));
     }
 
-    cur = cur->next = arg;
+    add_type(arg);
+
+    Obj *var = new_lvar("", arg->ty);
+    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok));
+    add_type(expr);
+
+    cur = cur->param_next = var;
   }
+
+  leave_scope();
 
   if (param)
     error_tok(tok, "too few arguments");
 
   Node *node = new_unary(ND_FUNCALL, fn, tok);
   node->ty = ty->return_ty;
-  node->args = head.next;
+  node->args = head.param_next;
+  node->args_expr = expr;
 
   // If a function returns a struct, it is caller's responsibility
   // to allocate a space for the return value.
@@ -3122,7 +3136,9 @@ static Node *primary(Token **rest, Token *tok) {
   if (tok->kind == TK_STR) {
     Obj *var = new_string_literal(tok->str, tok->ty);
     *rest = tok->next;
-    return new_var_node(var, tok);
+    Node *n = new_var_node(var, tok);
+    add_type(n);
+    return n;
   }
 
   if (tok->kind == TK_NUM) {

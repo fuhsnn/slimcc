@@ -4,7 +4,6 @@
 #define FP_MAX 8
 
 static FILE *output_file;
-static int depth;
 static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
 static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
@@ -84,26 +83,16 @@ static void pop_tmpf(int reg) {
   println("  movsd %d(%%rbp), %%xmm%d", offset, reg);
 }
 
-static void push(void) {
-  println("  push %%rax");
-  depth++;
-}
-
-static void pop(char *arg) {
-  println("  pop %s", arg);
-  depth--;
-}
-
-static void pushf(void) {
-  println("  sub $8, %%rsp");
-  println("  movsd %%xmm0, (%%rsp)");
-  depth++;
-}
-
-static void popf(int reg) {
-  println("  movsd (%%rsp), %%xmm%d", reg);
-  println("  add $8, %%rsp");
-  depth--;
+static void mov_extend(Obj *var, char *reg) {
+  char *insn = var->ty->is_unsigned ? "movz" : "movs";
+  if (var->ty->size == 1)
+    println("  %sb %d(%%rbp), %s", insn, var->offset, reg);
+  else if (var->ty->size == 2)
+    println("  %sw %d(%%rbp), %s", insn, var->offset, reg);
+  else if (var->ty->size == 4)
+    println("  movsxd %d(%%rbp), %s", var->offset, reg);
+  else
+    println("  mov %d(%%rbp), %s", var->offset, reg);
 }
 
 // Round up `n` to the nearest multiple of `align`. For instance,
@@ -501,59 +490,43 @@ static bool has_flonum2(Type *ty) {
   return has_flonum(ty, 8, 16, 0);
 }
 
-static bool pass_by_reg(Type *ty, int gp, int fp) {
-  if (ty->size > 16)
-    return false;
+static int calling_convention(Obj *var, int gp_start) {
+  int stack = 0;
+  int gp = gp_start, fp = 0;
+  for (; var; var = var->param_next) {
+    Type *ty = var->ty;
+    assert(ty->size != 0);
 
-  int fp_inc = has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
-  int gp_inc = !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
+    switch (ty->kind) {
+    case TY_STRUCT:
+    case TY_UNION:
+      if (ty->size <= 16) {
+        int fp_inc = has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
+        int gp_inc = !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
 
-  if (fp_inc && (fp + fp_inc > FP_MAX))
-    return false;
-  if (gp_inc && (gp + gp_inc > GP_MAX))
-    return false;
-
-  return true;
-}
-
-static void push_struct(Type *ty) {
-  int sz = align_to(ty->size, 8);
-  println("  sub $%d, %%rsp", sz);
-  depth += sz / 8;
-
-  for (int i = 0; i < ty->size; i++) {
-    println("  mov %d(%%rax), %%r10b", i);
-    println("  mov %%r10b, %d(%%rsp)", i);
+        if ((!fp_inc || (fp + fp_inc <= FP_MAX)) &&
+          (!gp_inc || (gp + gp_inc <= GP_MAX))) {
+          fp += fp_inc;
+          gp += gp_inc;
+          continue;
+        }
+      }
+      break;
+    case TY_FLOAT:
+    case TY_DOUBLE:
+      if (fp++ < FP_MAX)
+        continue;
+      break;
+    case TY_LDOUBLE:
+      break;
+    default:
+      if (gp++ < GP_MAX)
+        continue;
+    }
+    var->pass_by_stack = true;
+    stack += align_to(ty->size, 8);
   }
-}
-
-static void push_args2(Node *args, bool first_pass) {
-  if (!args)
-    return;
-  push_args2(args->next, first_pass);
-
-  if ((first_pass && !args->pass_by_stack) || (!first_pass && args->pass_by_stack))
-    return;
-
-  gen_expr(args);
-
-  switch (args->ty->kind) {
-  case TY_STRUCT:
-  case TY_UNION:
-    push_struct(args->ty);
-    break;
-  case TY_FLOAT:
-  case TY_DOUBLE:
-    pushf();
-    break;
-  case TY_LDOUBLE:
-    println("  sub $16, %%rsp");
-    println("  fstpt (%%rsp)");
-    depth += 2;
-    break;
-  default:
-    push();
-  }
+  return stack;
 }
 
 // Load function call arguments. Arguments are already evaluated and
@@ -575,65 +548,82 @@ static void push_args2(Node *args, bool first_pass) {
 //
 // - If a function is variadic, set the number of floating-point type
 //   arguments to RAX.
-static int push_args(Node *node) {
-  int stack = 0, gp = 0, fp = 0;
+static void place_stack_args(Node *node, int stack_size) {
+  int stack = 0;
+  for (Obj *var = node->args; var; var = var->param_next) {
+    if (!var->pass_by_stack)
+      continue;
 
-  // If the return type is a large struct/union, the caller passes
-  // a pointer to a buffer as if it were the first argument.
-  if (node->ret_buffer && node->ty->size > 16)
-    gp++;
-
-  // Load as many arguments to the registers as possible.
-  for (Node *arg = node->args; arg; arg = arg->next) {
-    Type *ty = arg->ty;
-
-    switch (ty->kind) {
+    switch (var->ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
-      if (pass_by_reg(ty, gp, fp)) {
-        fp += has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
-        gp += !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
-      } else {
-        arg->pass_by_stack = true;
-        stack += align_to(ty->size, 8) / 8;
+      for (int i = 0; i < var->ty->size; i++) {
+        println("  mov %d(%%rbp), %%r10b", i + var->offset);
+        println("  mov %%r10b, %d(%%rsp)", i + stack);
       }
       break;
     case TY_FLOAT:
     case TY_DOUBLE:
-      if (fp++ >= FP_MAX) {
-        arg->pass_by_stack = true;
-        stack++;
-      }
+      println("  movsd %d(%%rbp), %%xmm0", var->offset);
+      println("  movsd %%xmm0, %d(%%rsp)", stack);
       break;
     case TY_LDOUBLE:
-      arg->pass_by_stack = true;
-      stack += 2;
+      println("  fldt %d(%%rbp)", var->offset);
+      println("  fstpt %d(%%rsp)", stack);
       break;
-    default:
-      if (gp++ >= GP_MAX) {
-        arg->pass_by_stack = true;
-        stack++;
-      }
+    default: {
+      assert(var->ty->size <= 8);
+      char *ax = reg_ax(var->ty->size < 4 ? 4 : 8);
+      mov_extend(var, ax);
+      println("  mov %%rax, %d(%%rsp)", stack);
     }
+    }
+    stack += align_to(var->ty->size, 8);
   }
+  assert(stack == stack_size);
+}
 
-  if ((depth + stack) % 2 == 1) {
-    println("  sub $8, %%rsp");
-    depth++;
-    stack++;
-  }
-
-  push_args2(node->args, true);
-  push_args2(node->args, false);
-
+static void place_reg_args(Node *node, bool gp_start, int *fp_count) {
+  int gp = 0, fp = 0;
   // If the return type is a large struct/union, the caller passes
   // a pointer to a buffer as if it were the first argument.
-  if (node->ret_buffer && node->ty->size > 16) {
-    println("  lea %d(%%rbp), %%rax", node->ret_buffer->offset);
-    push();
-  }
+  if (gp_start)
+    println("  lea %d(%%rbp), %s", node->ret_buffer->offset, argreg64[gp++]);
 
-  return stack;
+  for (Obj *var = node->args; var; var = var->param_next) {
+    if (var->pass_by_stack)
+      continue;
+
+    switch (var->ty->kind) {
+    case TY_STRUCT:
+    case TY_UNION:
+      if (has_flonum1(var->ty))
+        println("  movsd %d(%%rbp), %%xmm%d", var->offset, fp++);
+      else
+        println("  mov %d(%%rbp), %s",  var->offset, argreg64[gp++]);
+
+      if (var->ty->size > 8) {
+        if (has_flonum2(var->ty))
+          println("  movsd %d(%%rbp), %%xmm%d", 8 + var->offset, fp++);
+        else
+          println("  mov %d(%%rbp), %s",  8 + var->offset, argreg64[gp++]);
+      }
+      continue;
+    case TY_FLOAT:
+      println("  movss %d(%%rbp), %%xmm%d", var->offset, fp++);
+      continue;
+    case TY_DOUBLE:
+      println("  movsd %d(%%rbp), %%xmm%d", var->offset, fp++);
+      continue;
+    case TY_LDOUBLE:
+      unreachable();
+    default: {
+      char **reg = var->ty->size < 4 ? argreg32 : argreg64;
+      mov_extend(var, reg[gp++]);
+    }
+    }
+  }
+  *fp_count = fp;
 }
 
 static void copy_ret_buffer(Obj *var) {
@@ -966,62 +956,35 @@ static void gen_expr(Node *node) {
   }
   case ND_FUNCALL: {
     if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
-      gen_expr(node->args);
+      gen_expr(node->args_expr);
       println("  mov %%rax, %%rdi");
       builtin_alloca();
       return;
     }
-
-    int stack_args = push_args(node);
     gen_expr(node->lhs);
+    push_tmp();
 
-    int gp = 0, fp = 0;
+    if (node->args_expr)
+      gen_expr(node->args_expr);
 
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
-    if (node->ret_buffer && node->ty->size > 16)
-      pop(argreg64[gp++]);
+    bool gp_start = node->ret_buffer && node->ty->size > 16;
 
-    for (Node *arg = node->args; arg; arg = arg->next) {
-      Type *ty = arg->ty;
+    int args_size = calling_convention(node->args, gp_start);
+    int stack_size = align_to(args_size, 16);
 
-      switch (ty->kind) {
-      case TY_STRUCT:
-      case TY_UNION:
-        if (!pass_by_reg(ty, gp, fp))
-          continue;
+    println("  sub $%d, %%rsp", stack_size);
 
-        if (has_flonum1(ty))
-          popf(fp++);
-        else
-          pop(argreg64[gp++]);
+    place_stack_args(node, args_size);
 
-        if (ty->size > 8) {
-          if (has_flonum2(ty))
-            popf(fp++);
-          else
-            pop(argreg64[gp++]);
-        }
-        break;
-      case TY_FLOAT:
-      case TY_DOUBLE:
-        if (fp < FP_MAX)
-          popf(fp++);
-        break;
-      case TY_LDOUBLE:
-        break;
-      default:
-        if (gp < GP_MAX)
-          pop(argreg64[gp++]);
-      }
-    }
+    int fp_count;
+    place_reg_args(node, gp_start, &fp_count);
 
-    println("  mov %%rax, %%r10");
-    println("  mov $%d, %%rax", fp);
+    println("  mov $%d, %%rax", fp_count);
+    pop_tmp("%r10");
     println("  call *%%r10");
-    println("  add $%d, %%rsp", stack_args * 8);
-
-    depth -= stack_args;
+    println("  add $%d, %%rsp", stack_size);
 
     // It looks like the most significant 48 or 56 bits in RAX may
     // contain garbage if a function return type is short or bool/char,
@@ -1449,32 +1412,12 @@ static void assign_lvar_offsets(Obj *prog) {
     // The first passed-by-stack parameter resides at RBP+16.
     int top = 16;
 
-    int gp = 0, fp = 0;
+    calling_convention(fn->ty->param_list, 0);
 
     // Assign offsets to pass-by-stack parameters.
     for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
-      Type *ty = var->ty;
-
-      switch (ty->kind) {
-      case TY_STRUCT:
-      case TY_UNION:
-        if (pass_by_reg(ty, gp, fp)) {
-          fp += has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
-          gp += !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
-          continue;
-        }
-        break;
-      case TY_FLOAT:
-      case TY_DOUBLE:
-        if (fp++ < FP_MAX)
-          continue;
-        break;
-      case TY_LDOUBLE:
-        break;
-      default:
-        if (gp++ < GP_MAX)
-          continue;
-      }
+      if (!var->pass_by_stack)
+        continue;
 
       top = align_to(top, 8);
       var->offset = top;
@@ -1645,39 +1588,25 @@ static void emit_text(Obj *prog) {
     // Save passed-by-register arguments to the stack
     int gp = 0, fp = 0;
     for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
-      if (var->offset > 0)
+      if (var->pass_by_stack)
         continue;
 
       Type *ty = var->ty;
+      if (has_flonum1(ty))
+        store_fp(fp++, var->offset, MIN(8, ty->size));
+      else
+        store_gp(gp++, var->offset, MIN(8, ty->size));
 
-      switch (ty->kind) {
-      case TY_STRUCT:
-      case TY_UNION:
-        assert(ty->size <= 16);
-        if (has_flonum(ty, 0, 8, 0))
-          store_fp(fp++, var->offset, MIN(8, ty->size));
+      if (ty->size > 8) {
+        if (has_flonum2(ty))
+          store_fp(fp++, var->offset + 8, ty->size - 8);
         else
-          store_gp(gp++, var->offset, MIN(8, ty->size));
-
-        if (ty->size > 8) {
-          if (has_flonum(ty, 8, 16, 0))
-            store_fp(fp++, var->offset + 8, ty->size - 8);
-          else
-            store_gp(gp++, var->offset + 8, ty->size - 8);
-        }
-        break;
-      case TY_FLOAT:
-      case TY_DOUBLE:
-        store_fp(fp++, var->offset, ty->size);
-        break;
-      default:
-        store_gp(gp++, var->offset, ty->size);
+          store_gp(gp++, var->offset + 8, ty->size - 8);
       }
     }
 
     // Emit code
     gen_stmt(fn->body);
-    assert(depth == 0);
     assert(tmp_stack.depth == 0);
 
     long cur_pos = ftell(output_file);
