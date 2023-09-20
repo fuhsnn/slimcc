@@ -289,7 +289,8 @@ static Obj *new_var(char *name, Type *ty) {
   var->name = name;
   var->ty = ty;
   var->align = ty->align;
-  push_scope(name)->var = var;
+  if (name)
+    push_scope(name)->var = var;
   return var;
 }
 
@@ -627,7 +628,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
       ty2 = pointer_to(ty2);
     }
 
-    char *var_name = name ? get_ident(name) : "";
+    char *var_name = name ? get_ident(name) : NULL;
     cur = cur->param_next = new_lvar(var_name, ty2);
   }
 
@@ -823,7 +824,7 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
   else
     base_sz = new_num(ty->base->size, tok);
 
-  ty->vla_size = new_lvar("", ty_ulong);
+  ty->vla_size = new_lvar(NULL, ty_ulong);
   chain_expr(&node, new_binary(ND_ASSIGN, new_var_node(ty->vla_size, tok),
                                new_binary(ND_MUL, ty->vla_len, base_sz, tok),
                                tok));
@@ -2038,7 +2039,7 @@ static Node *to_assign(Node *binary) {
 
   // Convert `A.x op= C` to `tmp = &A, (*tmp).x = (*tmp).x op C`.
   if (binary->lhs->kind == ND_MEMBER) {
-    Obj *var = new_lvar("", pointer_to(binary->lhs->lhs->ty));
+    Obj *var = new_lvar(NULL, pointer_to(binary->lhs->lhs->ty));
 
     Node *expr1 = new_binary(ND_ASSIGN, new_var_node(var, tok),
                              new_unary(ND_ADDR, binary->lhs->lhs, tok), tok);
@@ -2073,10 +2074,10 @@ static Node *to_assign(Node *binary) {
     Node head = {0};
     Node *cur = &head;
 
-    Obj *addr = new_lvar("", pointer_to(binary->lhs->ty));
-    Obj *val = new_lvar("", binary->rhs->ty);
-    Obj *old = new_lvar("", binary->lhs->ty);
-    Obj *new = new_lvar("", binary->lhs->ty);
+    Obj *addr = new_lvar(NULL, pointer_to(binary->lhs->ty));
+    Obj *val = new_lvar(NULL, binary->rhs->ty);
+    Obj *old = new_lvar(NULL, binary->lhs->ty);
+    Obj *new = new_lvar(NULL, binary->lhs->ty);
 
     cur = cur->next =
       new_unary(ND_EXPR_STMT,
@@ -2123,7 +2124,7 @@ static Node *to_assign(Node *binary) {
   }
 
   // Convert `A op= B` to ``tmp = &A, *tmp = *tmp op B`.
-  Obj *var = new_lvar("", pointer_to(binary->lhs->ty));
+  Obj *var = new_lvar(NULL, pointer_to(binary->lhs->ty));
 
   Node *expr1 = new_binary(ND_ASSIGN, new_var_node(var, tok),
                            new_unary(ND_ADDR, binary->lhs, tok), tok);
@@ -2195,7 +2196,7 @@ static Node *conditional(Token **rest, Token *tok) {
   if (equal(tok->next, ":")) {
     // [GNU] Compile `a ?: b` as `tmp = a, tmp ? tmp : b`.
     add_type(cond);
-    Obj *var = new_lvar("", cond->ty);
+    Obj *var = new_lvar(NULL, cond->ty);
     Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
     Node *rhs = new_node(ND_COND, tok);
     rhs->cond = new_var_node(var, tok);
@@ -2839,7 +2840,7 @@ static Node *postfix(Token **rest, Token *tok) {
       return new_var_node(var, start);
     }
 
-    Obj *var = new_lvar("", ty);
+    Obj *var = new_lvar(NULL, ty);
     Node *lhs = lvar_initializer(rest, tok, var);
     Node *rhs = new_var_node(var, tok);
     return new_binary(ND_COMMA, lhs, rhs, start);
@@ -2932,7 +2933,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
     add_type(arg);
 
-    Obj *var = new_lvar("", arg->ty);
+    Obj *var = new_lvar(NULL, arg->ty);
     chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok));
     add_type(expr);
 
@@ -2952,7 +2953,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   // If a function returns a struct, it is caller's responsibility
   // to allocate a space for the return value.
   if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION)
-    node->ret_buffer = new_lvar("", node->ty);
+    node->ret_buffer = new_lvar(NULL, node->ty);
   return node;
 }
 
@@ -3254,7 +3255,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   // as the hidden first parameter.
   Type *rty = ty->return_ty;
   if ((rty->kind == TY_STRUCT || rty->kind == TY_UNION) && rty->size > 16)
-    fn->large_rtn = new_lvar("", pointer_to(rty));
+    fn->large_rtn = new_lvar(NULL, pointer_to(rty));
 
   if (ty->is_variadic)
     fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
@@ -3342,7 +3343,7 @@ static void scan_globals(void) {
 
 static void declare_builtin_functions(void) {
   Type *ty = func_type(pointer_to(ty_void));
-  ty->param_list = new_var("", ty_int);
+  ty->param_list = new_var(NULL, ty_int);
   builtin_alloca = new_gvar("alloca", ty);
   builtin_alloca->is_static = true;
 }
