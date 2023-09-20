@@ -219,9 +219,6 @@ static void gen_addr(Node *node) {
       return;
     }
     break;
-  case ND_VLA_PTR:
-    println("  lea %d(%%rbp), %%rax", node->var->offset);
-    return;
   }
 
   error_tok(node->tok, "not an lvalue");
@@ -716,32 +713,28 @@ static void copy_struct_mem(void) {
   }
 }
 
-static void builtin_alloca(void) {
-  // Align size to 16 bytes.
-  println("  add $15, %%rdi");
-  println("  and $0xfffffff0, %%edi");
-
+static void builtin_alloca(Node *node) {
   // Shift the temporary area by %rdi.
-  println("  mov %d(%%rbp), %%rcx", current_fn->alloca_bottom->offset);
-  println("  sub %%rsp, %%rcx");
+  println("  sub %%rax, %%rsp");
+  // Align frame pointer
+  int align = node->val > 16 ? node->val : 16;
+  println("  and $-%d, %%rsp", align);
+  if (node->var) {
+    println("  mov %%rsp, %d(%%rbp)", node->var->offset);
+    println("  mov %%rsp, %d(%%rbp)", node->top_vla->offset);
+  }
   println("  mov %%rsp, %%rax");
-  println("  sub %%rdi, %%rsp");
-  println("  mov %%rsp, %%rdx");
-  println("1:");
-  println("  cmp $0, %%rcx");
-  println("  je 2f");
-  println("  mov (%%rax), %%r8b");
-  println("  mov %%r8b, (%%rdx)");
-  println("  inc %%rdx");
-  println("  inc %%rax");
-  println("  dec %%rcx");
-  println("  jmp 1b");
-  println("2:");
+}
 
-  // Move alloca_bottom pointer.
-  println("  mov %d(%%rbp), %%rax", current_fn->alloca_bottom->offset);
-  println("  sub %%rdi, %%rax");
-  println("  mov %%rax, %d(%%rbp)", current_fn->alloca_bottom->offset);
+static void dealloc_vla(Node *node) {
+  if (!current_fn->vla_base || node->top_vla == node->target_vla)
+    return;
+  Obj *vla;
+  if (node->target_vla)
+    vla = node->target_vla;
+  else
+    vla = current_fn->vla_base;
+  println("  mov %d(%%rbp), %%rsp", vla->offset);
 }
 
 static void print_loc(Token *tok) {
@@ -886,6 +879,7 @@ static void gen_expr(Node *node) {
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
+    dealloc_vla(node);
     return;
   case ND_COMMA:
     gen_expr(node->lhs);
@@ -957,10 +951,10 @@ static void gen_expr(Node *node) {
   case ND_FUNCALL: {
     if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
       gen_expr(node->args_expr);
-      println("  mov %%rax, %%rdi");
-      builtin_alloca();
+      builtin_alloca(node);
       return;
     }
+
     gen_expr(node->lhs);
     push_tmp();
 
@@ -1268,6 +1262,7 @@ static void gen_stmt(Node *node) {
       gen_expr(node->inc);
     println("  jmp .L.begin.%d", c);
     println("%s:", node->brk_label);
+    dealloc_vla(node);
     return;
   }
   case ND_DO: {
@@ -1327,8 +1322,10 @@ static void gen_stmt(Node *node) {
   case ND_BLOCK:
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
+    dealloc_vla(node);
     return;
   case ND_GOTO:
+    dealloc_vla(node);
     println("  jmp %s", node->unique_label);
     return;
   case ND_GOTO_EXPR:
@@ -1546,7 +1543,8 @@ static void emit_text(Obj *prog) {
     println("  mov %%rsp, %%rbp");
     long reserved_pos = ftell(output_file);
     println("                           ");
-    println("  mov %%rsp, %d(%%rbp)", fn->alloca_bottom->offset);
+    if (fn->vla_base)
+      println("  mov %%rsp, %d(%%rbp)", fn->vla_base->offset);
 
     // Save arg registers if function is variadic
     if (fn->va_area) {

@@ -87,6 +87,11 @@ static char *cont_label;
 // a switch statement. Otherwise, NULL.
 static Node *current_switch;
 
+static Obj *current_vla;
+static Obj *brk_vla;
+static bool fn_use_vla;
+static bool dont_dealloc_vla;
+
 static Obj *builtin_alloca;
 
 
@@ -218,12 +223,6 @@ static Node *new_ulong(long val, Token *tok) {
 
 static Node *new_var_node(Obj *var, Token *tok) {
   Node *node = new_node(ND_VAR, tok);
-  node->var = var;
-  return node;
-}
-
-static Node *new_vla_ptr(Obj *var, Token *tok) {
-  Node *node = new_node(ND_VLA_PTR, tok);
   node->var = var;
   return node;
 }
@@ -832,10 +831,13 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
   return node;
 }
 
-static Node *new_alloca(Node *sz) {
+static Node *new_alloca(Node *sz, Obj *var, Obj *top, int align) {
   Node *node = new_unary(ND_FUNCALL, new_var_node(builtin_alloca, sz->tok), sz->tok);
   node->ty = builtin_alloca->ty->return_ty;
   node->args_expr = sz;
+  node->var = var;
+  node->top_vla = top;
+  node->val = align;
   add_type(sz);
   return node;
 }
@@ -881,10 +883,16 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       // For example, `int x[n+2]` is translated to `tmp = n + 2,
       // x = alloca(tmp)`.
       Obj *var = new_lvar(get_ident(ty->name), ty);
+      Obj *top = new_lvar(NULL, ty);
+
+      int align = (attr && attr->align) ? attr->align : 16;
+
       Token *tok = ty->name;
-      chain_expr(&expr, new_binary(ND_ASSIGN, new_vla_ptr(var, tok),
-                                   new_alloca(new_var_node(ty->vla_size, tok)),
-                                   tok));
+      chain_expr(&expr, new_alloca(new_var_node(ty->vla_size, tok), var, top, align));
+
+      top->vla_next = current_vla;
+      current_vla = top;
+      fn_use_vla = true;
       continue;
     }
 
@@ -1526,6 +1534,22 @@ static Node *asm_stmt(Token **rest, Token *tok) {
   return node;
 }
 
+static void loop_body(Token **rest, Token *tok, Node *node) {
+  char *brk = brk_label;
+  char *cont = cont_label;
+  brk_label = node->brk_label = new_unique_name();
+  cont_label = node->cont_label = new_unique_name();
+
+  Obj *vla = brk_vla;
+  brk_vla = current_vla;
+
+  node->then = stmt(rest, tok);
+
+  brk_label = brk;
+  cont_label = cont;
+  brk_vla = vla;
+}
+
 // stmt = "return" expr? ";"
 //      | "if" "(" expr ")" stmt ("else" stmt)?
 //      | "switch" "(" expr ")" stmt
@@ -1583,16 +1607,22 @@ static Node *stmt(Token **rest, Token *tok) {
     char *brk = brk_label;
     brk_label = node->brk_label = new_unique_name();
 
+    Obj *vla = brk_vla;
+    brk_vla = current_vla;
+
     node->then = stmt(rest, tok);
 
     current_switch = sw;
     brk_label = brk;
+    brk_vla = vla;
     return node;
   }
 
   if (equal(tok, "case")) {
     if (!current_switch)
       error_tok(tok, "stray case");
+    if (current_vla != brk_vla)
+      error_tok(tok, "jump crosses VLA initialization");
 
     Node *node = new_node(ND_CASE, tok);
     int64_t begin = const_expr(&tok, tok->next);
@@ -1632,6 +1662,8 @@ static Node *stmt(Token **rest, Token *tok) {
   if (equal(tok, "default")) {
     if (!current_switch)
       error_tok(tok, "stray default");
+    if (current_vla != brk_vla)
+      error_tok(tok, "jump crosses VLA initialization");
 
     Node *node = new_node(ND_CASE, tok);
     tok = skip(tok->next, ":");
@@ -1645,12 +1677,8 @@ static Node *stmt(Token **rest, Token *tok) {
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
 
+    node->target_vla = current_vla;
     enter_scope();
-
-    char *brk = brk_label;
-    char *cont = cont_label;
-    brk_label = node->brk_label = new_unique_name();
-    cont_label = node->cont_label = new_unique_name();
 
     if (is_typename(tok)) {
       Type *basety = declspec(&tok, tok, NULL);
@@ -1671,11 +1699,11 @@ static Node *stmt(Token **rest, Token *tok) {
       node->inc = expr(&tok, tok);
     tok = skip(tok, ")");
 
-    node->then = stmt(rest, tok);
+    loop_body(rest, tok, node);
 
+    node->top_vla = current_vla;
+    current_vla = node->target_vla;
     leave_scope();
-    brk_label = brk;
-    cont_label = cont;
     return node;
   }
 
@@ -1685,30 +1713,14 @@ static Node *stmt(Token **rest, Token *tok) {
     node->cond = expr(&tok, tok);
     tok = skip(tok, ")");
 
-    char *brk = brk_label;
-    char *cont = cont_label;
-    brk_label = node->brk_label = new_unique_name();
-    cont_label = node->cont_label = new_unique_name();
-
-    node->then = stmt(rest, tok);
-
-    brk_label = brk;
-    cont_label = cont;
+    loop_body(rest, tok, node);
     return node;
   }
 
   if (equal(tok, "do")) {
     Node *node = new_node(ND_DO, tok);
 
-    char *brk = brk_label;
-    char *cont = cont_label;
-    brk_label = node->brk_label = new_unique_name();
-    cont_label = node->cont_label = new_unique_name();
-
-    node->then = stmt(&tok, tok->next);
-
-    brk_label = brk;
-    cont_label = cont;
+    loop_body(&tok, tok->next, node);
 
     tok = skip(tok, "while");
     tok = skip(tok, "(");
@@ -1733,6 +1745,7 @@ static Node *stmt(Token **rest, Token *tok) {
     Node *node = new_node(ND_GOTO, tok);
     node->label = get_ident(tok->next);
     node->goto_next = gotos;
+    node->top_vla = current_vla;
     gotos = node;
     *rest = skip(tok->next->next, ";");
     return node;
@@ -1743,6 +1756,8 @@ static Node *stmt(Token **rest, Token *tok) {
       error_tok(tok, "stray break");
     Node *node = new_node(ND_GOTO, tok);
     node->unique_label = brk_label;
+    node->target_vla = brk_vla;
+    node->top_vla = current_vla;
     *rest = skip(tok->next, ";");
     return node;
   }
@@ -1752,6 +1767,8 @@ static Node *stmt(Token **rest, Token *tok) {
       error_tok(tok, "stray continue");
     Node *node = new_node(ND_GOTO, tok);
     node->unique_label = cont_label;
+    node->target_vla = brk_vla;
+    node->top_vla = current_vla;
     *rest = skip(tok->next, ";");
     return node;
   }
@@ -1762,6 +1779,7 @@ static Node *stmt(Token **rest, Token *tok) {
     node->unique_label = new_unique_name();
     node->lhs = stmt(rest, tok->next->next);
     node->goto_next = labels;
+    node->top_vla = current_vla;
     labels = node;
     return node;
   }
@@ -1778,6 +1796,7 @@ static Node *compound_stmt(Token **rest, Token *tok) {
   Node head = {0};
   Node *cur = &head;
 
+  node->target_vla = current_vla;
   enter_scope();
 
   for (; !equal(tok, "}"); add_type(cur)) {
@@ -1810,6 +1829,8 @@ static Node *compound_stmt(Token **rest, Token *tok) {
     cur = cur->next = stmt(&tok, tok);
   }
 
+  node->top_vla = current_vla;
+  current_vla = node->target_vla;
   leave_scope();
 
   node->body = head.next;
@@ -2535,6 +2556,7 @@ static Node *unary(Token **rest, Token *tok) {
     node->label = get_ident(tok->next);
     node->goto_next = gotos;
     gotos = node;
+    dont_dealloc_vla = true;
     *rest = tok->next->next;
     return node;
   }
@@ -3015,8 +3037,8 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (equal(tok, "(") && equal(tok->next, "{")) {
     // This is a GNU statement expresssion.
-    Node *node = new_node(ND_STMT_EXPR, tok);
-    node->body = compound_stmt(&tok, tok->next->next)->body;
+    Node *node = compound_stmt(&tok, tok->next->next);
+    node->kind = ND_STMT_EXPR;
     *rest = skip(tok, ")");
     return node;
   }
@@ -3117,6 +3139,9 @@ static Node *primary(Token **rest, Token *tok) {
         sc->var->is_root = true;
 
       char *name = sc->var->name;
+      if (!strcmp(name, "alloca"))
+        dont_dealloc_vla = true;
+
       if (opt_optimize && (strstr(name, "setjmp") || strstr(name, "savectx") ||
           strstr(name, "vfork") || strstr(name, "getcontext")))
         dont_reuse_stack = true;
@@ -3179,17 +3204,26 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
 // So, we need to do this after we parse the entire function.
 static void resolve_goto_labels(void) {
   for (Node *x = gotos; x; x = x->goto_next) {
-    for (Node *y = labels; y; y = y->goto_next) {
-      if (!strcmp(x->label, y->label)) {
-        x->unique_label = y->unique_label;
+    Node *dest = labels;
+    for (; dest; dest = dest->goto_next)
+      if (!strcmp(x->label, dest->label))
         break;
-      }
-    }
-
-    if (x->unique_label == NULL)
+    if (!dest)
       error_tok(x->tok->next, "use of undeclared label");
-  }
 
+    x->unique_label = dest->unique_label;
+    if (!dest->top_vla)
+      continue;
+
+    Obj *vla = x->top_vla;
+    for (; vla; vla = vla->vla_next)
+      if (vla == dest->top_vla)
+        break;
+    if (!vla)
+      error_tok(x->tok->next, "jump crosses VLA initialization");
+
+    x->target_vla = vla;
+  }
   gotos = labels = NULL;
 }
 
@@ -3243,6 +3277,8 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   fn->ty = ty;
 
   current_fn = fn;
+  current_vla = NULL;
+  fn_use_vla = dont_dealloc_vla = false;
 
   if (ty->scopes) {
     scope = ty->scopes;
@@ -3259,7 +3295,6 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
 
   if (ty->is_variadic)
     fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
-  fn->alloca_bottom = new_lvar("__alloca_size__", pointer_to(ty_char));
 
   // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
   // automatically defined as a local variable containing the
@@ -3274,6 +3309,8 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
     calc->next = fn->body->body;
     fn->body->body = calc;
   }
+  if (fn_use_vla && !dont_dealloc_vla && !dont_reuse_stack)
+    fn->vla_base = new_lvar(NULL, pointer_to(ty_char));
 
   leave_scope();
   resolve_goto_labels();

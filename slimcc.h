@@ -157,6 +157,7 @@ struct Obj {
   // Local variable
   int offset;
   Obj *param_next;
+  Obj *vla_next;
   bool pass_by_stack;
 
   // Global variable or function
@@ -175,7 +176,7 @@ struct Obj {
   Node *body;
   Obj *large_rtn;
   Obj *va_area;
-  Obj *alloca_bottom;
+  Obj *vla_base;
   int lvar_stack_size;
 
   // Static inline function
@@ -237,7 +238,6 @@ typedef enum {
   ND_EXPR_STMT, // Expression statement
   ND_STMT_EXPR, // Statement expression
   ND_VAR,       // Variable
-  ND_VLA_PTR,   // VLA designator
   ND_NUM,       // Integer
   ND_CAST,      // Type cast
   ND_MEMZERO,   // Zero-clear a stack variable
@@ -290,6 +290,9 @@ struct Node {
   // Case
   long begin;
   long end;
+
+  Obj *target_vla;
+  Obj *top_vla;
 
   // "asm" string literal
   char *asm_str;
