@@ -3087,16 +3087,15 @@ static Node *primary(Token **rest, Token *tok) {
     return new_ulong(ty->size, start);
   }
 
-  if (equal(tok, "_Alignof") && equal(tok->next, "(") && is_typename(tok->next->next)) {
-    Type *ty = typename(&tok, tok->next->next);
+  if (equal(tok, "_Alignof")) {
+    tok = skip(tok->next, "(");
+    if (!is_typename(tok))
+      error_tok(tok, "expected type name");
+    Type *ty = typename(&tok, tok);
+    while (ty->kind == TY_VLA || ty->kind == TY_ARRAY)
+      ty = ty->base;
     *rest = skip(tok, ")");
     return new_ulong(ty->align, tok);
-  }
-
-  if (equal(tok, "_Alignof")) {
-    Node *node = unary(rest, tok->next);
-    add_type(node);
-    return new_ulong(node->ty->align, tok);
   }
 
   if (equal(tok, "_Generic"))
