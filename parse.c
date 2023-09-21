@@ -3039,7 +3039,9 @@ static Node *primary(Token **rest, Token *tok) {
   Token *start = tok;
 
   if (equal(tok, "(") && equal(tok->next, "{")) {
-    // This is a GNU statement expresssion.
+    if (scope->parent == NULL)
+      error_tok(tok, "statement expresssion at file scope");
+
     Node *stmt = NULL;
     Node *node = compound_stmt(&tok, tok->next->next, &stmt);
     node->kind = ND_STMT_EXPR;
