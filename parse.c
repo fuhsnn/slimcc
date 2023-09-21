@@ -2842,8 +2842,7 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
                   node->ty);
 }
 
-// postfix = "(" type-name ")" "{" initializer-list "}"
-//         = ident "(" func-args ")" postfix-tail*
+// postfix = ident "(" func-args ")" postfix-tail*
 //         | primary postfix-tail*
 //
 // postfix-tail = "[" expr "]"
@@ -2853,24 +2852,6 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
 //              | "++"
 //              | "--"
 static Node *postfix(Token **rest, Token *tok) {
-  if (equal(tok, "(") && is_typename(tok->next)) {
-    // Compound literal
-    Token *start = tok;
-    Type *ty = typename(&tok, tok->next);
-    tok = skip(tok, ")");
-
-    if (scope->parent == NULL) {
-      Obj *var = new_anon_gvar(ty);
-      gvar_initializer(rest, tok, var);
-      return new_var_node(var, start);
-    }
-
-    Obj *var = new_lvar(NULL, ty);
-    Node *lhs = lvar_initializer(rest, tok, var);
-    Node *rhs = new_var_node(var, tok);
-    return new_binary(ND_COMMA, lhs, rhs, start);
-  }
-
   Node *node = primary(&tok, tok);
 
   for (;;) {
@@ -3037,6 +3018,24 @@ static Node *generic_selection(Token **rest, Token *tok) {
 //         | num
 static Node *primary(Token **rest, Token *tok) {
   Token *start = tok;
+
+  if (equal(tok, "(") && is_typename(tok->next)) {
+    // Compound literal
+    Token *start = tok;
+    Type *ty = typename(&tok, tok->next);
+    tok = skip(tok, ")");
+
+    if (scope->parent == NULL) {
+      Obj *var = new_anon_gvar(ty);
+      gvar_initializer(rest, tok, var);
+      return new_var_node(var, start);
+    }
+
+    Obj *var = new_lvar(NULL, ty);
+    Node *lhs = lvar_initializer(rest, tok, var);
+    Node *rhs = new_var_node(var, tok);
+    return new_binary(ND_COMMA, lhs, rhs, start);
+  }
 
   if (equal(tok, "(") && equal(tok->next, "{")) {
     if (scope->parent == NULL)
