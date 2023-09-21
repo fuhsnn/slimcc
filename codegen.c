@@ -203,22 +203,23 @@ static void gen_addr(Node *node) {
     gen_addr(node->rhs);
     return;
   case ND_MEMBER:
-    gen_addr(node->lhs);
-    println("  add $%d, %%rax", node->member->offset);
-    return;
-  case ND_FUNCALL:
-    if (node->ret_buffer) {
-      gen_expr(node);
+    switch(node->lhs->kind) {
+    case ND_FUNCALL:
+      if (!node->lhs->ret_buffer)
+        break;
+    case ND_ASSIGN:
+    case ND_COND:
+    case ND_STMT_EXPR:
+      if (node->lhs->ty->kind != TY_STRUCT && node->lhs->ty->kind != TY_UNION)
+        break;
+      gen_expr(node->lhs);
+      println("  add $%d, %%rax", node->member->offset);
+      return;
+    default:
+      gen_addr(node->lhs);
+      println("  add $%d, %%rax", node->member->offset);
       return;
     }
-    break;
-  case ND_ASSIGN:
-  case ND_COND:
-    if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION) {
-      gen_expr(node);
-      return;
-    }
-    break;
   }
 
   error_tok(node->tok, "not an lvalue");
