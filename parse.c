@@ -1649,13 +1649,12 @@ static Node *stmt(Token **rest, Token *tok) {
       ((current_switch->cond->ty->is_unsigned && ((uint64_t)end < begin))))
       error_tok(tok, "empty case range specified");
 
-    tok = skip(tok, ":");
     node->label = new_unique_name();
-    node->lhs = stmt(rest, tok);
     node->begin = begin;
     node->end = end;
     node->case_next = current_switch->case_next;
     current_switch->case_next = node;
+    *rest = skip(tok, ":");
     return node;
   }
 
@@ -1666,10 +1665,9 @@ static Node *stmt(Token **rest, Token *tok) {
       error_tok(tok, "jump crosses VLA initialization");
 
     Node *node = new_node(ND_CASE, tok);
-    tok = skip(tok->next, ":");
     node->label = new_unique_name();
-    node->lhs = stmt(rest, tok);
     current_switch->default_case = node;
+    *rest = skip(tok->next, ":");
     return node;
   }
 
@@ -1777,10 +1775,10 @@ static Node *stmt(Token **rest, Token *tok) {
     Node *node = new_node(ND_LABEL, tok);
     node->label = strndup(tok->loc, tok->len);
     node->unique_label = new_unique_name();
-    node->lhs = stmt(rest, tok->next->next);
     node->goto_next = labels;
     node->top_vla = current_vla;
     labels = node;
+    *rest = tok->next->next;
     return node;
   }
 
