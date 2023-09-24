@@ -155,7 +155,8 @@ struct Obj {
   int align;     // alignment
 
   // Local variable
-  int offset;
+  int ofs;
+  char *ptr;
   Obj *param_next;
   Obj *vla_next;
   bool pass_by_stack;
@@ -178,6 +179,7 @@ struct Obj {
   Obj *large_rtn;
   Obj *va_area;
   Obj *vla_base;
+  int stack_align;
   int lvar_stack_size;
 
   // Static inline function
