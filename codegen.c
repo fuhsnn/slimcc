@@ -1563,14 +1563,6 @@ static void emit_text(Obj *prog) {
 
       int off = fn->va_area->offset;
 
-      // va_elem
-      println("  movl $%d, %d(%%rbp)", gp * 8, off);          // gp_offset
-      println("  movl $%d, %d(%%rbp)", fp * 16 + 48, off + 4);// fp_offset
-      println("  movq %%rbp, %d(%%rbp)", off + 8);            // overflow_arg_area
-      println("  addq $%d, %d(%%rbp)", stack + 16, off + 8);
-      println("  movq %%rbp, %d(%%rbp)", off + 16);           // reg_save_area
-      println("  addq $%d, %d(%%rbp)", off + 24, off + 16);
-
       // __reg_save_area__
       println("  movq %%rdi, %d(%%rbp)", off + 24);
       println("  movq %%rsi, %d(%%rbp)", off + 32);
@@ -1578,6 +1570,8 @@ static void emit_text(Obj *prog) {
       println("  movq %%rcx, %d(%%rbp)", off + 48);
       println("  movq %%r8, %d(%%rbp)", off + 56);
       println("  movq %%r9, %d(%%rbp)", off + 64);
+      println("  test %%al, %%al");
+      println("  je 1f");
       println("  movsd %%xmm0, %d(%%rbp)", off + 72);
       println("  movsd %%xmm1, %d(%%rbp)", off + 88);
       println("  movsd %%xmm2, %d(%%rbp)", off + 104);
@@ -1586,6 +1580,15 @@ static void emit_text(Obj *prog) {
       println("  movsd %%xmm5, %d(%%rbp)", off + 152);
       println("  movsd %%xmm6, %d(%%rbp)", off + 168);
       println("  movsd %%xmm7, %d(%%rbp)", off + 184);
+      println("1:");
+
+      // va_elem
+      println("  movl $%d, %d(%%rbp)", gp * 8, off);          // gp_offset
+      println("  movl $%d, %d(%%rbp)", fp * 16 + 48, off + 4);// fp_offset
+      println("  lea %d(%%rbp), %%rax", stack + 16);          // overflow_arg_area
+      println("  mov %%rax, %d(%%rbp)",  off + 8);
+      println("  lea %d(%%rbp), %%rax", off + 24);            // reg_save_area
+      println("  mov %%rax, %d(%%rbp)",  off + 16);
     }
 
     // Save passed-by-register arguments to the stack
