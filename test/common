@@ -165,3 +165,25 @@ float struct_test121(
   reg3.l + reg3.d + reg4.l + reg4.d + reg5.l + reg5.d +
   s0.l + s0.d + s1.l + s1.d + f6.f + f7.f;
 }
+
+
+typedef struct {
+  char _Alignas(1024) c;
+} Aligned1024;
+
+int struct_test131(G g0,G g1,G g2,G g3,G g4,F f0,F f1,F f2,F f3,F f4,F f5, int i0, int i1, ... ) {
+  va_list ap;
+  va_start(ap, i1);
+  long double ret = i0 + i1;
+  ret += va_arg(ap, long double);
+  ret += va_arg(ap, Aligned1024).c;
+  ret += va_arg(ap, int);
+  ret += va_arg(ap, double);
+  ret += va_arg(ap, double);
+  ret += va_arg(ap, double);
+  ret += va_arg(ap, double);
+  ret += va_arg(ap, Aligned1024).c;
+  ret += va_arg(ap, long double);
+  va_end(ap);
+  return ret;
+}

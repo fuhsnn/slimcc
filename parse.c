@@ -3114,7 +3114,7 @@ static Node *primary(Token **rest, Token *tok) {
 
     if (is_integer(ty) || ty->kind == TY_PTR)
       return new_num(0, start);
-    if (is_flonum(ty))
+    if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE)
       return new_num(1, start);
     return new_num(2, start);
   }
@@ -3309,7 +3309,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
     fn->large_rtn = new_lvar(NULL, pointer_to(rty));
 
   if (ty->is_variadic)
-    fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
+    fn->va_area = new_lvar("__va_area__", array_of(ty_char, 200));
 
   // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
   // automatically defined as a local variable containing the

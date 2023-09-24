@@ -18,8 +18,8 @@ typedef __va_elem va_list[1];
 static void *__va_arg_mem(__va_elem *ap, int sz, int align) {
   void *p = ap->overflow_arg_area;
   if (align > 8)
-    p = (p + 15) / 16 * 16;
-  ap->overflow_arg_area = ((unsigned long)p + sz + 7) / 8 * 8;
+    p = (void *)(((unsigned long) p + align - 1) / align * align);
+  ap->overflow_arg_area = (void *)(((unsigned long)p + sz + 7) / 8 * 8);
   return p;
 }
 
@@ -33,11 +33,11 @@ static void *__va_arg_gp(__va_elem *ap, int sz, int align) {
 }
 
 static void *__va_arg_fp(__va_elem *ap, int sz, int align) {
-  if (ap->fp_offset >= 112)
+  if (ap->fp_offset >= 176)
     return __va_arg_mem(ap, sz, align);
 
   void *r = ap->reg_save_area + ap->fp_offset;
-  ap->fp_offset += 8;
+  ap->fp_offset += 16;
   return r;
 }
 

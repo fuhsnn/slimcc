@@ -159,6 +159,7 @@ struct Obj {
   Obj *param_next;
   Obj *vla_next;
   bool pass_by_stack;
+  int stack_offset;
 
   // Global variable or function
   bool is_function;

@@ -488,8 +488,9 @@ static bool has_flonum2(Type *ty) {
   return has_flonum(ty, 8, 16, 0);
 }
 
-static int calling_convention(Obj *var, int gp_start) {
+static int calling_convention(Obj *var, int gp_start, int *gp_count, int *fp_count, int *stack_align) {
   int stack = 0;
+  int max_align = 16;
   int gp = gp_start, fp = 0;
   for (; var; var = var->param_next) {
     Type *ty = var->ty;
@@ -522,8 +523,21 @@ static int calling_convention(Obj *var, int gp_start) {
         continue;
     }
     var->pass_by_stack = true;
+
+    if (ty->align > 8) {
+      stack = align_to(stack, ty->align);
+      max_align = MAX(max_align, ty->align);
+    }
+    var->stack_offset = stack;
     stack += align_to(ty->size, 8);
   }
+  if (gp_count)
+    *gp_count = MIN(gp, GP_MAX);
+  if (fp_count)
+    *fp_count = MIN(fp, FP_MAX);
+  if (stack_align)
+    *stack_align = max_align;
+
   return stack;
 }
 
@@ -546,8 +560,7 @@ static int calling_convention(Obj *var, int gp_start) {
 //
 // - If a function is variadic, set the number of floating-point type
 //   arguments to RAX.
-static void place_stack_args(Node *node, int stack_size) {
-  int stack = 0;
+static void place_stack_args(Node *node) {
   for (Obj *var = node->args; var; var = var->param_next) {
     if (!var->pass_by_stack)
       continue;
@@ -556,32 +569,30 @@ static void place_stack_args(Node *node, int stack_size) {
     case TY_STRUCT:
     case TY_UNION:
       for (int i = 0; i < var->ty->size; i++) {
-        println("  mov %d(%%rbp), %%r10b", i + var->offset);
-        println("  mov %%r10b, %d(%%rsp)", i + stack);
+        println("  mov %d(%%rbp), %%r8b", i + var->offset);
+        println("  mov %%r8b, %d(%%rsp)", i + var->stack_offset);
       }
       break;
     case TY_FLOAT:
     case TY_DOUBLE:
       println("  movsd %d(%%rbp), %%xmm0", var->offset);
-      println("  movsd %%xmm0, %d(%%rsp)", stack);
+      println("  movsd %%xmm0, %d(%%rsp)", var->stack_offset);
       break;
     case TY_LDOUBLE:
       println("  fldt %d(%%rbp)", var->offset);
-      println("  fstpt %d(%%rsp)", stack);
+      println("  fstpt %d(%%rsp)", var->stack_offset);
       break;
     default: {
       assert(var->ty->size <= 8);
       char *ax = reg_ax(var->ty->size < 4 ? 4 : 8);
       mov_extend(var, ax);
-      println("  mov %%rax, %d(%%rsp)", stack);
+      println("  mov %%rax, %d(%%rsp)", var->stack_offset);
     }
     }
-    stack += align_to(var->ty->size, 8);
   }
-  assert(stack == stack_size);
 }
 
-static void place_reg_args(Node *node, bool gp_start, int *fp_count) {
+static void place_reg_args(Node *node, bool gp_start) {
   int gp = 0, fp = 0;
   // If the return type is a large struct/union, the caller passes
   // a pointer to a buffer as if it were the first argument.
@@ -621,7 +632,6 @@ static void place_reg_args(Node *node, bool gp_start, int *fp_count) {
     }
     }
   }
-  *fp_count = fp;
 }
 
 static void copy_ret_buffer(Obj *var) {
@@ -956,6 +966,9 @@ static void gen_expr(Node *node) {
       return;
     }
 
+    println("  mov %%rsp, %%rax");
+    push_tmp();
+
     gen_expr(node->lhs);
     push_tmp();
 
@@ -966,20 +979,20 @@ static void gen_expr(Node *node) {
     // a pointer to a buffer as if it were the first argument.
     bool gp_start = node->ret_buffer && node->ty->size > 16;
 
-    int args_size = calling_convention(node->args, gp_start);
-    int stack_size = align_to(args_size, 16);
+    int fp_count, stack_align;
+    int args_size = calling_convention(node->args, gp_start, NULL, &fp_count, &stack_align);
 
-    println("  sub $%d, %%rsp", stack_size);
+    println("  sub $%d, %%rsp", args_size);
+    println("  and $-%d, %%rsp", stack_align);
 
-    place_stack_args(node, args_size);
-
-    int fp_count;
-    place_reg_args(node, gp_start, &fp_count);
+    place_stack_args(node);
+    place_reg_args(node, gp_start);
 
     println("  mov $%d, %%rax", fp_count);
     pop_tmp("%r10");
     println("  call *%%r10");
-    println("  add $%d, %%rsp", stack_size);
+
+    pop_tmp("%rsp");
 
     // It looks like the most significant 48 or 56 bits in RAX may
     // contain garbage if a function return type is short or bool/char,
@@ -1408,16 +1421,14 @@ static void assign_lvar_offsets(Obj *prog) {
     // The first passed-by-stack parameter resides at RBP+16.
     int top = 16;
 
-    calling_convention(fn->ty->param_list, 0);
+    calling_convention(fn->ty->param_list, 0, NULL, NULL, NULL);
 
     // Assign offsets to pass-by-stack parameters.
     for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
       if (!var->pass_by_stack)
         continue;
 
-      top = align_to(top, 8);
-      var->offset = top;
-      top += var->ty->size;
+      var->offset = var->stack_offset + top;
     }
 
     fn->lvar_stack_size = assign_lvar_offsets2(fn->ty->scopes, 0);
@@ -1547,21 +1558,16 @@ static void emit_text(Obj *prog) {
 
     // Save arg registers if function is variadic
     if (fn->va_area) {
-      int gp = 0, fp = 0;
-      for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
-        if (is_flonum(var->ty))
-          fp++;
-        else
-          gp++;
-      }
+      int gp, fp;
+      int stack = calling_convention(fn->ty->param_list, 0, &gp, &fp, NULL);
 
       int off = fn->va_area->offset;
 
       // va_elem
       println("  movl $%d, %d(%%rbp)", gp * 8, off);          // gp_offset
-      println("  movl $%d, %d(%%rbp)", fp * 8 + 48, off + 4); // fp_offset
+      println("  movl $%d, %d(%%rbp)", fp * 16 + 48, off + 4);// fp_offset
       println("  movq %%rbp, %d(%%rbp)", off + 8);            // overflow_arg_area
-      println("  addq $16, %d(%%rbp)", off + 8);
+      println("  addq $%d, %d(%%rbp)", stack + 16, off + 8);
       println("  movq %%rbp, %d(%%rbp)", off + 16);           // reg_save_area
       println("  addq $%d, %d(%%rbp)", off + 24, off + 16);
 
@@ -1573,13 +1579,13 @@ static void emit_text(Obj *prog) {
       println("  movq %%r8, %d(%%rbp)", off + 56);
       println("  movq %%r9, %d(%%rbp)", off + 64);
       println("  movsd %%xmm0, %d(%%rbp)", off + 72);
-      println("  movsd %%xmm1, %d(%%rbp)", off + 80);
-      println("  movsd %%xmm2, %d(%%rbp)", off + 88);
-      println("  movsd %%xmm3, %d(%%rbp)", off + 96);
-      println("  movsd %%xmm4, %d(%%rbp)", off + 104);
-      println("  movsd %%xmm5, %d(%%rbp)", off + 112);
-      println("  movsd %%xmm6, %d(%%rbp)", off + 120);
-      println("  movsd %%xmm7, %d(%%rbp)", off + 128);
+      println("  movsd %%xmm1, %d(%%rbp)", off + 88);
+      println("  movsd %%xmm2, %d(%%rbp)", off + 104);
+      println("  movsd %%xmm3, %d(%%rbp)", off + 120);
+      println("  movsd %%xmm4, %d(%%rbp)", off + 136);
+      println("  movsd %%xmm5, %d(%%rbp)", off + 152);
+      println("  movsd %%xmm6, %d(%%rbp)", off + 168);
+      println("  movsd %%xmm7, %d(%%rbp)", off + 184);
     }
 
     // Save passed-by-register arguments to the stack

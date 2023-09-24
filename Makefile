@@ -15,7 +15,7 @@ $(OBJS): slimcc.h
 
 test/%.exe: slimcc test/%.c
 	./slimcc -Iinclude -Itest -c -o test/$*.o test/$*.c
-	$(CC) -std=c99 -pthread -o $@ test/$*.o -xc test/common
+	$(CC) -std=c11 -pthread -Wno-psabi -o $@ test/$*.o -xc test/common
 
 test: $(TESTS)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
