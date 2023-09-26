@@ -336,6 +336,7 @@ static int getTypeId(Type *ty) {
   case TY_INT:
     return ty->is_unsigned ? U32 : I32;
   case TY_LONG:
+  case TY_LONGLONG:
     return ty->is_unsigned ? U64 : I64;
   case TY_FLOAT:
     return F32;
@@ -1161,7 +1162,7 @@ static void gen_expr(Node *node) {
 
   char *ax, *di, *dx;
 
-  if (node->lhs->ty->kind == TY_LONG || node->lhs->ty->base) {
+  if (node->lhs->ty->size == 8 || node->lhs->ty->base) {
     ax = "%rax";
     di = "%rdi";
     dx = "%rdx";

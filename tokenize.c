@@ -358,6 +358,7 @@ static bool convert_pp_int(Token *tok) {
   int64_t val = strtoul(p, &p, base);
 
   // Read U, L or LL suffixes.
+  bool ll = false;
   bool l = false;
   bool u = false;
 
@@ -366,13 +367,13 @@ static bool convert_pp_int(Token *tok) {
       startswith(p, "ULL") || startswith(p, "Ull") ||
       startswith(p, "uLL") || startswith(p, "ull")) {
     p += 3;
-    l = u = true;
+    ll = u = true;
   } else if (!strncasecmp(p, "lu", 2) || !strncasecmp(p, "ul", 2)) {
     p += 2;
     l = u = true;
   } else if (startswith(p, "LL") || startswith(p, "ll")) {
     p += 2;
-    l = true;
+    ll = true;
   } else if (*p == 'L' || *p == 'l') {
     p++;
     l = true;
@@ -387,8 +388,12 @@ static bool convert_pp_int(Token *tok) {
   // Infer a type.
   Type *ty;
   if (base == 10) {
-    if (l && u)
+    if (ll && u)
+      ty = ty_ullong;
+    else if (l && u)
       ty = ty_ulong;
+    else if (ll)
+      ty = ty_llong;
     else if (l)
       ty = ty_long;
     else if (u)
@@ -396,8 +401,12 @@ static bool convert_pp_int(Token *tok) {
     else
       ty = (val >> 31) ? ty_long : ty_int;
   } else {
-    if (l && u)
+    if (ll && u)
+      ty = ty_ullong;
+    else if (l && u)
       ty = ty_ulong;
+    else if (ll)
+      ty = (val >> 63) ? ty_ullong : ty_llong;
     else if (l)
       ty = (val >> 63) ? ty_ulong : ty_long;
     else if (u)
