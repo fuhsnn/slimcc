@@ -40,6 +40,10 @@ bool is_numeric(Type *ty) {
   return is_integer(ty) || is_flonum(ty);
 }
 
+bool is_bitfield(Node *node) {
+  return node->kind == ND_MEMBER && node->member->is_bitfield;
+}
+
 bool is_compatible(Type *t1, Type *t2) {
   if (t1 == t2)
     return true;
@@ -129,6 +133,52 @@ Type *enum_type(void) {
 
 Type *struct_type(void) {
   return new_type(TY_STRUCT, 0, 1);
+}
+
+int int_rank(Type *t) {
+  switch (t->kind) {
+    case TY_ENUM:
+    case TY_BOOL:
+    case TY_CHAR:
+    case TY_SHORT:
+      return 0;
+    case TY_INT:
+      return 1;
+    case TY_LONG:
+      return 2;
+  }
+  unreachable();
+}
+
+static void int_promotion(Node **node) {
+  Type *ty = (*node)->ty;
+
+  if (is_bitfield(*node)) {
+    int int_width = ty_int->size * 8;
+    int bit_width = (*node)->member->bit_width;
+
+    if (bit_width == int_width && ty->is_unsigned) {
+      *node = new_cast(*node, ty_uint);
+    } else if (bit_width <= int_width) {
+      *node = new_cast(*node, ty_int);
+    } else {
+      *node = new_cast(*node, ty);
+    }
+    return;
+  }
+
+  if (ty->size < ty_int->size) {
+    *node = new_cast(*node, ty_int);
+    return;
+  }
+
+  if (ty->size == ty_int->size && int_rank(ty) < int_rank(ty_int)) {
+    if (ty->is_unsigned)
+      *node = new_cast(*node, ty_uint);
+    else
+      *node = new_cast(*node, ty_int);
+    return;
+  }
 }
 
 static Type *get_common_type(Type *ty1, Type *ty2) {
@@ -234,6 +284,9 @@ void add_type(Node *node) {
   case ND_BITNOT:
   case ND_SHL:
   case ND_SHR:
+    if (!is_integer(node->lhs->ty))
+      error_tok(node->lhs->tok, "invalid operand");
+    int_promotion(&node->lhs);
     node->ty = node->lhs->ty;
     return;
   case ND_VAR:
