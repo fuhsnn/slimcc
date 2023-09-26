@@ -2520,7 +2520,7 @@ static Node *unary(Token **rest, Token *tok) {
   if (equal(tok, "&")) {
     Node *lhs = cast(rest, tok->next);
     add_type(lhs);
-    if (lhs->kind == ND_MEMBER && lhs->member->is_bitfield)
+    if (is_bitfield(lhs))
       error_tok(tok, "cannot take address of bitfield");
     return new_unary(ND_ADDR, lhs, tok);
   }

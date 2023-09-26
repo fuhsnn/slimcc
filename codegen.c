@@ -857,7 +857,7 @@ static void gen_expr(Node *node) {
     int tmp_offset = push_tmp();
     gen_expr(node->rhs);
 
-    if (node->lhs->kind == ND_MEMBER && node->lhs->member->is_bitfield) {
+    if (is_bitfield(node->lhs)) {
       // If the lhs is a bitfield, we need to read the current value
       // from memory and merge it with a new value.
       Member *mem = node->lhs->member;
