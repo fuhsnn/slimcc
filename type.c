@@ -181,7 +181,10 @@ static void int_promotion(Node **node) {
   }
 }
 
-static Type *get_common_type(Type *ty1, Type *ty2) {
+static Type *get_common_type(Node **lhs, Node **rhs) {
+  Type *ty1 = (*lhs)->ty;
+  Type *ty2 = (*rhs)->ty;
+
   if (ty1->base)
     return pointer_to(ty1->base);
 
@@ -190,6 +193,11 @@ static Type *get_common_type(Type *ty1, Type *ty2) {
   if (ty2->kind == TY_FUNC)
     return pointer_to(ty2);
 
+  if (!is_numeric(ty1) || !is_numeric(ty2)) {
+    assert(is_compatible(ty1, ty2));
+    return ty1;
+  }
+
   if (ty1->kind == TY_LDOUBLE || ty2->kind == TY_LDOUBLE)
     return ty_ldouble;
   if (ty1->kind == TY_DOUBLE || ty2->kind == TY_DOUBLE)
@@ -197,17 +205,28 @@ static Type *get_common_type(Type *ty1, Type *ty2) {
   if (ty1->kind == TY_FLOAT || ty2->kind == TY_FLOAT)
     return ty_float;
 
-  if (ty1->size < 4)
-    ty1 = ty_int;
-  if (ty2->size < 4)
-    ty2 = ty_int;
+  int_promotion(lhs);
+  int_promotion(rhs);
+  ty1 = (*lhs)->ty;
+  ty2 = (*rhs)->ty;
 
   if (ty1->size != ty2->size)
     return (ty1->size < ty2->size) ? ty2 : ty1;
 
-  if (ty2->is_unsigned)
-    return ty2;
-  return ty1;
+  Type *ranked_ty = int_rank(ty1) > int_rank(ty2) ? ty1 : ty2;
+
+  if (ty1->is_unsigned == ty2->is_unsigned)
+    return ranked_ty;
+
+  // If same size but different sign, the common type is unsigned
+  // variant of the highest-ranked type between the two.
+  switch (ranked_ty->kind) {
+    case TY_INT:
+      return ty_uint;
+    case TY_LONG:
+      return ty_ulong;
+  }
+  unreachable();
 }
 
 // For many binary operators, we implicitly promote operands so that
@@ -218,7 +237,7 @@ static Type *get_common_type(Type *ty1, Type *ty2) {
 //
 // This operation is called the "usual arithmetic conversion".
 static void usual_arith_conv(Node **lhs, Node **rhs) {
-  Type *ty = get_common_type((*lhs)->ty, (*rhs)->ty);
+  Type *ty = get_common_type(lhs, rhs);
   *lhs = new_cast(*lhs, ty);
   *rhs = new_cast(*rhs, ty);
 }

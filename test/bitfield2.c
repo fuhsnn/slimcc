@@ -115,6 +115,10 @@ int uninit_global(void) {
   ASSERT(3, s.j);
 }
 
+static int operand_promotion(void) {
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; s.i > -1; }) );
+}
+
 int main(void) {
   bitextract();
   struct_init();
@@ -122,6 +126,7 @@ int main(void) {
   assign_expr();
   large_field();
   uninit_global();
+  operand_promotion();
 
   printf("OK\n");
 
