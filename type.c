@@ -253,12 +253,14 @@ void add_type(Node *node) {
     usual_arith_conv(&node->lhs, &node->rhs);
     node->ty = node->lhs->ty;
     return;
-  case ND_NEG: {
-    Type *ty = get_common_type(ty_int, node->lhs->ty);
-    node->lhs = new_cast(node->lhs, ty);
-    node->ty = ty;
+  case ND_POS:
+  case ND_NEG:
+    if (!is_numeric(node->lhs->ty))
+      error_tok(node->lhs->tok, "invalid operand");
+    if (is_integer(node->lhs->ty))
+      int_promotion(&node->lhs);
+    node->ty = node->lhs->ty;
     return;
-  }
   case ND_ASSIGN:
     if (node->lhs->ty->kind == TY_ARRAY)
       error_tok(node->lhs->tok, "not an lvalue");

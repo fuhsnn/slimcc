@@ -799,6 +799,9 @@ static void gen_expr(Node *node) {
     println("  mov $%ld, %%rax", node->val);
     return;
   }
+  case ND_POS:
+    gen_expr(node->lhs);
+    return;
   case ND_NEG:
     gen_expr(node->lhs);
 

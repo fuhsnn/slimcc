@@ -1900,6 +1900,8 @@ static int64_t eval2(Node *node, char ***label) {
     if (node->ty->is_unsigned)
       return (uint64_t)eval(node->lhs) / eval(node->rhs);
     return eval(node->lhs) / eval(node->rhs);
+  case ND_POS:
+    return eval(node->lhs);
   case ND_NEG:
     return -eval(node->lhs);
   case ND_MOD:
@@ -2031,6 +2033,8 @@ static double eval_double(Node *node) {
     return eval_double(node->lhs) * eval_double(node->rhs);
   case ND_DIV:
     return eval_double(node->lhs) / eval_double(node->rhs);
+  case ND_POS:
+    return eval_double(node->lhs);
   case ND_NEG:
     return -eval_double(node->lhs);
   case ND_COND:
@@ -2512,7 +2516,7 @@ static Node *cast(Token **rest, Token *tok) {
 //       | postfix
 static Node *unary(Token **rest, Token *tok) {
   if (equal(tok, "+"))
-    return cast(rest, tok->next);
+    return new_unary(ND_POS, cast(rest, tok->next), tok);
 
   if (equal(tok, "-"))
     return new_unary(ND_NEG, cast(rest, tok->next), tok);
