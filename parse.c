@@ -2435,22 +2435,16 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_SUB, lhs, rhs, tok);
 
-  // VLA + num
+  // VLA - num
   if (lhs->ty->base->kind == TY_VLA) {
     rhs = new_binary(ND_MUL, rhs, new_var_node(lhs->ty->base->vla_size, tok), tok);
-    add_type(rhs);
-    Node *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node->ty = lhs->ty;
-    return node;
+    return new_binary(ND_SUB, lhs, rhs, tok);
   }
 
   // ptr - num
   if (lhs->ty->base && is_integer(rhs->ty)) {
     rhs = new_binary(ND_MUL, rhs, new_long(lhs->ty->base->size, tok), tok);
-    add_type(rhs);
-    Node *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node->ty = lhs->ty;
-    return node;
+    return new_binary(ND_SUB, lhs, rhs, tok);
   }
 
   // ptr - ptr, which returns how many elements are between the two.

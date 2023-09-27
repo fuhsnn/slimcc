@@ -219,9 +219,6 @@ static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
     }
   }
 
-  if (ty1->base)
-    return pointer_to(ty1->base);
-
   if (!is_numeric(ty1) || !is_numeric(ty2))
     error_tok((*rhs)->tok,"invalid operand");
 
@@ -292,6 +289,16 @@ void add_type(Node *node) {
     return;
   case ND_ADD:
   case ND_SUB:
+    if (node->lhs->ty->base) {
+      if (node->lhs->ty->kind != TY_PTR)
+        node->lhs = new_cast(node->lhs, pointer_to(node->lhs->ty->base));
+      node->rhs = new_cast(node->rhs, ty_ullong);
+      node->ty = node->lhs->ty;
+      return;
+    }
+    usual_arith_conv(&node->lhs, &node->rhs, false);
+    node->ty = node->lhs->ty;
+    return;
   case ND_MUL:
   case ND_DIV:
   case ND_MOD:
