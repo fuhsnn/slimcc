@@ -695,15 +695,32 @@ static Type *pointers(Token **rest, Token *tok, Type *ty) {
   return ty;
 }
 
+static Token *skip_paren(Token *tok) {
+  int level = 0;
+  for (;;) {
+    if (level == 0 && equal(tok, ")"))
+      break;
+
+    if (tok->kind == TK_EOF)
+      error_tok(tok, "premature end of input");
+
+    if (equal(tok, "("))
+      level++;
+    else if (equal(tok, ")"))
+      level--;
+
+    tok = tok->next;
+  }
+  return tok->next;
+}
+
 // declarator = pointers ("(" ident ")" | "(" declarator ")" | ident) type-suffix
 static Type *declarator(Token **rest, Token *tok, Type *ty) {
   ty = pointers(&tok, tok, ty);
 
   if (equal(tok, "(")) {
     Token *start = tok;
-    Type dummy = {0};
-    declarator(&tok, start->next, &dummy);
-    tok = skip(tok, ")");
+    tok = skip_paren(tok->next);
     ty = type_suffix(rest, tok, ty);
     return declarator(&tok, start->next, ty);
   }
@@ -728,9 +745,7 @@ static Type *abstract_declarator(Token **rest, Token *tok, Type *ty) {
 
   if (equal(tok, "(")) {
     Token *start = tok;
-    Type dummy = {0};
-    abstract_declarator(&tok, start->next, &dummy);
-    tok = skip(tok, ")");
+    tok = skip_paren(tok->next);
     ty = type_suffix(rest, tok, ty);
     return abstract_declarator(&tok, start->next, ty);
   }
