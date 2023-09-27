@@ -660,12 +660,13 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   tok = skip(tok, "]");
   ty = type_suffix(rest, tok, ty);
 
-  if (ty->kind == TY_VLA || !is_const_expr(expr, NULL)) {
-    if (scope->parent == NULL)
-      error_tok(tok, "variably-modified type at file scope");
-    return vla_of(ty, expr);
-  }
-  return array_of(ty, eval(expr));
+  int64_t array_len;
+  if (ty->kind != TY_VLA && is_const_expr(expr, &array_len))
+    return array_of(ty, array_len);
+
+  if (scope->parent == NULL)
+    error_tok(tok, "variably-modified type at file scope");
+  return vla_of(ty, expr);
 }
 
 // type-suffix = "(" func-params
