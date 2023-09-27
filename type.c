@@ -155,6 +155,17 @@ int int_rank(Type *t) {
   unreachable();
 }
 
+static bool is_nullptr(Node *node) {
+  if (node->kind == ND_CAST &&
+    node->ty->kind == TY_PTR && node->ty->base->kind == TY_VOID)
+    node = node->lhs;
+
+  int64_t val;
+  if (is_integer(node->ty) && is_const_expr(node, &val) && val == 0)
+    return true;
+  return false;
+}
+
 static void int_promotion(Node **node) {
   Type *ty = (*node)->ty;
 
@@ -186,22 +197,33 @@ static void int_promotion(Node **node) {
   }
 }
 
-static Type *get_common_type(Node **lhs, Node **rhs) {
+static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
   Type *ty1 = (*lhs)->ty;
   Type *ty2 = (*rhs)->ty;
+
+  if (handle_ptr) {
+    if (ty1->kind == TY_FUNC)
+      ty1 = pointer_to(ty1);
+    if (ty2->kind == TY_FUNC)
+      ty2 = pointer_to(ty2);
+
+    if (ty1->base && is_nullptr(*rhs))
+      return pointer_to(ty1->base);
+    if (ty2->base && is_nullptr(*lhs))
+      return pointer_to(ty2->base);
+
+    if (ty1->base && ty2->base) {
+      if (is_compatible(ty1->base, ty2->base))
+        return pointer_to(ty1->base);
+      return pointer_to(ty_void);
+    }
+  }
 
   if (ty1->base)
     return pointer_to(ty1->base);
 
-  if (ty1->kind == TY_FUNC)
-    return pointer_to(ty1);
-  if (ty2->kind == TY_FUNC)
-    return pointer_to(ty2);
-
-  if (!is_numeric(ty1) || !is_numeric(ty2)) {
-    assert(is_compatible(ty1, ty2));
-    return ty1;
-  }
+  if (!is_numeric(ty1) || !is_numeric(ty2))
+    error_tok((*rhs)->tok,"invalid operand");
 
   if (ty1->kind == TY_LDOUBLE || ty2->kind == TY_LDOUBLE)
     return ty_ldouble;
@@ -243,8 +265,8 @@ static Type *get_common_type(Node **lhs, Node **rhs) {
 // be promoted to match with the other.
 //
 // This operation is called the "usual arithmetic conversion".
-static void usual_arith_conv(Node **lhs, Node **rhs) {
-  Type *ty = get_common_type(lhs, rhs);
+static void usual_arith_conv(Node **lhs, Node **rhs, bool handle_ptr) {
+  Type *ty = get_common_type(lhs, rhs, handle_ptr);
   *lhs = new_cast(*lhs, ty);
   *rhs = new_cast(*rhs, ty);
 }
@@ -276,7 +298,7 @@ void add_type(Node *node) {
   case ND_BITAND:
   case ND_BITOR:
   case ND_BITXOR:
-    usual_arith_conv(&node->lhs, &node->rhs);
+    usual_arith_conv(&node->lhs, &node->rhs, false);
     node->ty = node->lhs->ty;
     return;
   case ND_POS:
@@ -298,7 +320,7 @@ void add_type(Node *node) {
   case ND_NE:
   case ND_LT:
   case ND_LE:
-    usual_arith_conv(&node->lhs, &node->rhs);
+    usual_arith_conv(&node->lhs, &node->rhs, true);
     node->ty = ty_int;
     return;
   case ND_FUNCALL:
@@ -323,8 +345,10 @@ void add_type(Node *node) {
   case ND_COND:
     if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID) {
       node->ty = ty_void;
+    } else if (is_compatible(node->then->ty, node->els->ty)) {
+      node->ty = node->then->ty;
     } else {
-      usual_arith_conv(&node->then, &node->els);
+      usual_arith_conv(&node->then, &node->els, true);
       node->ty = node->then->ty;
     }
     return;

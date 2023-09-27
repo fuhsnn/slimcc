@@ -23,6 +23,20 @@ int main(int argc, char**argv) {
 
   ASSERT(1, ({ unsigned long a; long long b; _Generic(a + b, unsigned long long:1, unsigned long:0); }) );
 
+  ASSERT(1, _Generic(argc ? 0 : "a", char*:1 ) );
+  ASSERT(1, _Generic(argc ? "a" : 0, char*:1 ) );
+
+  ASSERT(1, _Generic(argc ? (void*)0 : "a", char*:1 ) );
+  ASSERT(1, _Generic(argc ? "a" : (void*)0, char*:1 ) );
+
+  ASSERT(1, _Generic(argc ? "a" : (void*)(void*)0, void*:1 ) );
+
+  ASSERT(1, ({ void *p; _Generic(argc ? p : "a", void*:1, char*:2); }) );
+  ASSERT(1, ({ void *p; _Generic(argc ? "a" : p, void*:1, char*:2); }) );
+
+  ASSERT(1, ({ double *p; char *q; _Generic(argc ? p : q, void*:1 ); }) );
+  ASSERT(1, ({ double *p; char *q; _Generic(argc ? q : p, void*:1 ); }) );
+
   printf("OK\n");
 }
 

@@ -118,7 +118,6 @@ static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, char ***label);
 static int64_t eval_rval(Node *node, char ***label);
-static bool is_const_expr(Node *node);
 static Node *assign(Token **rest, Token *tok);
 static Node *logor(Token **rest, Token *tok);
 static double eval_double(Node *node);
@@ -657,10 +656,11 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   }
 
   Node *expr = assign(&tok, tok);
+  add_type(expr);
   tok = skip(tok, "]");
   ty = type_suffix(rest, tok, ty);
 
-  if (ty->kind == TY_VLA || !is_const_expr(expr)) {
+  if (ty->kind == TY_VLA || !is_const_expr(expr, NULL)) {
     if (scope->parent == NULL)
       error_tok(tok, "variably-modified type at file scope");
     return vla_of(ty, expr);
@@ -1422,6 +1422,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         Node *expr = init->children[mem->idx]->expr;
         if (!expr)
           continue;
+        add_type(expr);
 
         char *loc = buf + offset + mem->offset;
         uint64_t oldval = read_buf(loc, mem->ty->size);
@@ -1446,6 +1447,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
 
   if (!init->expr)
     return cur;
+  add_type(init->expr);
 
   if (ty->kind == TY_FLOAT) {
     *(float *)(buf + offset) = eval_double(init->expr);
@@ -1903,8 +1905,6 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
 // number. The latter form is accepted only as an initialization
 // expression for a global variable.
 static int64_t eval2(Node *node, char ***label) {
-  add_type(node);
-
   if (is_flonum(node->ty))
     return eval_double(node);
 
@@ -2019,24 +2019,26 @@ static int64_t eval_rval(Node *node, char ***label) {
   return eval_error(node->tok, "invalid initializer");
 }
 
-static bool is_const_expr(Node *node) {
+bool is_const_expr(Node *node, int64_t *val) {
+  add_type(node);
   bool failed = false;
 
   assert(!eval_recover);
   eval_recover = &failed;
-  eval(node);
+  int64_t v = eval(node);
+  if (val)
+    *val = v;
   eval_recover = NULL;
   return !failed;
 }
 
 int64_t const_expr(Token **rest, Token *tok) {
   Node *node = conditional(rest, tok);
+  add_type(node);
   return eval(node);
 }
 
 static double eval_double(Node *node) {
-  add_type(node);
-
   if (is_integer(node->ty)) {
     if (node->ty->is_unsigned)
       return (unsigned long)eval(node);
