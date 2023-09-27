@@ -2,6 +2,15 @@
 #include <stdint.h>
 
 char c23_label(void) {
+
+  {
+    int i = 0;
+    if (i != 0)
+lab3:
+      i = 1;
+    ASSERT(0, i);
+  }
+
   switch (1) {
     default:
     case 2:

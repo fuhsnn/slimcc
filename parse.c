@@ -112,7 +112,7 @@ static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_t
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static Node *compound_stmt(Token **rest, Token *tok, Node **last);
-static Node *stmt(Token **rest, Token *tok);
+static Node *stmt(Token **rest, Token *tok, bool chained);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
@@ -1547,7 +1547,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
   Obj *vla = brk_vla;
   brk_vla = current_vla;
 
-  node->then = stmt(rest, tok);
+  node->then = stmt(rest, tok, true);
 
   brk_label = brk;
   cont_label = cont;
@@ -1569,7 +1569,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 //      | ident ":" stmt
 //      | "{" compound-stmt
 //      | expr-stmt
-static Node *stmt(Token **rest, Token *tok) {
+static Node *stmt(Token **rest, Token *tok, bool chained) {
   if (equal(tok, "return")) {
     Node *node = new_node(ND_RETURN, tok);
     if (consume(rest, tok->next, ";"))
@@ -1592,9 +1592,9 @@ static Node *stmt(Token **rest, Token *tok) {
     tok = skip(tok->next, "(");
     node->cond = expr(&tok, tok);
     tok = skip(tok, ")");
-    node->then = stmt(&tok, tok);
+    node->then = stmt(&tok, tok, true);
     if (equal(tok, "else"))
-      node->els = stmt(&tok, tok->next);
+      node->els = stmt(&tok, tok->next, true);
     *rest = tok;
     return node;
   }
@@ -1614,7 +1614,7 @@ static Node *stmt(Token **rest, Token *tok) {
     Obj *vla = brk_vla;
     brk_vla = current_vla;
 
-    node->then = stmt(rest, tok);
+    node->then = stmt(rest, tok, true);
 
     current_switch = sw;
     brk_label = brk;
@@ -1629,6 +1629,8 @@ static Node *stmt(Token **rest, Token *tok) {
       error_tok(tok, "jump crosses VLA initialization");
 
     Node *node = new_node(ND_CASE, tok);
+    node->label = new_unique_name();
+
     int64_t begin = const_expr(&tok, tok->next);
     int64_t end;
 
@@ -1653,12 +1655,15 @@ static Node *stmt(Token **rest, Token *tok) {
       ((current_switch->cond->ty->is_unsigned && ((uint64_t)end < begin))))
       error_tok(tok, "empty case range specified");
 
-    node->label = new_unique_name();
+    tok = skip(tok, ":");
+    if (chained)
+      node->lhs = stmt(rest, tok, true);
+    else
+      *rest = tok;
     node->begin = begin;
     node->end = end;
     node->case_next = current_switch->case_next;
     current_switch->case_next = node;
-    *rest = skip(tok, ":");
     return node;
   }
 
@@ -1670,8 +1675,13 @@ static Node *stmt(Token **rest, Token *tok) {
 
     Node *node = new_node(ND_CASE, tok);
     node->label = new_unique_name();
+
+    tok = skip(tok->next, ":");
+    if (chained)
+      node->lhs = stmt(rest, tok, true);
+    else
+      *rest = tok;
     current_switch->default_case = node;
-    *rest = skip(tok->next, ":");
     return node;
   }
 
@@ -1778,11 +1788,16 @@ static Node *stmt(Token **rest, Token *tok) {
   if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
     Node *node = new_node(ND_LABEL, tok);
     node->label = strndup(tok->loc, tok->len);
+
+    tok = tok->next->next;
+    if (chained)
+      node->lhs = stmt(rest, tok, true);
+    else
+      *rest = tok;
     node->unique_label = new_unique_name();
     node->goto_next = labels;
     node->top_vla = current_vla;
     labels = node;
-    *rest = tok->next->next;
     return node;
   }
 
@@ -1828,7 +1843,7 @@ static Node *compound_stmt(Token **rest, Token *tok, Node **last) {
         cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
       continue;
     }
-    cur = cur->next = stmt(&tok, tok);
+    cur = cur->next = stmt(&tok, tok, false);
   }
 
   if (last)
