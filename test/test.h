@@ -1,5 +1,6 @@
 #define ASSERT(x, y) assert(x, y, #y)
 
+#if defined(__slimcc__) || defined(__chibicc__)
 void assert(int expected, int actual, char *code);
 int printf(char *fmt, ...);
 int sprintf(char *buf, char *fmt, ...);
@@ -12,3 +13,8 @@ int vsprintf();
 long strlen(char *s);
 void *memcpy(void *dest, void *src, long n);
 void *memset(void *s, int c, long n);
+#else
+#include <stdio.h>
+#include <string.h>
+extern void assert(int expected, int actual, char *code);
+#endif
