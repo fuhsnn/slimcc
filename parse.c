@@ -2004,9 +2004,9 @@ static int64_t eval2(Node *node, char ***label) {
     int64_t val = eval2(node->lhs, label);
     if (is_integer(node->ty)) {
       switch (node->ty->size) {
-      case 1: return node->ty->is_unsigned ? (uint8_t)val : (int8_t)val;
-      case 2: return node->ty->is_unsigned ? (uint16_t)val : (int16_t)val;
-      case 4: return node->ty->is_unsigned ? (uint32_t)val : (int32_t)val;
+      case 1: return node->ty->is_unsigned ? (uint8_t)val : (int64_t)(int8_t)val;
+      case 2: return node->ty->is_unsigned ? (uint16_t)val : (int64_t)(int16_t)val;
+      case 4: return node->ty->is_unsigned ? (uint32_t)val : (int64_t)(int32_t)val;
       }
     }
     return val;
