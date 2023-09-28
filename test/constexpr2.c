@@ -9,6 +9,8 @@ int main(void) {
 
   SASSERT((_Bool)0.1f == 1);
   SASSERT((_Bool)2 == 1);
+  SASSERT((_Bool)(0.0f + 0.1f) == 1);
+  SASSERT((_Bool)(2 * 3) == 1);
 
   SASSERT( -1 < 0 );
 
