@@ -647,18 +647,22 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
 
 // array-dimensions = ("static" | "restrict")* const-expr? "]" type-suffix
 static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
+  if (!consume(&tok, tok, "[")) {
+    *rest = tok;
+    return ty;
+  }
   while (equal(tok, "static") || equal(tok, "restrict"))
     tok = tok->next;
 
   if (equal(tok, "]")) {
-    ty = type_suffix(rest, tok->next, ty);
+    ty = array_dimensions(rest, tok->next, ty);
     return array_of(ty, -1);
   }
 
   Node *expr = assign(&tok, tok);
   add_type(expr);
   tok = skip(tok, "]");
-  ty = type_suffix(rest, tok, ty);
+  ty = array_dimensions(rest, tok, ty);
 
   int64_t array_len;
   if (ty->kind != TY_VLA && is_const_expr(expr, &array_len))
@@ -676,11 +680,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
   if (equal(tok, "("))
     return func_params(rest, tok->next, ty);
 
-  if (equal(tok, "["))
-    return array_dimensions(rest, tok->next, ty);
-
-  *rest = tok;
-  return ty;
+  return array_dimensions(rest, tok, ty);
 }
 
 // pointers = ("*" ("const" | "volatile" | "restrict")*)*
