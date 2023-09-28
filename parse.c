@@ -974,6 +974,18 @@ static void string_initializer(Token **rest, Token *tok, Initializer *init) {
   *rest = tok->next;
 }
 
+static bool string_initializer2(Token **rest, Token *tok, Initializer *init) {
+  if (equal(tok, "(") && string_initializer2(&tok, tok->next, init)) {
+    *rest = skip(tok, ")");
+    return true;
+  }
+  if (tok->kind == TK_STR) {
+    string_initializer(rest, tok, init);
+    return true;
+  }
+  return false;
+}
+
 // array-designator = "[" const-expr "]"
 //
 // C99 added the designated initializer to the language, which allows
@@ -1217,9 +1229,13 @@ static void union_initializer(Token **rest, Token *tok, Initializer *init) {
 //             | struct-initializer | union-initializer
 //             | assign
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
-  if (init->ty->kind == TY_ARRAY && tok->kind == TK_STR) {
-    string_initializer(rest, tok, init);
-    return;
+  if (init->ty->kind == TY_ARRAY && !init->ty->base->base) {
+    if (equal(tok, "{") && string_initializer2(&tok, tok->next, init)) {
+      *rest = skip(tok, "}");
+      return;
+    }
+    if (string_initializer2(rest, tok, init))
+      return;
   }
 
   if (init->ty->kind == TY_ARRAY) {
