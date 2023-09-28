@@ -1968,8 +1968,13 @@ static int64_t eval2(Node *node, char ***label) {
   case ND_SHL:
     return eval(node->lhs) << eval(node->rhs);
   case ND_SHR:
-    if (node->ty->is_unsigned && node->ty->size == 8)
+    if (node->ty->is_unsigned) {
+      if (node->ty->size == 4)
+        return (uint32_t)eval(node->lhs) >> eval(node->rhs);
       return (uint64_t)eval(node->lhs) >> eval(node->rhs);
+    }
+    if (node->ty->size == 4)
+      return (int32_t)eval(node->lhs) >> eval(node->rhs);
     return eval(node->lhs) >> eval(node->rhs);
   case ND_EQ:
     return eval(node->lhs) == eval(node->rhs);
