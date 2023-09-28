@@ -654,8 +654,9 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   while (equal(tok, "static") || equal(tok, "restrict"))
     tok = tok->next;
 
-  if (equal(tok, "]")) {
-    ty = array_dimensions(rest, tok->next, ty);
+  if (consume(&tok, tok, "]") ||
+      (equal(tok, "*") && consume(&tok, tok->next, "]"))) {
+    ty = array_dimensions(rest, tok, ty);
     return array_of(ty, -1);
   }
 
