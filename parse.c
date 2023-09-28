@@ -1996,6 +1996,11 @@ static int64_t eval2(Node *node, char ***label) {
   case ND_LOGOR:
     return eval(node->lhs) || eval(node->rhs);
   case ND_CAST: {
+    if (node->ty->kind == TY_BOOL) {
+      if (is_flonum(node->lhs->ty))
+        return !!node->lhs->fval;
+      return !!node->lhs->val;
+    }
     int64_t val = eval2(node->lhs, label);
     if (is_integer(node->ty)) {
       switch (node->ty->size) {
