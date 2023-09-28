@@ -3010,7 +3010,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Type *t1 = ctrl->ty;
   if (t1->kind == TY_FUNC)
     t1 = pointer_to(t1);
-  else if (t1->kind == TY_ARRAY)
+  else if (t1->kind == TY_ARRAY || t1->kind == TY_VLA)
     t1 = pointer_to(t1->base);
 
   Node *ret = NULL;
