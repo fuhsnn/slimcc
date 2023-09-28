@@ -17,6 +17,8 @@ int main(void) {
   SASSERT( 3U << 31 >> 31 == 1);
   SASSERT( 1 << 31 >> 31 == -1);
 
+  ASSERT(1, ({ int i = 2; char arr[ (i++,3) ]; i == sizeof arr; }) );
+
   printf("OK\n");
   return 0;
 }

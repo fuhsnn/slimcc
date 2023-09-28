@@ -1992,6 +1992,7 @@ static int64_t eval2(Node *node, char ***label) {
   case ND_COND:
     return eval(node->cond) ? eval2(node->then, label) : eval2(node->els, label);
   case ND_COMMA:
+    eval2(node->lhs, label);
     return eval2(node->rhs, label);
   case ND_NOT:
     return !eval(node->lhs);
