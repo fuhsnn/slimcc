@@ -10,6 +10,7 @@ bool opt_fpic;
 bool opt_optimize;
 bool opt_g;
 bool opt_func_sections;
+bool opt_data_sections;
 
 static FileType opt_x;
 static StringArray opt_include;
@@ -349,6 +350,11 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-ffunction-sections")) {
       opt_func_sections = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-fdata-sections")) {
+      opt_data_sections = true;
       continue;
     }
 

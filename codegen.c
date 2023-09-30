@@ -1480,8 +1480,12 @@ static void emit_data(Obj *prog) {
 
     // .data or .tdata
     if (var->init_data) {
-      if (var->is_tls)
+      if (var->is_tls && opt_data_sections)
+        println("  .section .tdata.%s,\"awT\",@progbits", var->name);
+      else if (var->is_tls)
         println("  .section .tdata,\"awT\",@progbits");
+      else if (opt_data_sections)
+        println("  .section .data.%s,\"aw\",@progbits", var->name);
       else
         println("  .data");
 
@@ -1505,8 +1509,12 @@ static void emit_data(Obj *prog) {
     }
 
     // .bss or .tbss
-    if (var->is_tls)
+    if (var->is_tls && opt_data_sections)
+      println("  .section .tbss.%s,\"awT\",@nobits", var->name);
+    else if (var->is_tls)
       println("  .section .tbss,\"awT\",@nobits");
+    else if (opt_data_sections)
+      println("  .section .bss.%s,\"aw\",@nobits", var->name);
     else
       println("  .bss");
 

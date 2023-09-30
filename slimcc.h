@@ -481,4 +481,5 @@ extern bool opt_fcommon;
 extern bool opt_optimize;
 extern bool opt_g;
 extern bool opt_func_sections;
+extern bool opt_data_sections;
 extern char *base_file;

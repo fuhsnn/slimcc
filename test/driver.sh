@@ -187,6 +187,16 @@ check '-funsigned-char'
 echo 'void f1() {}' | $testcc -xc - -S -o- -ffunction-sections | grep -q '.text.f1,'
 check '-ffunction-sections'
 
+# -fdata-sections
+echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.data.var,'
+check '-fdata-sections'
+echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tdata.var,'
+check '-fdata-sections'
+echo 'void fn(void){static int var;}' | $testcc -xc - -S -o- -fdata-sections | grep -q '.bss.'
+check '-fdata-sections'
+echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tbss.var,'
+check '-fdata-sections'
+
 # -include
 echo foo > $tmp/out.h
 echo bar | $testcc -include $tmp/out.h -E -o- -xc - | grep -q -z 'foo.*bar'
