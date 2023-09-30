@@ -119,6 +119,43 @@ static int operand_promotion(void) {
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; s.i > -1; }) );
 }
 
+static int postfix_overflow(void) {
+  struct S {
+    int pad :2;
+    int i : 3;
+    unsigned u : 3;
+    _Bool b: 1;
+  } s;
+
+  ASSERT(-4, (s.i = -4, s.i--));
+  ASSERT(3, (s.i = 3, s.i++));
+  ASSERT(0, (s.u = 0, s.u--));
+  ASSERT(7, (s.u = 7, s.u++));
+
+  _Bool x, y;
+  s.b = 0;
+  x = s.b, y = s.b--;
+  ASSERT(x, 0);
+  ASSERT(y, 0);
+  x = s.b, y = s.b--;
+  ASSERT(x, 1);
+  ASSERT(y, 1);
+  x = s.b, y = s.b--;
+  ASSERT(x, 0);
+  ASSERT(y, 0);
+
+  s.b = 0;
+  x = s.b, y = s.b++;
+  ASSERT(x, 0);
+  ASSERT(y, 0);
+  x = s.b, y = s.b++;
+  ASSERT(x, 1);
+  ASSERT(y, 1);
+  x = s.b, y = s.b++;
+  ASSERT(x, 1);
+  ASSERT(y, 1);
+}
+
 int main(void) {
   bitextract();
   struct_init();
@@ -127,6 +164,7 @@ int main(void) {
   large_field();
   uninit_global();
   operand_promotion();
+  postfix_overflow();
 
   printf("OK\n");
 
