@@ -836,11 +836,6 @@ static void gen_expr(Node *node) {
 
     Member *mem = node->member;
     if (mem->is_bitfield) {
-      if (mem->ty->kind == TY_BOOL) {
-        println("  shr $%d, %%rax", mem->bit_offset);
-        println("  and $1, %%eax");
-        return;
-      }
       println("  shl $%d, %%rax", 64 - mem->bit_width - mem->bit_offset);
       if (mem->ty->is_unsigned)
         println("  shr $%d, %%rax", 64 - mem->bit_width);
@@ -882,10 +877,9 @@ static void gen_expr(Node *node) {
       store(node->ty);
       println("  mov %%r8, %%rax");
 
-      if (!mem->ty->is_unsigned && mem->ty->kind != TY_BOOL) {
-        int shift = 64 - mem->bit_width - mem->bit_offset;
-        println("  shl $%d, %%rax", shift);
-        println("  sar $%d, %%rax", shift);
+      if (!mem->ty->is_unsigned) {
+        println("  shl $%d, %%rax", 64 - mem->bit_width);
+        println("  sar $%d, %%rax", 64 - mem->bit_width);
       }
       return;
     }

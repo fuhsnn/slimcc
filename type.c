@@ -1,7 +1,7 @@
 #include "slimcc.h"
 
 Type *ty_void = &(Type){TY_VOID, 1, 1};
-Type *ty_bool = &(Type){TY_BOOL, 1, 1};
+Type *ty_bool = &(Type){TY_BOOL, 1, 1, true};
 
 Type *ty_char = &(Type){TY_CHAR, 1, 1};
 Type *ty_short = &(Type){TY_SHORT, 2, 2};
