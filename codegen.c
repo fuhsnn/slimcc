@@ -44,7 +44,7 @@ static int push_tmpstack(void) {
   }
 
   int offset;
-  if (opt_optimize && !dont_reuse_stack) {
+  if (!dont_reuse_stack) {
       int bottom = current_fn->lvar_stack_size + (tmp_stack.depth + 1) * 8;
     tmp_stack.bottom = MAX(tmp_stack.bottom, bottom);
     offset = -bottom;
@@ -1415,7 +1415,7 @@ static int assign_lvar_offsets2(Scope *sc, int bottom, char *ptr) {
   int max_depth = bottom;
   for (Scope *sub = sc->children; sub; sub = sub->sibling_next) {
     int sub_depth= assign_lvar_offsets2(sub, bottom, ptr);
-    if (opt_optimize && !dont_reuse_stack)
+    if (!dont_reuse_stack)
       max_depth = MAX(max_depth, sub_depth);
     else
       bottom = max_depth = sub_depth;

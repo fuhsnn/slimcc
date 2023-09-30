@@ -3255,8 +3255,8 @@ static Node *primary(Token **rest, Token *tok) {
       if (!strcmp(name, "alloca"))
         dont_dealloc_vla = true;
 
-      if (opt_optimize && (strstr(name, "setjmp") || strstr(name, "savectx") ||
-          strstr(name, "vfork") || strstr(name, "getcontext")))
+      if (strstr(name, "setjmp") || strstr(name, "savectx") ||
+          strstr(name, "vfork") || strstr(name, "getcontext"))
         dont_reuse_stack = true;
     }
 
