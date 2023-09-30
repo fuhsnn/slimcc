@@ -1566,7 +1566,10 @@ static void emit_text(Obj *prog) {
     else
       println("  .globl %s", fn->name);
 
-    println("  .text");
+    if (opt_func_sections)
+      println("  .section .text.%s,\"ax\",@progbits", fn->name);
+    else
+      println("  .text");
     println("  .type %s, @function", fn->name);
     println("%s:", fn->name);
     current_fn = fn;

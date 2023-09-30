@@ -9,6 +9,7 @@ bool opt_fcommon = true;
 bool opt_fpic;
 bool opt_optimize;
 bool opt_g;
+bool opt_func_sections;
 
 static FileType opt_x;
 static StringArray opt_include;
@@ -343,6 +344,11 @@ static void parse_args(int argc, char **argv) {
       continue;
     if (!strcmp(argv[i], "-funsigned-char")) {
       ty_pchar->is_unsigned = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-ffunction-sections")) {
+      opt_func_sections = true;
       continue;
     }
 
