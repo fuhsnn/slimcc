@@ -329,6 +329,7 @@ enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
 
 static int getTypeId(Type *ty) {
   switch (ty->kind) {
+  case TY_PCHAR:
   case TY_CHAR:
     return ty->is_unsigned ? U8 : I8;
   case TY_SHORT:
@@ -1000,6 +1001,7 @@ static void gen_expr(Node *node) {
     case TY_BOOL:
       println("  movzx %%al, %%eax");
       return;
+    case TY_PCHAR:
     case TY_CHAR:
       if (node->ty->is_unsigned)
         println("  movzbl %%al, %%eax");

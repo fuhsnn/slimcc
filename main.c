@@ -339,6 +339,13 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (!strcmp(argv[i], "-fsigned-char"))
+      continue;
+    if (!strcmp(argv[i], "-funsigned-char")) {
+      ty_pchar->is_unsigned = true;
+      continue;
+    }
+
     // These options are ignored for now.
     if (!strncmp(argv[i], "-W", 2) ||
         !strncmp(argv[i], "-std=", 5) ||

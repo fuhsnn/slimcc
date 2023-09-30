@@ -3,6 +3,8 @@
 Type *ty_void = &(Type){TY_VOID, 1, 1};
 Type *ty_bool = &(Type){TY_BOOL, 1, 1, true};
 
+Type *ty_pchar = &(Type){TY_PCHAR, 1, 1};
+
 Type *ty_char = &(Type){TY_CHAR, 1, 1};
 Type *ty_short = &(Type){TY_SHORT, 2, 2};
 Type *ty_int = &(Type){TY_INT, 4, 4};
@@ -29,7 +31,7 @@ static Type *new_type(TypeKind kind, int size, int align) {
 
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
-  return k == TY_BOOL || k == TY_CHAR || k == TY_SHORT ||
+  return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||
          k == TY_INT  || k == TY_LONG || k == TY_LONGLONG || k == TY_ENUM;
 }
 
@@ -60,6 +62,7 @@ bool is_compatible(Type *t1, Type *t2) {
     return false;
 
   switch (t1->kind) {
+  case TY_PCHAR:
   case TY_CHAR:
   case TY_SHORT:
   case TY_INT:

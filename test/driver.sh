@@ -177,6 +177,12 @@ check '-fcommon'
 echo 'int foo;' | $testcc -fno-common -S -o- -xc - | grep -q '^foo:'
 check '-fno-common'
 
+# -funsigned-char
+rm -f $tmp/out
+echo 'int main(void){ return (char)-1 != (unsigned char)-1; }' | $testcc -funsigned-char -xc - -o $tmp/out
+$tmp/out
+check '-funsigned-char'
+
 # -include
 echo foo > $tmp/out.h
 echo bar | $testcc -include $tmp/out.h -E -o- -xc - | grep -q -z 'foo.*bar'

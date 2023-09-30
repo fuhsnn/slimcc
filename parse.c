@@ -521,6 +521,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       ty = ty_bool;
       break;
     case CHAR:
+      ty = ty_pchar;
+      break;
     case SIGNED + CHAR:
       ty = ty_char;
       break;
@@ -1566,7 +1568,7 @@ static Node *asm_stmt(Token **rest, Token *tok) {
     tok = tok->next;
 
   tok = skip(tok, "(");
-  if (tok->kind != TK_STR || tok->ty->base->kind != TY_CHAR)
+  if (tok->kind != TK_STR || tok->ty->base->kind != TY_PCHAR)
     error_tok(tok, "expected string literal");
   node->asm_str = tok->str;
   *rest = skip(tok->next, ")");
@@ -2129,7 +2131,7 @@ static Node *to_assign(Node *binary) {
   Token *tok = binary->tok;
 
   // Convert `A.x op= C` to `tmp = &A, (*tmp).x = (*tmp).x op C`.
-  if (binary->lhs->kind == ND_MEMBER) {
+  if (is_bitfield(binary->lhs)) {
     Obj *var = new_lvar(NULL, pointer_to(binary->lhs->lhs->ty));
 
     Node *expr1 = new_binary(ND_ASSIGN, new_var_node(var, tok),
@@ -2898,7 +2900,7 @@ static Node *struct_ref(Node *node, Token *tok) {
 // Convert A++ to `(ptr = &A, tmp = *ptr, *ptr += 1, tmp)`
 static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   add_type(node);
-  if (node->kind == ND_MEMBER) {
+  if (is_bitfield(node)) {
     enter_scope();
     Obj *tmp = new_lvar(NULL, node->ty);
     Obj *ptr = new_lvar(NULL, pointer_to(node->lhs->ty));
@@ -3407,14 +3409,14 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
     fn->large_rtn = new_lvar(NULL, pointer_to(rty));
 
   if (ty->is_variadic)
-    fn->va_area = new_lvar("__va_area__", array_of(ty_char, 200));
+    fn->va_area = new_lvar("__va_area__", array_of(ty_pchar, 200));
 
   // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
   // automatically defined as a local variable containing the
   // current function name.
   // [GNU] __FUNCTION__ is yet another name of __func__.
   push_scope("__func__")->var = push_scope("__FUNCTION__")->var =
-    new_string_literal(fn->name, array_of(ty_char, strlen(fn->name) + 1));
+    new_string_literal(fn->name, array_of(ty_pchar, strlen(fn->name) + 1));
 
   fn->body = compound_stmt(rest, tok->next, NULL);
   if (ty->vla_calc) {
