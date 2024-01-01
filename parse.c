@@ -3180,6 +3180,8 @@ static Node *primary(Token **rest, Token *tok) {
         return new_var_node(ty->vla_size, tok);
       return compute_vla_size(ty, tok);
     }
+    if (ty->size < 0)
+      error_tok(tok, "sizeof applied to incomplete type");
 
     return new_ulong(ty->size, start);
   }
