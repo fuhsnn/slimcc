@@ -84,16 +84,18 @@ static void pop_tmpf(int reg) {
   println("  movsd %d(%s), %%xmm%d", offset, lvar_ptr, reg);
 }
 
-static void mov_extend(Obj *var, char *reg) {
-  char *insn = var->ty->is_unsigned ? "movz" : "movs";
-  if (var->ty->size == 1)
-    println("  %sb %d(%s), %s", insn, var->ofs, var->ptr, reg);
-  else if (var->ty->size == 2)
-    println("  %sw %d(%s), %s", insn, var->ofs, var->ptr, reg);
-  else if (var->ty->size == 4)
-    println("  movsxd %d(%s), %s", var->ofs, var->ptr, reg);
-  else
-    println("  mov %d(%s), %s", var->ofs, var->ptr, reg);
+// When we load a char or a short value to a register, we always
+// extend them to the size of int, so we can assume the lower half of
+// a register always contains a valid value.
+static void load_extend_int(Type *ty, int ofs, char *ptr, char *reg) {
+  char *insn = ty->is_unsigned ? "movz" : "movs";
+  switch (ty->size) {
+  case 1: println("  %sbl %d(%s), %s", insn, ofs, ptr, reg); return;
+  case 2: println("  %swl %d(%s), %s", insn, ofs, ptr, reg); return;
+  case 4: println("  movl %d(%s), %s", ofs, ptr, reg); return;
+  case 8: println("  mov %d(%s), %s", ofs, ptr, reg); return;
+  }
+  unreachable();
 }
 
 // Round up `n` to the nearest multiple of `align`. For instance,
@@ -252,21 +254,8 @@ static void load(Type *ty) {
     return;
   }
 
-  char *insn = ty->is_unsigned ? "movz" : "movs";
-
-  // When we load a char or a short value to a register, we always
-  // extend them to the size of int, so we can assume the lower half of
-  // a register always contains a valid value. The upper half of a
-  // register for char, short and int may contain garbage. When we load
-  // a long value to a register, it simply occupies the entire register.
-  if (ty->size == 1)
-    println("  %sbl (%%rax), %%eax", insn);
-  else if (ty->size == 2)
-    println("  %swl (%%rax), %%eax", insn);
-  else if (ty->size == 4)
-    println("  movsxd (%%rax), %%rax");
-  else
-    println("  mov (%%rax), %%rax");
+  char *ax = ty->size <= 4 ? "%eax" : "%rax";
+  load_extend_int(ty, 0, "%rax", ax);
 }
 
 // Store %rax to an address that the stack top is pointing to.
@@ -355,7 +344,7 @@ static char i32u8[] = "movzbl %al, %eax";
 static char i32i16[] = "movswl %ax, %eax";
 static char i32u16[] = "movzwl %ax, %eax";
 static char i32f32[] = "cvtsi2ssl %eax, %xmm0";
-static char i32i64[] = "movsxd %eax, %rax";
+static char i32i64[] = "movslq %eax, %rax";
 static char i32f64[] = "cvtsi2sdl %eax, %xmm0";
 static char i32f80[] = "mov %eax, -4(%rsp); fildl -4(%rsp)";
 
@@ -575,23 +564,21 @@ static void place_stack_args(Node *node) {
         println("  mov %d(%s), %%r8b", i + var->ofs, var->ptr);
         println("  mov %%r8b, %d(%%rsp)", i + var->stack_offset);
       }
-      break;
+      continue;
     case TY_FLOAT:
     case TY_DOUBLE:
       println("  movsd %d(%s), %%xmm0", var->ofs, var->ptr);
       println("  movsd %%xmm0, %d(%%rsp)", var->stack_offset);
-      break;
+      continue;
     case TY_LDOUBLE:
       println("  fldt %d(%s)", var->ofs, var->ptr);
       println("  fstpt %d(%%rsp)", var->stack_offset);
-      break;
-    default: {
-      assert(var->ty->size <= 8);
-      char *ax = reg_ax(var->ty->size < 4 ? 4 : 8);
-      mov_extend(var, ax);
-      println("  mov %%rax, %d(%%rsp)", var->stack_offset);
+      continue;
     }
-    }
+
+    char *ax = var->ty->size <= 4 ? "%eax" : "%rax";
+    load_extend_int(var->ty, var->ofs, var->ptr, ax);
+    println("  mov %%rax, %d(%%rsp)", var->stack_offset);
   }
 }
 
@@ -627,13 +614,10 @@ static void place_reg_args(Node *node, bool gp_start) {
     case TY_DOUBLE:
       println("  movsd %d(%s), %%xmm%d", var->ofs, var->ptr, fp++);
       continue;
-    case TY_LDOUBLE:
-      unreachable();
-    default: {
-      char **reg = var->ty->size < 4 ? argreg32 : argreg64;
-      mov_extend(var, reg[gp++]);
     }
-    }
+
+    char *argreg = var->ty->size <= 4 ? argreg32[gp++] : argreg64[gp++];
+    load_extend_int(var->ty, var->ofs, var->ptr, argreg);
   }
 }
 
