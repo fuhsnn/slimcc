@@ -721,11 +721,12 @@ static Token *skip_paren(Token *tok) {
 static Type *declarator(Token **rest, Token *tok, Type *ty) {
   ty = pointers(&tok, tok, ty);
 
-  if (equal(tok, "(")) {
-    Token *start = tok;
-    tok = skip_paren(tok->next);
-    ty = type_suffix(rest, tok, ty);
-    return declarator(&tok, start->next, ty);
+  if (consume(&tok, tok, "(")) {
+    if (is_typename(tok) || equal(tok, ")"))
+      return func_params(rest, tok, ty);
+
+    ty = type_suffix(rest, skip_paren(tok), ty);
+    return declarator(&(Token *){NULL}, tok, ty);
   }
 
   Token *name = NULL;
@@ -746,11 +747,12 @@ static Type *declarator(Token **rest, Token *tok, Type *ty) {
 static Type *abstract_declarator(Token **rest, Token *tok, Type *ty) {
   ty = pointers(&tok, tok, ty);
 
-  if (equal(tok, "(")) {
-    Token *start = tok;
-    tok = skip_paren(tok->next);
-    ty = type_suffix(rest, tok, ty);
-    return abstract_declarator(&tok, start->next, ty);
+  if (consume(&tok, tok, "(")) {
+    if (is_typename(tok) || equal(tok, ")"))
+      return func_params(rest, tok, ty);
+
+    ty = type_suffix(rest, skip_paren(tok), ty);
+    return abstract_declarator(&(Token *){NULL}, tok, ty);
   }
 
   return type_suffix(rest, tok, ty);
@@ -3090,6 +3092,8 @@ static Node *generic_selection(Token **rest, Token *tok) {
     }
 
     Type *t2 = typename(&tok, tok);
+    if (t2->kind == TY_FUNC)
+      error_tok(tok, "association has function type");
     tok = skip(tok, ":");
     Node *node = assign(&tok, tok);
     if (is_compatible(t1, t2))
