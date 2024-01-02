@@ -709,6 +709,7 @@ static void copy_struct_mem(void) {
     println("  mov %d(%%rax), %%dl", i);
     println("  mov %%dl, %d(%%rdi)", i);
   }
+  println("  mov %%rdi, %%rax");
 }
 
 static void builtin_alloca(Node *node) {
