@@ -12,7 +12,6 @@ bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;
 
-static FileType opt_x;
 static StringArray opt_include;
 static bool opt_E;
 static bool opt_M;
@@ -210,12 +209,14 @@ static void parse_args(int argc, char **argv) {
     }
 
     if (!strcmp(argv[i], "-x")) {
-      opt_x = parse_opt_x(argv[++i]);
+      strarray_push(&input_paths, "-x");
+      strarray_push(&input_paths, argv[++i]);
       continue;
     }
 
     if (!strncmp(argv[i], "-x", 2)) {
-      opt_x = parse_opt_x(argv[i] + 2);
+      strarray_push(&input_paths, "-x");
+      strarray_push(&input_paths, argv[i] + 2);
       continue;
     }
 
@@ -389,10 +390,6 @@ static void parse_args(int argc, char **argv) {
 
   if (input_paths.len == 0)
     error("no input files");
-
-  // -E implies that the input is the C macro language.
-  if (opt_E)
-    opt_x = FILE_C;
 }
 
 static FILE *open_file(char *path) {
@@ -710,9 +707,6 @@ static void run_linker(StringArray *inputs, char *output) {
 }
 
 static FileType get_file_type(char *filename) {
-  if (opt_x != FILE_NONE)
-    return opt_x;
-
   if (endswith(filename, ".a"))
     return FILE_AR;
   if (endswith(filename, ".so"))
@@ -723,6 +717,9 @@ static FileType get_file_type(char *filename) {
     return FILE_C;
   if (endswith(filename, ".s"))
     return FILE_ASM;
+
+  if (opt_E && !strcmp(filename, "-"))
+    return FILE_C;
 
   char *p = strstr(filename, ".so.");
   if (p) {
@@ -747,12 +744,16 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  if (input_paths.len > 1 && opt_o && (opt_c || opt_S || opt_E))
-    error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
-
   StringArray ld_args = {0};
+  int file_count = 0;
+  FileType opt_x = FILE_NONE;
 
   for (int i = 0; i < input_paths.len; i++) {
+    if (!strcmp(input_paths.data[i], "-x")) {
+      opt_x = parse_opt_x(input_paths.data[++i]);
+      continue;
+    }
+
     char *input = input_paths.data[i];
 
     if (!strncmp(input, "-l", 2)) {
@@ -770,6 +771,10 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    if (opt_o && (opt_c || opt_S || opt_E))
+      if (++file_count > 1)
+        error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
+
     char *output;
     if (opt_o)
       output = opt_o;
@@ -778,7 +783,11 @@ int main(int argc, char **argv) {
     else
       output = replace_extn(input, ".o");
 
-    FileType type = get_file_type(input);
+    FileType type;
+    if (opt_x != FILE_NONE)
+      type = opt_x;
+    else
+      type = get_file_type(input);
 
     // Handle .o or .a
     if (type == FILE_OBJ || type == FILE_AR || type == FILE_DSO) {
