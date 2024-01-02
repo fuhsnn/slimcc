@@ -797,8 +797,17 @@ int main(int argc, char **argv) {
 
     // Handle .s
     if (type == FILE_ASM) {
-      if (!opt_S)
+      if (opt_S || opt_E || opt_M)
+        continue;
+
+      if (opt_c) {
         assemble(input, output);
+        continue;
+      }
+
+      char *tmp = create_tmpfile();
+      assemble(input, tmp);
+      strarray_push(&ld_args, tmp);
       continue;
     }
 
