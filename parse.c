@@ -1982,14 +1982,22 @@ static int64_t eval2(Node *node, char ***label) {
       return (int32_t)eval(node->lhs) >> eval(node->rhs);
     return eval(node->lhs) >> eval(node->rhs);
   case ND_EQ:
+    if (is_flonum(node->lhs->ty))
+      return eval_double(node->lhs) == eval_double(node->rhs);
     return eval(node->lhs) == eval(node->rhs);
   case ND_NE:
+    if (is_flonum(node->lhs->ty))
+      return eval_double(node->lhs) != eval_double(node->rhs);
     return eval(node->lhs) != eval(node->rhs);
   case ND_LT:
+    if (is_flonum(node->lhs->ty))
+      return eval_double(node->lhs) < eval_double(node->rhs);
     if (node->lhs->ty->is_unsigned)
       return (uint64_t)eval(node->lhs) < eval(node->rhs);
     return eval(node->lhs) < eval(node->rhs);
   case ND_LE:
+    if (is_flonum(node->lhs->ty))
+      return eval_double(node->lhs) <= eval_double(node->rhs);
     if (node->lhs->ty->is_unsigned)
       return (uint64_t)eval(node->lhs) <= eval(node->rhs);
     return eval(node->lhs) <= eval(node->rhs);
