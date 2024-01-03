@@ -2020,6 +2020,11 @@ static int64_t eval2(Node *node, char ***label) {
         return !!eval_double(node->lhs);
       return !!eval2(node->lhs, label);
     }
+    if (is_flonum(node->lhs->ty)) {
+      if (node->ty->size == 8 && node->ty->is_unsigned)
+        return (uint64_t)eval_double(node->lhs);
+      return eval_double(node->lhs);
+    }
     int64_t val = eval2(node->lhs, label);
     if (is_integer(node->ty)) {
       switch (node->ty->size) {
@@ -2121,6 +2126,8 @@ static double eval_double(Node *node) {
   case ND_CAST:
     if (is_flonum(node->lhs->ty))
       return eval_double(node->lhs);
+    if (node->lhs->ty->size == 8 && node->lhs->ty->is_unsigned)
+      return (uint64_t)eval(node->lhs);
     return eval(node->lhs);
   case ND_NUM:
     return node->fval;
