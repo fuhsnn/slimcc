@@ -1103,7 +1103,6 @@ void init_macros(void) {
   define_macro("__STDC_NO_COMPLEX__", "1");
   define_macro("__STDC_UTF_16__", "1");
   define_macro("__STDC_UTF_32__", "1");
-  define_macro("__STDC_VERSION__", "201112L");
   define_macro("__STDC__", "1");
   define_macro("__USER_LABEL_PREFIX__", "");
   define_macro("__alignof__", "_Alignof");
@@ -1116,8 +1115,6 @@ void init_macros(void) {
   define_macro("__linux__", "1");
   define_macro("__signed__", "signed");
   define_macro("__slimcc__", "1");
-  define_macro("__typeof", "typeof");
-  define_macro("__typeof__", "typeof");
   define_macro("__unix", "1");
   define_macro("__unix__", "1");
   define_macro("__volatile__", "volatile");
@@ -1125,6 +1122,15 @@ void init_macros(void) {
   define_macro("__x86_64__", "1");
   define_macro("linux", "1");
   define_macro("unix", "1");
+
+  switch (opt_std) {
+  case STD_C89: break;
+  case STD_C99: define_macro("__STDC_VERSION__", "199901L"); break;
+  case STD_C11: define_macro("__STDC_VERSION__", "201112L"); break;
+  case STD_C17: define_macro("__STDC_VERSION__", "201710L"); break;
+  case STD_C23: define_macro("__STDC_VERSION__", "202311L"); break;
+  default: define_macro("__STDC_VERSION__", "201710L");
+  }
 
   add_builtin("__FILE__", file_macro);
   add_builtin("__LINE__", line_macro);

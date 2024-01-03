@@ -172,12 +172,17 @@ static bool is_keyword(Token *tok) {
       "default", "extern", "_Alignof", "_Alignas", "do", "signed",
       "unsigned", "const", "volatile", "auto", "register", "restrict",
       "__restrict", "__restrict__", "_Noreturn", "float", "double",
-      "typeof", "asm", "_Thread_local", "__thread", "_Atomic",
-      "__attribute__",
+      "_Thread_local", "__thread", "_Atomic", "__attribute__",
+      "__asm", "__asm__", "__typeof", "__typeof__"
     };
 
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
       hashmap_put(&map, kw[i], (void *)1);
+
+    if (opt_std == STD_NONE)
+      hashmap_put(&map, "asm", (void *)1);
+    if (opt_std == STD_NONE || opt_std >= STD_C23)
+      hashmap_put(&map, "typeof", (void *)1);      
   }
 
   return hashmap_get2(&map, tok->loc, tok->len);

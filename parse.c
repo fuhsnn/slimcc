@@ -468,7 +468,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     // Handle user-defined types.
     Type *ty2 = find_typedef(tok);
     if (equal(tok, "struct") || equal(tok, "union") || equal(tok, "enum") ||
-        equal(tok, "typeof") || ty2) {
+        equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__") || ty2) {
       if (counter)
         break;
 
@@ -478,7 +478,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
         ty = union_decl(&tok, tok->next);
       } else if (equal(tok, "enum")) {
         ty = enum_specifier(&tok, tok->next);
-      } else if (equal(tok, "typeof")) {
+      } else if (equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__")) {
         ty = typeof_specifier(&tok, tok->next);
       } else {
         ty = ty2;
@@ -1535,12 +1535,15 @@ static bool is_typename(Token *tok) {
       "void", "_Bool", "char", "short", "int", "long", "struct", "union",
       "typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
       "const", "volatile", "auto", "register", "restrict", "__restrict",
-      "__restrict__", "_Noreturn", "float", "double", "typeof", "inline",
-      "_Thread_local", "__thread", "_Atomic",
+      "__restrict__", "_Noreturn", "float", "double", "inline",
+      "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__"
     };
 
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
       hashmap_put(&map, kw[i], (void *)1);
+
+    if (opt_std == STD_NONE || opt_std >= STD_C23)
+      hashmap_put(&map, "typeof", (void *)1);
   }
 
   return hashmap_get2(&map, tok->loc, tok->len) || find_typedef(tok);
@@ -1561,7 +1564,7 @@ static void static_assertion(Token **rest, Token *tok) {
   *rest = skip(tok, ";");
 }
 
-// asm-stmt = "asm" ("volatile" | "inline")* "(" string-literal ")"
+// asm-stmt = "__asm__" ("volatile" | "inline")* "(" string-literal ")"
 static Node *asm_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_ASM, tok);
   tok = tok->next;
@@ -1601,7 +1604,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 //      | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 //      | "while" "(" expr ")" stmt
 //      | "do" stmt "while" "(" expr ")" ";"
-//      | "asm" asm-stmt
+//      | "__asm__" asm-stmt
 //      | "goto" (ident | "*" expr) ";"
 //      | "break" ";"
 //      | "continue" ";"
@@ -1781,7 +1784,8 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     return node;
   }
 
-  if (equal(tok, "asm"))
+  if (tok->kind == TK_KEYWORD &&
+    (equal(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")))
     return asm_stmt(rest, tok);
 
   if (equal(tok, "goto")) {

@@ -11,6 +11,7 @@ bool opt_optimize;
 bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;
+StdVer opt_std;
 
 static StringArray opt_include;
 static bool opt_E;
@@ -340,6 +341,22 @@ static void parse_args(int argc, char **argv) {
         opt_optimize = true;
       continue;
     }
+    if (!strncmp(argv[i], "-std=c", 6)) {
+      int val = strtoul(argv[i] + 6, NULL, 10);
+      if (val == 89 || val == 90)
+        opt_std = STD_C89;
+      else if (val == 99)
+        opt_std = STD_C99;
+      else if (val == 11)
+        opt_std = STD_C11;
+      else if (val == 17 || val == 18)
+        opt_std = STD_C17;
+      else if (val == 23)
+        opt_std = STD_C23;
+      else
+        error("unknown c standard");
+      continue;
+    }
 
     if (!strncmp(argv[i], "-fstack-reuse=", 14)) {
       if (strncmp(argv[i] + 14, "all\0", 4))
@@ -366,7 +383,6 @@ static void parse_args(int argc, char **argv) {
 
     // These options are ignored for now.
     if (!strncmp(argv[i], "-W", 2) ||
-        !strncmp(argv[i], "-std=", 5) ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
         !strcmp(argv[i], "-fno-lto") ||

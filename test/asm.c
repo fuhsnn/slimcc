@@ -1,17 +1,17 @@
 #include "test.h"
 
 char *asm_fn1(void) {
-  asm("mov $50, %rax\n\t"
-      "mov %rbp, %rsp\n\t"
-      "pop %rbp\n\t"
-      "ret");
+  __asm__("mov $50, %rax\n\t"
+          "mov %rbp, %rsp\n\t"
+          "pop %rbp\n\t"
+          "ret");
 }
 
 char *asm_fn2(void) {
-  asm inline volatile("mov $55, %rax\n\t"
-                      "mov %rbp, %rsp\n\t"
-                      "pop %rbp\n\t"
-                      "ret");
+  __asm__ inline volatile("mov $55, %rax\n\t"
+                          "mov %rbp, %rsp\n\t"
+                          "pop %rbp\n\t"
+                          "ret");
 }
 
 int main() {

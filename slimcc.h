@@ -472,6 +472,14 @@ int display_width(char *p, int len);
 //
 // main.c
 //
+typedef enum {
+  STD_NONE = 0,
+  STD_C89,
+  STD_C99,
+  STD_C11,
+  STD_C17,
+  STD_C23
+} StdVer;
 
 bool file_exists(char *path);
 
@@ -483,3 +491,4 @@ extern bool opt_g;
 extern bool opt_func_sections;
 extern bool opt_data_sections;
 extern char *base_file;
+extern StdVer opt_std;
