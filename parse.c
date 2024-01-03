@@ -1561,7 +1561,7 @@ static void static_assertion(Token **rest, Token *tok) {
   *rest = skip(tok, ";");
 }
 
-// asm-stmt = "asm" ("volatile" | "inline")* "(" string-literal ")"
+// asm-stmt = "__asm__" ("volatile" | "inline")* "(" string-literal ")"
 static Node *asm_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_ASM, tok);
   tok = tok->next;
@@ -1601,7 +1601,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 //      | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 //      | "while" "(" expr ")" stmt
 //      | "do" stmt "while" "(" expr ")" ";"
-//      | "asm" asm-stmt
+//      | "__asm__" asm-stmt
 //      | "goto" (ident | "*" expr) ";"
 //      | "break" ";"
 //      | "continue" ";"
@@ -1781,7 +1781,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     return node;
   }
 
-  if (equal(tok, "asm"))
+  if (equal(tok, "__asm__"))
     return asm_stmt(rest, tok);
 
   if (equal(tok, "goto")) {
