@@ -947,7 +947,7 @@ static Token *skip_excess_element(Token *tok) {
 }
 
 // string-initializer = string-literal
-static void string_initializer(Token **rest, Token *tok, Initializer *init) {
+static void string_initializer(Token *tok, Initializer *init) {
   if (init->is_flexible)
     *init = *new_initializer(array_of(init->ty->base, tok->ty->array_len), false);
 
@@ -975,17 +975,16 @@ static void string_initializer(Token **rest, Token *tok, Initializer *init) {
   default:
     unreachable();
   }
-
-  *rest = tok->next;
 }
 
-static bool string_initializer2(Token **rest, Token *tok, Initializer *init) {
-  if (equal(tok, "(") && string_initializer2(&tok, tok->next, init)) {
-    *rest = skip(tok, ")");
+static bool is_str_tok(Token **rest, Token *tok, Token **str_tok) {
+  if (equal(tok, "(") && is_str_tok(&tok, tok->next, str_tok) &&
+    consume(rest, tok, ")"))
     return true;
-  }
+
   if (tok->kind == TK_STR) {
-    string_initializer(rest, tok, init);
+    *str_tok = tok;
+    *rest = tok->next;
     return true;
   }
   return false;
@@ -1234,13 +1233,20 @@ static void union_initializer(Token **rest, Token *tok, Initializer *init) {
 //             | struct-initializer | union-initializer
 //             | assign
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
-  if (init->ty->kind == TY_ARRAY && !init->ty->base->base) {
-    if (equal(tok, "{") && string_initializer2(&tok, tok->next, init)) {
-      *rest = skip(tok, "}");
+  if (init->ty->kind == TY_ARRAY && is_integer(init->ty->base)) {
+    Token *start = tok;
+    Token *str_tok;
+    if (equal(tok, "{") && is_str_tok(&tok, tok->next, &str_tok)) {
+      if (consume(rest, tok, "}")) {
+        string_initializer(str_tok, init);
+        return;
+      }
+      tok = start;
+    }
+    if (is_str_tok(rest, tok, &str_tok)) {
+      string_initializer(str_tok, init);
       return;
     }
-    if (string_initializer2(rest, tok, init))
-      return;
   }
 
   if (init->ty->kind == TY_ARRAY) {
