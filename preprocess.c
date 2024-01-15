@@ -267,6 +267,8 @@ static long eval_const_expr(Token **rest, Token *tok) {
   for (Token *t = expr; t->kind != TK_EOF; t = t->next) {
     if (t->kind == TK_IDENT) {
       Token *next = t->next;
+      if (equal(next, "("))
+        error_tok(t, "undefined function-like macro");
       *t = *new_num_token(0, t);
       t->next = next;
     }
