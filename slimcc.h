@@ -178,6 +178,9 @@ struct Obj {
   Node *body;
   Obj *large_rtn;
   Obj *va_area;
+  int va_gp_ofs;
+  int va_fp_ofs;
+  int va_st_ofs;
   Obj *vla_base;
   int stack_align;
   int lvar_stack_size;
@@ -248,6 +251,9 @@ typedef enum {
   ND_ASM,       // "asm"
   ND_CAS,       // Atomic compare-and-swap
   ND_EXCH,      // Atomic exchange
+  ND_VA_START,  // "va_start"
+  ND_VA_COPY,   // "va_copy"
+  ND_VA_ARG     // "va_arg"
 } NodeKind;
 
 // AST node type

@@ -1850,6 +1850,34 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     return node;
   }
 
+  if (equal(tok, "__builtin_va_start")) {
+    Node *node = new_node(ND_VA_START, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = conditional(&tok, tok);
+    if (equal(tok, ","))
+      assign(&tok, tok->next);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "__builtin_va_copy")) {
+    Node *node = new_node(ND_VA_COPY, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = conditional(&tok, tok);
+    tok = skip(tok, ",");
+    node->rhs = conditional(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "__builtin_va_end")) {
+    Node *node = new_node(ND_EXPR_STMT, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = conditional(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
   if (equal(tok, "{"))
     return compound_stmt(rest, tok->next, NULL);
 
@@ -3238,16 +3266,22 @@ static Node *primary(Token **rest, Token *tok) {
     return new_num(is_compatible(t1, t2), start);
   }
 
-  if (equal(tok, "__builtin_reg_class")) {
+  if (equal(tok, "__builtin_va_arg")) {
+    Node *node = new_node(ND_VA_ARG, tok);
     tok = skip(tok->next, "(");
-    Type *ty = typename(&tok, tok);
-    *rest = skip(tok, ")");
 
-    if (is_integer(ty) || ty->kind == TY_PTR)
-      return new_num(0, start);
-    if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE)
-      return new_num(1, start);
-    return new_num(2, start);
+    Node *ap_arg = conditional(&tok, tok);
+    add_type(ap_arg);
+    node->lhs = ap_arg;
+    tok = skip(tok, ",");
+
+    enter_scope();
+    node->var = new_lvar(NULL, typename(&tok, tok));
+    node->ty = node->var->ty;
+    leave_scope();
+    chain_expr(&node, new_var_node(node->var, tok));
+    *rest = skip(tok, ")");
+    return node;
   }
 
   if (equal(tok, "__builtin_compare_and_swap")) {
@@ -3440,7 +3474,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
     fn->large_rtn = new_lvar(NULL, pointer_to(rty));
 
   if (ty->is_variadic)
-    fn->va_area = new_lvar("__va_area__", array_of(ty_pchar, 200));
+    fn->va_area = new_lvar(NULL, array_of(ty_pchar, 176));
 
   // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
   // automatically defined as a local variable containing the

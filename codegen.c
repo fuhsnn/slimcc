@@ -1049,6 +1049,61 @@ static void gen_expr(Node *node) {
     println("  xchg %s, (%%rdi)", reg_ax(sz));
     return;
   }
+  case ND_VA_ARG: {
+    gen_expr(node->lhs);
+    Type *ty = node->ty;
+    Obj *var = node->var;
+
+    if (ty->size <= 16) {
+      bool reg_class[2] = {!has_flonum1(ty)};
+      if (ty->size > 8)
+        reg_class[1] = !has_flonum2(ty);
+
+      int gp_inc = reg_class[0] + (ty->size > 8 && reg_class[1]);
+      if (gp_inc) {
+        println("  cmpl $%d, (%%rax)", 48 - gp_inc * 8);
+        println("  ja 1f");
+      }
+      int fp_inc = !reg_class[0] + (ty->size > 8 && !reg_class[1]);
+      if (fp_inc) {
+        println("  cmpl $%d, 4(%%rax)", 176 - fp_inc * 16);
+        println("  ja 1f");
+      }
+      for (int i = 0; i < (ty->size + 7) / 8; i++) {
+        if (reg_class[i]) {
+          println("  movl (%%rax), %%edi");   // gp_offset
+          println("  addq 16(%%rax), %%rdi"); // reg_save_area
+          println("  addq $8, (%%rax)");
+        } else {
+          println("  movl 4(%%rax), %%edi");  // fp_offset
+          println("  addq 16(%%rax), %%rdi"); // reg_save_area
+          println("  addq $16, 4(%%rax)");
+        }
+        for (int ofs = 0; ofs < (ty->size - i * 8); ofs++) {
+          println("  mov %d(%%rdi), %%r8b", ofs);
+          println("  mov %%r8b, %d(%s)", ofs + i * 8 + var->ofs, var->ptr);
+        }
+      }
+      println("  jmp 2f");
+      println("1:");
+    }
+
+    println("  movq 8(%%rax), %%rdi"); // overflow_arg_area
+    if (ty->align > 8) {
+      println("  addq $%d, %%rdi", ty->align - 1);
+      println("  andq $-%d, %%rdi", ty->align);
+    }
+    println("  movq %%rdi, %%rdx");
+    println("  addq $%d, %%rdx", align_to(ty->size, 8));
+    println("  movq %%rdx, 8(%%rax)");
+    for (int ofs = 0; ofs < ty->size; ofs++) {
+      println("  mov %d(%%rdi), %%r8b", ofs);
+      println("  mov %%r8b, %d(%s)", ofs + var->ofs, var->ptr);
+    }
+    if (ty->size <= 16)
+      println("2:");
+    return;
+  }
   }
 
   switch (node->lhs->ty->kind) {
@@ -1368,6 +1423,31 @@ static void gen_stmt(Node *node) {
   case ND_ASM:
     println("  %s", node->asm_str);
     return;
+  case ND_VA_START: {
+    gen_expr(node->lhs);
+    Obj *fn = current_fn;
+    println("  movl $%d, (%%rax)", fn->va_gp_ofs);
+    println("  movl $%d, 4(%%rax)", fn->va_fp_ofs);
+    println("  lea %d(%%rbp), %%rdx", fn->va_st_ofs);
+    println("  movq %%rdx, 8(%%rax)");
+    println("  lea %d(%s), %%rdx", fn->va_area->ofs, fn->va_area->ptr);
+    println("  movq %%rdx, 16(%%rax)");
+    return;
+  }
+  case ND_VA_COPY: {
+    gen_expr(node->lhs);
+    push_tmp();
+    gen_expr(node->rhs);
+    pop_tmp("%rdi");
+
+    println("  movq (%%rax), %%rdx");
+    println("  movq %%rdx, (%%rdi)");
+    println("  movq 8(%%rax), %%rdx");
+    println("  movq %%rdx, 8(%%rdi)");
+    println("  movq 16(%%rax), %%rdx");
+    println("  movq %%rdx, 16(%%rdi)");
+    return;
+  }
   }
 
   error_tok(node->tok, "invalid statement");
@@ -1596,36 +1676,31 @@ static void emit_text(Obj *prog) {
     if (fn->va_area) {
       int gp, fp;
       int stack = calling_convention(fn->ty->param_list, 0, &gp, &fp, NULL);
+      fn->va_gp_ofs = gp * 8;
+      fn->va_fp_ofs = fp * 16 + 48;
+      fn->va_st_ofs = stack + 16;
 
       int off = fn->va_area->ofs;
       char *ptr = lvar_ptr;
 
       // __reg_save_area__
-      println("  movq %%rdi, %d(%s)", off + 24, ptr);
-      println("  movq %%rsi, %d(%s)", off + 32, ptr);
-      println("  movq %%rdx, %d(%s)", off + 40, ptr);
-      println("  movq %%rcx, %d(%s)", off + 48, ptr);
-      println("  movq %%r8, %d(%s)", off + 56, ptr);
-      println("  movq %%r9, %d(%s)", off + 64, ptr);
+      println("  movq %%rdi, %d(%s)", off, ptr);
+      println("  movq %%rsi, %d(%s)", off + 8, ptr);
+      println("  movq %%rdx, %d(%s)", off + 16, ptr);
+      println("  movq %%rcx, %d(%s)", off + 24, ptr);
+      println("  movq %%r8, %d(%s)", off + 32, ptr);
+      println("  movq %%r9, %d(%s)", off + 40, ptr);
       println("  test %%al, %%al");
       println("  je 1f");
-      println("  movsd %%xmm0, %d(%s)", off + 72, ptr);
-      println("  movsd %%xmm1, %d(%s)", off + 88, ptr);
-      println("  movsd %%xmm2, %d(%s)", off + 104, ptr);
-      println("  movsd %%xmm3, %d(%s)", off + 120, ptr);
-      println("  movsd %%xmm4, %d(%s)", off + 136, ptr);
-      println("  movsd %%xmm5, %d(%s)", off + 152, ptr);
-      println("  movsd %%xmm6, %d(%s)", off + 168, ptr);
-      println("  movsd %%xmm7, %d(%s)", off + 184, ptr);
+      println("  movdqu %%xmm0, %d(%s)", off + 48, ptr);
+      println("  movdqu %%xmm1, %d(%s)", off + 64, ptr);
+      println("  movdqu %%xmm2, %d(%s)", off + 80, ptr);
+      println("  movdqu %%xmm3, %d(%s)", off + 96, ptr);
+      println("  movdqu %%xmm4, %d(%s)", off + 112, ptr);
+      println("  movdqu %%xmm5, %d(%s)", off + 128, ptr);
+      println("  movdqu %%xmm6, %d(%s)", off + 144, ptr);
+      println("  movdqu %%xmm7, %d(%s)", off + 160, ptr);
       println("1:");
-
-      // va_elem
-      println("  movl $%d, %d(%s)", gp * 8, off, ptr);           // gp_offset
-      println("  movl $%d, %d(%s)", fp * 16 + 48, off + 4, ptr); // fp_offset
-      println("  lea %d(%%rbp), %%rax", stack + 16);             // overflow_arg_area
-      println("  mov %%rax, %d(%s)", off + 8, ptr);
-      println("  lea %d(%s), %%rax", off + 24, ptr);             // reg_save_area
-      println("  mov %%rax, %d(%s)", off + 16, ptr);
     }
 
     // Save passed-by-register arguments to the stack

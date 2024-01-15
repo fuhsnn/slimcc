@@ -78,22 +78,9 @@ short sshort_fn();
 
 int add_all(int n, ...);
 
-typedef struct {
-  int gp_offset;
-  int fp_offset;
-  void *overflow_arg_area;
-  void *reg_save_area;
-} __va_elem;
-
-typedef __va_elem va_list[1];
-
-int add_all(int n, ...);
-int sprintf(char *buf, char *fmt, ...);
-int vsprintf(char *buf, char *fmt, va_list ap);
-
 char *fmt(char *buf, char *fmt, ...) {
   va_list ap;
-  *ap = *(__va_elem *)__va_area__;
+  va_start(ap, fmt);
   vsprintf(buf, fmt, ap);
 }
 
@@ -197,7 +184,7 @@ Ty21 struct_test38(void) {
   return (Ty21){1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
 }
 
-inline int inline_fn(void) {
+static inline int inline_fn(void) {
   return 3;
 }
 

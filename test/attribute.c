@@ -1,6 +1,10 @@
 #include "test.h"
 #include "stddef.h"
 
+#if defined(__attribute__)
+#undef __attribute__
+#endif
+
 int main() {
   ASSERT(5, ({ struct { char a; int b; } __attribute__((packed)) x; sizeof(x); }));
   ASSERT(0, offsetof(struct __attribute__((packed)) { char a; int b; }, a));

@@ -566,6 +566,18 @@ static void cc1(void) {
   Token head = {0};
   Token *cur = &head;
 
+  if (!opt_E) {
+    Token *end;
+    head.next = tokenize(add_input_file("slimcc_builtins",
+    "typedef struct {"
+    "  unsigned int gp_offset;"
+    "  unsigned int fp_offset;"
+    "  void *overflow_arg_area;"
+    "  void *reg_save_area;"
+    "} __builtin_va_list[1];"), &end);
+    cur = end;
+  }
+
   // Process -include option
   for (int i = 0; i < opt_include.len; i++) {
     char *incl = opt_include.data[i];

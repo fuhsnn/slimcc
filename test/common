@@ -187,3 +187,51 @@ int struct_test131(G g0,G g1,G g2,G g3,G g4,F f0,F f1,F f2,F f3,F f4,F f5, int i
   va_end(ap);
   return ret;
 }
+
+typedef struct {
+  long i,j;
+} DI;
+
+int struct_test141(int cnt,...) {
+  va_list ap;
+  va_start(ap, cnt);
+  long ret = 0;
+  for (int i = 0; i < cnt; i++) {
+    DI s = va_arg(ap, DI);
+    ret += s.i + s.j;
+  }
+  va_end(ap);
+  return ret;
+}
+
+typedef struct {
+  double d,f;
+} DD;
+
+int struct_test151(int cnt,...) {
+  va_list ap;
+  va_start(ap, cnt);
+  double ret = 0;
+  for (int i = 0; i < cnt; i++) {
+    DD s = va_arg(ap, DD);
+    ret += s.d + s.f;
+  }
+  va_end(ap);
+  return ret;
+}
+
+typedef struct {
+    long i;
+    double d;
+} DM;
+int struct_test161(int cnt,...) {
+  va_list ap;
+  va_start(ap, cnt);
+  double ret = 0;
+  for (int i = 0; i < cnt; i++) {
+    DM s = va_arg(ap, DM);
+    ret += s.d + s.i;
+  }
+  va_end(ap);
+  return ret;
+}
