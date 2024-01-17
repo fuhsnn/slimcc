@@ -3328,6 +3328,19 @@ static Node *primary(Token **rest, Token *tok) {
         return new_num(sc->enum_val, tok);
     }
 
+    // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
+    // automatically defined as a local variable containing the
+    // current function name.
+    // [GNU] __FUNCTION__ is yet another name of __func__.
+    if (current_fn && (equal(tok, "__func__") || equal(tok, "__FUNCTION__"))) {
+      char *name = current_fn->name;
+      VarScope *vsc = calloc(1, sizeof(VarScope));
+      vsc->var = new_string_literal(name, array_of(ty_pchar, strlen(name) + 1));
+      hashmap_put(&current_fn->ty->scopes->vars, "__func__", vsc);
+      hashmap_put(&current_fn->ty->scopes->vars, "__FUNCTION__", vsc);
+      return new_var_node(vsc->var, tok);
+    }
+
     if (equal(tok->next, "("))
       error_tok(tok, "implicit declaration of a function");
     error_tok(tok, "undefined variable");
@@ -3469,13 +3482,6 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
 
   if (ty->is_variadic)
     fn->va_area = new_lvar(NULL, array_of(ty_pchar, 176));
-
-  // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
-  // automatically defined as a local variable containing the
-  // current function name.
-  // [GNU] __FUNCTION__ is yet another name of __func__.
-  push_scope("__func__")->var = push_scope("__FUNCTION__")->var =
-    new_string_literal(fn->name, array_of(ty_pchar, strlen(fn->name) + 1));
 
   fn->body = compound_stmt(rest, tok->next, NULL);
   if (ty->vla_calc) {
