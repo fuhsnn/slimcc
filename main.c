@@ -383,6 +383,7 @@ static void parse_args(int argc, char **argv) {
 
     // These options are ignored for now.
     if (!strncmp(argv[i], "-W", 2) ||
+        !strncmp(argv[i], "-std=", 5) ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
         !strcmp(argv[i], "-fno-lto") ||
