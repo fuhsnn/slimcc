@@ -3202,13 +3202,7 @@ static Node *primary(Token **rest, Token *tok) {
 
     if (stmt && stmt->kind == ND_EXPR_STMT) {
       Node *expr = stmt->lhs;
-      if (expr->ty->kind == TY_STRUCT || expr->ty->kind == TY_UNION) {
-        Obj *var = new_lvar(NULL, expr->ty);
-        expr = new_binary(ND_ASSIGN, new_var_node(var, tok),
-                          expr, tok);
-        add_type(expr);
-        stmt->lhs = expr;
-      } else if (expr->ty->kind == TY_ARRAY || expr->ty->kind == TY_VLA) {
+      if (expr->ty->kind == TY_ARRAY || expr->ty->kind == TY_VLA) {
         stmt->lhs = new_cast(expr, pointer_to(expr->ty->base));
       }
     }
