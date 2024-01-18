@@ -700,12 +700,13 @@ static Type *pointers(Token **rest, Token *tok, Type *ty) {
 
 static Token *skip_paren(Token *tok) {
   int level = 0;
+  Token *start = tok;
   for (;;) {
     if (level == 0 && equal(tok, ")"))
       break;
 
     if (tok->kind == TK_EOF)
-      error_tok(tok, "premature end of input");
+      error_tok(start, "unterminated list");
 
     if (equal(tok, "("))
       level++;

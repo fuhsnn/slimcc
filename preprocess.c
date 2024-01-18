@@ -365,6 +365,7 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   Token head = {0};
   Token *cur = &head;
   int level = 0;
+  Token *start = tok;
 
   for (;;) {
     pop_macro_lock(tok);
@@ -380,7 +381,7 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
       break;
 
     if (tok->kind == TK_EOF)
-      error_tok(tok, "premature end of input");
+      error_tok(start, "unterminated list");
 
     if (equal(tok, "("))
       level++;
