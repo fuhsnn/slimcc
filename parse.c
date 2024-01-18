@@ -3069,8 +3069,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Obj *cur = &head;
   Node *expr = NULL;
 
-  enter_scope();
-
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
     add_type(arg);
@@ -3099,8 +3097,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
     cur = cur->param_next = var;
   }
-
-  leave_scope();
 
   if (param)
     error_tok(tok, "too few arguments");
