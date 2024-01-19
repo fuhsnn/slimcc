@@ -3175,6 +3175,8 @@ static Node *primary(Token **rest, Token *tok) {
     // Compound literal
     Token *start = tok;
     Type *ty = typename(&tok, tok->next);
+    if (ty->kind == TY_VLA)
+      error_tok(tok, "compound literals cannot be VLA");
     tok = skip(tok, ")");
 
     if (scope->parent == NULL) {
