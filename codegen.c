@@ -571,6 +571,7 @@ static void place_stack_args(Node *node) {
     switch (var->ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
+    case TY_LDOUBLE:
       for (int i = 0; i < var->ty->size; i++) {
         println("  mov %d(%s), %%r8b", i + var->ofs, var->ptr);
         println("  mov %%r8b, %d(%%rsp)", i + var->stack_offset);
@@ -580,10 +581,6 @@ static void place_stack_args(Node *node) {
     case TY_DOUBLE:
       println("  movsd %d(%s), %%xmm0", var->ofs, var->ptr);
       println("  movsd %%xmm0, %d(%%rsp)", var->stack_offset);
-      continue;
-    case TY_LDOUBLE:
-      println("  fldt %d(%s)", var->ofs, var->ptr);
-      println("  fstpt %d(%%rsp)", var->stack_offset);
       continue;
     }
 
@@ -1735,9 +1732,6 @@ static void emit_text(Obj *prog) {
       case TY_FLOAT:
       case TY_DOUBLE:
         store_fp(fp++, ty->size, var->ofs, var->ptr);
-        break;
-      case TY_LDOUBLE:
-        unreachable();
         break;
       default:
         store_gp(gp++, ty->size, var->ofs, var->ptr);
