@@ -540,18 +540,22 @@ static void print_dependencies(void) {
   File **files = get_input_files();
 
   for (int i = 0; files[i]; i++) {
-    if (opt_MMD && in_std_include_path(files[i]->name))
-      continue;
-    fprintf(out, " \\\n  %s", files[i]->name);
+    char *name = files[i]->name;
+    if (opt_MMD)
+      if (in_std_include_path(name) || !strcmp(name, "slimcc_builtins"))
+        continue;
+    fprintf(out, " \\\n  %s", name);
   }
 
   fprintf(out, "\n\n");
 
   if (opt_MP) {
     for (int i = 1; files[i]; i++) {
-      if (opt_MMD && in_std_include_path(files[i]->name))
-        continue;
-      fprintf(out, "%s:\n\n", quote_makefile(files[i]->name));
+      char *name = files[i]->name;
+      if (opt_MMD)
+        if (in_std_include_path(name) || !strcmp(name, "slimcc_builtins"))
+          continue;
+      fprintf(out, "%s:\n\n", quote_makefile(name));
     }
   }
 }
