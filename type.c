@@ -49,30 +49,24 @@ bool is_bitfield(Node *node) {
 }
 
 static bool is_bitfield2(Node *node, int *width) {
-  for (;;) {
-    switch (node->kind) {
-    case ND_MEMBER:
-      if (node->member->is_bitfield) {
-        *width = node->member->bit_width;
-        return true;
-      }
+  if (node->kind == ND_MEMBER) {
+    if (!node->member->is_bitfield)
       return false;
-    case ND_COMMA:
-      node = node->rhs;
-      continue;
-    case ND_STMT_EXPR:
-      if (node->body) {
-        Node *stmt = node->body;
-        while (stmt->next)
-          stmt = stmt->next;
-        if (stmt->kind == ND_EXPR_STMT) {
-          node = stmt->lhs;
-          continue;
-        }
-      }
-    }
-    return false;
+    *width = node->member->bit_width;
+    return true;
   }
+  if (node->kind == ND_COMMA)
+    return is_bitfield2(node->rhs, width);
+  if (node->kind == ND_ASSIGN)
+    return is_bitfield2(node->lhs, width);
+  if (node->kind == ND_STMT_EXPR && node->body) {
+    Node *stmt = node->body;
+    while (stmt->next)
+      stmt = stmt->next;
+    if (stmt->kind == ND_EXPR_STMT)
+      return is_bitfield2(stmt->lhs, width);
+  }
+  return false;
 }
 
 bool is_compatible(Type *t1, Type *t2) {
