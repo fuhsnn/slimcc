@@ -19,7 +19,7 @@ test/%.exe: slimcc test/%.c
 
 test: $(TESTS)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
-	bash test/driver.sh ./slimcc
+	bash test/driver.sh ./slimcc $(CC)
 
 test-all: test test-stage2
 
@@ -35,11 +35,11 @@ stage2/%.o: slimcc %.c
 stage2/test/%.exe: stage2/slimcc test/%.c
 	mkdir -p stage2/test
 	./stage2/slimcc -Iinclude -Itest -c -o stage2/test/$*.o test/$*.c
-	$(CC) -std=c99 -pthread -o $@ stage2/test/$*.o -xc test/common
+	$(CC) -std=c11 -pthread -Wno-psabi -o $@ stage2/test/$*.o -xc test/common
 
 test-stage2: $(TESTS:test/%=stage2/test/%)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
-	bash test/driver.sh ./stage2/slimcc
+	bash test/driver.sh ./stage2/slimcc $(CC)
 
 # Misc.
 

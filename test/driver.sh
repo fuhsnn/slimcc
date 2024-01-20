@@ -1,5 +1,6 @@
 #!/bin/bash
 testcc=$1
+refcc=$2
 
 tmp=`mktemp -d /tmp/testcc-test-XXXXXX`
 trap 'rm -rf $tmp' INT TERM HUP EXIT
@@ -230,9 +231,9 @@ $testcc -o $tmp/foo $tmp/main.c $tmp/foo.a
 check '.a'
 
 # .so file
-echo 'void foo() {}' | cc -fPIC -c -xc -o $tmp/foo.o -
-echo 'void bar() {}' | cc -fPIC -c -xc -o $tmp/bar.o -
-cc -shared -o $tmp/foo.so $tmp/foo.o $tmp/bar.o
+echo 'void foo() {}' | $refcc -fPIC -c -xc -o $tmp/foo.o -
+echo 'void bar() {}' | $refcc -fPIC -c -xc -o $tmp/bar.o -
+$refcc -shared -o $tmp/foo.so $tmp/foo.o $tmp/bar.o
 echo 'void foo(); void bar(); int main() { foo(); bar(); }' > $tmp/main.c
 $testcc -o $tmp/foo $tmp/main.c $tmp/foo.so
 check '.so'
@@ -279,7 +280,7 @@ grep -q -z '^md2.o:.*md2\.c .*/out2\.h' $tmp/md-mf.d
 check -MD
 
 echo 'extern int bar; int foo() { return bar; }' | $testcc -fPIC -xc -c -o $tmp/foo.o -
-cc -shared -o $tmp/foo.so $tmp/foo.o
+$refcc -shared -o $tmp/foo.so $tmp/foo.o
 echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/main.c
 $testcc -o $tmp/foo $tmp/main.c $tmp/foo.so
 check -fPIC
@@ -318,14 +319,14 @@ check -L
 echo 'int foo() {}' | $testcc -c -o $tmp/foo.o -xc -
 echo 'int foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
-cc -Wl,-z,muldefs,--gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
+$refcc -Wl,-z,muldefs,--gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Wl,
 
 # -Xlinker
 echo 'int foo() {}' | $testcc -c -o $tmp/foo.o -xc -
 echo 'int foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
-cc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
+$refcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Xlinker
 
 echo OK
