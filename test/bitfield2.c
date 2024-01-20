@@ -117,6 +117,13 @@ int uninit_global(void) {
 
 static int operand_promotion(void) {
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; s.i > -1; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(0, s.i) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~({s.i;}) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(1 ? s.i : s.i) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(0, (1 ? s.i : s.i)) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~({(1 ? s.i : s.i);}) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(1 ? ({(0,s.i);}) : (0,({s.i;}))) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(1 ? (0,({s.i;})) : ({(0,s.i);})) < 0; }) );
 }
 
 static int postfix_overflow(void) {
@@ -132,28 +139,26 @@ static int postfix_overflow(void) {
   ASSERT(0, (s.u = 0, s.u--));
   ASSERT(7, (s.u = 7, s.u++));
 
-  _Bool x, y;
+  _Bool x=0, y=0;
   s.b = 0;
-  x = s.b, y = s.b--;
-  ASSERT(x, 0);
-  ASSERT(y, 0);
-  x = s.b, y = s.b--;
-  ASSERT(x, 1);
-  ASSERT(y, 1);
-  x = s.b, y = s.b--;
-  ASSERT(x, 0);
-  ASSERT(y, 0);
+  ASSERT(0, (x = s.b, x));
+  ASSERT(0, (y = s.b--, y));
+
+  ASSERT(1, (x = s.b, x));
+  ASSERT(1, (y = s.b--, y));
+
+  ASSERT(0, (x = s.b, x));
+  ASSERT(0, (y = s.b--, y));
 
   s.b = 0;
-  x = s.b, y = s.b++;
-  ASSERT(x, 0);
-  ASSERT(y, 0);
-  x = s.b, y = s.b++;
-  ASSERT(x, 1);
-  ASSERT(y, 1);
-  x = s.b, y = s.b++;
-  ASSERT(x, 1);
-  ASSERT(y, 1);
+  ASSERT(0, (x = s.b, x));
+  ASSERT(0, (y = s.b++, y));
+
+  ASSERT(1, (x = s.b, x));
+  ASSERT(1, (y = s.b++, y));
+
+  ASSERT(1, (x = s.b, x));
+  ASSERT(1, (y = s.b++, y));
 }
 
 int main(void) {

@@ -48,6 +48,33 @@ bool is_bitfield(Node *node) {
   return node->kind == ND_MEMBER && node->member->is_bitfield;
 }
 
+static bool is_bitfield2(Node *node, int *width) {
+  for (;;) {
+    switch (node->kind) {
+    case ND_MEMBER:
+      if (node->member->is_bitfield) {
+        *width = node->member->bit_width;
+        return true;
+      }
+      return false;
+    case ND_COMMA:
+      node = node->rhs;
+      continue;
+    case ND_STMT_EXPR:
+      if (node->body) {
+        Node *stmt = node->body;
+        while (stmt->next)
+          stmt = stmt->next;
+        if (stmt->kind == ND_EXPR_STMT) {
+          node = stmt->lhs;
+          continue;
+        }
+      }
+    }
+    return false;
+  }
+}
+
 bool is_compatible(Type *t1, Type *t2) {
   if (t1 == t2)
     return true;
@@ -171,10 +198,10 @@ static bool is_nullptr(Node *node) {
 
 static void int_promotion(Node **node) {
   Type *ty = (*node)->ty;
+  int bit_width;
 
-  if (is_bitfield(*node)) {
+  if (is_bitfield2(*node, &bit_width)) {
     int int_width = ty_int->size * 8;
-    int bit_width = (*node)->member->bit_width;
 
     if (bit_width == int_width && ty->is_unsigned) {
       *node = new_cast(*node, ty_uint);
@@ -355,7 +382,7 @@ void add_type(Node *node) {
   case ND_COND:
     if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID) {
       node->ty = ty_void;
-    } else if (is_compatible(node->then->ty, node->els->ty)) {
+    } else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty)) {
       node->ty = node->then->ty;
     } else {
       usual_arith_conv(&node->then, &node->els, true);
