@@ -981,7 +981,9 @@ static void gen_expr(Node *node) {
     place_stack_args(node);
     place_reg_args(node, gp_start);
 
-    println("  mov $%d, %%rax", fp_count);
+    if (node->lhs->ty->is_variadic)
+      println("  movl $%d, %%eax", fp_count);
+
     pop_tmp("%r10");
     println("  call *%%r10");
 
