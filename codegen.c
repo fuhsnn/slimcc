@@ -959,14 +959,16 @@ static void gen_expr(Node *node) {
       return;
     }
 
-    println("  mov %%rsp, %%rax");
-    push_tmp();
-
     gen_expr(node->lhs);
     push_tmp();
 
     if (node->args_expr)
       gen_expr(node->args_expr);
+
+    pop_tmp("%r10");
+
+    println("  mov %%rsp, %%rax");
+    push_tmp();
 
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
@@ -984,7 +986,6 @@ static void gen_expr(Node *node) {
     if (node->lhs->ty->is_variadic)
       println("  movl $%d, %%eax", fp_count);
 
-    pop_tmp("%r10");
     println("  call *%%r10");
 
     pop_tmp("%rsp");
