@@ -3074,6 +3074,9 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Obj *cur = &head;
   Node *expr = NULL;
 
+  enter_scope();
+  scope->is_temporary = true;
+
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
     add_type(arg);
@@ -3102,7 +3105,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
     cur = cur->param_next = var;
   }
-
   if (param)
     error_tok(tok, "too few arguments");
 
@@ -3115,6 +3117,8 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   // to allocate a space for the return value.
   if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION)
     node->ret_buffer = new_lvar(NULL, node->ty);
+
+  leave_scope();
   return node;
 }
 
@@ -3189,8 +3193,15 @@ static Node *primary(Token **rest, Token *tok) {
       gvar_initializer(rest, tok, var);
       return new_var_node(var, start);
     }
+    Scope *sc = scope;
+    while (sc->is_temporary)
+      sc = sc->parent;
 
-    Obj *var = new_lvar(NULL, ty);
+    Obj *var = new_var(NULL, ty);
+    var->is_local = true;
+    var->next = sc->locals;
+    sc->locals = var;
+
     Node *lhs = lvar_initializer(rest, tok, var);
     Node *rhs = new_var_node(var, tok);
     return new_binary(ND_COMMA, lhs, rhs, start);

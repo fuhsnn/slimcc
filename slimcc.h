@@ -328,6 +328,7 @@ struct Scope {
   Scope *sibling_next;
 
   Obj *locals;
+  bool is_temporary;
   // C has two block scopes; one is for variables/typedefs and
   // the other is for struct/union/enum tags.
   HashMap vars;

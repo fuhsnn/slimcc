@@ -4,6 +4,8 @@ typedef struct {
   long i[4];
 } S1;
 
+S1 gen_S1(int i) { S1 s = {i,i+1,i+2,i+3}; return s; }
+
 void *pass(void *ptr){ return ptr; }
 
 int main(void) {
@@ -12,9 +14,29 @@ int main(void) {
   ASSERT(3, ({ S1 s = {1,2,3,4}; s; }).i[ ({ S1 s = {}; 2;}) ] );
   ASSERT(4, ({ S1 s = {1,2,3,4}; s; }).i[ ({ S1 s = {}; 3;}) ] );
 
+  ASSERT(1, gen_S1(1).i[ ({ S1 s = {}; 0;}) ] );
+  ASSERT(2, gen_S1(1).i[ ({ S1 s = {}; 1;}) ] );
+  ASSERT(3, gen_S1(1).i[ ({ S1 s = {}; 2;}) ] );
+  ASSERT(4, gen_S1(1).i[ ({ S1 s = {}; 3;}) ] );
+
+  ASSERT(5, gen_S1(5).i[ gen_S1(0).i[0] ] );
+  ASSERT(6, gen_S1(5).i[ gen_S1(0).i[1] ] );
+  ASSERT(7, gen_S1(5).i[ gen_S1(0).i[2] ] );
+  ASSERT(8, gen_S1(5).i[ gen_S1(0).i[3] ] );
+
+  ASSERT(5, ({ S1 s = {5,6,7,8}; s; }).i[ gen_S1(0).i[0] ] );
+  ASSERT(6, ({ S1 s = {5,6,7,8}; s; }).i[ gen_S1(0).i[1] ] );
+  ASSERT(7, ({ S1 s = {5,6,7,8}; s; }).i[ gen_S1(0).i[2] ] );
+  ASSERT(8, ({ S1 s = {5,6,7,8}; s; }).i[ gen_S1(0).i[3] ] );
+
   unsigned long long complit_p1 = (unsigned long long) pass(&(S1[]){0});
   unsigned long long complit_p2 = (unsigned long long) pass(&(S1[]){0});
+  unsigned long long complit_p3 = (unsigned long long) pass(pass(&(S1[]){0}));
+  unsigned long long complit_p4 = (unsigned long long) pass(pass(&(S1[]){0}));
+
   ASSERT(1, complit_p1 != complit_p2);
+  ASSERT(1, complit_p2 != complit_p3);
+  ASSERT(1, complit_p3 != complit_p4);
 
   unsigned long long alloca_p1 = (unsigned long long) pass(alloca(3));
   unsigned long long alloca_p2 = (unsigned long long) pass(alloca(3));
