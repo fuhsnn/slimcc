@@ -67,6 +67,16 @@ struct InitDesg {
   Obj *var;
 };
 
+typedef enum {
+  EV_CONST, // constant expression
+  EV_LABEL, // relocation label
+} EvalKind;
+
+typedef struct {
+  EvalKind kind;
+  void *ptr;
+} EvalContext;
+
 // Likewise, global variables are accumulated to this list.
 static Obj *globals;
 
@@ -116,8 +126,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
-static int64_t eval2(Node *node, char ***label);
-static int64_t eval_rval(Node *node, char ***label);
+static int64_t eval2(Node *node, EvalContext *ctx);
 static Node *assign(Token **rest, Token *tok);
 static Node *logor(Token **rest, Token *tok);
 static double eval_double(Node *node);
@@ -1508,7 +1517,9 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   }
 
   char **label = NULL;
-  uint64_t val = eval2(init->expr, &label);
+  EvalContext ctx = {.kind = EV_LABEL, .ptr= &label};
+
+  uint64_t val = eval2(init->expr, &ctx);
 
   if (!label) {
     write_buf(buf + offset, val, ty->size);
@@ -1963,7 +1974,10 @@ static Node *expr(Token **rest, Token *tok) {
 }
 
 static int64_t eval(Node *node) {
-  return eval2(node, NULL);
+  if (is_flonum(node->ty))
+    return eval_double(node);
+
+  return eval2(node, &(EvalContext){.kind = EV_CONST});
 }
 
 static int64_t eval_error(Token *tok, char *fmt, ...) {
@@ -1984,15 +1998,12 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
 // is a pointer to a global variable and n is a postiive/negative
 // number. The latter form is accepted only as an initialization
 // expression for a global variable.
-static int64_t eval2(Node *node, char ***label) {
-  if (is_flonum(node->ty))
-    return eval_double(node);
-
+static int64_t eval2(Node *node, EvalContext *ctx) {
   switch (node->kind) {
   case ND_ADD:
-    return eval2(node->lhs, label) + eval(node->rhs);
+    return eval2(node->lhs, ctx) + eval(node->rhs);
   case ND_SUB:
-    return eval2(node->lhs, label) - eval(node->rhs);
+    return eval2(node->lhs, ctx) - eval(node->rhs);
   case ND_MUL:
     return eval(node->lhs) * eval(node->rhs);
   case ND_DIV:
@@ -2045,10 +2056,10 @@ static int64_t eval2(Node *node, char ***label) {
       return (uint64_t)eval(node->lhs) <= eval(node->rhs);
     return eval(node->lhs) <= eval(node->rhs);
   case ND_COND:
-    return eval(node->cond) ? eval2(node->then, label) : eval2(node->els, label);
+    return eval(node->cond) ? eval2(node->then, ctx) : eval2(node->els, ctx);
   case ND_COMMA:
-    eval2(node->lhs, label);
-    return eval2(node->rhs, label);
+    eval2(node->lhs, ctx);
+    return eval2(node->rhs, ctx);
   case ND_NOT:
     return !eval(node->lhs);
   case ND_BITNOT:
@@ -2061,14 +2072,14 @@ static int64_t eval2(Node *node, char ***label) {
     if (node->ty->kind == TY_BOOL) {
       if (is_flonum(node->lhs->ty))
         return !!eval_double(node->lhs);
-      return !!eval2(node->lhs, label);
+      return !!eval2(node->lhs, ctx);
     }
     if (is_flonum(node->lhs->ty)) {
       if (node->ty->size == 8 && node->ty->is_unsigned)
         return (uint64_t)eval_double(node->lhs);
       return eval_double(node->lhs);
     }
-    int64_t val = eval2(node->lhs, label);
+    int64_t val = eval2(node->lhs, ctx);
     if (is_integer(node->ty)) {
       switch (node->ty->size) {
       case 1: return node->ty->is_unsigned ? (uint8_t)val : (int64_t)(int8_t)val;
@@ -2078,49 +2089,30 @@ static int64_t eval2(Node *node, char ***label) {
     }
     return val;
   }
-  case ND_ADDR:
-    return eval_rval(node->lhs, label);
-  case ND_LABEL_VAL:
-    *label = &node->unique_label;
-    return 0;
-  case ND_DEREF:
-    if (node->ty->kind != TY_ARRAY)
-      return eval_error(node->tok, "not a compile-time constant");
-    return eval2(node->lhs, label);
-  case ND_MEMBER:
-    if (!label)
-      return eval_error(node->tok, "not a compile-time constant");
-    if (node->ty->kind != TY_ARRAY)
-      return eval_error(node->tok, "invalid initializer");
-    return eval_rval(node->lhs, label) + node->member->offset;
-  case ND_VAR:
-    if (!label)
-      return eval_error(node->tok, "not a compile-time constant");
-    if (node->var->ty->kind != TY_ARRAY && node->var->ty->kind != TY_FUNC)
-      return eval_error(node->tok, "invalid initializer");
-    *label = &node->var->name;
-    return 0;
   case ND_NUM:
     return node->val;
   }
 
-  return eval_error(node->tok, "not a compile-time constant");
-}
-
-static int64_t eval_rval(Node *node, char ***label) {
-  switch (node->kind) {
-  case ND_VAR:
-    if (node->var->is_local)
-      return eval_error(node->tok, "not a compile-time constant");
-    *label = &node->var->name;
-    return 0;
-  case ND_DEREF:
-    return eval2(node->lhs, label);
-  case ND_MEMBER:
-    return eval_rval(node->lhs, label) + node->member->offset;
+  if (ctx->kind == EV_LABEL) {
+    switch (node->kind) {
+    case ND_ADDR:
+    case ND_DEREF:
+      return eval2(node->lhs, ctx);
+    case ND_MEMBER:
+      return eval2(node->lhs, ctx) + node->member->offset;
+    case ND_LABEL_VAL:
+      *((char ***)ctx->ptr) = &node->unique_label;
+      return 0;
+    case ND_VAR:
+      if (node->var->is_local)
+        return eval_error(node->tok, "not a compile-time constant");
+      *((char ***)ctx->ptr) = &node->var->name;
+      return 0;
+    }
+    return eval_error(node->tok, "invalid initializer");
   }
 
-  return eval_error(node->tok, "invalid initializer");
+  return eval_error(node->tok, "not a compile-time constant");
 }
 
 bool is_const_expr(Node *node, int64_t *val) {
