@@ -126,7 +126,7 @@ int main() {
 #define M1 3+4
   ASSERT(23, M1*5);
 
-#define ASSERT_ assert(
+#define ASSERT_ test_assert(
 #define if 5
 #define five "5"
 #define END )

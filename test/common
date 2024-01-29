@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void assert(int expected, int actual, char *code) {
+void test_assert(int expected, int actual, char *code) {
   if (expected == actual) {
     printf("%s => %d\n", code, actual);
   } else {

@@ -1,7 +1,7 @@
 #include "test.h"
 #define STRINGIFY2(x) #x
 #define STRINGIFY(x) STRINGIFY2(x)
-#define ASSERTL(x, y) assert(x, y, #y " line:" STRINGIFY(__LINE__))
+#define ASSERTL(x, y) test_assert(x, y, #y " line:" STRINGIFY(__LINE__))
 
 int main(int argc, char** argv) {
 

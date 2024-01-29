@@ -91,7 +91,7 @@ int main() {
   ASSERT(16, sizeof(5.l));
   ASSERT(16, sizeof(2.0L));
 
-  assert(1, size\
+  test_assert(1, size\
 of(char), \
          "sizeof(char)");
 
