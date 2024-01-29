@@ -1041,15 +1041,14 @@ static void array_designator(Token **rest, Token *tok, Type *ty, int *begin, int
 
 // struct-designator = "." ident
 static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
-  Token *start = tok;
-  tok = skip(tok, ".");
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected a field designator");
 
   Member *mem = get_struct_member(ty, tok);
   if (!mem)
     error_tok(tok, "struct has no such member");
-  *rest = mem->name ? tok->next : start;
+  if (mem->name)
+    *rest = tok->next;
   return mem;
 }
 
@@ -1070,7 +1069,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
   }
 
   if (equal(tok, ".") && init->ty->kind == TY_STRUCT) {
-    Member *mem = struct_designator(&tok, tok, init->ty);
+    Member *mem = struct_designator(&tok, tok->next, init->ty);
     designation(&tok, tok, init->children[mem->idx]);
     init->expr = NULL;
     struct_initializer2(rest, tok, init, mem->next, true);
@@ -1078,7 +1077,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
   }
 
   if (equal(tok, ".") && init->ty->kind == TY_UNION) {
-    Member *mem = struct_designator(&tok, tok, init->ty);
+    Member *mem = struct_designator(&tok, tok->next, init->ty);
     init->mem = mem;
     designation(rest, tok, init->children[mem->idx]);
     return;
@@ -1179,7 +1178,7 @@ static void struct_initializer1(Token **rest, Token *tok, Initializer *init) {
   bool first = true;
   for (; comma_list(rest, &tok, "}", !first); first = false) {
     if (equal(tok, ".")) {
-      mem = struct_designator(&tok, tok, init->ty);
+      mem = struct_designator(&tok, tok->next, init->ty);
       designation(&tok, tok, init->children[mem->idx]);
       mem = mem->next;
       continue;
@@ -1221,7 +1220,7 @@ static void union_initializer(Token **rest, Token *tok, Initializer *init) {
   bool first = true;
   for (; comma_list(rest, &tok, "}", !first); first = false) {
     if (equal(tok, ".")) {
-      init->mem = struct_designator(&tok, tok, init->ty);
+      init->mem = struct_designator(&tok, tok->next, init->ty);
       designation(&tok, tok, init->children[init->mem->idx]);
       continue;
     }
@@ -3265,6 +3264,31 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (equal(tok, "_Generic"))
     return generic_selection(rest, tok->next);
+
+  if (equal(tok, "__builtin_offsetof")) {
+    tok = skip(tok->next, "(");
+    Type *ty = typename(&tok, tok);
+    tok = skip(tok, ",");
+
+    int offset = 0;
+    do {
+      Member *mem;
+      do {
+        mem = struct_designator(&tok, tok, ty);
+        offset += mem->offset;
+        ty = mem->ty;
+      } while (!mem->name);
+
+      while (ty->base && consume(&tok, tok, "[")) {
+        offset += ty->base->size * const_expr(&tok, tok);
+        ty = ty->base;
+        tok = skip(tok, "]");
+      }
+    } while (consume(&tok, tok, "."));
+
+    *rest = skip(tok, ")");
+    return new_ulong(offset, tok);
+  }
 
   if (equal(tok, "__builtin_types_compatible_p")) {
     tok = skip(tok->next, "(");
