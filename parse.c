@@ -322,7 +322,8 @@ static char *new_unique_name(void) {
 }
 
 static Obj *new_anon_gvar(Type *ty) {
-  Obj *var = new_gvar(new_unique_name(), ty);
+  Obj *var = new_gvar(NULL, ty);
+  var->name = new_unique_name();
   var->is_definition = true;
   var->is_static = true;
   return var;
