@@ -2,6 +2,37 @@
 
 long double ld = 0.0L;
 
+#define CAT(x) b##x
+int CAT(6🐱) = 7;
+
+int arr[2][2] = {{1,2},{3,4}};
+int *p1 = arr[1];
+
+int fn(float), var1 = 7, fn2(void), var2 = 11;
+
 int main(void) {
+  {
+    ASSERT(7, b6🐱);
+  }
+  {
+    ASSERT(3, *p1);
+  }
+  {
+    ASSERT(7, var1);
+    ASSERT(11, var2);
+    ASSERT(13, fn(13.0f));
+    ASSERT(19, fn2());
+  }
+  {
+    char arr2[3] = {11, 22, 33};
+    ASSERT(33, (&arr2)[0][2]);
+    ASSERT(22, (*&arr2)[1]);
+    ASSERT(11, (**&arr2));
+  }
+
   printf("OK\n");
 }
+
+
+int fn(float f) { return f; }
+int fn2(void) { return 19; }
