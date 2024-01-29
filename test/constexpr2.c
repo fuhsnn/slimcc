@@ -33,6 +33,9 @@ int main(void) {
   ASSERT(1, 13835058055282163711ULL  == (unsigned long long) 13835058055282163711.0L);
   ASSERT(1, 13835058055282163711.0L  == (long double) 13835058055282163711ULL);
 
+  DASSERT( 16777217.0 != (float)16777217.0 );
+  DASSERT( 9007199254740993.0L != (double)9007199254740993.0L || sizeof(double) == sizeof(long double) );
+
   ASSERT(1, ({ int i = 2; char arr[ (i++,3) ]; i == sizeof arr; }) );
 
   printf("OK\n");

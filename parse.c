@@ -129,7 +129,7 @@ static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
 static Node *assign(Token **rest, Token *tok);
 static Node *logor(Token **rest, Token *tok);
-static double eval_double(Node *node);
+static long double eval_double(Node *node);
 static Node *conditional(Token **rest, Token *tok);
 static Node *logand(Token **rest, Token *tok);
 static Node *bitor(Token **rest, Token *tok);
@@ -2138,7 +2138,7 @@ int64_t const_expr(Token **rest, Token *tok) {
   return eval(node);
 }
 
-static double eval_double(Node *node) {
+static long double eval_double(Node *node) {
   if (is_integer(node->ty)) {
     if (node->ty->is_unsigned)
       return (unsigned long)eval(node);
@@ -2163,8 +2163,13 @@ static double eval_double(Node *node) {
   case ND_COMMA:
     return eval_double(node->rhs);
   case ND_CAST:
-    if (is_flonum(node->lhs->ty))
+    if (is_flonum(node->lhs->ty)) {
+      if (node->ty->size == 4)
+        return (float)eval_double(node->lhs);
+      if (node->ty->size == 8)
+        return (double)eval_double(node->lhs);
       return eval_double(node->lhs);
+    }
     if (node->lhs->ty->size == 8 && node->lhs->ty->is_unsigned)
       return (uint64_t)eval(node->lhs);
     return eval(node->lhs);
