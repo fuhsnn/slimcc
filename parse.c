@@ -2063,6 +2063,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     eval2(node->lhs, ctx);
     return eval2(node->rhs, ctx);
   case ND_NOT:
+    if (is_flonum(node->lhs->ty))
+      return !eval_double(node->lhs);
     return !eval(node->lhs);
   case ND_BITNOT:
     return ~eval(node->lhs);
