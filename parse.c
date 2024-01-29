@@ -1506,13 +1506,15 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     return cur;
   add_type(init->expr);
 
-  if (ty->kind == TY_FLOAT) {
+  switch(ty->kind) {
+  case TY_FLOAT:
     *(float *)(buf + offset) = eval_double(init->expr);
     return cur;
-  }
-
-  if (ty->kind == TY_DOUBLE) {
+  case TY_DOUBLE:
     *(double *)(buf + offset) = eval_double(init->expr);
+    return cur;
+  case TY_LDOUBLE:
+    *(long double *)(buf + offset) = eval_double(init->expr);
     return cur;
   }
 
