@@ -263,6 +263,7 @@ static void store(Type *ty) {
   pop_tmp("%rdi");
 
   switch (ty->kind) {
+  case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
     for (int i = 0; i < ty->size; i++) {

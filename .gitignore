@@ -7,4 +7,5 @@
 /thirdparty
 /slimcc
 /test/*.exe
+/test/c23/*.exe
 /stage2

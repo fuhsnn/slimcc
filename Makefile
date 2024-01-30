@@ -6,6 +6,9 @@ OBJS=$(SRCS:.c=.o)
 TEST_SRCS=$(wildcard test/*.c)
 TESTS=$(TEST_SRCS:.c=.exe)
 
+TEST_C23_SRCS=$(wildcard test/c23/*.c)
+TESTS_C23=$(TEST_C23_SRCS:.c=.exe)
+
 # Stage 1
 
 slimcc: $(OBJS)
@@ -17,7 +20,11 @@ test/%.exe: slimcc test/%.c
 	./slimcc -Iinclude -Itest -c -o test/$*.o test/$*.c
 	$(CC) -std=c11 -pthread -Wno-psabi -o $@ test/$*.o -xc test/common
 
-test: $(TESTS)
+test/c23/%.exe: slimcc test/c23/%.c
+	./slimcc -std=c23 -Iinclude -Itest -c -o test/c23/$*.o test/c23/$*.c
+	$(CC) -std=c11 -pthread -Wno-psabi -o $@ test/c23/$*.o -xc test/common
+
+test: $(TESTS) $(TESTS_C23)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
 	bash test/driver.sh ./slimcc $(CC)
 
@@ -37,7 +44,12 @@ stage2/test/%.exe: stage2/slimcc test/%.c
 	./stage2/slimcc -Iinclude -Itest -c -o stage2/test/$*.o test/$*.c
 	$(CC) -std=c11 -pthread -Wno-psabi -o $@ stage2/test/$*.o -xc test/common
 
-test-stage2: $(TESTS:test/%=stage2/test/%)
+stage2/test/c23/%.exe: stage2/slimcc test/c23/%.c
+	mkdir -p stage2/test/c23
+	./stage2/slimcc -std=c23 -Iinclude -Itest -c -o stage2/test/c23/$*.o test/c23/$*.c
+	$(CC) -std=c11 -pthread -Wno-psabi -o $@ stage2/test/c23/$*.o -xc test/common
+
+test-stage2: $(TESTS:test/%=stage2/test/%) $(TESTS_C23:test/c23/%=stage2/test/c23/%)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
 	bash test/driver.sh ./stage2/slimcc $(CC)
 

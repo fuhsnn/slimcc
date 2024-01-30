@@ -341,7 +341,7 @@ void add_type(Node *node) {
     node->ty = node->lhs->ty;
     return;
   case ND_ASSIGN:
-    if (node->lhs->ty->kind == TY_ARRAY)
+    if (node->lhs->ty->kind == TY_ARRAY && !node->lhs->var->constexpr_data)
       error_tok(node->lhs->tok, "not an lvalue");
     if (node->lhs->ty->kind != TY_STRUCT)
       node->rhs = new_cast(node->rhs, node->lhs->ty);
