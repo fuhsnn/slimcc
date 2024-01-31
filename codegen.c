@@ -128,16 +128,36 @@ static void push_tmp(void) {
   push_tmpstack(SL_GP);
 }
 
+static void pop_tmp2(Slot *sl, bool is_r64, char *arg) {
+  char *ax = is_r64 ? "%rax" : "%eax";
+
+  if (sl->kind == SL_GP) {
+    char *reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
+    insrtln("  mov %s, %s", sl->loc, ax, reg);
+    println("  mov %s, %s", reg, arg);
+    return;
+  }
+  insrtln("  mov %s, %d(%s)", sl->loc, ax, sl->st_offset, lvar_ptr);
+  println("  mov %d(%s), %s", sl->st_offset, lvar_ptr, arg);
+}
+
 static void pop_tmp(char *arg) {
+  Slot *sl = pop_tmpstack();
+  pop_tmp2(sl, true, arg);
+}
+
+static char *pop_tmp_keep_reg(bool is_r64) {
   Slot *sl = pop_tmpstack();
 
   if (sl->kind == SL_GP) {
-    insrtln("  mov %%rax, %s", sl->loc, tmpreg64[sl->gp_depth]);
-    println("  mov %s, %s", tmpreg64[sl->gp_depth], arg);
-    return;
+    char *ax = is_r64 ? "%rax" : "%eax";
+    char *reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
+    insrtln("  mov %s, %s", sl->loc, ax, reg);
+    return reg;
   }
-  insrtln("  mov %%rax, %d(%s)", sl->loc, sl->st_offset, lvar_ptr);
-  println("  mov %d(%s), %s", sl->st_offset, lvar_ptr, arg);
+  char *reg = is_r64 ? "%rcx" : "%ecx";
+  pop_tmp2(sl, is_r64, reg);
+  return reg;
 }
 
 static void push_tmpf(void) {
@@ -1302,58 +1322,51 @@ static void gen_expr(Node *node) {
   gen_expr(node->rhs);
   push_tmp();
   gen_expr(node->lhs);
-  pop_tmp("%rdi");
 
-  char *ax, *di;
-
-  if (node->lhs->ty->size == 8 || node->lhs->ty->base) {
-    ax = "%rax";
-    di = "%rdi";
-  } else {
-    ax = "%eax";
-    di = "%edi";
-  }
+  bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
+  char *ax = is_r64 ? "%rax" : "%eax";
+  char *op = pop_tmp_keep_reg(is_r64);
 
   switch (node->kind) {
   case ND_ADD:
-    println("  add %s, %s", di, ax);
+    println("  add %s, %s", op, ax);
     return;
   case ND_SUB:
-    println("  sub %s, %s", di, ax);
+    println("  sub %s, %s", op, ax);
     return;
   case ND_MUL:
-    println("  imul %s, %s", di, ax);
+    println("  imul %s, %s", op, ax);
     return;
   case ND_DIV:
   case ND_MOD:
     if (node->ty->is_unsigned) {
       println("  xor %%edx, %%edx");
-      println("  div %s", di);
+      println("  div %s", op);
     } else {
       if (node->lhs->ty->size == 8)
         println("  cqo");
       else
         println("  cdq");
-      println("  idiv %s", di);
+      println("  idiv %s", op);
     }
 
     if (node->kind == ND_MOD)
       println("  mov %%rdx, %%rax");
     return;
   case ND_BITAND:
-    println("  and %s, %s", di, ax);
+    println("  and %s, %s", op, ax);
     return;
   case ND_BITOR:
-    println("  or %s, %s", di, ax);
+    println("  or %s, %s", op, ax);
     return;
   case ND_BITXOR:
-    println("  xor %s, %s", di, ax);
+    println("  xor %s, %s", op, ax);
     return;
   case ND_EQ:
   case ND_NE:
   case ND_LT:
   case ND_LE:
-    println("  cmp %s, %s", di, ax);
+    println("  cmp %s, %s", op, ax);
 
     if (node->kind == ND_EQ) {
       println("  sete %%al");
