@@ -247,7 +247,7 @@ static void gen_addr(Node *node) {
     if (opt_fpic) {
       // Thread-local variable
       if (node->var->is_tls) {
-        println("  data16 lea %s@tlsgd(%%rip), %%rdi", node->var->name);
+        println("  data16 lea \"%s\"@tlsgd(%%rip), %%rdi", node->var->name);
         println("  .value 0x6666");
         println("  rex64");
         println("  call __tls_get_addr@PLT");
@@ -255,14 +255,14 @@ static void gen_addr(Node *node) {
       }
 
       // Function or global variable
-      println("  mov %s@GOTPCREL(%%rip), %%rax", node->var->name);
+      println("  mov \"%s\"@GOTPCREL(%%rip), %%rax", node->var->name);
       return;
     }
 
     // Thread-local variable
     if (node->var->is_tls) {
       println("  mov %%fs:0, %%rax");
-      println("  add $%s@tpoff, %%rax", node->var->name);
+      println("  add $\"%s\"@tpoff, %%rax", node->var->name);
       return;
     }
 
@@ -292,14 +292,14 @@ static void gen_addr(Node *node) {
     // Function
     if (node->ty->kind == TY_FUNC) {
       if (node->var->is_definition)
-        println("  lea %s(%%rip), %%rax", node->var->name);
+        println("  lea \"%s\"(%%rip), %%rax", node->var->name);
       else
-        println("  mov %s@GOTPCREL(%%rip), %%rax", node->var->name);
+        println("  mov \"%s\"@GOTPCREL(%%rip), %%rax", node->var->name);
       return;
     }
 
     // Global variable
-    println("  lea %s(%%rip), %%rax", node->var->name);
+    println("  lea \"%s\"(%%rip), %%rax", node->var->name);
     return;
   case ND_DEREF:
     gen_expr(node->lhs);
@@ -1519,7 +1519,7 @@ static void gen_stmt(Node *node) {
       }
     }
 
-    println("  jmp .L.return.%s", current_fn->name);
+    println("  jmp 9f");
     return;
   case ND_EXPR_STMT:
     gen_expr(node->lhs);
@@ -1640,40 +1640,40 @@ static void emit_data(Obj *prog) {
       continue;
 
     if (var->is_static)
-      println("  .local %s", var->name);
+      println("  .local \"%s\"", var->name);
     else
-      println("  .globl %s", var->name);
+      println("  .globl \"%s\"", var->name);
 
     int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
       ? MAX(16, var->align) : var->align;
 
     // Common symbol
     if (opt_fcommon && var->is_tentative) {
-      println("  .comm %s, %d, %d", var->name, var->ty->size, align);
+      println("  .comm \"%s\", %d, %d", var->name, var->ty->size, align);
       continue;
     }
 
     // .data or .tdata
     if (var->init_data) {
       if (var->is_tls && opt_data_sections)
-        println("  .section .tdata.%s,\"awT\",@progbits", var->name);
+        println("  .section .tdata.\"%s\",\"awT\",@progbits", var->name);
       else if (var->is_tls)
         println("  .section .tdata,\"awT\",@progbits");
       else if (opt_data_sections)
-        println("  .section .data.%s,\"aw\",@progbits", var->name);
+        println("  .section .data.\"%s\",\"aw\",@progbits", var->name);
       else
         println("  .data");
 
-      println("  .type %s, @object", var->name);
-      println("  .size %s, %d", var->name, var->ty->size);
+      println("  .type \"%s\", @object", var->name);
+      println("  .size \"%s\", %d", var->name, var->ty->size);
       println("  .align %d", align);
-      println("%s:", var->name);
+      println("\"%s\":", var->name);
 
       Relocation *rel = var->rel;
       int pos = 0;
       while (pos < var->ty->size) {
         if (rel && rel->offset == pos) {
-          println("  .quad %s%+ld", *rel->label, rel->addend);
+          println("  .quad \"%s\"%+ld", *rel->label, rel->addend);
           rel = rel->next;
           pos += 8;
         } else {
@@ -1685,16 +1685,16 @@ static void emit_data(Obj *prog) {
 
     // .bss or .tbss
     if (var->is_tls && opt_data_sections)
-      println("  .section .tbss.%s,\"awT\",@nobits", var->name);
+      println("  .section .tbss.\"%s\",\"awT\",@nobits", var->name);
     else if (var->is_tls)
       println("  .section .tbss,\"awT\",@nobits");
     else if (opt_data_sections)
-      println("  .section .bss.%s,\"aw\",@nobits", var->name);
+      println("  .section .bss.\"%s\",\"aw\",@nobits", var->name);
     else
       println("  .bss");
 
     println("  .align %d", align);
-    println("%s:", var->name);
+    println("\"%s\":", var->name);
     println("  .zero %d", var->ty->size);
   }
 }
@@ -1745,16 +1745,16 @@ static void emit_text(Obj *prog) {
       continue;
 
     if (fn->is_static)
-      println("  .local %s", fn->name);
+      println("  .local \"%s\"", fn->name);
     else
-      println("  .globl %s", fn->name);
+      println("  .globl \"%s\"", fn->name);
 
     if (opt_func_sections)
-      println("  .section .text.%s,\"ax\",@progbits", fn->name);
+      println("  .section .text.\"%s\",\"ax\",@progbits", fn->name);
     else
       println("  .text");
-    println("  .type %s, @function", fn->name);
-    println("%s:", fn->name);
+    println("  .type \"%s\", @function", fn->name);
+    println("\"%s\":", fn->name);
     current_fn = fn;
     tmp_stack.bottom = fn->lvar_stack_size;
 
@@ -1854,7 +1854,7 @@ static void emit_text(Obj *prog) {
       println("  mov $0, %%rax");
 
     // Epilogue
-    println(".L.return.%s:", fn->name);
+    println("9:");
     if (use_rbx)
       println("  mov -8(%%rbp), %%rbx");
     println("  mov %%rbp, %%rsp");

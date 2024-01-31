@@ -638,6 +638,7 @@ static void cc1(void) {
 
 static void assemble(char *input, char *output) {
   char *cmd[] = {"as", input, "-o", output, NULL};
+  // char *cmd[] = {"clang", "-c", "-xassembler", input, "-o", output, NULL};
   run_subprocess(cmd);
 }
 

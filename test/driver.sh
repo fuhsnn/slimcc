@@ -22,7 +22,7 @@ $testcc -c -o $tmp/out $tmp/empty.c
 check -o
 
 # -S
-echo 'int main() {}' | $testcc -S -o- -xc - | grep -q 'main:'
+echo 'int main() {}' | $testcc -S -o- -xc - | grep -q '"main":'
 check -S
 
 # Default output file
@@ -125,40 +125,40 @@ echo 'int foo(); int main() { foo(); }' > $tmp/inline2.c
 $testcc -o /dev/null $tmp/inline1.c $tmp/inline2.c
 check inline
 
-echo 'static inline void f1() {}' | $testcc -o- -S -xc - | grep -v -q f1:
+echo 'static inline void f1() {}' | $testcc -o- -S -xc - | grep -v -q \"f1\":
 check inline
 
-echo 'static inline void f1() {} void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q f1:
+echo 'static inline void f1() {} void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q f1:
+echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -v -q f2:
+echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -v -q \"f2\":
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q f1:
+echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q f2:
+echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f2\":
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() {}' | $testcc -o- -S -xc - | grep -v -q f1:
+echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() {}' | $testcc -o- -S -xc - | grep -v -q \"f1\":
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() {}' | $testcc -o- -S -xc - | grep -v -q f2:
+echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() {}' | $testcc -o- -S -xc - | grep -v -q \"f2\":
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q f1:
+echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q f2:
+echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f2\":
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q f1:
+echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q f2:
+echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f2\":
 check inline
 
 # -idirafter
@@ -171,14 +171,14 @@ echo "#include \"idirafter\"" | $testcc -idirafter $tmp/dir1 -I$tmp/dir2 -E -xc 
 check -idirafter
 
 # -fcommon
-echo 'int foo;' | $testcc -S -o- -xc - | grep -q '\.comm foo'
+echo 'int foo;' | $testcc -S -o- -xc - | grep -q '\.comm "foo"'
 check '-fcommon (default)'
 
-echo 'int foo;' | $testcc -fcommon -S -o- -xc - | grep -q '\.comm foo'
+echo 'int foo;' | $testcc -fcommon -S -o- -xc - | grep -q '\.comm "foo"'
 check '-fcommon'
 
 # -fno-common
-echo 'int foo;' | $testcc -fno-common -S -o- -xc - | grep -q '^foo:'
+echo 'int foo;' | $testcc -fno-common -S -o- -xc - | grep -q '^"foo":'
 check '-fno-common'
 
 # -funsigned-char
@@ -188,17 +188,17 @@ $tmp/out
 check '-funsigned-char'
 
 # -ffunction-sections
-echo 'void f1() {}' | $testcc -xc - -S -o- -ffunction-sections | grep -q '.text.f1,'
+echo 'void f1() {}' | $testcc -xc - -S -o- -ffunction-sections | grep -q '.text."f1",'
 check '-ffunction-sections'
 
 # -fdata-sections
-echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.data.var,'
+echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.data."var",'
 check '-fdata-sections'
-echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tdata.var,'
+echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tdata."var",'
 check '-fdata-sections'
 echo 'void fn(void){static int var;}' | $testcc -xc - -S -o- -fdata-sections | grep -q '.bss.'
 check '-fdata-sections'
-echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tbss.var,'
+echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tbss."var",'
 check '-fdata-sections'
 
 # -include
