@@ -96,7 +96,7 @@ int main() {
   ASSERT(12, ({ wchar_t x[] = L"🤔x"; sizeof(x); }));
 
   ASSERT(3, π);
-  ASSERT(3, ({ int あβ0¾=3; あβ0¾; }));
+  ASSERT(3, ({ int あβ0µ=3; あβ0µ; }));
   ASSERT(5, ({ int $$$=5; $$$; }));
 
   printf("OK\n");

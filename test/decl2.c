@@ -3,7 +3,8 @@
 long double ld = 0.0L;
 
 #define CAT(x) b##x
-int CAT(6🐱) = 7;
+int CAT(6_) = 7;
+int CAT(8µ) = 9;
 
 int arr[2][2] = {{1,2},{3,4}};
 int *p1 = arr[1];
@@ -12,7 +13,8 @@ int fn(float), var1 = 7, fn2(void), var2 = 11;
 
 int main(void) {
   {
-    ASSERT(7, b6🐱);
+    ASSERT(7, b6_);
+    ASSERT(9, b8µ);
   }
   {
     ASSERT(3, *p1);
