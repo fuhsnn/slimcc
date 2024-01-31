@@ -1304,16 +1304,14 @@ static void gen_expr(Node *node) {
   gen_expr(node->lhs);
   pop_tmp("%rdi");
 
-  char *ax, *di, *dx;
+  char *ax, *di;
 
   if (node->lhs->ty->size == 8 || node->lhs->ty->base) {
     ax = "%rax";
     di = "%rdi";
-    dx = "%rdx";
   } else {
     ax = "%eax";
     di = "%edi";
-    dx = "%edx";
   }
 
   switch (node->kind) {
@@ -1329,7 +1327,7 @@ static void gen_expr(Node *node) {
   case ND_DIV:
   case ND_MOD:
     if (node->ty->is_unsigned) {
-      println("  mov $0, %s", dx);
+      println("  xor %%edx, %%edx");
       println("  div %s", di);
     } else {
       if (node->lhs->ty->size == 8)
