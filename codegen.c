@@ -164,16 +164,17 @@ static void push_tmpf(void) {
   push_tmpstack(SL_FP);
 }
 
-static void pop_tmpf(int reg) {
+static int pop_tmpf_keep_reg(bool is_xmm64) {
   Slot *sl = pop_tmpstack();
+  char *mv = is_xmm64 ? "movsd" : "movss";
 
   if (sl->kind == SL_FP) {
-    insrtln("  movsd %%xmm0, %%xmm%d", sl->loc, sl->fp_depth + 2);
-    println("  movsd %%xmm%d, %%xmm%d", sl->fp_depth + 2, reg);
-    return;
+    insrtln("  %s %%xmm0, %%xmm%d", sl->loc, mv, sl->fp_depth + 2);
+    return sl->fp_depth + 2;
   }
-  insrtln("  movsd %%xmm0, %d(%s)", sl->loc, sl->st_offset, lvar_ptr);
-  println("  movsd %d(%s), %%xmm%d", sl->st_offset, lvar_ptr, reg);
+  insrtln("  %s %%xmm0, %d(%s)", sl->loc, mv, sl->st_offset, lvar_ptr);
+  println("  %s %d(%s), %%xmm1", mv, sl->st_offset, lvar_ptr);
+  return 1;
 }
 
 // When we load a char or a short value to a register, we always
@@ -1234,28 +1235,29 @@ static void gen_expr(Node *node) {
     gen_expr(node->rhs);
     push_tmpf();
     gen_expr(node->lhs);
-    pop_tmpf(1);
 
-    char *sz = (node->lhs->ty->kind == TY_FLOAT) ? "ss" : "sd";
+    bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
+    int reg = pop_tmpf_keep_reg(is_xmm64);
+    char *sz = is_xmm64 ? "sd" : "ss";
 
     switch (node->kind) {
     case ND_ADD:
-      println("  add%s %%xmm1, %%xmm0", sz);
+      println("  add%s %%xmm%d, %%xmm0", sz, reg);
       return;
     case ND_SUB:
-      println("  sub%s %%xmm1, %%xmm0", sz);
+      println("  sub%s %%xmm%d, %%xmm0", sz, reg);
       return;
     case ND_MUL:
-      println("  mul%s %%xmm1, %%xmm0", sz);
+      println("  mul%s %%xmm%d, %%xmm0", sz, reg);
       return;
     case ND_DIV:
-      println("  div%s %%xmm1, %%xmm0", sz);
+      println("  div%s %%xmm%d, %%xmm0", sz, reg);
       return;
     case ND_EQ:
     case ND_NE:
     case ND_LT:
     case ND_LE:
-      println("  ucomi%s %%xmm0, %%xmm1", sz);
+      println("  ucomi%s %%xmm0, %%xmm%d", sz, reg);
 
       if (node->kind == ND_EQ) {
         println("  sete %%al");
