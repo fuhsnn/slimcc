@@ -3,6 +3,24 @@
 #define GP_MAX 6
 #define FP_MAX 8
 
+#define GP_SLOTS 3
+#define FP_SLOTS 6
+
+typedef enum {
+  SL_GP,
+  SL_FP,
+  SL_ST,
+} SlotKind;
+
+typedef struct {
+  SlotKind kind;
+  int gp_depth;
+  int fp_depth;
+  int st_depth;
+  int st_offset;
+  long loc;
+} Slot;
+
 static FILE *output_file;
 static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
 static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
@@ -10,11 +28,14 @@ static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 static Obj *current_fn;
 static char *lvar_ptr;
+static char *tmpreg32[3] = {"%r9d", "%r10d", "%r11d"};
+static char *tmpreg64[3] = {"%r9", "%r10", "%r11"};
+
 
 bool dont_reuse_stack;
 
 struct {
-  int *data;
+  Slot *data;
   int capacity;
   int depth;
   int bottom;
@@ -32,56 +53,107 @@ static void println(char *fmt, ...) {
   fprintf(output_file, "\n");
 }
 
+static long resrvln(void) {
+  long loc = ftell(output_file);
+  println("                           \n");
+  return loc;
+}
+
+__attribute__((format(printf, 1, 3)))
+static void insrtln(char *fmt, long loc, ...) {
+  long cur_loc = ftell(output_file);
+  fseek(output_file, loc, SEEK_SET);
+
+  va_list ap;
+  va_start(ap, loc);
+  vfprintf(output_file, fmt, ap);
+  va_end(ap);
+
+  fseek(output_file, cur_loc, SEEK_SET);
+}
+
 static int count(void) {
   static int i = 1;
   return i++;
 }
 
-static int push_tmpstack(void) {
+static void save_tmp_regs(void) {
+  for (int i = 0; i < tmp_stack.depth; i++)
+    tmp_stack.data[i].kind = SL_ST;
+}
+
+static void push_tmpstack(SlotKind kind) {
   if (tmp_stack.depth == tmp_stack.capacity) {
     tmp_stack.capacity += 4;
-    tmp_stack.data = realloc(tmp_stack.data, sizeof(int) * tmp_stack.capacity);
+    tmp_stack.data = realloc(tmp_stack.data, sizeof(Slot) * tmp_stack.capacity);
   }
 
-  int offset;
-  if (!dont_reuse_stack) {
-      int bottom = current_fn->lvar_stack_size + (tmp_stack.depth + 1) * 8;
-    tmp_stack.bottom = MAX(tmp_stack.bottom, bottom);
-    offset = -bottom;
-  } else {
-    tmp_stack.bottom += 8;
-    offset = -tmp_stack.bottom;
-  }
-
-  tmp_stack.data[tmp_stack.depth] = offset;
+  long loc = resrvln();
+  Slot sl = {.kind = kind, .loc = loc};
+  tmp_stack.data[tmp_stack.depth] = sl;
   tmp_stack.depth++;
-  return offset;
+  return;
 }
 
-static int pop_tmpstack(void) {
+static Slot *pop_tmpstack(void) {
   tmp_stack.depth--;
-  return tmp_stack.data[tmp_stack.depth];
+  assert(tmp_stack.depth >= 0);
+
+  Slot *sl = &tmp_stack.data[tmp_stack.depth];
+  if ((sl->kind == SL_GP && sl->gp_depth >= GP_SLOTS) ||
+    (sl->kind == SL_FP && sl->fp_depth >= FP_SLOTS))
+    sl->kind = SL_ST;
+
+  if (tmp_stack.depth > 0) {
+    Slot *sl2 = &tmp_stack.data[tmp_stack.depth - 1];
+    sl2->gp_depth = MAX(sl2->gp_depth, sl->gp_depth + (sl->kind == SL_GP));
+    sl2->fp_depth = MAX(sl2->fp_depth, sl->fp_depth + (sl->kind == SL_FP));
+    sl2->st_depth = MAX(sl2->st_depth, sl->st_depth + (sl->kind == SL_ST));
+  }
+
+  if (sl->kind == SL_ST) {
+    if (dont_reuse_stack) {
+      tmp_stack.bottom += 8;
+      sl->st_offset = -tmp_stack.bottom;
+    } else {
+      int bottom = current_fn->lvar_stack_size + (sl->st_depth + 1) * 8;
+      tmp_stack.bottom = MAX(tmp_stack.bottom, bottom);
+      sl->st_offset = -bottom;
+    }
+  }
+  return sl;
 }
 
-static int push_tmp(void) {
-  int offset = push_tmpstack();
-  println("  mov %%rax, %d(%s)", offset, lvar_ptr);
-  return offset;
+static void push_tmp(void) {
+  push_tmpstack(SL_GP);
 }
 
 static void pop_tmp(char *arg) {
-  int offset = pop_tmpstack();
-  println("  mov %d(%s), %s", offset, lvar_ptr, arg);
+  Slot *sl = pop_tmpstack();
+
+  if (sl->kind == SL_GP) {
+    insrtln("  mov %%rax, %s", sl->loc, tmpreg64[sl->gp_depth]);
+    println("  mov %s, %s", tmpreg64[sl->gp_depth], arg);
+    return;
+  }
+  insrtln("  mov %%rax, %d(%s)", sl->loc, sl->st_offset, lvar_ptr);
+  println("  mov %d(%s), %s", sl->st_offset, lvar_ptr, arg);
 }
 
 static void push_tmpf(void) {
-  int offset = push_tmpstack();
-  println("  movsd %%xmm0, %d(%s)", offset, lvar_ptr);
+  push_tmpstack(SL_FP);
 }
 
 static void pop_tmpf(int reg) {
-  int offset = pop_tmpstack();
-  println("  movsd %d(%s), %%xmm%d", offset, lvar_ptr, reg);
+  Slot *sl = pop_tmpstack();
+
+  if (sl->kind == SL_FP) {
+    insrtln("  movsd %%xmm0, %%xmm%d", sl->loc, sl->fp_depth + 2);
+    println("  movsd %%xmm%d, %%xmm%d", sl->fp_depth + 2, reg);
+    return;
+  }
+  insrtln("  movsd %%xmm0, %d(%s)", sl->loc, sl->st_offset, lvar_ptr);
+  println("  movsd %d(%s), %%xmm%d", sl->st_offset, lvar_ptr, reg);
 }
 
 // When we load a char or a short value to a register, we always
@@ -848,7 +920,7 @@ static void gen_expr(Node *node) {
     return;
   case ND_ASSIGN:
     gen_addr(node->lhs);
-    int tmp_offset = push_tmp();
+    push_tmp();
     gen_expr(node->rhs);
 
     if (is_bitfield(node->lhs)) {
@@ -859,7 +931,8 @@ static void gen_expr(Node *node) {
       println("  and %%rdi, %%rax");
       println("  mov %%rax, %%r8");
 
-      println("  mov %d(%s), %%rax", tmp_offset, lvar_ptr);
+      pop_tmp("%rax");
+      push_tmp();
       load(mem->ty);
 
       long mask = ((1L << mem->bit_width) - 1) << mem->bit_offset;
@@ -970,6 +1043,8 @@ static void gen_expr(Node *node) {
 
     println("  mov %%rsp, %%rax");
     push_tmp();
+
+    save_tmp_regs();
 
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
@@ -1673,8 +1748,8 @@ static void emit_text(Obj *prog) {
       println("  mov %%rbx, %%rsp");
     }
 
-    long reserved_pos = ftell(output_file);
-    println("                           ");
+    long stack_alloc_loc = resrvln();
+
     if (fn->vla_base)
       println("  mov %%rsp, %d(%s)", fn->vla_base->ofs, fn->vla_base->ptr);
 
@@ -1746,12 +1821,7 @@ static void emit_text(Obj *prog) {
     gen_stmt(fn->body);
     assert(tmp_stack.depth == 0);
 
-    long cur_pos = ftell(output_file);
-
-    fseek(output_file, reserved_pos, SEEK_SET);
-    println("  sub $%d, %%rsp", align_to(tmp_stack.bottom, 16));
-
-    fseek(output_file, cur_pos, SEEK_SET);
+    insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(tmp_stack.bottom, 16));
 
     // [https://www.sigbus.info/n1570#5.1.2.2.3p1] The C spec defines
     // a special rule for the main function. Reaching the end of the
