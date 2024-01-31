@@ -196,6 +196,16 @@ static char *reg_ax(int sz) {
   unreachable();
 }
 
+static char *regop_ax(Type *ty) {
+  switch (ty->size) {
+  case 1:
+  case 2:
+  case 4: return "%eax";
+  case 8: return "%rax";
+  }
+  unreachable();
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 static void gen_addr(Node *node) {
@@ -326,8 +336,7 @@ static void load(Type *ty) {
     return;
   }
 
-  char *ax = ty->size <= 4 ? "%eax" : "%rax";
-  load_extend_int(ty, 0, "%rax", ax);
+  load_extend_int(ty, 0, "%rax", regop_ax(ty));
 }
 
 // Store %rax to an address that the stack top is pointing to.
@@ -657,8 +666,7 @@ static void place_stack_args(Node *node) {
       continue;
     }
 
-    char *ax = var->ty->size <= 4 ? "%eax" : "%rax";
-    load_extend_int(var->ty, var->ofs, var->ptr, ax);
+    load_extend_int(var->ty, var->ofs, var->ptr, regop_ax(var->ty));
     println("  mov %%rax, %d(%%rsp)", var->stack_offset);
   }
 }
@@ -1026,6 +1034,19 @@ static void gen_expr(Node *node) {
     println(".L.end.%d:", c);
     return;
   }
+  case ND_SHL:
+  case ND_SHR:
+    gen_expr(node->rhs);
+    push_tmp();
+    gen_expr(node->lhs);
+    pop_tmp("%rcx");
+    if (node->kind == ND_SHL)
+      println("  shl %%cl, %s", regop_ax(node->ty));
+    else if (node->lhs->ty->is_unsigned)
+      println("  shr %%cl, %s", regop_ax(node->ty));
+    else
+      println("  sar %%cl, %s", regop_ax(node->ty));
+    return;
   case ND_FUNCALL: {
     if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
       gen_expr(node->args_expr);
@@ -1353,17 +1374,6 @@ static void gen_expr(Node *node) {
     }
 
     println("  movzb %%al, %%rax");
-    return;
-  case ND_SHL:
-    println("  mov %%rdi, %%rcx");
-    println("  shl %%cl, %s", ax);
-    return;
-  case ND_SHR:
-    println("  mov %%rdi, %%rcx");
-    if (node->lhs->ty->is_unsigned)
-      println("  shr %%cl, %s", ax);
-    else
-      println("  sar %%cl, %s", ax);
     return;
   }
 
