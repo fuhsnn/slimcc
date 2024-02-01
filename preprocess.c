@@ -686,7 +686,6 @@ static bool expand_macro(Token **rest, Token *tok) {
   // Built-in dynamic macro application such as __LINE__
   if (m->handler) {
     *rest = m->handler(tok);
-    (*rest)->next = tok->next;
     align_token(*rest, tok);
     return true;
   }
@@ -1030,41 +1029,55 @@ static Macro *add_builtin(char *name, macro_handler_fn *fn) {
   return m;
 }
 
-static Token *file_macro(Token *tmpl) {
-  while (tmpl->origin)
-    tmpl = tmpl->origin;
-  return new_str_token(tmpl->file->display_file->name, tmpl);
+static Token *file_macro(Token *start) {
+  Token *tok = start;
+  while (tok->origin)
+    tok = tok->origin;
+  tok = new_str_token(tok->file->display_file->name, tok);
+  tok->next = start->next;
+  return tok;
 }
 
-static Token *line_macro(Token *tmpl) {
-  while (tmpl->origin)
-    tmpl = tmpl->origin;
-  int i = tmpl->line_no + tmpl->file->line_delta;
-  return new_num_token(i, tmpl);
+static Token *line_macro(Token *start) {
+  Token *tok = start;
+  while (tok->origin)
+    tok = tok->origin;
+  int i = tok->line_no + tok->file->line_delta;
+  tok = new_num_token(i, tok);
+  tok->next = start->next;
+  return tok;
 }
 
 // __COUNTER__ is expanded to serial values starting from 0.
-static Token *counter_macro(Token *tmpl) {
+static Token *counter_macro(Token *start) {
   static int i = 0;
-  return new_num_token(i++, tmpl);
+  Token *tok = new_num_token(i++, start);
+  tok->next = start->next;
+  return tok;
 }
 
 // __TIMESTAMP__ is expanded to a string describing the last
 // modification time of the current file. E.g.
 // "Fri Jul 24 01:32:50 2020"
-static Token *timestamp_macro(Token *tmpl) {
+static Token *timestamp_macro(Token *start) {
+  Token *tok;
   struct stat st;
-  if (stat(tmpl->file->name, &st) != 0)
-    return new_str_token("??? ??? ?? ??:??:?? ????", tmpl);
-
-  char buf[30];
-  ctime_r(&st.st_mtime, buf);
-  buf[24] = '\0';
-  return new_str_token(buf, tmpl);
+  if (stat(start->file->name, &st) != 0) {
+    tok = new_str_token("??? ??? ?? ??:??:?? ????", start);
+  } else {
+    char buf[30];
+    ctime_r(&st.st_mtime, buf);
+    buf[24] = '\0';
+    tok = new_str_token(buf, start);
+  }
+  tok->next = start->next;
+  return tok;
 }
 
-static Token *base_file_macro(Token *tmpl) {
-  return new_str_token(base_file, tmpl);
+static Token *base_file_macro(Token *start) {
+  Token *tok = new_str_token(base_file, start);
+  tok->next = start->next;
+  return tok;
 }
 
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
