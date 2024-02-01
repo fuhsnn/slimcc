@@ -1557,18 +1557,14 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
-static int get_lvar_align(Scope *scp, int align) {
+static void calc_stack_align(Scope *scp, int *align) {
   for (Obj *var = scp->locals; var; var = var->next) {
-      if (var->ofs)
+    if (var->ofs)
       continue;
-    align = MAX(align, var->align);
+    *align = MAX(*align, var->align);
   }
-
-  for (Scope *sub = scp->children; sub; sub = sub->sibling_next) {
-    int sub_max = get_lvar_align(sub, align);
-    align = MAX(align, sub_max);
-  }
-  return align;
+  for (Scope *sub = scp->children; sub; sub = sub->sibling_next)
+    calc_stack_align(sub, align);
 }
 
 static int assign_lvar_offsets2(Scope *sc, int bottom, char *ptr) {
@@ -1592,10 +1588,10 @@ static int assign_lvar_offsets2(Scope *sc, int bottom, char *ptr) {
   int max_depth = bottom;
   for (Scope *sub = sc->children; sub; sub = sub->sibling_next) {
     int sub_depth= assign_lvar_offsets2(sub, bottom, ptr);
-    if (!dont_reuse_stack)
-      max_depth = MAX(max_depth, sub_depth);
-    else
+    if (dont_reuse_stack)
       bottom = max_depth = sub_depth;
+    else
+      max_depth = MAX(max_depth, sub_depth);
   }
   return max_depth;
 }
@@ -1627,7 +1623,9 @@ static void assign_lvar_offsets(Obj *prog) {
       var->ptr = "%rbp";
     }
 
-    fn->stack_align = get_lvar_align(fn->ty->scopes, 16);
+    int st_align = 16;
+    calc_stack_align(fn->ty->scopes, &st_align);
+    fn->stack_align = st_align;
 
     char *lvar_ptr = (fn->stack_align > 16) ? "%rbx" : "%rbp";
     fn->lvar_stack_size = assign_lvar_offsets2(fn->ty->scopes, 0, lvar_ptr);
