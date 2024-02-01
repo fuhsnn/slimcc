@@ -2248,6 +2248,7 @@ static long double eval_double(Node *node) {
   case ND_COND:
     return eval_double(node->cond) ? eval_double(node->then) : eval_double(node->els);
   case ND_COMMA:
+    eval_double(node->lhs);
     return eval_double(node->rhs);
   case ND_CAST:
     if (is_flonum(node->lhs->ty)) {
