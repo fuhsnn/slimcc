@@ -387,9 +387,13 @@ static void parse_args(int argc, char **argv) {
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
         !strcmp(argv[i], "-fno-lto") ||
+        !strcmp(argv[i], "-fno-asynchronous-unwind-tables") ||
+        !strcmp(argv[i], "-fno-delete-null-pointer-checks") ||
         !strcmp(argv[i], "-fno-omit-frame-pointer") ||
         !strcmp(argv[i], "-fno-stack-protector") ||
         !strcmp(argv[i], "-fno-strict-aliasing") ||
+        !strcmp(argv[i], "-fno-strict-overflow") ||
+        !strcmp(argv[i], "-fwrapv") ||
         !strcmp(argv[i], "-m64") ||
         !strcmp(argv[i], "-mno-red-zone") ||
         !strcmp(argv[i], "-pedantic") ||
