@@ -98,6 +98,7 @@ static Token *new_eof(Token *tok) {
   Token *t = copy_token(tok);
   t->kind = TK_EOF;
   t->len = 0;
+  t->at_bol = true;
   return t;
 }
 
@@ -208,6 +209,27 @@ static Token *split_line(Token **rest, Token *tok) {
     cur = cur->next;
 
   *rest = cur->next;
+  cur->next = new_eof(tok);
+  return head.next;
+}
+
+static Token *split_paren(Token **rest, Token *tok) {
+  Token *start = tok;
+  Token head = {0};
+  Token *cur = &head;
+
+  int level = 0;
+  while (!(level == 0 && consume(rest, tok, ")"))) {
+    if (equal(tok, "("))
+      level++;
+    else if (equal(tok, ")"))
+      level--;
+    else if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated list");
+
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
   cur->next = new_eof(tok);
   return head.next;
 }
@@ -748,7 +770,13 @@ static char *search_include_next(char *filename) {
 }
 
 // Read an #include argument.
-static char *read_include_filename(Token **rest, Token *tok, bool *is_dquote) {
+static char *read_include_filename(Token *tok, bool *is_dquote) {
+  // Pattern 3: #include FOO
+  // In this case FOO must be macro-expanded to either
+  // a single string token or a sequence of "<" ... ">".
+  if (tok->kind == TK_IDENT)
+    tok = preprocess2(tok);
+
   // Pattern 1: #include "foo.h"
   if (tok->kind == TK_STR) {
     // A double-quoted filename for #include is a special kind of
@@ -757,7 +785,7 @@ static char *read_include_filename(Token **rest, Token *tok, bool *is_dquote) {
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
     *is_dquote = true;
-    *rest = skip_line(tok->next);
+    skip_line(tok->next);
     return strndup(tok->loc + 1, tok->len - 2);
   }
 
@@ -769,20 +797,12 @@ static char *read_include_filename(Token **rest, Token *tok, bool *is_dquote) {
 
     // Find closing ">".
     for (; !equal(tok, ">"); tok = tok->next)
-      if (tok->at_bol || tok->kind == TK_EOF)
+      if (tok->kind == TK_EOF)
         error_tok(tok, "expected '>'");
 
     *is_dquote = false;
-    *rest = skip_line(tok->next);
+    skip_line(tok->next);
     return join_tokens(start->next, tok);
-  }
-
-  // Pattern 3: #include FOO
-  // In this case FOO must be macro-expanded to either
-  // a single string token or a sequence of "<" ... ">".
-  if (tok->kind == TK_IDENT) {
-    Token *tok2 = preprocess2(copy_line(rest, tok));
-    return read_include_filename(&tok2, tok2, is_dquote);
   }
 
   error_tok(tok, "expected a filename");
@@ -866,8 +886,7 @@ static Token *preprocess2(Token *tok) {
 
     if (equal(tok, "include")) {
       bool is_dquote;
-      char *filename = read_include_filename(&tok, tok->next, &is_dquote);
-
+      char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
       if (filename[0] != '/' && is_dquote) {
         char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
         if (file_exists(path)) {
@@ -883,7 +902,7 @@ static Token *preprocess2(Token *tok) {
 
     if (equal(tok, "include_next")) {
       bool ignore;
-      char *filename = read_include_filename(&tok, tok->next, &ignore);
+      char *filename = read_include_filename(split_line(&tok, tok->next), &ignore);
       char *path = search_include_next(filename);
       tok = include_file(tok, path ? path : filename, start->next->next);
       continue;
@@ -1080,6 +1099,25 @@ static Token *base_file_macro(Token *start) {
   return tok;
 }
 
+static Token *has_include_macro(Token *start) {
+  Token *tok = skip(start->next, "(");
+
+  bool is_dquote;
+  char *filename = read_include_filename(split_paren(&tok, tok), &is_dquote);
+
+  bool found = false;
+  if (filename[0] != '/' && is_dquote) {
+    char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
+    found = file_exists(path);
+  }
+  if (!found)
+    found = search_include_paths(filename);
+
+  Token *tok2 = new_num_token(found, start);
+  tok2->next = tok;
+  return tok2;
+}
+
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
 static char *format_date(struct tm *tm) {
   static char mon[][4] = {
@@ -1153,6 +1191,8 @@ void init_macros(void) {
   add_builtin("__COUNTER__", counter_macro);
   add_builtin("__TIMESTAMP__", timestamp_macro);
   add_builtin("__BASE_FILE__", base_file_macro);
+
+  add_builtin("__has_include", has_include_macro);
 
   time_t now = time(NULL);
   struct tm *tm = localtime(&now);
