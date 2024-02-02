@@ -128,7 +128,7 @@ Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end);
 File *add_input_file(char *path, char *content);
 
-#define unreachable() \
+#define internal_error() \
   error("internal error at %s:%d", __FILE__, __LINE__)
 
 //

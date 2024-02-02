@@ -176,7 +176,7 @@ int int_rank(Type *t) {
     case TY_LONGLONG:
       return 3;
   }
-  unreachable();
+  internal_error();
 }
 
 static bool is_nullptr(Node *node) {
@@ -276,7 +276,7 @@ static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
     case TY_LONGLONG:
       return ty_ullong;
   }
-  unreachable();
+  internal_error();
 }
 
 // For many binary operators, we implicitly promote operands so that

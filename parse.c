@@ -131,13 +131,13 @@ static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
 static Node *assign(Token **rest, Token *tok);
-static Node *logor(Token **rest, Token *tok);
+static Node *log_or(Token **rest, Token *tok);
 static long double eval_double(Node *node);
 static Node *conditional(Token **rest, Token *tok);
-static Node *logand(Token **rest, Token *tok);
-static Node *bitor(Token **rest, Token *tok);
-static Node *bitxor(Token **rest, Token *tok);
-static Node *bitand(Token **rest, Token *tok);
+static Node *log_and(Token **rest, Token *tok);
+static Node *bit_or(Token **rest, Token *tok);
+static Node *bit_xor(Token **rest, Token *tok);
+static Node *bit_and(Token **rest, Token *tok);
 static Node *equality(Token **rest, Token *tok);
 static Node *relational(Token **rest, Token *tok);
 static Node *shift(Token **rest, Token *tok);
@@ -527,7 +527,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     else if (equal(tok, "unsigned"))
       counter |= UNSIGNED;
     else
-      unreachable();
+      internal_error();
 
     switch (counter) {
     case VOID:
@@ -1011,7 +1011,7 @@ static void string_initializer(Token *tok, Initializer *init) {
     break;
   }
   default:
-    unreachable();
+    internal_error();
   }
 }
 
@@ -1471,7 +1471,7 @@ static uint64_t read_buf(char *buf, int sz) {
     return *(uint32_t *)buf;
   if (sz == 8)
     return *(uint64_t *)buf;
-  unreachable();
+  internal_error();
 }
 
 static void write_buf(char *buf, uint64_t val, int sz) {
@@ -1484,7 +1484,7 @@ static void write_buf(char *buf, uint64_t val, int sz) {
   else if (sz == 8)
     *(uint64_t *)buf = val;
   else
-    unreachable();
+    internal_error();
 }
 
 static long double read_double_buf(char *buf, Type *ty){
@@ -1494,7 +1494,7 @@ static long double read_double_buf(char *buf, Type *ty){
     return *(double *)buf;
   if (ty->kind == TY_LDOUBLE)
     return *(long double *)buf;
-  unreachable();
+  internal_error();
 }
 
 static Relocation *
@@ -2438,7 +2438,7 @@ static Node *assign(Token **rest, Token *tok) {
 
 // conditional = logor ("?" expr? ":" conditional)?
 static Node *conditional(Token **rest, Token *tok) {
-  Node *cond = logor(&tok, tok);
+  Node *cond = log_or(&tok, tok);
 
   if (!equal(tok, "?")) {
     *rest = tok;
@@ -2466,51 +2466,51 @@ static Node *conditional(Token **rest, Token *tok) {
 }
 
 // logor = logand ("||" logand)*
-static Node *logor(Token **rest, Token *tok) {
-  Node *node = logand(&tok, tok);
+static Node *log_or(Token **rest, Token *tok) {
+  Node *node = log_and(&tok, tok);
   while (equal(tok, "||")) {
     Token *start = tok;
-    node = new_binary(ND_LOGOR, node, logand(&tok, tok->next), start);
+    node = new_binary(ND_LOGOR, node, log_and(&tok, tok->next), start);
   }
   *rest = tok;
   return node;
 }
 
 // logand = bitor ("&&" bitor)*
-static Node *logand(Token **rest, Token *tok) {
-  Node *node = bitor(&tok, tok);
+static Node *log_and(Token **rest, Token *tok) {
+  Node *node = bit_or(&tok, tok);
   while (equal(tok, "&&")) {
     Token *start = tok;
-    node = new_binary(ND_LOGAND, node, bitor(&tok, tok->next), start);
+    node = new_binary(ND_LOGAND, node, bit_or(&tok, tok->next), start);
   }
   *rest = tok;
   return node;
 }
 
 // bitor = bitxor ("|" bitxor)*
-static Node *bitor(Token **rest, Token *tok) {
-  Node *node = bitxor(&tok, tok);
+static Node *bit_or(Token **rest, Token *tok) {
+  Node *node = bit_xor(&tok, tok);
   while (equal(tok, "|")) {
     Token *start = tok;
-    node = new_binary(ND_BITOR, node, bitxor(&tok, tok->next), start);
+    node = new_binary(ND_BITOR, node, bit_xor(&tok, tok->next), start);
   }
   *rest = tok;
   return node;
 }
 
 // bitxor = bitand ("^" bitand)*
-static Node *bitxor(Token **rest, Token *tok) {
-  Node *node = bitand(&tok, tok);
+static Node *bit_xor(Token **rest, Token *tok) {
+  Node *node = bit_and(&tok, tok);
   while (equal(tok, "^")) {
     Token *start = tok;
-    node = new_binary(ND_BITXOR, node, bitand(&tok, tok->next), start);
+    node = new_binary(ND_BITXOR, node, bit_and(&tok, tok->next), start);
   }
   *rest = tok;
   return node;
 }
 
 // bitand = equality ("&" equality)*
-static Node *bitand(Token **rest, Token *tok) {
+static Node *bit_and(Token **rest, Token *tok) {
   Node *node = equality(&tok, tok);
   while (equal(tok, "&")) {
     Token *start = tok;

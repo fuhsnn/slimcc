@@ -188,7 +188,7 @@ static void load_extend_int(Type *ty, int ofs, char *ptr, char *reg) {
   case 4: println("  movl %d(%s), %s", ofs, ptr, reg); return;
   case 8: println("  mov %d(%s), %s", ofs, ptr, reg); return;
   }
-  unreachable();
+  internal_error();
 }
 
 // Round up `n` to the nearest multiple of `align`. For instance,
@@ -204,7 +204,7 @@ static char *reg_dx(int sz) {
   case 4: return "%edx";
   case 8: return "%rdx";
   }
-  unreachable();
+  internal_error();
 }
 
 static char *reg_ax(int sz) {
@@ -214,7 +214,7 @@ static char *reg_ax(int sz) {
   case 4: return "%eax";
   case 8: return "%rax";
   }
-  unreachable();
+  internal_error();
 }
 
 static char *regop_ax(Type *ty) {
@@ -224,7 +224,7 @@ static char *regop_ax(Type *ty) {
   case 4: return "%eax";
   case 8: return "%rax";
   }
-  unreachable();
+  internal_error();
 }
 
 // Compute the absolute address of a given node.
@@ -1706,7 +1706,7 @@ static void store_fp(int r, int sz, int ofs, char *ptr) {
     println("  movsd %%xmm%d, %d(%s)", r, ofs, ptr);
     return;
   }
-  unreachable();
+  internal_error();
 }
 
 static void store_gp(int r, int sz, int ofs, char *ptr) {

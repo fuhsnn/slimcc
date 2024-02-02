@@ -1214,7 +1214,7 @@ static StringKind getStringKind(Token *tok) {
   case 'U': return STR_UTF32;
   case 'L': return STR_WIDE;
   }
-  unreachable();
+  internal_error();
 }
 
 // Concatenate adjacent string literals into a single string literal
