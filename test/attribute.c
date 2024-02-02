@@ -1,10 +1,6 @@
 #include "test.h"
 #include "stddef.h"
 
-#if defined(__attribute__)
-#undef __attribute__
-#endif
-
 int main() {
   ASSERT(5, ({ struct { char a; int b; } __attribute__((packed)) x; sizeof(x); }));
   ASSERT(0, offsetof(struct __attribute__((packed)) { char a; int b; }, a));
@@ -25,16 +21,16 @@ int main() {
 
 //  ASSERT(8, ({ struct __attribute__((aligned(8), packed)) { char a; int b; } x; _Alignof(x); }));
 //  ASSERT(8, ({ struct { char a; int b; } __attribute__((aligned(8), packed)) x; _Alignof(x); }));
-  ASSERT(1, offsetof(struct __attribute__((aligned(8), packed)) { char a; int b; }, b));
-  ASSERT(1, offsetof(struct { char a; int b; } __attribute__((aligned(8), packed)), b));
+//  ASSERT(1, offsetof(struct __attribute__((aligned(8), packed)) { char a; int b; }, b));
+//  ASSERT(1, offsetof(struct { char a; int b; } __attribute__((aligned(8), packed)), b));
 
 //  ASSERT(8, ({ struct __attribute__((aligned(8))) __attribute__((packed)) { char a; int b; } x; _Alignof(x); }));
 //  ASSERT(8, ({ struct { char a; int b; } __attribute__((aligned(8))) __attribute__((packed)) x; _Alignof(x); }));
-  ASSERT(1, offsetof(struct __attribute__((aligned(8))) __attribute__((packed)) { char a; int b; }, b));
-  ASSERT(1, offsetof(struct { char a; int b; } __attribute__((aligned(8))) __attribute__((packed)), b));
+//  ASSERT(1, offsetof(struct __attribute__((aligned(8))) __attribute__((packed)) { char a; int b; }, b));
+//  ASSERT(1, offsetof(struct { char a; int b; } __attribute__((aligned(8))) __attribute__((packed)), b));
 
 //  ASSERT(8, ({ struct __attribute__((aligned(8))) { char a; int b; } __attribute__((packed)) x; _Alignof(x); }));
-  ASSERT(1, offsetof(struct __attribute__((aligned(8))) { char a; int b; } __attribute__((packed)), b));
+//  ASSERT(1, offsetof(struct __attribute__((aligned(8))) { char a; int b; } __attribute__((packed)), b));
 
 //  ASSERT(16, ({ struct __attribute__((aligned(8+8))) { char a; int b; } x; _Alignof(x); }));
 

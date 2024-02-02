@@ -705,6 +705,12 @@ static bool expand_macro(Token **rest, Token *tok) {
     return false;
   }
 
+  if (equal(tok, "__attribute__") && !m->is_objlike && m->body->kind == TK_EOF) {
+    tok->is_hidden_attr = true;
+    push_macro_lock(m, skip_paren(skip(tok->next, "(")));
+    return;
+  }
+
   // Built-in dynamic macro application such as __LINE__
   if (m->handler) {
     *rest = m->handler(tok);
@@ -1282,11 +1288,63 @@ static void join_adjacent_string_literals(Token *tok) {
   }
 }
 
+static void filter_attr(Token *tok, Token *attr, bool is_hidden) {
+  bool first = true;
+  for (; tok->kind != TK_EOF; first = false) {
+    if (!first)
+      tok = skip(tok, ",");
+
+    if (tok->kind != TK_IDENT)
+      error_tok(tok, "expected attribute name");
+
+    tok->kind = TK_ATTR;
+
+    if (equal(tok, "packed") || equal(tok, "__packed__")) {
+      attr = attr->attr_next = tok;
+      tok = tok->next;
+      continue;
+    }
+
+    if (consume(&tok, tok->next, "(")) {
+      tok = skip_paren(tok);
+      continue;
+    }
+    tok = tok->next;
+    continue;
+  }
+}
+
+static Token *preprocess3(Token *tok) {
+  Token head = {0};
+  Token *cur = &head;
+
+  while (tok->kind != TK_EOF) {
+    if (equal(tok, "__attribute__")) {
+      bool is_hidden = tok->is_hidden_attr;
+
+      tok = skip(tok->next, "(");
+      tok = skip(tok, "(");
+      Token *list = split_paren(&tok, tok);
+      tok = skip(tok, ")");
+
+      filter_attr(list, tok, is_hidden);
+      continue;
+    }
+    cur = cur->next = tok;
+    tok = tok->next;
+    continue;
+  }
+  cur->next = tok;
+  return head.next;
+}
+
 // Entry point function of the preprocessor.
 Token *preprocess(Token *tok) {
   tok = preprocess2(tok);
   if (cond_incl)
     error_tok(cond_incl->tok, "unterminated conditional directive");
+
+  tok = preprocess3(tok);
   convert_pp_tokens(tok);
   join_adjacent_string_literals(tok);
 

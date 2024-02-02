@@ -75,6 +75,7 @@ typedef enum {
   TK_NUM,     // Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
   TK_PMARK,   // Placermarkers
+  TK_ATTR,    // GNU attribute
   TK_EOF,     // End-of-file markers
 } TokenKind;
 
@@ -108,8 +109,10 @@ struct Token {
   bool at_bol;      // True if this token is at beginning of line
   bool has_space;   // True if this token follows a space character
   bool dont_expand; // True if a macro token is encountered during the macro's expansion
+  bool is_hidden_attr;
   Token *origin;    // If this is expanded from a macro, the original token
   char *guard_file; // The path of a potentially include-guarded file
+  Token *attr_next;
 };
 
 void error(char *fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
@@ -127,6 +130,7 @@ Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end);
 File *add_input_file(char *path, char *content);
+void convert_pp_number(Token *tok);
 
 #define internal_error() \
   error("internal error at %s:%d", __FILE__, __LINE__)
@@ -341,7 +345,7 @@ struct Scope {
 Node *new_cast(Node *expr, Type *ty);
 int64_t const_expr(Token **rest, Token *tok);
 Obj *parse(Token *tok);
-
+Token *skip_paren(Token *tok);
 //
 // type.c
 //

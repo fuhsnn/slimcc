@@ -446,7 +446,7 @@ static bool convert_pp_int(Token *tok) {
 // token after preprocessing.
 //
 // This function converts a pp-number token to a regular number token.
-static void convert_pp_number(Token *tok) {
+void convert_pp_number(Token *tok) {
   // Try to parse as an integer constant.
   if (convert_pp_int(tok))
     return;

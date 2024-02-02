@@ -719,7 +719,7 @@ static Type *pointers(Token **rest, Token *tok, Type *ty) {
   return ty;
 }
 
-static Token *skip_paren(Token *tok) {
+Token *skip_paren(Token *tok) {
   int level = 0;
   Token *start = tok;
   for (;;) {
@@ -2846,38 +2846,19 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   ty->members = head.next;
 }
 
-// attribute = ("__attribute__" "(" "(" "packed" ")" ")")*
-static Token *attribute_list(Token *tok, Type *ty) {
-  while (consume(&tok, tok, "__attribute__")) {
-    tok = skip(tok, "(");
-    tok = skip(tok, "(");
-
-    bool first = true;
-    for (; comma_list(&tok, &tok, ")", !first); first = false) {
-      if (consume(&tok, tok, "packed")) {
-        ty->is_packed = true;
-        continue;
-      }
-
-      if (consume(&tok, tok, "aligned")) {
-        tok = skip(tok, "(");
-        ty->align = const_expr(&tok, tok);
-        tok = skip(tok, ")");
-        continue;
-      }
-
-      error_tok(tok, "unknown attribute");
+static void attribute_packed(Token *tok, Type *ty) {
+  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
+    if (equal(lst, "packed") || equal(lst, "__packed__")) {
+      ty->is_packed = true;
+      continue;
     }
-
-    tok = skip(tok, ")");
   }
-  return tok;
 }
 
 // struct-union-decl = attribute? ident? ("{" struct-members)?
 static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
   Type *ty = struct_type();
-  tok = attribute_list(tok, ty);
+  attribute_packed(tok, ty);
 
   // Read a tag.
   Token *tag = NULL;
@@ -2903,7 +2884,8 @@ static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
 
   // Construct a struct object.
   struct_members(&tok, tok, ty);
-  *rest = attribute_list(tok, ty);
+  attribute_packed(tok, ty);
+  *rest = tok;
 
   if (tag) {
     // If this is a redefinition, overwrite a previous type.
@@ -3491,6 +3473,9 @@ static Node *primary(Token **rest, Token *tok) {
     add_type(n);
     return n;
   }
+
+  if (tok->kind == TK_PP_NUM)
+    convert_pp_number(tok);
 
   if (tok->kind == TK_NUM) {
     Node *node;
