@@ -131,6 +131,11 @@ static void pop_macro_lock(Token *tok) {
   }
 }
 
+static void pop_macro_lock_until(Token *tok, Token *end) {
+  for (; tok != end; tok = tok->next)
+    pop_macro_lock(tok);
+}
+
 static Token *skip_cond_incl2(Token *tok) {
   while (tok->kind != TK_EOF) {
     if (is_hash(tok) &&
@@ -501,7 +506,10 @@ static Token *expand_arg(MacroArg *arg) {
     cur = cur->next = copy_token(tok);
     tok = tok->next;
   }
-  assert(start_m == locked_macros);
+
+  if (start_m != locked_macros) {
+    internal_error();
+  }
   cur->next = new_eof(tok);
   return arg->expanded = head.next;
 }
@@ -1064,8 +1072,9 @@ static Token *preprocess2(Token *tok) {
     error_tok(tok, "invalid preprocessor directive");
   }
 
-  assert(start_m == locked_macros);
-
+  if (start_m != locked_macros) {
+    internal_error();
+  }
   cur->next = tok;
   return head.next;
 }
@@ -1150,6 +1159,7 @@ static Token *has_include_macro(Token *start) {
   if (!found)
     found = search_include_paths(filename);
 
+  pop_macro_lock_until(start, tok);
   Token *tok2 = new_num_token(found, start);
   tok2->next = tok;
   return tok2;
@@ -1159,8 +1169,9 @@ static Token *has_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
   long val = is_supported_attr(NULL, tok);
-  tok = skip(tok->next, ")");
 
+  tok = skip(tok->next, ")");
+  pop_macro_lock_until(start, tok);
   Token *tok2 = new_num_token(val, start);
   tok2->next = tok;
   return tok2;
@@ -1168,14 +1179,16 @@ static Token *has_attribute_macro(Token *start) {
 
 static Token *has_c_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
+
   Token *vendor = NULL;
   if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
     vendor = tok;
     tok = skip(tok->next->next, ":");
   }
   long val = is_supported_attr(&vendor, tok);
-  tok = skip(tok->next, ")");
 
+  tok = skip(tok->next, ")");
+  pop_macro_lock_until(start, tok);
   Token *tok2 = new_num_token(val, start);
   tok2->next = tok;
   return tok2;
@@ -1192,12 +1205,11 @@ static Token *has_builtin_macro(Token *start) {
     equal(tok, "__builtin_va_arg");
 
   tok = skip(tok->next, ")");
-
+  pop_macro_lock_until(start, tok);
   Token *tok2 = new_num_token(has_it, start);
   tok2->next = tok;
   return tok2;
 }
-
 
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
 static char *format_date(struct tm *tm) {

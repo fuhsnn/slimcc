@@ -14,9 +14,11 @@
 #error
 #endif
 
+#define CAT(x,y) x##y
 
 int has_attr(void) {
   DASSERT(__has_attribute(packed) == 1);
+  DASSERT( CAT(__has,_attribute)(packed) == 1);
   DASSERT(__has_c_attribute(gnu::packed) == 1);
   DASSERT(__has_c_attribute(gnu::__packed__) == 1);
   DASSERT(__has_c_attribute(clang::packed) == 0);
