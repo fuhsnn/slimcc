@@ -55,7 +55,7 @@ static void println(char *fmt, ...) {
 
 static long resrvln(void) {
   long loc = ftell(output_file);
-  println("                           \n");
+  fprintf(output_file, "                           \n");
   return loc;
 }
 
