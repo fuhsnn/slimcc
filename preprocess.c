@@ -102,6 +102,13 @@ static Token *new_eof(Token *tok) {
   return t;
 }
 
+static Token *to_eof(Token *tok) {
+  tok->kind = TK_EOF;
+  tok->len = 0;
+  tok->at_bol = true;
+  return tok;
+}
+
 static Token *new_pmark(Token *tok){
   Token *t = copy_token(tok);
   t->kind = TK_PMARK;
@@ -219,7 +226,7 @@ static Token *split_paren(Token **rest, Token *tok) {
   Token *cur = &head;
 
   int level = 0;
-  while (!(level == 0 && consume(rest, tok, ")"))) {
+  while (!(level == 0 && equal(tok, ")"))) {
     if (equal(tok, "("))
       level++;
     else if (equal(tok, ")"))
@@ -230,7 +237,30 @@ static Token *split_paren(Token **rest, Token *tok) {
     cur = cur->next = tok;
     tok = tok->next;
   }
-  cur->next = new_eof(tok);
+  *rest = tok->next;
+  cur->next = to_eof(tok);
+  return head.next;
+}
+
+static Token *split_bracket(Token **rest, Token *tok) {
+  Token *start = tok;
+  Token head = {0};
+  Token *cur = &head;
+
+  int level = 0;
+  while (!(level == 0 && equal(tok, "]"))) {
+    if (equal(tok, "["))
+      level++;
+    else if (equal(tok, "]"))
+      level--;
+    else if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated list");
+
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
+  *rest = tok->next;
+  cur->next = to_eof(tok);
   return head.next;
 }
 
@@ -1288,18 +1318,25 @@ static void join_adjacent_string_literals(Token *tok) {
   }
 }
 
-static void filter_attr(Token *tok, Token *attr, bool is_hidden) {
+static void filter_attr(Token *tok, Token *attr, bool is_hidden, bool is_bracket) {
   bool first = true;
   for (; tok->kind != TK_EOF; first = false) {
     if (!first)
       tok = skip(tok, ",");
 
+    Token *vendor = NULL;
+    if (is_bracket && tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      vendor = tok;
+      tok = skip(tok->next->next, ":");
+    }
+
     if (tok->kind != TK_IDENT)
       error_tok(tok, "expected attribute name");
 
-    tok->kind = TK_ATTR;
+    tok->kind = is_bracket ? TK_BATTR : TK_ATTR;
 
-    if (equal(tok, "packed") || equal(tok, "__packed__")) {
+    if ((equal(tok, "packed") || equal(tok, "__packed__")) &&
+      (!is_bracket || (vendor && equal(vendor, "gnu")))) {
       attr = attr->attr_next = tok;
       tok = tok->next;
       continue;
@@ -1327,9 +1364,18 @@ static Token *preprocess3(Token *tok) {
       Token *list = split_paren(&tok, tok);
       tok = skip(tok, ")");
 
-      filter_attr(list, tok, is_hidden);
+      filter_attr(list, tok, is_hidden, false);
       continue;
     }
+
+    if (equal(tok, "[") && consume(&tok, tok->next, "[")) {
+      Token *list = split_bracket(&tok, tok);
+      tok = skip(tok, "]");
+
+      filter_attr(list, tok, false, true);
+      continue;
+    }
+
     cur = cur->next = tok;
     tok = tok->next;
     continue;

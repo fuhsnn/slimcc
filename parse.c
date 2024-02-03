@@ -2846,9 +2846,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   ty->members = head.next;
 }
 
-static void attribute_packed(Token *tok, Type *ty) {
+static void attribute_packed(Token *tok, Type *ty, bool no_battr) {
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
     if (equal(lst, "packed") || equal(lst, "__packed__")) {
+      if (no_battr && lst->kind == TK_BATTR)
+        continue;
       ty->is_packed = true;
       continue;
     }
@@ -2858,7 +2860,7 @@ static void attribute_packed(Token *tok, Type *ty) {
 // struct-union-decl = attribute? ident? ("{" struct-members)?
 static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
   Type *ty = struct_type();
-  attribute_packed(tok, ty);
+  attribute_packed(tok, ty, false);
 
   // Read a tag.
   Token *tag = NULL;
@@ -2884,7 +2886,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
 
   // Construct a struct object.
   struct_members(&tok, tok, ty);
-  attribute_packed(tok, ty);
+  attribute_packed(tok, ty, true);
   *rest = tok;
 
   if (tag) {
