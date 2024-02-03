@@ -71,6 +71,7 @@ static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
 static Token *subst(Token *tok, MacroArg *args);
+static long is_supported_attr(Token **vendor, Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -1154,6 +1155,32 @@ static Token *has_include_macro(Token *start) {
   return tok2;
 }
 
+static Token *has_attribute_macro(Token *start) {
+  Token *tok = skip(start->next, "(");
+
+  long val = is_supported_attr(NULL, tok);
+  tok = skip(tok->next, ")");
+
+  Token *tok2 = new_num_token(val, start);
+  tok2->next = tok;
+  return tok2;
+}
+
+static Token *has_c_attribute_macro(Token *start) {
+  Token *tok = skip(start->next, "(");
+  Token *vendor = NULL;
+  if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+    vendor = tok;
+    tok = skip(tok->next->next, ":");
+  }
+  long val = is_supported_attr(&vendor, tok);
+  tok = skip(tok->next, ")");
+
+  Token *tok2 = new_num_token(val, start);
+  tok2->next = tok;
+  return tok2;
+}
+
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
 static char *format_date(struct tm *tm) {
   static char mon[][4] = {
@@ -1228,6 +1255,8 @@ void init_macros(void) {
   add_builtin("__TIMESTAMP__", timestamp_macro);
   add_builtin("__BASE_FILE__", base_file_macro);
 
+  add_builtin("__has_attribute", has_attribute_macro);
+  add_builtin("__has_c_attribute", has_c_attribute_macro);
   add_builtin("__has_include", has_include_macro);
 
   time_t now = time(NULL);
@@ -1318,30 +1347,41 @@ static void join_adjacent_string_literals(Token *tok) {
   }
 }
 
-static void filter_attr(Token *tok, Token *attr, bool is_hidden, bool is_bracket) {
+static long is_supported_attr(Token **vendor, Token *tok) {
+  if (tok->kind != TK_IDENT)
+    error_tok(tok, "expected attribute name");
+
+  bool vendor_gnu = vendor && *vendor && equal(*vendor, "gnu");
+
+  if ((equal(tok, "packed") || equal(tok, "__packed__")) &&
+    (!vendor || vendor_gnu)) {
+    return 1;
+  }
+  return 0;
+}
+
+static void filter_attr(Token *tok, Token *lst, bool is_hidden, bool is_bracket) {
   bool first = true;
   for (; tok->kind != TK_EOF; first = false) {
     if (!first)
       tok = skip(tok, ",");
 
-    Token *vendor = NULL;
-    if (is_bracket && tok->kind == TK_IDENT && equal(tok->next, ":")) {
-      vendor = tok;
-      tok = skip(tok->next->next, ":");
+    if (is_bracket) {
+      Token *vendor = NULL;
+      if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+        vendor = tok;
+        tok = skip(tok->next->next, ":");
+      }
+      if (is_supported_attr(&vendor, tok)) {
+        tok->kind = TK_BATTR;
+        lst = lst->attr_next = tok;
+      }
+    } else {
+      if (is_supported_attr(NULL, tok)) {
+        tok->kind = TK_ATTR;
+        lst = lst->attr_next = tok;
+      }
     }
-
-    if (tok->kind != TK_IDENT)
-      error_tok(tok, "expected attribute name");
-
-    tok->kind = is_bracket ? TK_BATTR : TK_ATTR;
-
-    if ((equal(tok, "packed") || equal(tok, "__packed__")) &&
-      (!is_bracket || (vendor && equal(vendor, "gnu")))) {
-      attr = attr->attr_next = tok;
-      tok = tok->next;
-      continue;
-    }
-
     if (consume(&tok, tok->next, "(")) {
       tok = skip_paren(tok);
       continue;
