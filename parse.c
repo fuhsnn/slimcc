@@ -3255,7 +3255,6 @@ static Node *generic_selection(Token **rest, Token *tok) {
 //         | "_Alignof" unary
 //         | "_Generic" generic-selection
 //         | "__builtin_types_compatible_p" "(" type-name, type-name, ")"
-//         | "__builtin_reg_class" "(" type-name ")"
 //         | ident
 //         | str
 //         | num

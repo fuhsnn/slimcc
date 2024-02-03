@@ -1181,6 +1181,24 @@ static Token *has_c_attribute_macro(Token *start) {
   return tok2;
 }
 
+static Token *has_builtin_macro(Token *start) {
+  Token *tok = skip(start->next, "(");
+
+  bool has_it = equal(tok, "__builtin_offsetof") ||
+    equal(tok, "__builtin_types_compatible_p") ||
+    equal(tok, "__builtin_va_start") ||
+    equal(tok, "__builtin_va_copy") ||
+    equal(tok, "__builtin_va_end") ||
+    equal(tok, "__builtin_va_arg");
+
+  tok = skip(tok->next, ")");
+
+  Token *tok2 = new_num_token(has_it, start);
+  tok2->next = tok;
+  return tok2;
+}
+
+
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
 static char *format_date(struct tm *tm) {
   static char mon[][4] = {
@@ -1257,6 +1275,7 @@ void init_macros(void) {
 
   add_builtin("__has_attribute", has_attribute_macro);
   add_builtin("__has_c_attribute", has_c_attribute_macro);
+  add_builtin("__has_builtin", has_builtin_macro);
   add_builtin("__has_include", has_include_macro);
 
   time_t now = time(NULL);
