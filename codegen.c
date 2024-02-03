@@ -44,7 +44,7 @@ struct {
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 
-__attribute__((format(printf, 1, 2)))
+FMTCHK(1,2)
 static void println(char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -59,7 +59,7 @@ static long resrvln(void) {
   return loc;
 }
 
-__attribute__((format(printf, 1, 3)))
+FMTCHK(1,3)
 static void insrtln(char *fmt, long loc, ...) {
   long cur_loc = ftell(output_file);
   fseek(output_file, loc, SEEK_SET);

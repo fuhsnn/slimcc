@@ -20,6 +20,22 @@
 #define MAX(x, y) ((x) < (y) ? (y) : (x))
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
+#ifdef __has_attribute
+#if __has_attribute(format)
+#define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
+#endif
+#if __has_attribute(noreturn)
+#define NORETURN __attribute__((noreturn))
+#endif
+#endif
+
+#ifndef FMTCHK
+#define FMTCHK(x,y)
+#endif
+#ifndef NORETURN
+#define NORETURN
+#endif
+
 typedef struct Type Type;
 typedef struct Node Node;
 typedef struct Member Member;
@@ -60,7 +76,7 @@ typedef struct {
 } StringArray;
 
 void strarray_push(StringArray *arr, char *s);
-char *format(char *fmt, ...) __attribute__((format(printf, 1, 2)));
+char *format(char *fmt, ...) FMTCHK(1,2);
 
 //
 // tokenize.c
@@ -116,10 +132,10 @@ struct Token {
   Token *attr_next;
 };
 
-void error(char *fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
-void error_at(char *loc, char *fmt, ...) __attribute__((format(printf, 2, 3), noreturn));
-void error_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3), noreturn));
-void warn_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3)));
+void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
+void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
+void error_tok(Token *tok, char *fmt, ...) FMTCHK(2,3) NORETURN;
+void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
 void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
