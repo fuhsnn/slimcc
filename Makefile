@@ -1,4 +1,4 @@
-CFLAGS=-std=c99 -g -fno-common -Wall -pedantic -Wno-return-type -Wno-switch
+CFLAGS=-std=c99 -g -fno-common -Wall -pedantic -Wno-switch
 
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)

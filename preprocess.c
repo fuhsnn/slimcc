@@ -738,7 +738,7 @@ static bool expand_macro(Token **rest, Token *tok) {
   if (equal(tok, "__attribute__") && !m->is_objlike && m->body->kind == TK_EOF) {
     tok->is_hidden_attr = true;
     push_macro_lock(m, skip_paren(skip(tok->next, "(")));
-    return;
+    return true;
   }
 
   // Built-in dynamic macro application such as __LINE__
