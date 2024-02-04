@@ -57,16 +57,15 @@ static bool take_arg(char *arg) {
 static void add_default_include_paths(char *argv0) {
   // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
-  strarray_push(&include_paths, format("%s/include", dirname(strdup(argv0))));
+  strarray_push(&std_include_paths, format("%s/include", dirname(strdup(argv0))));
 
   // Add standard include paths.
-  strarray_push(&include_paths, "/usr/local/include");
-  strarray_push(&include_paths, "/usr/include/x86_64-linux-gnu");
-  strarray_push(&include_paths, "/usr/include");
+  strarray_push(&std_include_paths, "/usr/local/include");
+  strarray_push(&std_include_paths, "/usr/include/x86_64-linux-gnu");
+  strarray_push(&std_include_paths, "/usr/include");
 
-  // Keep a copy of the standard include paths for -MMD option.
-  for (int i = 0; i < include_paths.len; i++)
-    strarray_push(&std_include_paths, include_paths.data[i]);
+  for (int i = 0; i < std_include_paths.len; i++)
+    strarray_push(&include_paths, std_include_paths.data[i]);
 }
 
 static void define(char *str) {
