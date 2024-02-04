@@ -744,12 +744,6 @@ static bool expand_macro(Token **rest, Token *tok) {
     return false;
   }
 
-  if (equal(tok, "__attribute__") && !m->is_objlike && m->body->kind == TK_EOF) {
-    tok->is_hidden_attr = true;
-    push_macro_lock(m, skip_paren(skip(tok->next, "(")));
-    return true;
-  }
-
   // Built-in dynamic macro application such as __LINE__
   if (m->handler) {
     *rest = m->handler(tok);
@@ -761,6 +755,15 @@ static bool expand_macro(Token **rest, Token *tok) {
   // treat it as a normal identifier.
   if (!m->is_objlike && !equal(tok->next, "("))
     return false;
+
+  if (!m->is_objlike && m->body->kind == TK_EOF && equal(tok, "__attribute__")) {
+    char *slash = strrchr(m->body->file->name, '/');
+    if (slash && !strcmp(slash + 1, "cdefs.h")) {
+      tok->is_hidden_attr = true;
+      push_macro_lock(m, skip_paren(skip(tok->next, "(")));
+      return true;
+    }
+  }
 
   // The token right after the macro. For funclike, after parentheses.
   Token *stop_tok;

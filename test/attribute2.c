@@ -1,6 +1,4 @@
 #include "test.h"
-#include "stddef.h"
-
 
 #if !defined(__has_attribute) || !defined(__has_c_attribute)
 #error
