@@ -363,7 +363,7 @@ static void load(Type *ty) {
 
 // Store %rax to an address that the stack top is pointing to.
 static void store(Type *ty) {
-  pop_tmp("%rdi");
+  char *reg = pop_tmp_keep_reg(true);
 
   switch (ty->kind) {
   case TY_ARRAY:
@@ -371,28 +371,28 @@ static void store(Type *ty) {
   case TY_UNION:
     for (int i = 0; i < ty->size; i++) {
       println("  mov %d(%%rax), %%r8b", i);
-      println("  mov %%r8b, %d(%%rdi)", i);
+      println("  mov %%r8b, %d(%s)", i, reg);
     }
     return;
   case TY_FLOAT:
-    println("  movss %%xmm0, (%%rdi)");
+    println("  movss %%xmm0, (%s)", reg);
     return;
   case TY_DOUBLE:
-    println("  movsd %%xmm0, (%%rdi)");
+    println("  movsd %%xmm0, (%s)", reg);
     return;
   case TY_LDOUBLE:
-    println("  fstpt (%%rdi)");
+    println("  fstpt (%s)", reg);
     return;
   }
 
   if (ty->size == 1)
-    println("  mov %%al, (%%rdi)");
+    println("  mov %%al, (%s)", reg);
   else if (ty->size == 2)
-    println("  mov %%ax, (%%rdi)");
+    println("  mov %%ax, (%s)", reg);
   else if (ty->size == 4)
-    println("  mov %%eax, (%%rdi)");
+    println("  mov %%eax, (%s)", reg);
   else
-    println("  mov %%rax, (%%rdi)");
+    println("  mov %%rax, (%s)", reg);
 }
 
 static void cmp_zero(Type *ty) {
@@ -1152,10 +1152,10 @@ static void gen_expr(Node *node) {
     println("  mov %%rax, %%r8");
     load(node->cas_old->ty->base);
     pop_tmp("%rdx"); // new
-    pop_tmp("%rdi"); // addr
+    char *addr = pop_tmp_keep_reg(true);
 
     int sz = node->cas_addr->ty->base->size;
-    println("  lock cmpxchg %s, (%%rdi)", reg_dx(sz));
+    println("  lock cmpxchg %s, (%s)", reg_dx(sz), addr);
     println("  sete %%cl");
     println("  je 1f");
     println("  mov %s, (%%r8)", reg_ax(sz));
@@ -1167,10 +1167,10 @@ static void gen_expr(Node *node) {
     gen_expr(node->lhs);
     push_tmp();
     gen_expr(node->rhs);
-    pop_tmp("%rdi");
+    char *reg = pop_tmp_keep_reg(true);
 
     int sz = node->lhs->ty->base->size;
-    println("  xchg %s, (%%rdi)", reg_ax(sz));
+    println("  xchg %s, (%s)", reg_ax(sz), reg);
     return;
   }
   case ND_VA_ARG: {
@@ -1543,14 +1543,12 @@ static void gen_stmt(Node *node) {
     gen_expr(node->lhs);
     push_tmp();
     gen_expr(node->rhs);
-    pop_tmp("%rdi");
+    char *reg = pop_tmp_keep_reg(true);
 
-    println("  movq (%%rax), %%rdx");
-    println("  movq %%rdx, (%%rdi)");
-    println("  movq 8(%%rax), %%rdx");
-    println("  movq %%rdx, 8(%%rdi)");
+    println("  movdqu (%%rax), %%xmm0");
     println("  movq 16(%%rax), %%rdx");
-    println("  movq %%rdx, 16(%%rdi)");
+    println("  movdqu %%xmm0, (%s)", reg);
+    println("  movq %%rdx, 16(%s)", reg);
     return;
   }
   }

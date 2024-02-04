@@ -24,8 +24,10 @@ _Static_assert(__builtin_offsetof(struct ofs_S1, m[1][2].n.k[3]) == 46,"");
 
 
 int va(int i, ...) {
-  __builtin_va_list ap;
+  __builtin_va_list ap, ap2;
   __builtin_va_start(ap, (i += 7, i));
+  __builtin_va_copy(ap2, ap);
+  ASSERT(1, !memcmp(ap,ap2,sizeof(__builtin_va_list)));
 #ifdef __slimcc__
   __builtin_va_start(ap);
 #endif
