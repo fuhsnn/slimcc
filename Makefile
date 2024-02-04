@@ -56,7 +56,8 @@ test-stage2: $(TESTS:test/%=stage2/test/%) $(TESTS_C23:test/c23/%=stage2/test/c2
 # Misc.
 
 clean:
-	rm -rf slimcc tmp* $(TESTS) test/*.s test/*.exe stage2
+	rm -rf slimcc stage2
 	find * -type f '(' -name '*~' -o -name '*.o' ')' -exec rm {} ';'
+	find test/* -type f '(' -name '*~' -o -name '*.exe' ')' -exec rm {} ';'
 
 .PHONY: test clean test-stage2
