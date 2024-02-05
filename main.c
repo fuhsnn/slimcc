@@ -1,7 +1,7 @@
 #include "slimcc.h"
 
 typedef enum {
-  FILE_NONE, FILE_C, FILE_ASM, FILE_OBJ, FILE_AR, FILE_DSO,
+  FILE_NONE, FILE_C, FILE_ASM, FILE_OBJ, FILE_AR, FILE_DSO, FILE_PP_ASM
 } FileType;
 
 StringArray include_paths;
@@ -11,6 +11,7 @@ bool opt_optimize;
 bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;
+bool opt_cc1_asm_pp;
 StdVer opt_std;
 
 static StringArray opt_include;
@@ -81,6 +82,8 @@ static FileType parse_opt_x(char *s) {
     return FILE_C;
   if (!strcmp(s, "assembler"))
     return FILE_ASM;
+  if (!strcmp(s, "assembler-with-cpp"))
+    return FILE_PP_ASM;
   if (!strcmp(s, "none"))
     return FILE_NONE;
   error("<command line>: unknown argument for -x: %s", s);
@@ -291,6 +294,12 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (!strcmp(argv[i], "-cc1-asm-pp")) {
+      opt_E = true;
+      opt_cc1_asm_pp = true;
+      continue;
+    }
+
     if (!strcmp(argv[i], "-idirafter")) {
       strarray_push(&idirafter, argv[i++]);
       continue;
@@ -476,7 +485,7 @@ static void run_subprocess(char **argv) {
     exit(1);
 }
 
-static void run_cc1(int argc, char **argv, char *input, char *output) {
+static void run_cc1(int argc, char **argv, char *input, char *output, char *option) {
   char **args = calloc(argc + 10, sizeof(char *));
   memcpy(args, argv, argc * sizeof(char *));
   args[argc++] = "-cc1";
@@ -491,12 +500,15 @@ static void run_cc1(int argc, char **argv, char *input, char *output) {
     args[argc++] = output;
   }
 
+  if (option)
+    args[argc++] = option;
+
   run_subprocess(args);
 }
 
 // Print tokens to stdout. Used for -E.
-static void print_tokens(Token *tok) {
-  FILE *out = open_file(opt_o ? opt_o : "-");
+static void print_tokens(Token *tok, char *path) {
+  FILE *out = open_file(path);
 
   int line = 1;
   for (; tok->kind != TK_EOF; tok = tok->next) {
@@ -618,7 +630,7 @@ static void cc1(void) {
 
   // If -E is given, print out preprocessed C code as a result.
   if (opt_E) {
-    print_tokens(tok);
+    print_tokens(tok, output_file);
     return;
   }
 
@@ -754,6 +766,8 @@ static FileType get_file_type(char *filename) {
     return FILE_C;
   if (endswith(filename, ".s"))
     return FILE_ASM;
+  if (endswith(filename, ".S"))
+    return FILE_PP_ASM;
 
   if (opt_E && !strcmp(filename, "-"))
     return FILE_C;
@@ -848,24 +862,44 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    // Handle .S
+    if (type == FILE_PP_ASM) {
+      if (opt_S || opt_E || opt_M) {
+        run_cc1(argc, argv, input, (opt_o ? opt_o : "-"), "-cc1-asm-pp");
+        continue;
+      }
+      if (opt_c) {
+        char *tmp = create_tmpfile();
+        run_cc1(argc, argv, input, tmp, "-cc1-asm-pp");
+        assemble(tmp, output);
+        continue;
+      }
+      char *tmp1 = create_tmpfile();
+      char *tmp2 = create_tmpfile();
+      run_cc1(argc, argv, input, tmp1, "-cc1-asm-pp");
+      assemble(tmp1, tmp2);
+      strarray_push(&ld_args, tmp2);
+      continue;
+    }
+
     assert(type == FILE_C);
 
     // Just preprocess
     if (opt_E || opt_M) {
-      run_cc1(argc, argv, input, NULL);
+      run_cc1(argc, argv, input, (opt_o ? opt_o : "-"), NULL);
       continue;
     }
 
     // Compile
     if (opt_S) {
-      run_cc1(argc, argv, input, output);
+      run_cc1(argc, argv, input, output, NULL);
       continue;
     }
 
     // Compile and assemble
     if (opt_c) {
       char *tmp = create_tmpfile();
-      run_cc1(argc, argv, input, tmp);
+      run_cc1(argc, argv, input, tmp, NULL);
       assemble(tmp, output);
       continue;
     }
@@ -873,7 +907,7 @@ int main(int argc, char **argv) {
     // Compile, assemble and link
     char *tmp1 = create_tmpfile();
     char *tmp2 = create_tmpfile();
-    run_cc1(argc, argv, input, tmp1);
+    run_cc1(argc, argv, input, tmp1, NULL);
     assemble(tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
     continue;

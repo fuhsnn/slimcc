@@ -1077,6 +1077,15 @@ static Token *preprocess2(Token *tok) {
       continue;
     }
 
+    if (opt_cc1_asm_pp) {
+      tok = start;
+      do {
+        cur = cur->next = tok;
+        tok = tok->next;
+      } while (!tok->at_bol);
+      continue;
+    }
+
     // `#`-only line is legal. It's called a null directive.
     if (tok->at_bol)
       continue;
