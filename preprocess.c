@@ -1372,66 +1372,52 @@ static StringKind getStringKind(Token *tok) {
 // Concatenate adjacent string literals into a single string literal
 // as per the C spec.
 static void join_adjacent_string_literals(Token *tok) {
-  // First pass: If regular string literals are adjacent to wide
-  // string literals, regular string literals are converted to a wide
-  // type before concatenation. In this pass, we do the conversion.
-  for (Token *tok1 = tok; tok1->kind != TK_EOF;) {
-    if (tok1->kind != TK_STR || tok1->next->kind != TK_STR) {
-      tok1 = tok1->next;
-      continue;
+  Token *end = tok->next->next;
+  while (end->kind == TK_STR)
+    end = end->next;
+
+  int fileno = tok->display_file_no;
+  int lineno = tok->display_line_no;
+
+  // If regular string literals are adjacent to wide string literals,
+  // regular string literals are converted to the wide type.
+  StringKind kind = getStringKind(tok);
+  Type *basety = tok->ty->base;
+
+  for (Token *t = tok->next; t != end; t = t->next) {
+    StringKind k = getStringKind(t);
+    if (kind == STR_NONE) {
+      kind = k;
+      basety = t->ty->base;
+    } else if (k != STR_NONE && kind != k) {
+      error_tok(t, "unsupported non-standard concatenation of string literals");
     }
-
-    StringKind kind = getStringKind(tok1);
-    Type *basety = tok1->ty->base;
-
-    for (Token *t = tok1->next; t->kind == TK_STR; t = t->next) {
-      StringKind k = getStringKind(t);
-      if (kind == STR_NONE) {
-        kind = k;
-        basety = t->ty->base;
-      } else if (k != STR_NONE && kind != k) {
-        error_tok(t, "unsupported non-standard concatenation of string literals");
-      }
-    }
-
-    if (basety->size > 1)
-      for (Token *t = tok1; t->kind == TK_STR; t = t->next)
-        if (t->ty->base->size == 1)
-          *t = *tokenize_string_literal(t, basety);
-
-    while (tok1->kind == TK_STR)
-      tok1 = tok1->next;
   }
 
-  // Second pass: concatenate adjacent string literals.
-  for (Token *tok1 = tok; tok1->kind != TK_EOF;) {
-    if (tok1->kind != TK_STR || tok1->next->kind != TK_STR) {
-      tok1 = tok1->next;
-      continue;
-    }
+  if (basety->size > 1)
+    for (Token *t = tok; t != end; t = t->next)
+      if (t->ty->base->size == 1)
+        *t = *tokenize_string_literal(t, basety);
 
-    Token *tok2 = tok1->next;
-    while (tok2->kind == TK_STR)
-      tok2 = tok2->next;
+  // Concatenate adjacent string literals.
+  int len = tok->ty->array_len;
+  for (Token *t = tok->next; t != end; t = t->next)
+    len = len + t->ty->array_len - 1;
 
-    int len = tok1->ty->array_len;
-    for (Token *t = tok1->next; t != tok2; t = t->next)
-      len = len + t->ty->array_len - 1;
+  char *buf = calloc(basety->size, len);
 
-    char *buf = calloc(tok1->ty->base->size, len);
-
-    int i = 0;
-    for (Token *t = tok1; t != tok2; t = t->next) {
-      memcpy(buf + i, t->str, t->ty->size);
-      i = i + t->ty->size - t->ty->base->size;
-    }
-
-    *tok1 = *copy_token(tok1);
-    tok1->ty = array_of(tok1->ty->base, len);
-    tok1->str = buf;
-    tok1->next = tok2;
-    tok1 = tok2;
+  int i = 0;
+  for (Token *t = tok; t != end; t = t->next) {
+    memcpy(buf + i, t->str, t->ty->size);
+    i = i + t->ty->size - t->ty->base->size;
   }
+
+  tok->display_file_no = fileno;
+  tok->display_line_no = lineno;
+
+  tok->ty = array_of(basety, len);
+  tok->str = buf;
+  tok->next = end;
 }
 
 static long is_supported_attr(Token **vendor, Token *tok) {
@@ -1506,6 +1492,9 @@ static Token *preprocess3(Token *tok) {
     if (tok->kind == TK_IDENT && is_keyword(tok))
       tok->kind = TK_KEYWORD;
 
+    if (tok->kind == TK_STR && tok->next->kind == TK_STR)
+      join_adjacent_string_literals(tok);
+
     cur = cur->next = tok;
     tok = tok->next;
     continue;
@@ -1523,8 +1512,5 @@ Token *preprocess(Token *tok) {
   if (opt_E)
     return tok;
 
-  tok = preprocess3(tok);
-  join_adjacent_string_literals(tok);
-
-  return tok;
+  return preprocess3(tok);
 }
