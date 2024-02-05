@@ -1050,6 +1050,15 @@ static Token *preprocess2(Token *tok) {
       continue;
     }
 
+    if (equal(tok, "pragma") && opt_E) {
+      tok = start;
+      do {
+        cur = cur->next = tok;
+        tok = tok->next;
+      } while (!tok->at_bol);
+      continue;
+    }
+
     if (equal(tok, "pragma")) {
       do {
         tok = tok->next;
@@ -1463,6 +1472,9 @@ Token *preprocess(Token *tok) {
   tok = preprocess2(tok);
   if (cond_incl)
     error_tok(cond_incl->tok, "unterminated conditional directive");
+
+  if (opt_E)
+    return tok;
 
   tok = preprocess3(tok);
   convert_pp_tokens(tok);

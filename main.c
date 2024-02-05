@@ -14,7 +14,7 @@ bool opt_data_sections;
 StdVer opt_std;
 
 static StringArray opt_include;
-static bool opt_E;
+bool opt_E;
 static bool opt_M;
 static bool opt_MD;
 static bool opt_MMD;
