@@ -331,10 +331,6 @@ static long eval_const_expr(Token **rest, Token *tok) {
       t->next = next;
     }
   }
-
-  // Convert pp-numbers to regular numbers
-  convert_pp_tokens(expr);
-
   Token *rest2;
   long val = const_expr(&rest2, expr);
   if (rest2->kind != TK_EOF)
@@ -884,7 +880,7 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok) {
 static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
   tok = preprocess2(copy_line(rest, tok));
-  convert_pp_tokens(tok);
+  convert_pp_number(tok);
 
   if (tok->kind != TK_NUM || tok->ty->kind != TY_INT)
     error_tok(tok, "invalid line marker");
@@ -1507,6 +1503,9 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
+    if (tok->kind == TK_IDENT && is_keyword(tok))
+      tok->kind = TK_KEYWORD;
+
     cur = cur->next = tok;
     tok = tok->next;
     continue;
@@ -1525,7 +1524,6 @@ Token *preprocess(Token *tok) {
     return tok;
 
   tok = preprocess3(tok);
-  convert_pp_tokens(tok);
   join_adjacent_string_literals(tok);
 
   return tok;

@@ -161,7 +161,7 @@ static int read_punct(char *p) {
   return ispunct(*p) ? 1 : 0;
 }
 
-static bool is_keyword(Token *tok) {
+bool is_keyword(Token *tok) {
   static HashMap map;
 
   if (map.capacity == 0) {
@@ -472,15 +472,6 @@ void convert_pp_number(Token *tok) {
   tok->kind = TK_NUM;
   tok->fval = val;
   tok->ty = ty;
-}
-
-void convert_pp_tokens(Token *tok) {
-  for (Token *t = tok; t->kind != TK_EOF; t = t->next) {
-    if (is_keyword(t))
-      t->kind = TK_KEYWORD;
-    else if (t->kind == TK_PP_NUM)
-      convert_pp_number(t);
-  }
 }
 
 // Initialize line info for all tokens.

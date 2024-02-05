@@ -140,7 +140,6 @@ void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt, v
 bool equal(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);
-void convert_pp_tokens(Token *tok);
 File **get_input_files(void);
 File *new_file(char *name, int file_no, char *contents);
 Token *tokenize_string_literal(Token *tok, Type *basety);
@@ -148,6 +147,7 @@ Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end);
 File *add_input_file(char *path, char *content);
 void convert_pp_number(Token *tok);
+bool is_keyword(Token *tok);
 
 #define internal_error() \
   error("internal error at %s:%d", __FILE__, __LINE__)
