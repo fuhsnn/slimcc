@@ -1157,6 +1157,43 @@ static Token *base_file_macro(Token *start) {
   return tok;
 }
 
+static Token *pragma_macro(Token *start) {
+  Token *tok = start->next;
+  Token *str;
+  for (int progress = 0;;) {
+    if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated _Pragma sequence");
+
+    pop_macro_lock(tok);
+    if (expand_macro(&tok, tok))
+      continue;
+
+    switch (progress++) {
+    case 0:
+      tok = skip(tok, "(");
+      continue;
+    case 1:
+      if (tok->kind != TK_STR || tok->len < 2)
+        error_tok(tok, "expected string literal");
+      str = tok;
+      tok = tok->next;
+      continue;
+    case 2:
+      tok = skip(tok, ")");
+      tok->at_bol = true;
+    }
+    break;
+  }
+  char *buf = calloc(1, str->len + 7);
+  memcpy(buf, "#pragma ", 8);
+  memcpy(buf + 8, str->loc + 1, str->len - 2);
+
+  Token *end;
+  Token *hash = tokenize(new_file(start->file->name, start->file->file_no, buf), &end);
+  end->next = tok;
+  return hash;
+}
+
 static Token *has_include_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
@@ -1296,6 +1333,8 @@ void init_macros(void) {
   add_builtin("__COUNTER__", counter_macro);
   add_builtin("__TIMESTAMP__", timestamp_macro);
   add_builtin("__BASE_FILE__", base_file_macro);
+
+  add_builtin("_Pragma", pragma_macro);
 
   add_builtin("__has_attribute", has_attribute_macro);
   add_builtin("__has_c_attribute", has_c_attribute_macro);
