@@ -37,6 +37,14 @@ int main(void) {
 
   ASSERT(1, ({ int i = 2; char arr[ (i++,3) ]; i == sizeof arr; }) );
 
+  {
+    char arr[3];
+    DASSERT(8 == sizeof((0 ? arr:arr)));
+    DASSERT(8 == sizeof((0 ? 0:arr)));
+    DASSERT(8 == sizeof((0 ? arr:0)));
+    DASSERT(8 == sizeof(({arr;})));
+  }
+
   printf("OK\n");
   return 0;
 }

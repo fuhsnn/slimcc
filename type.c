@@ -132,6 +132,12 @@ Type *pointer_to(Type *base) {
   return ty;
 }
 
+Type *array_to_pointer(Type *ty) {
+  if (ty->base && ty->kind != TY_PTR)
+    return pointer_to(ty->base);
+  return ty;
+}
+
 Type *func_type(Type *return_ty) {
   // The C spec disallows sizeof(<function type>), but
   // GCC allows that and the expression is evaluated to 1.
@@ -232,13 +238,13 @@ static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
       ty2 = pointer_to(ty2);
 
     if (ty1->base && is_nullptr(*rhs))
-      return pointer_to(ty1->base);
+      return array_to_pointer(ty1);
     if (ty2->base && is_nullptr(*lhs))
-      return pointer_to(ty2->base);
+      return array_to_pointer(ty2);
 
     if (ty1->base && ty2->base) {
       if (is_compatible(ty1->base, ty2->base))
-        return pointer_to(ty1->base);
+        return array_to_pointer(ty1);
       return pointer_to(ty_void);
     }
   }
@@ -377,7 +383,7 @@ void add_type(Node *node) {
     if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID) {
       node->ty = ty_void;
     } else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty)) {
-      node->ty = node->then->ty;
+      node->ty = array_to_pointer(node->then->ty);
     } else {
       usual_arith_conv(&node->then, &node->els, true);
       node->ty = node->then->ty;
@@ -406,7 +412,7 @@ void add_type(Node *node) {
       while (stmt->next)
         stmt = stmt->next;
       if (stmt->kind == ND_EXPR_STMT) {
-        node->ty = stmt->lhs->ty;
+        node->ty = array_to_pointer(stmt->lhs->ty);
         return;
       }
     }

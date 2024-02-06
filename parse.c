@@ -124,7 +124,7 @@ static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_t
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
-static Node *compound_stmt(Token **rest, Token *tok, Node **last);
+static Node *compound_stmt(Token **rest, Token *tok);
 static Node *stmt(Token **rest, Token *tok, bool chained);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
@@ -1950,13 +1950,13 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
   }
 
   if (equal(tok, "{"))
-    return compound_stmt(rest, tok->next, NULL);
+    return compound_stmt(rest, tok->next);
 
   return expr_stmt(rest, tok);
 }
 
 // compound-stmt = (typedef | declaration | stmt)* "}"
-static Node *compound_stmt(Token **rest, Token *tok, Node **last) {
+static Node *compound_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_BLOCK, tok);
   Node head = {0};
   Node *cur = &head;
@@ -1993,9 +1993,6 @@ static Node *compound_stmt(Token **rest, Token *tok, Node **last) {
     }
     cur = cur->next = stmt(&tok, tok, false);
   }
-
-  if (last)
-    *last = cur;
 
   node->top_vla = current_vla;
   current_vla = node->target_vla;
@@ -3312,16 +3309,8 @@ static Node *primary(Token **rest, Token *tok) {
     if (scope->parent == NULL)
       error_tok(tok, "statement expresssion at file scope");
 
-    Node *stmt = NULL;
-    Node *node = compound_stmt(&tok, tok->next->next, &stmt);
+    Node *node = compound_stmt(&tok, tok->next->next);
     node->kind = ND_STMT_EXPR;
-
-    if (stmt && stmt->kind == ND_EXPR_STMT) {
-      Node *expr = stmt->lhs;
-      if (expr->ty->kind == TY_ARRAY || expr->ty->kind == TY_VLA) {
-        stmt->lhs = new_cast(expr, pointer_to(expr->ty->base));
-      }
-    }
     *rest = skip(tok, ")");
     return node;
   }
@@ -3627,7 +3616,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   if (ty->is_variadic)
     fn->va_area = new_lvar(NULL, array_of(ty_pchar, 176));
 
-  fn->body = compound_stmt(rest, tok->next, NULL);
+  fn->body = compound_stmt(rest, tok->next);
   if (ty->vla_calc) {
     Node *calc = new_unary(ND_EXPR_STMT, ty->vla_calc, tok);
     calc->next = fn->body->body;
