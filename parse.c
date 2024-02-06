@@ -2398,6 +2398,20 @@ static Node *to_assign(Node *binary) {
 //           | "<<=" | ">>="
 static Node *assign(Token **rest, Token *tok) {
   Node *node = conditional(&tok, tok);
+  add_type(node);
+
+  // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
+  if (equal(tok, "=") && node->ty->is_atomic) {
+    Node *rhs = assign(rest, tok->next);
+    add_type(rhs);
+    Obj *tmp = new_lvar(NULL, rhs->ty);
+    Node *expr = new_binary(ND_ASSIGN, new_var_node(tmp, tok), rhs, tok);
+    chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok),
+                                          new_var_node(tmp, tok),
+                                          tok));
+    chain_expr(&expr, new_var_node(tmp, tok));
+    return expr;
+  }
 
   if (equal(tok, "="))
     return new_binary(ND_ASSIGN, node, assign(rest, tok->next), tok);
