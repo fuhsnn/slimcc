@@ -169,6 +169,11 @@ static void enter_scope(void) {
   scope = scope->children = sc;
 }
 
+static void enter_tmp_scope(void) {
+  enter_scope();
+  scope->is_temporary = true;
+}
+
 static void leave_scope(void) {
   scope = scope->parent;
 }
@@ -2462,12 +2467,14 @@ static Node *conditional(Token **rest, Token *tok) {
   if (equal(tok->next, ":")) {
     // [GNU] Compile `a ?: b` as `tmp = a, tmp ? tmp : b`.
     add_type(cond);
+    enter_tmp_scope();
     Obj *var = new_lvar(NULL, cond->ty);
     Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
     Node *rhs = new_node(ND_COND, tok);
     rhs->cond = new_var_node(var, tok);
     rhs->then = new_var_node(var, tok);
     rhs->els = conditional(rest, tok->next->next);
+    leave_scope();
     return new_binary(ND_COMMA, lhs, rhs, tok);
   }
 
@@ -3057,8 +3064,9 @@ static Node *struct_ref(Node *node, Token *tok) {
 // Convert A++ to `(ptr = &A, tmp = *ptr, *ptr += 1, tmp)`
 static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   add_type(node);
+  enter_tmp_scope();
+
   if (is_bitfield(node)) {
-    enter_scope();
     Obj *tmp = new_lvar(NULL, node->ty);
     Obj *ptr = new_lvar(NULL, pointer_to(node->lhs->ty));
 
@@ -3082,7 +3090,6 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
     return expr;
   }
 
-  enter_scope();
   Obj *tmp = new_lvar(NULL, node->ty);
   Obj *ptr = new_lvar(NULL, pointer_to(node->ty));
 
@@ -3170,8 +3177,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Obj *cur = &head;
   Node *expr = NULL;
 
-  enter_scope();
-  scope->is_temporary = true;
+  enter_tmp_scope();
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
@@ -3404,7 +3410,7 @@ static Node *primary(Token **rest, Token *tok) {
     node->lhs = ap_arg;
     tok = skip(tok, ",");
 
-    enter_scope();
+    enter_tmp_scope();
     node->var = new_lvar(NULL, typename(&tok, tok));
     node->ty = node->var->ty;
     leave_scope();
