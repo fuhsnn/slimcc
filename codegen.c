@@ -1503,35 +1503,27 @@ static void gen_stmt(Node *node) {
     println("%s:", node->brk_label);
     return;
   }
-  case ND_SWITCH:
+  case ND_SWITCH: {
     gen_expr(node->cond);
 
+    char *ax, *cx, *dx;
+    if (node->cond->ty->size == 8)
+      ax = "%rax", cx = "%rcx", dx = "%rdx";
+    else
+      ax = "%eax", cx = "%ecx", dx = "%edx";
+
     for (Node *n = node->case_next; n; n = n->case_next) {
-      char *ax, *di, *dx;
-
-      if (node->cond->ty->size == 8) {
-        ax = "%rax";
-        di = "%rdi";
-        dx = "%rdx";
-      } else {
-        ax = "%eax";
-        di = "%edi";
-        dx = "%edx";
-      }
-
       if (n->begin == n->end) {
         println("  mov $%ld, %s", n->begin, dx);
         println("  cmp %s, %s", dx, ax);
         println("  je %s", n->label);
         continue;
       }
-
-      // [GNU] Case ranges
-      println("  mov %s, %s", ax, di);
+      println("  mov %s, %s", ax, cx);
       println("  mov $%ld, %s", n->begin, dx);
-      println("  sub %s, %s", dx, di);
+      println("  sub %s, %s", dx, cx);
       println("  mov $%ld, %s", n->end - n->begin, dx);
-      println("  cmp %s, %s", dx, di);
+      println("  cmp %s, %s", dx, cx);
       println("  jbe %s", n->label);
     }
 
@@ -1542,6 +1534,7 @@ static void gen_stmt(Node *node) {
     gen_stmt(node->then);
     println("%s:", node->brk_label);
     return;
+  }
   case ND_CASE:
     println("%s:", node->label);
     if (node->lhs)
