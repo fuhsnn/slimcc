@@ -1060,10 +1060,11 @@ static void gen_expr(Node *node) {
   }
   case ND_SHL:
   case ND_SHR:
-    gen_expr(node->rhs);
-    push_tmp();
     gen_expr(node->lhs);
-    pop_tmp("%rcx");
+    push_tmp();
+    gen_expr(node->rhs);
+    println("  mov %%eax, %%ecx");
+    pop_tmp("%rax");
     if (node->kind == ND_SHL)
       println("  shl %%cl, %s", regop_ax(node->ty));
     else if (node->lhs->ty->is_unsigned)
@@ -1235,9 +1236,9 @@ static void gen_expr(Node *node) {
   switch (node->lhs->ty->kind) {
   case TY_FLOAT:
   case TY_DOUBLE: {
-    gen_expr(node->rhs);
-    push_tmpf();
     gen_expr(node->lhs);
+    push_tmpf();
+    gen_expr(node->rhs);
 
     bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
     int reg = pop_tmpf_keep_reg(is_xmm64);
@@ -1248,19 +1249,21 @@ static void gen_expr(Node *node) {
       println("  add%s %%xmm%d, %%xmm0", sz, reg);
       return;
     case ND_SUB:
-      println("  sub%s %%xmm%d, %%xmm0", sz, reg);
+      println("  sub%s %%xmm0, %%xmm%d", sz, reg);
+      println("  movaps %%xmm%d, %%xmm0", reg);
       return;
     case ND_MUL:
       println("  mul%s %%xmm%d, %%xmm0", sz, reg);
       return;
     case ND_DIV:
-      println("  div%s %%xmm%d, %%xmm0", sz, reg);
+      println("  div%s %%xmm0, %%xmm%d", sz, reg);
+      println("  movaps %%xmm%d, %%xmm0", reg);
       return;
     case ND_EQ:
     case ND_NE:
     case ND_LT:
     case ND_LE:
-      println("  ucomi%s %%xmm0, %%xmm%d", sz, reg);
+      println("  ucomi%s %%xmm%d, %%xmm0", sz, reg);
 
       if (node->kind == ND_EQ) {
         println("  sete %%al");
@@ -1324,9 +1327,9 @@ static void gen_expr(Node *node) {
   }
   }
 
-  gen_expr(node->rhs);
-  push_tmp();
   gen_expr(node->lhs);
+  push_tmp();
+  gen_expr(node->rhs);
 
   bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
   char *ax = is_r64 ? "%rax" : "%eax";
@@ -1337,13 +1340,15 @@ static void gen_expr(Node *node) {
     println("  add %s, %s", op, ax);
     return;
   case ND_SUB:
-    println("  sub %s, %s", op, ax);
+    println("  sub %s, %s", ax, op);
+    println("  mov %s, %s", op, ax);
     return;
   case ND_MUL:
     println("  imul %s, %s", op, ax);
     return;
   case ND_DIV:
   case ND_MOD:
+    println("  xchg %s, %s", op, ax);
     if (node->ty->is_unsigned) {
       println("  xor %%edx, %%edx");
       println("  div %s", op);
@@ -1371,7 +1376,7 @@ static void gen_expr(Node *node) {
   case ND_NE:
   case ND_LT:
   case ND_LE:
-    println("  cmp %s, %s", op, ax);
+    println("  cmp %s, %s", ax, op);
 
     if (node->kind == ND_EQ) {
       println("  sete %%al");

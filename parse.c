@@ -124,7 +124,7 @@ static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_t
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
-static Node *compound_stmt(Token **rest, Token *tok);
+static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, bool chained);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
@@ -1950,14 +1950,14 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
   }
 
   if (equal(tok, "{"))
-    return compound_stmt(rest, tok->next);
+    return compound_stmt(rest, tok->next, ND_BLOCK);
 
   return expr_stmt(rest, tok);
 }
 
 // compound-stmt = (typedef | declaration | stmt)* "}"
-static Node *compound_stmt(Token **rest, Token *tok) {
-  Node *node = new_node(ND_BLOCK, tok);
+static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
+  Node *node = new_node(kind, tok);
   Node head = {0};
   Node *cur = &head;
 
@@ -1997,6 +1997,19 @@ static Node *compound_stmt(Token **rest, Token *tok) {
   node->top_vla = current_vla;
   current_vla = node->target_vla;
   leave_scope();
+
+  if (node->kind == ND_STMT_EXPR) {
+    if (!cur->lhs)
+      error_tok(node->tok, "statement expression returning void is not supported");
+    add_type(cur->lhs);
+    Type *ty = cur->lhs->ty;
+    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
+      Obj *var = new_lvar(NULL, ty);
+      Node *expr = new_binary(ND_ASSIGN, new_var_node(var, tok), cur->lhs, tok);
+      chain_expr(&expr, new_var_node(var, tok));
+      cur->lhs = expr;
+    }
+  }
 
   node->body = head.next;
   *rest = tok->next;
@@ -3209,6 +3222,8 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   if (param)
     error_tok(tok, "too few arguments");
 
+  leave_scope();
+
   Node *node = new_unary(ND_FUNCALL, fn, tok);
   node->ty = ty->return_ty;
   node->args = head.param_next;
@@ -3218,8 +3233,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   // to allocate a space for the return value.
   if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION)
     node->ret_buffer = new_lvar(NULL, node->ty);
-
-  leave_scope();
   return node;
 }
 
@@ -3311,8 +3324,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (scope->parent == NULL)
       error_tok(tok, "statement expresssion at file scope");
 
-    Node *node = compound_stmt(&tok, tok->next->next);
-    node->kind = ND_STMT_EXPR;
+    Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
     *rest = skip(tok, ")");
     return node;
   }
@@ -3618,7 +3630,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
   if (ty->is_variadic)
     fn->va_area = new_lvar(NULL, array_of(ty_pchar, 176));
 
-  fn->body = compound_stmt(rest, tok->next);
+  fn->body = compound_stmt(rest, tok->next, ND_BLOCK);
   if (ty->vla_calc) {
     Node *calc = new_unary(ND_EXPR_STMT, ty->vla_calc, tok);
     calc->next = fn->body->body;
