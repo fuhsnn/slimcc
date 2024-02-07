@@ -1198,16 +1198,17 @@ static void gen_expr(Node *node) {
   case ND_CAS: {
     gen_expr(node->cas_addr);
     push_tmp();
-    gen_expr(node->cas_new);
-    push_tmp();
     gen_expr(node->cas_old);
+    push_tmp();
+    gen_expr(node->cas_new);
+    int sz = node->cas_addr->ty->base->size;
+    println("  mov %s, %s", reg_ax(sz), reg_dx(sz));
+    pop_tmp("%rax"); // old
+    pop_tmp("%rcx"); // addr
     println("  mov %%rax, %%r8");
     load(node->cas_old->ty->base);
-    pop_tmp("%rdx"); // new
-    char *addr = pop_tmp_keep_reg(true);
 
-    int sz = node->cas_addr->ty->base->size;
-    println("  lock cmpxchg %s, (%s)", reg_dx(sz), addr);
+    println("  lock cmpxchg %s, (%%rcx)", reg_dx(sz));
     println("  sete %%cl");
     println("  je 1f");
     println("  mov %s, (%%r8)", reg_ax(sz));
