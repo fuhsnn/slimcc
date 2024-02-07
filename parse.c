@@ -3413,10 +3413,8 @@ static Node *primary(Token **rest, Token *tok) {
     node->lhs = ap_arg;
     tok = skip(tok, ",");
 
-    enter_tmp_scope();
     node->var = new_lvar(NULL, typename(&tok, tok));
     node->ty = node->var->ty;
-    leave_scope();
     chain_expr(&node, new_var_node(node->var, tok));
     *rest = skip(tok, ")");
     return node;
