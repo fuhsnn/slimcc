@@ -43,6 +43,9 @@ int main(void) {
     DASSERT(8 == sizeof((0 ? 0:arr)));
     DASSERT(8 == sizeof((0 ? arr:0)));
     DASSERT(8 == sizeof(({arr;})));
+
+    DASSERT(8 == sizeof((0,arr)));
+    DASSERT(3 == sizeof( (typeof(arr)){0} ));
   }
 
   printf("OK\n");

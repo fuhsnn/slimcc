@@ -389,8 +389,11 @@ void add_type(Node *node) {
       node->ty = node->then->ty;
     }
     return;
-  case ND_COMMA:
+  case ND_CHAIN:
     node->ty = node->rhs->ty;
+    return;
+  case ND_COMMA:
+    node->ty = array_to_pointer(node->rhs->ty);
     return;
   case ND_MEMBER:
     node->ty = node->member->ty;

@@ -277,7 +277,8 @@ typedef enum {
   ND_EXCH,      // Atomic exchange
   ND_VA_START,  // "va_start"
   ND_VA_COPY,   // "va_copy"
-  ND_VA_ARG     // "va_arg"
+  ND_VA_ARG,    // "va_arg"
+  ND_CHAIN,     // ND_COMMA without array-to-pointer conversion
 } NodeKind;
 
 // AST node type

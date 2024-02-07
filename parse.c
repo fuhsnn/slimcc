@@ -364,7 +364,7 @@ static void push_tag_scope(Token *tok, Type *ty) {
 
 static void chain_expr(Node **lhs, Node *rhs) {
   if (rhs)
-    *lhs = !*lhs ? rhs : new_binary(ND_COMMA, *lhs, rhs, rhs->tok);
+    *lhs = !*lhs ? rhs : new_binary(ND_CHAIN, *lhs, rhs, rhs->tok);
 }
 
 static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma) {
@@ -2117,6 +2117,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval(node->lhs) <= eval(node->rhs);
   case ND_COND:
     return eval(node->cond) ? eval2(node->then, ctx) : eval2(node->els, ctx);
+  case ND_CHAIN:
   case ND_COMMA:
     eval2(node->lhs, ctx);
     return eval2(node->rhs, ctx);
@@ -2249,6 +2250,7 @@ static long double eval_double(Node *node) {
     return -eval_double(node->lhs);
   case ND_COND:
     return eval_double(node->cond) ? eval_double(node->then) : eval_double(node->els);
+  case ND_CHAIN:
   case ND_COMMA:
     eval_double(node->lhs);
     return eval_double(node->rhs);
@@ -2312,7 +2314,7 @@ static Node *to_assign(Node *binary) {
                              new_binary(binary->kind, expr3, binary->rhs, tok),
                              tok);
 
-    return new_binary(ND_COMMA, expr1, expr4, tok);
+    return new_binary(ND_CHAIN, expr1, expr4, tok);
   }
 
   // If A is an atomic type, Convert `A op= B` to
@@ -2392,7 +2394,7 @@ static Node *to_assign(Node *binary) {
                           tok),
                tok);
 
-  return new_binary(ND_COMMA, expr1, expr2, tok);
+  return new_binary(ND_CHAIN, expr1, expr2, tok);
 }
 
 // assign    = conditional (assign-op assign)?
@@ -2472,7 +2474,7 @@ static Node *conditional(Token **rest, Token *tok) {
     rhs->then = new_var_node(var, tok);
     rhs->els = conditional(rest, tok->next->next);
     leave_scope();
-    return new_binary(ND_COMMA, lhs, rhs, tok);
+    return new_binary(ND_CHAIN, lhs, rhs, tok);
   }
 
   Node *node = new_node(ND_COND, tok);
@@ -3302,7 +3304,7 @@ static Node *primary(Token **rest, Token *tok) {
 
     Node *lhs = lvar_initializer(rest, tok, var);
     Node *rhs = new_var_node(var, tok);
-    return new_binary(ND_COMMA, lhs, rhs, start);
+    return new_binary(ND_CHAIN, lhs, rhs, start);
   }
 
   if (equal(tok, "(") && equal(tok->next, "{")) {

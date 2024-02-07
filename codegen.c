@@ -305,6 +305,7 @@ static void gen_addr(Node *node) {
   case ND_DEREF:
     gen_expr(node->lhs);
     return;
+  case ND_CHAIN:
   case ND_COMMA:
     gen_expr(node->lhs);
     gen_addr(node->rhs);
@@ -989,6 +990,7 @@ static void gen_expr(Node *node) {
       gen_stmt(n);
     dealloc_vla(node);
     return;
+  case ND_CHAIN:
   case ND_COMMA:
     gen_expr(node->lhs);
     gen_expr(node->rhs);
