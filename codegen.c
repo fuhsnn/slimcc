@@ -227,6 +227,22 @@ static char *regop_ax(Type *ty) {
   internal_error();
 }
 
+static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
+  for (int i = 0; i < sz;) {
+    int rem = sz - i;
+    if (rem >= 16) {
+      println("  movups %d(%s), %%xmm0", i + sofs, sptr);
+      println("  movups %%xmm0, %d(%s)", i + dofs, dptr);
+      i += 16;
+      continue;
+    }
+    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
+    println("  mov %d(%s), %s", i + sofs, sptr, reg_dx(p2));
+    println("  mov %s, %d(%s)", reg_dx(p2), i + dofs, dptr);
+    i += p2;
+  }
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 static void gen_addr(Node *node) {
@@ -370,10 +386,7 @@ static void store(Type *ty) {
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
-    for (int i = 0; i < ty->size; i++) {
-      println("  mov %d(%%rax), %%r8b", i);
-      println("  mov %%r8b, %d(%s)", i, reg);
-    }
+    gen_mem_copy(0, "%rax", 0, reg, ty->size);
     return;
   case TY_FLOAT:
     println("  movss %%xmm0, (%s)", reg);
@@ -676,16 +689,12 @@ static void place_stack_args(Node *node) {
     switch (var->ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
-    case TY_LDOUBLE:
-      for (int i = 0; i < var->ty->size; i++) {
-        println("  mov %d(%s), %%r8b", i + var->ofs, var->ptr);
-        println("  mov %%r8b, %d(%%rsp)", i + var->stack_offset);
-      }
-      continue;
     case TY_FLOAT:
     case TY_DOUBLE:
-      println("  movsd %d(%s), %%xmm0", var->ofs, var->ptr);
-      println("  movsd %%xmm0, %d(%%rsp)", var->stack_offset);
+    case TY_LDOUBLE:
+      gen_mem_copy(var->ofs, var->ptr,
+                   var->stack_offset, "%rsp",
+                   var->ty->size);
       continue;
     }
 
@@ -815,13 +824,9 @@ static void copy_struct_mem(void) {
   Type *ty = current_fn->ty->return_ty;
   Obj *var = current_fn->ty->param_list;
 
-  println("  mov %d(%s), %%rdi", var->ofs, var->ptr);
-
-  for (int i = 0; i < ty->size; i++) {
-    println("  mov %d(%%rax), %%dl", i);
-    println("  mov %%dl, %d(%%rdi)", i);
-  }
-  println("  mov %%rdi, %%rax");
+  println("  mov %d(%s), %%rcx", var->ofs, var->ptr);
+  gen_mem_copy(0, "%rax", 0, "%rcx", ty->size);
+  println("  mov %%rcx, %%rax");
 }
 
 static void builtin_alloca(Node *node) {
@@ -1192,11 +1197,7 @@ static void gen_expr(Node *node) {
     push_tmp();
     gen_expr(node->rhs);
     char *reg = pop_tmp_keep_reg(true);
-
-    println("  movdqu (%%rax), %%xmm0");
-    println("  movq 16(%%rax), %%rdx");
-    println("  movdqu %%xmm0, (%s)", reg);
-    println("  movq %%rdx, 16(%s)", reg);
+    gen_mem_copy(0, "%rax", 0, reg, 24);
     return;
   }
   case ND_VA_ARG: {
@@ -1800,14 +1801,14 @@ static void emit_text(Obj *prog) {
       println("  movq %%r9, %d(%s)", off + 40, ptr);
       println("  test %%al, %%al");
       println("  je 1f");
-      println("  movdqu %%xmm0, %d(%s)", off + 48, ptr);
-      println("  movdqu %%xmm1, %d(%s)", off + 64, ptr);
-      println("  movdqu %%xmm2, %d(%s)", off + 80, ptr);
-      println("  movdqu %%xmm3, %d(%s)", off + 96, ptr);
-      println("  movdqu %%xmm4, %d(%s)", off + 112, ptr);
-      println("  movdqu %%xmm5, %d(%s)", off + 128, ptr);
-      println("  movdqu %%xmm6, %d(%s)", off + 144, ptr);
-      println("  movdqu %%xmm7, %d(%s)", off + 160, ptr);
+      println("  movups %%xmm0, %d(%s)", off + 48, ptr);
+      println("  movups %%xmm1, %d(%s)", off + 64, ptr);
+      println("  movups %%xmm2, %d(%s)", off + 80, ptr);
+      println("  movups %%xmm3, %d(%s)", off + 96, ptr);
+      println("  movups %%xmm4, %d(%s)", off + 112, ptr);
+      println("  movups %%xmm5, %d(%s)", off + 128, ptr);
+      println("  movups %%xmm6, %d(%s)", off + 144, ptr);
+      println("  movups %%xmm7, %d(%s)", off + 160, ptr);
       println("1:");
     }
 
