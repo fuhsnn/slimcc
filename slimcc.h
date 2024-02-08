@@ -488,6 +488,7 @@ void add_type(Node *node);
 
 void codegen(Obj *prog, FILE *out);
 int align_to(int n, int align);
+bool va_arg_need_copy(Type *ty);
 
 extern bool dont_reuse_stack;
 

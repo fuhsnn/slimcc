@@ -3412,11 +3412,13 @@ static Node *primary(Token **rest, Token *tok) {
     node->lhs = ap_arg;
     tok = skip(tok, ",");
 
-    node->var = new_lvar(NULL, typename(&tok, tok));
-    node->ty = node->var->ty;
-    chain_expr(&node, new_var_node(node->var, tok));
+    Type *ty = typename(&tok, tok);
+    if (va_arg_need_copy(ty))
+      node->var = new_lvar(NULL, ty);
+
+    node->ty = pointer_to(ty);
     *rest = skip(tok, ")");
-    return node;
+    return new_unary(ND_DEREF, node, tok);
   }
 
   if (equal(tok, "__builtin_compare_and_swap")) {
