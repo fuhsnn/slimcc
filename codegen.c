@@ -243,6 +243,16 @@ static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
   }
 }
 
+static void gen_mem_zero(int dofs, char *dptr, int sz) {
+  println("  xor %%eax, %%eax");
+  for (int i = 0; i < sz;) {
+    int rem = sz - i;
+    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
+    println("  mov %s, %d(%s)", reg_ax(p2), i + dofs, dptr);
+    i += p2;
+  }
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 static void gen_addr(Node *node) {
@@ -1043,11 +1053,7 @@ static void gen_expr(Node *node) {
     cast(node->lhs->ty, node->ty);
     return;
   case ND_MEMZERO:
-    // `rep stosb` is equivalent to `memset(%rdi, %al, %rcx)`.
-    println("  mov $%d, %%rcx", node->var->ty->size);
-    println("  lea %d(%s), %%rdi", node->var->ofs, node->var->ptr);
-    println("  mov $0, %%al");
-    println("  rep stosb");
+    gen_mem_zero(node->var->ofs, node->var->ptr, node->var->ty->size);
     return;
   case ND_COND: {
     int c = count();
