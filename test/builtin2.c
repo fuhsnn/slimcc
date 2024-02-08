@@ -23,7 +23,7 @@ struct ofs_S1 {
 _Static_assert(__builtin_offsetof(struct ofs_S1, m[1][2].n.k[3]) == 46,"");
 
 
-int va(int i, ...) {
+int va_expr_in_arg(int i, ...) {
   __builtin_va_list ap, ap2;
   __builtin_va_start(ap, (i += 7, i));
   __builtin_va_copy(ap2, ap);
@@ -35,8 +35,18 @@ int va(int i, ...) {
   return i;
 }
 
+int va_in_comma(int i, ...) {
+  __builtin_va_list ap, ap2;
+  return __builtin_va_start(ap, i),
+  __builtin_va_copy(ap2, ap),
+  i = __builtin_va_arg(ap2, int),
+  __builtin_va_end(ap2),
+  i;
+}
+
 int main(void) {
-  ASSERT(30, va(17));
+  ASSERT(30, va_expr_in_arg(17));
+  ASSERT(33, va_in_comma(0,33));
 
   printf("OK\n");
 }

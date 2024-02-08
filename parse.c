@@ -1921,34 +1921,6 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     return node;
   }
 
-  if (equal(tok, "__builtin_va_start")) {
-    Node *node = new_node(ND_VA_START, tok);
-    tok = skip(tok->next, "(");
-    node->lhs = conditional(&tok, tok);
-    if (equal(tok, ","))
-      assign(&tok, tok->next);
-    *rest = skip(tok, ")");
-    return node;
-  }
-
-  if (equal(tok, "__builtin_va_copy")) {
-    Node *node = new_node(ND_VA_COPY, tok);
-    tok = skip(tok->next, "(");
-    node->lhs = conditional(&tok, tok);
-    tok = skip(tok, ",");
-    node->rhs = conditional(&tok, tok);
-    *rest = skip(tok, ")");
-    return node;
-  }
-
-  if (equal(tok, "__builtin_va_end")) {
-    Node *node = new_node(ND_EXPR_STMT, tok);
-    tok = skip(tok->next, "(");
-    node->lhs = conditional(&tok, tok);
-    *rest = skip(tok, ")");
-    return node;
-  }
-
   if (equal(tok, "{"))
     return compound_stmt(rest, tok->next, ND_BLOCK);
 
@@ -3402,6 +3374,33 @@ static Node *primary(Token **rest, Token *tok) {
     Type *t2 = typename(&tok, tok);
     *rest = skip(tok, ")");
     return new_num(is_compatible(t1, t2), start);
+  }
+
+  if (equal(tok, "__builtin_va_start")) {
+    Node *node = new_node(ND_VA_START, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = conditional(&tok, tok);
+    if (equal(tok, ","))
+      assign(&tok, tok->next);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "__builtin_va_copy")) {
+    Node *node = new_node(ND_VA_COPY, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = conditional(&tok, tok);
+    tok = skip(tok, ",");
+    node->rhs = conditional(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "__builtin_va_end")) {
+    tok = skip(tok->next, "(");
+    Node *node = conditional(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
   }
 
   if (equal(tok, "__builtin_va_arg")) {

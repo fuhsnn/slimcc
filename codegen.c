@@ -1176,6 +1176,29 @@ static void gen_expr(Node *node) {
     println("  xchg %s, (%s)", reg_ax(sz), reg);
     return;
   }
+  case ND_VA_START: {
+    gen_expr(node->lhs);
+    Obj *fn = current_fn;
+    println("  movl $%d, (%%rax)", fn->va_gp_ofs);
+    println("  movl $%d, 4(%%rax)", fn->va_fp_ofs);
+    println("  lea %d(%%rbp), %%rdx", fn->va_st_ofs);
+    println("  movq %%rdx, 8(%%rax)");
+    println("  lea %d(%s), %%rdx", fn->va_area->ofs, fn->va_area->ptr);
+    println("  movq %%rdx, 16(%%rax)");
+    return;
+  }
+  case ND_VA_COPY: {
+    gen_expr(node->lhs);
+    push_tmp();
+    gen_expr(node->rhs);
+    char *reg = pop_tmp_keep_reg(true);
+
+    println("  movdqu (%%rax), %%xmm0");
+    println("  movq 16(%%rax), %%rdx");
+    println("  movdqu %%xmm0, (%s)", reg);
+    println("  movq %%rdx, 16(%s)", reg);
+    return;
+  }
   case ND_VA_ARG: {
     gen_expr(node->lhs);
     Type *ty = node->ty;
@@ -1206,7 +1229,7 @@ static void gen_expr(Node *node) {
           println("  addq 16(%%rax), %%rdi"); // reg_save_area
           println("  addq $16, 4(%%rax)");
         }
-        for (int ofs = 0; ofs < (ty->size - i * 8); ofs++) {
+        for (int ofs = 0; ofs < MIN((ty->size - i * 8), 8); ofs++) {
           println("  mov %d(%%rdi), %%r8b", ofs);
           println("  mov %%r8b, %d(%s)", ofs + i * 8 + var->ofs, var->ptr);
         }
@@ -1535,29 +1558,6 @@ static void gen_stmt(Node *node) {
   case ND_ASM:
     println("  %s", node->asm_str);
     return;
-  case ND_VA_START: {
-    gen_expr(node->lhs);
-    Obj *fn = current_fn;
-    println("  movl $%d, (%%rax)", fn->va_gp_ofs);
-    println("  movl $%d, 4(%%rax)", fn->va_fp_ofs);
-    println("  lea %d(%%rbp), %%rdx", fn->va_st_ofs);
-    println("  movq %%rdx, 8(%%rax)");
-    println("  lea %d(%s), %%rdx", fn->va_area->ofs, fn->va_area->ptr);
-    println("  movq %%rdx, 16(%%rax)");
-    return;
-  }
-  case ND_VA_COPY: {
-    gen_expr(node->lhs);
-    push_tmp();
-    gen_expr(node->rhs);
-    char *reg = pop_tmp_keep_reg(true);
-
-    println("  movdqu (%%rax), %%xmm0");
-    println("  movq 16(%%rax), %%rdx");
-    println("  movdqu %%xmm0, (%s)", reg);
-    println("  movq %%rdx, 16(%s)", reg);
-    return;
-  }
   }
 
   error_tok(node->tok, "invalid statement");

@@ -8,6 +8,17 @@ S1 gen_S1(int i) { S1 s = {i,i+1,i+2,i+3}; return s; }
 
 void *pass(void *ptr){ return ptr; }
 
+typedef struct {
+  long i[1]; double d[1];
+} M;
+
+void va_fn(int i, ...) {
+  va_list ap;
+  ASSERT(55, ( va_start(ap,i), va_arg(ap, M).i[ ({ S1 s = {}; 0; }) ] ));
+  ASSERT(66, ( va_start(ap,i), va_arg(ap, M).d[ ({ S1 s = {}; 0; }) ] ));
+}
+
+
 int main(void) {
   ASSERT(1, ({ S1 s = {1,2,3,4}; s; }).i[ ({ S1 s = {}; 0;}) ] );
   ASSERT(2, ({ S1 s = {1,2,3,4}; s; }).i[ ({ S1 s = {}; 1;}) ] );
@@ -45,6 +56,8 @@ int main(void) {
   ASSERT(1, alloca_p1 != alloca_p2);
   ASSERT(1, alloca_p2 != alloca_p3);
   ASSERT(1, alloca_p3 != alloca_p4);
+
+  va_fn(0, (M){55,66});
 
   printf("OK\n");
 }
