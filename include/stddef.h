@@ -5,8 +5,11 @@
 
 typedef unsigned long size_t;
 typedef long ptrdiff_t;
-typedef unsigned int wchar_t;
-typedef long max_align_t;
+typedef int wchar_t;
+typedef struct {
+  long long __ll;
+  long double __ld;
+} max_align_t;
 
 #define offsetof(type, member) __builtin_offsetof(type, member)
 #endif
