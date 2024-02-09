@@ -3,7 +3,7 @@
 #define GP_MAX 6
 #define FP_MAX 8
 
-#define GP_SLOTS 3
+#define GP_SLOTS 6
 #define FP_SLOTS 6
 
 typedef enum {
@@ -28,8 +28,8 @@ static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 static Obj *current_fn;
 static char *lvar_ptr;
-static char *tmpreg32[3] = {"%r9d", "%r10d", "%r11d"};
-static char *tmpreg64[3] = {"%r9", "%r10", "%r11"};
+static char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
+static char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
 
 
 bool dont_reuse_stack;
@@ -488,12 +488,12 @@ static char i64f80[] = "movq %rax, -8(%rsp); fildll -8(%rsp)";
 
 static char u64f32[] =
   "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2ss %rax,%xmm0; jmp 2f; "
-  "1: mov %rax,%rdi; and $1,%eax; pxor %xmm0,%xmm0; shr %rdi; "
-  "or %rax,%rdi; cvtsi2ss %rdi,%xmm0; addss %xmm0,%xmm0; 2:";
+  "1: mov %rax,%rdx; and $1,%eax; pxor %xmm0,%xmm0; shr %rdx; "
+  "or %rax,%rdx; cvtsi2ss %rdx,%xmm0; addss %xmm0,%xmm0; 2:";
 static char u64f64[] =
   "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2sd %rax,%xmm0; jmp 2f; "
-  "1: mov %rax,%rdi; and $1,%eax; pxor %xmm0,%xmm0; shr %rdi; "
-  "or %rax,%rdi; cvtsi2sd %rdi,%xmm0; addsd %xmm0,%xmm0; 2:";
+  "1: mov %rax,%rdx; and $1,%eax; pxor %xmm0,%xmm0; shr %rdx; "
+  "or %rax,%rdx; cvtsi2sd %rdx,%xmm0; addsd %xmm0,%xmm0; 2:";
 static char u64f80[] =
   "mov %rax, -8(%rsp); fildq -8(%rsp); test %rax, %rax; jns 1f;"
   "mov $1602224128, %eax; mov %eax, -4(%rsp); fadds -4(%rsp); 1:";
@@ -801,20 +801,20 @@ static void copy_struct_reg(void) {
   Type *ty = current_fn->ty->return_ty;
   int gp = 0, fp = 0;
 
-  println("  mov %%rax, %%rdi");
+  println("  mov %%rax, %%rcx");
 
   if (has_flonum1(ty)) {
     assert(ty->size == 4 || 8 <= ty->size);
     if (ty->size == 4)
-      println("  movss (%%rdi), %%xmm0");
+      println("  movss (%%rcx), %%xmm0");
     else
-      println("  movsd (%%rdi), %%xmm0");
+      println("  movsd (%%rcx), %%xmm0");
     fp++;
   } else {
     println("  mov $0, %%rax");
     for (int i = MIN(8, ty->size) - 1; i >= 0; i--) {
       println("  shl $8, %%rax");
-      println("  mov %d(%%rdi), %%al", i);
+      println("  mov %d(%%rcx), %%al", i);
     }
     gp++;
   }
@@ -823,16 +823,16 @@ static void copy_struct_reg(void) {
     if (has_flonum2(ty)) {
       assert(ty->size == 12 || ty->size == 16);
       if (ty->size == 12)
-        println("  movss 8(%%rdi), %%xmm%d", fp);
+        println("  movss 8(%%rcx), %%xmm%d", fp);
       else
-        println("  movsd 8(%%rdi), %%xmm%d", fp);
+        println("  movsd 8(%%rcx), %%xmm%d", fp);
     } else {
       char *reg1 = (gp == 0) ? "%al" : "%dl";
       char *reg2 = (gp == 0) ? "%rax" : "%rdx";
       println("  mov $0, %s", reg2);
       for (int i = MIN(16, ty->size) - 1; i >= 8; i--) {
         println("  shl $8, %s", reg2);
-        println("  mov %d(%%rdi), %s", i, reg1);
+        println("  mov %d(%%rcx), %s", i, reg1);
       }
     }
   }
@@ -878,7 +878,7 @@ static void gen_vaarg_reg_copy(Type *ty, Obj *var) {
 }
 
 static void builtin_alloca(Node *node) {
-  // Shift the temporary area by %rdi.
+  // Shift the temporary area by %rax.
   println("  sub %%rax, %%rsp");
   // Align frame pointer
   int align = node->val > 16 ? node->val : 16;
@@ -1011,23 +1011,23 @@ static void gen_expr(Node *node) {
       // If the lhs is a bitfield, we need to read the current value
       // from memory and merge it with a new value.
       Member *mem = node->lhs->member;
-      println("  mov $%ld, %%rdi", (1L << mem->bit_width) - 1);
-      println("  and %%rdi, %%rax");
-      println("  mov %%rax, %%r8");
+      println("  mov $%ld, %%rdx", (1L << mem->bit_width) - 1);
+      println("  and %%rdx, %%rax");
+      println("  mov %%rax, %%rcx");
 
       pop_tmp("%rax");
       push_tmp();
       load(mem->ty);
 
       long mask = ((1L << mem->bit_width) - 1) << mem->bit_offset;
-      println("  mov $%ld, %%rdi", ~mask);
-      println("  and %%rdi, %%rax");
+      println("  mov $%ld, %%rdx", ~mask);
+      println("  and %%rdx, %%rax");
 
-      println("  mov %%r8, %%rdi");
-      println("  shl $%d, %%rdi", mem->bit_offset);
-      println("  or %%rdi, %%rax");
+      println("  mov %%rcx, %%rdx");
+      println("  shl $%d, %%rdx", mem->bit_offset);
+      println("  or %%rdx, %%rax");
       store(node->ty);
-      println("  mov %%r8, %%rax");
+      println("  mov %%rcx, %%rax");
 
       if (!mem->ty->is_unsigned) {
         println("  shl $%d, %%rax", 64 - mem->bit_width);
@@ -1205,13 +1205,13 @@ static void gen_expr(Node *node) {
     println("  mov %s, %s", reg_ax(sz), reg_dx(sz));
     pop_tmp("%rax"); // old
     pop_tmp("%rcx"); // addr
-    println("  mov %%rax, %%r8");
+    println("  mov %%rax, %s", tmpreg64[0]);
     load(node->cas_old->ty->base);
 
     println("  lock cmpxchg %s, (%%rcx)", reg_dx(sz));
     println("  sete %%cl");
     println("  je 1f");
-    println("  mov %s, (%%r8)", reg_ax(sz));
+    println("  mov %s, (%s)", reg_ax(sz), tmpreg64[0]);
     println("1:");
     println("  movzbl %%cl, %%eax");
     return;
