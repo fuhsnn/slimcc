@@ -407,10 +407,6 @@ struct Type {
   // the C spec.
   Type *base;
 
-  // Declaration
-  Token *name;
-  Token *name_pos;
-
   // Array
   int array_len;
 

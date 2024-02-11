@@ -115,7 +115,7 @@ static Type *typename(Token **rest, Token *tok);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
 static Type *type_suffix(Token **rest, Token *tok, Type *ty);
-static Type *declarator(Token **rest, Token *tok, Type *ty);
+static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static void array_initializer2(Token **rest, Token *tok, Initializer *init, int i);
 static void struct_initializer2(Token **rest, Token *tok, Initializer *init, Member *mem, bool post_desig);
@@ -154,7 +154,7 @@ static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety);
-static Obj *func_prototype(Type *ty, VarAttr *attr);
+static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
 
@@ -641,9 +641,8 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     }
 
     Type *ty2 = declspec(&tok, tok, NULL);
-    ty2 = declarator(&tok, tok, ty2);
-
-    Token *name = ty2->name;
+    Token *name = NULL;
+    ty2 = declarator(&tok, tok, ty2, &name);
 
     chain_expr(&vla_calc, compute_vla_size(ty2, tok));
 
@@ -748,8 +747,7 @@ Token *skip_paren(Token *tok) {
   return tok->next;
 }
 
-// declarator = pointers ("(" ident ")" | "(" declarator ")" | ident) type-suffix
-static Type *declarator(Token **rest, Token *tok, Type *ty) {
+static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
@@ -757,42 +755,20 @@ static Type *declarator(Token **rest, Token *tok, Type *ty) {
       return func_params(rest, tok, ty);
 
     ty = type_suffix(rest, skip_paren(tok), ty);
-    return declarator(&(Token *){NULL}, tok, ty);
+    return declarator(&(Token *){NULL}, tok, ty, name_tok);
   }
 
-  Token *name = NULL;
-  Token *name_pos = tok;
-
-  if (tok->kind == TK_IDENT) {
-    name = tok;
+  if (name_tok && tok->kind == TK_IDENT) {
+    *name_tok = tok;
     tok = tok->next;
   }
-
-  ty = type_suffix(rest, tok, ty);
-  ty->name = name;
-  ty->name_pos = name_pos;
-  return ty;
-}
-
-// abstract-declarator = pointers ("(" abstract-declarator ")")? type-suffix
-static Type *abstract_declarator(Token **rest, Token *tok, Type *ty) {
-  ty = pointers(&tok, tok, ty);
-
-  if (consume(&tok, tok, "(")) {
-    if (is_typename(tok) || equal(tok, ")"))
-      return func_params(rest, tok, ty);
-
-    ty = type_suffix(rest, skip_paren(tok), ty);
-    return abstract_declarator(&(Token *){NULL}, tok, ty);
-  }
-
   return type_suffix(rest, tok, ty);
 }
 
 // type-name = declspec abstract-declarator
 static Type *typename(Token **rest, Token *tok) {
   Type *ty = declspec(&tok, tok, NULL);
-  return abstract_declarator(rest, tok, ty);
+  return declarator(rest, tok, ty, NULL);
 }
 
 static bool is_end(Token *tok) {
@@ -904,15 +880,18 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
   bool first = true;
   for (; comma_list(rest, &tok, ";", !first); first = false) {
-    Type *ty = declarator(&tok, tok, basety);
+    Token *name = NULL;
+    Type *ty = declarator(&tok, tok, basety, &name);
     if (ty->kind == TY_FUNC) {
-      func_prototype(ty, attr);
+      if (!name)
+        error_tok(tok, "function name omitted");
+      func_prototype(ty, attr, name);
       continue;
     }
     if (ty->kind == TY_VOID)
       error_tok(tok, "variable declared void");
-    if (!ty->name)
-      error_tok(ty->name_pos, "variable name omitted");
+    if (!name)
+      error_tok(tok, "variable name omitted");
 
     // Generate code for computing a VLA size. We need to do this
     // even if ty is not VLA because ty may be a pointer to VLA
@@ -925,7 +904,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
       // static local variable
       Obj *var = new_anon_gvar(ty);
-      push_scope(get_ident(ty->name))->var = var;
+      push_scope(get_ident(name))->var = var;
 
       if (attr->is_constexpr) {
         if (!equal(tok, "="))
@@ -945,13 +924,12 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       // Variable length arrays (VLAs) are translated to alloca() calls.
       // For example, `int x[n+2]` is translated to `tmp = n + 2,
       // x = alloca(tmp)`.
-      Obj *var = new_lvar(get_ident(ty->name), ty);
+      Obj *var = new_lvar(get_ident(name), ty);
       Obj *top = new_lvar(NULL, ty);
 
       int align = (attr && attr->align) ? attr->align : 16;
 
-      Token *tok = ty->name;
-      chain_expr(&expr, new_alloca(new_var_node(ty->vla_size, tok), var, top, align));
+      chain_expr(&expr, new_alloca(new_var_node(ty->vla_size, name), var, top, align));
 
       top->vla_next = current_vla;
       current_vla = top;
@@ -959,7 +937,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       continue;
     }
 
-    Obj *var = new_lvar(get_ident(ty->name), ty);
+    Obj *var = new_lvar(get_ident(name), ty);
     if (attr && attr->align)
       var->align = attr->align;
 
@@ -976,9 +954,9 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
 
     if (var->ty->size < 0)
-      error_tok(ty->name, "variable has incomplete type");
+      error_tok(name, "variable has incomplete type");
     if (var->ty->kind == TY_VOID)
-      error_tok(ty->name, "variable declared void");
+      error_tok(name, "variable declared void");
   }
   return expr;
 }
@@ -2827,8 +2805,9 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
       Member *mem = calloc(1, sizeof(Member));
-      mem->ty = declarator(&tok, tok, basety);
-      mem->name = mem->ty->name;
+      Token *name = NULL;
+      mem->ty = declarator(&tok, tok, basety, &name);
+      mem->name = name;
       mem->align = attr.align ? attr.align : mem->ty->align;
 
       for (Type *t = mem->ty; t; t = t->base)
@@ -3526,10 +3505,11 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
   Node *node = NULL;
   bool first = true;
   for (; comma_list(rest, &tok, ";", !first); first = false) {
-    Type *ty = declarator(&tok, tok, basety);
-    if (!ty->name)
-      error_tok(ty->name_pos, "typedef name omitted");
-    push_scope(get_ident(ty->name))->type_def = ty;
+    Token *name = NULL;
+    Type *ty = declarator(&tok, tok, basety, &name);
+    if (!name)
+      error_tok(tok, "typedef name omitted");
+    push_scope(get_ident(name))->type_def = ty;
     chain_expr(&node, compute_vla_size(ty, tok));
   }
   return node;
@@ -3588,10 +3568,8 @@ static void mark_live(Obj *var) {
   }
 }
 
-static Obj *func_prototype(Type *ty, VarAttr *attr) {
-  if (!ty->name)
-    error_tok(ty->name_pos, "function name omitted");
-  char *name_str = get_ident(ty->name);
+static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
+  char *name_str = get_ident(name);
 
   Obj *fn = find_func(name_str);
   if (!fn) {
@@ -3600,14 +3578,14 @@ static Obj *func_prototype(Type *ty, VarAttr *attr) {
     fn->is_static = attr->is_static || (attr->is_inline && !attr->is_extern);
     fn->is_inline = attr->is_inline;
   } else if (!fn->is_static && attr->is_static) {
-    error_tok(ty->name, "static declaration follows a non-static declaration");
+    error_tok(name, "static declaration follows a non-static declaration");
   }
   fn->is_root = !(fn->is_static && fn->is_inline);
   return fn;
 }
 
-static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
-  Obj *fn = func_prototype(ty, attr);
+static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr, Token *name) {
+  Obj *fn = func_prototype(ty, attr, name);
 
   if (fn->is_definition)
     error_tok(tok, "redefinition of %s", fn->name);
@@ -3651,23 +3629,24 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr) {
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
-    Type *ty = declarator(&tok, tok, basety);
+    Token *name = NULL;
+    Type *ty = declarator(&tok, tok, basety, &name);
 
     if (ty->kind == TY_FUNC) {
       if (equal(tok, "{")) {
         if (!first || scope->parent)
           error_tok(tok, "function definition is not allowed here");
-        func_definition(&tok, tok, ty, attr);
+        func_definition(&tok, tok, ty, attr, name);
         return tok;
       }
-      func_prototype(ty, attr);
+      func_prototype(ty, attr, name);
       continue;
     }
 
-    if (!ty->name)
-      error_tok(ty->name_pos, "variable name omitted");
+    if (!name)
+      error_tok(tok, "variable name omitted");
 
-    Obj *var = new_gvar(get_ident(ty->name), ty);
+    Obj *var = new_gvar(get_ident(name), ty);
     var->is_definition = !attr->is_extern;
     var->is_static = attr->is_static;
     var->is_tls = attr->is_tls;
