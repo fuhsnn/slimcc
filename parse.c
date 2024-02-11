@@ -2120,6 +2120,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval(node->lhs) || eval(node->rhs);
   case ND_CAST: {
     if (node->ty->kind == TY_BOOL) {
+      if (node->lhs->kind == ND_VAR &&
+        (node->lhs->ty->kind == TY_ARRAY || node->lhs->ty->kind == TY_VLA))
+        return 1;
       if (is_flonum(node->lhs->ty))
         return !!eval_double(node->lhs);
       return !!eval2(node->lhs, ctx);
