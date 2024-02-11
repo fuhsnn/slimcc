@@ -253,6 +253,10 @@ Node *new_cast(Node *expr, Type *ty) {
   return node;
 }
 
+Node *to_bool(Node *expr) {
+  return new_cast(expr, ty_bool);
+}
+
 static VarScope *push_scope(char *name) {
   VarScope *sc = calloc(1, sizeof(VarScope));
   hashmap_put(&scope->vars, name, sc);
@@ -2107,8 +2111,6 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     eval2(node->lhs, ctx);
     return eval2(node->rhs, ctx);
   case ND_NOT:
-    if (is_flonum(node->lhs->ty))
-      return !eval_double(node->lhs);
     return !eval(node->lhs);
   case ND_BITNOT:
     return ~eval(node->lhs);
@@ -2455,7 +2457,7 @@ static Node *conditional(Token **rest, Token *tok) {
     Obj *var = new_lvar(NULL, cond->ty);
     Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
     Node *rhs = new_node(ND_COND, tok);
-    rhs->cond = new_var_node(var, tok);
+    rhs->cond = to_bool(new_var_node(var, tok));
     rhs->then = new_var_node(var, tok);
     rhs->els = conditional(rest, tok->next->next);
     leave_scope();
@@ -2463,7 +2465,7 @@ static Node *conditional(Token **rest, Token *tok) {
   }
 
   Node *node = new_node(ND_COND, tok);
-  node->cond = cond;
+  node->cond = to_bool(cond);
   node->then = expr(&tok, tok->next);
   tok = skip(tok, ":");
   node->els = conditional(rest, tok);
@@ -2475,7 +2477,7 @@ static Node *log_or(Token **rest, Token *tok) {
   Node *node = log_and(&tok, tok);
   while (equal(tok, "||")) {
     Token *start = tok;
-    node = new_binary(ND_LOGOR, node, log_and(&tok, tok->next), start);
+    node = new_binary(ND_LOGOR, to_bool(node), to_bool(log_and(&tok, tok->next)), start);
   }
   *rest = tok;
   return node;
@@ -2486,7 +2488,7 @@ static Node *log_and(Token **rest, Token *tok) {
   Node *node = bit_or(&tok, tok);
   while (equal(tok, "&&")) {
     Token *start = tok;
-    node = new_binary(ND_LOGAND, node, bit_or(&tok, tok->next), start);
+    node = new_binary(ND_LOGAND, to_bool(node), to_bool(bit_or(&tok, tok->next)), start);
   }
   *rest = tok;
   return node;
@@ -2767,7 +2769,7 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "!"))
-    return new_unary(ND_NOT, cast(rest, tok->next), tok);
+    return new_unary(ND_NOT, to_bool(cast(rest, tok->next)), tok);
 
   if (equal(tok, "~"))
     return new_unary(ND_BITNOT, cast(rest, tok->next), tok);

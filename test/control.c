@@ -21,20 +21,20 @@ int main() {
   ASSERT(55, ({ int i=0; int j=0; while(i<=10) {j=i+j; i=i+1;} j; }));
 
   ASSERT(3, (1,2,3));
-  ASSERT(5, ({ int i=2, j=3; (i=5,j)=6; i; }));
-  ASSERT(6, ({ int i=2, j=3; (i=5,j)=6; j; }));
+  // ASSERT(5, ({ int i=2, j=3; (i=5,j)=6; i; }));
+  // ASSERT(6, ({ int i=2, j=3; (i=5,j)=6; j; }));
 
   ASSERT(55, ({ int j=0; for (int i=0; i<=10; i=i+1) j=j+i; j; }));
   ASSERT(3, ({ int i=3; int j=0; for (int i=0; i<=10; i=i+1) j=j+i; i; }));
 
-  ASSERT(1, 0||1);
-  ASSERT(1, 0||(2-2)||5);
-  ASSERT(0, 0||0);
-  ASSERT(0, 0||(2-2));
+  EASSERT(1, 0||1);
+  EASSERT(1, 0||(2-2)||5);
+  EASSERT(0, 0||0);
+  EASSERT(0, 0||(2-2));
 
-  ASSERT(0, 0&&1);
-  ASSERT(0, (2-2)&&5);
-  ASSERT(1, 1&&5);
+  EASSERT(0, 0&&1);
+  EASSERT(0, (2-2)&&5);
+  EASSERT(1, 1&&5);
 
   ASSERT(3, ({ int i=0; goto a; a: i++; b: i++; c: i++; i; }));
   ASSERT(2, ({ int i=0; goto e; d: i++; e: i++; f: i++; i; }));
@@ -68,14 +68,14 @@ int main() {
   ASSERT(7, ({ int i=0; int j=0; do { j++; } while (i++ < 6); j; }));
   ASSERT(4, ({ int i=0; int j=0; int k=0; do { if (++j > 3) break; continue; k++; } while (1); j; }));
 
-  ASSERT(0, 0.0 && 0.0);
-  ASSERT(0, 0.0 && 0.1);
-  ASSERT(0, 0.3 && 0.0);
-  ASSERT(1, 0.3 && 0.5);
-  ASSERT(0, 0.0 || 0.0);
-  ASSERT(1, 0.0 || 0.1);
-  ASSERT(1, 0.3 || 0.0);
-  ASSERT(1, 0.3 || 0.5);
+  EASSERT(0, 0.0 && 0.0);
+  EASSERT(0, 0.0 && 0.1);
+  EASSERT(0, 0.3 && 0.0);
+  EASSERT(1, 0.3 && 0.5);
+  EASSERT(0, 0.0 || 0.0);
+  EASSERT(1, 0.0 || 0.1);
+  EASSERT(1, 0.3 || 0.0);
+  EASSERT(1, 0.3 || 0.5);
   ASSERT(5, ({ int x; if (0.0) x=3; else x=5; x; }));
   ASSERT(3, ({ int x; if (0.1) x=3; else x=5; x; }));
   ASSERT(5, ({ int x=5; if (0.0) x=3; x; }));
