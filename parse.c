@@ -2124,6 +2124,11 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return node->val;
   }
 
+  if (node->kind == ND_ADDR && node->lhs->kind == ND_DEREF)
+    return eval2(node->lhs->lhs, ctx);
+  if (node->kind == ND_DEREF && node->lhs->kind == ND_ADDR)
+    return eval2(node->lhs->lhs, ctx);
+
   if (ctx->kind == EV_LABEL) {
     switch (node->kind) {
     case ND_ADDR:

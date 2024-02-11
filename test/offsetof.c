@@ -9,10 +9,10 @@ typedef struct {
 } T;
 
 int main() {
-  ASSERT(0, offsetof(T, a));
-  ASSERT(4, offsetof(T, b));
-  ASSERT(8, offsetof(T, c));
-  ASSERT(16, offsetof(T, d));
+  EASSERT(0, offsetof(T, a));
+  EASSERT(4, offsetof(T, b));
+  EASSERT(8, offsetof(T, c));
+  EASSERT(16, offsetof(T, d));
 
   printf("OK\n");
   return 0;

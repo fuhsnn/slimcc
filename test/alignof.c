@@ -8,15 +8,15 @@ long g5;
 char g6;
 
 int main() {
-  ASSERT(1, _Alignof(char));
-  ASSERT(2, _Alignof(short));
-  ASSERT(4, _Alignof(int));
-  ASSERT(8, _Alignof(long));
-  ASSERT(8, _Alignof(long long));
-  ASSERT(1, _Alignof(char[3]));
-  ASSERT(4, _Alignof(int[3]));
-  ASSERT(1, _Alignof(struct {char a; char b;}[2]));
-  ASSERT(8, _Alignof(struct {char a; long b;}[2]));
+  EASSERT(1, _Alignof(char));
+  EASSERT(2, _Alignof(short));
+  EASSERT(4, _Alignof(int));
+  EASSERT(8, _Alignof(long));
+  EASSERT(8, _Alignof(long long));
+  EASSERT(1, _Alignof(char[3]));
+  EASSERT(4, _Alignof(int[3]));
+  EASSERT(1, _Alignof(struct {char a; char b;}[2]));
+  EASSERT(8, _Alignof(struct {char a; long b;}[2]));
 
   ASSERT(1, ({ _Alignas(char) char x, y; &y-&x; }));
   ASSERT(8, ({ _Alignas(long) char x, y; &y-&x; }));
@@ -35,8 +35,8 @@ int main() {
 //  ASSERT(1, ({ char x; _Alignof x; }));
 //  ASSERT(4, ({ int x; _Alignof x; }));
 
-  ASSERT(1, _Alignof(char) << 31 >> 31);
-  ASSERT(1, _Alignof(char) << 63 >> 63);
+  EASSERT(1, _Alignof(char) << 31 >> 31);
+  EASSERT(1, _Alignof(char) << 63 >> 63);
 //  ASSERT(1, ({ char x; _Alignof(x) << 63 >> 63; }));
 
   ASSERT(0, ({ char x[16]; (unsigned long)&x % 16; }));
