@@ -53,6 +53,11 @@ int main(void) {
   DASSERT((long)~0xFFFFFFF0U == 15);
   DASSERT((long)~0xFFFFFFF0  == 15);
 
+  static_assert(INT32_MIN / -1 == INT32_MIN);
+  static_assert(INT64_MIN / -1 == INT64_MIN);
+  static_assert(INT32_MIN % -1 == 0);
+  static_assert(INT64_MIN % -1 == 0);
+
   DASSERT(13835058055282163712.0  == (double)13835058055282163712ULL);
   DASSERT(13835058055282163712.0f == (float) 13835058055282163712ULL);
   DASSERT(13835058055282163712ULL == (unsigned long long) 13835058055282163712.0f);

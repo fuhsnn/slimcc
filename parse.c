@@ -2033,10 +2033,21 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval2(node->lhs, ctx) - eval(node->rhs);
   case ND_MUL:
     return eval(node->lhs) * eval(node->rhs);
-  case ND_DIV:
+  case ND_DIV: {
+    int64_t lhs = eval(node->lhs);
+    int64_t rhs = eval(node->rhs);
+    if (!rhs)
+      return eval_error(node->rhs->tok, "division by zero during constant evaluation");
+    if (rhs == -1 && !node->ty->is_unsigned) {
+      if (node->ty->size == 4 && lhs == INT32_MIN)
+        return INT32_MIN;
+      if (node->ty->size == 8 && lhs == INT64_MIN)
+        return INT64_MIN;
+    }
     if (node->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs) / eval(node->rhs);
-    return eval(node->lhs) / eval(node->rhs);
+      return (uint64_t)lhs / rhs;
+    return lhs / rhs;
+  }
   case ND_POS:
     return eval(node->lhs);
   case ND_NEG:
@@ -2046,10 +2057,17 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return (int32_t)-eval(node->lhs);
     }
     return -eval(node->lhs);
-  case ND_MOD:
+  case ND_MOD: {
+    int64_t lhs = eval(node->lhs);
+    int64_t rhs = eval(node->rhs);
+    if (!rhs)
+      return eval_error(node->rhs->tok, "remainder by zero during constant evaluation");
+    if (rhs == -1 && !node->ty->is_unsigned && node->ty->size == 8 && lhs == INT64_MIN)
+        return 0;
     if (node->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs) % eval(node->rhs);
-    return eval(node->lhs) % eval(node->rhs);
+      return (uint64_t)lhs % rhs;
+    return lhs % rhs;
+  }
   case ND_BITAND:
     return eval(node->lhs) & eval(node->rhs);
   case ND_BITOR:
