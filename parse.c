@@ -2040,6 +2040,11 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_POS:
     return eval(node->lhs);
   case ND_NEG:
+    if (node->ty->size == 4) {
+      if (node->ty->is_unsigned)
+        return (uint32_t)-eval(node->lhs);
+      return (int32_t)-eval(node->lhs);
+    }
     return -eval(node->lhs);
   case ND_MOD:
     if (node->ty->is_unsigned)
@@ -2091,6 +2096,11 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_NOT:
     return !eval(node->lhs);
   case ND_BITNOT:
+    if (node->ty->size == 4) {
+      if (node->ty->is_unsigned)
+        return (uint32_t)~eval(node->lhs);
+      return (int32_t)~eval(node->lhs);
+    }
     return ~eval(node->lhs);
   case ND_LOGAND:
     return eval(node->lhs) && eval(node->rhs);
