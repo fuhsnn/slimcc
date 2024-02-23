@@ -78,6 +78,10 @@ static int count(void) {
   return i++;
 }
 
+static bool is_gp_ty(Type *ty) {
+  return is_integer(ty) || ty->kind == TY_PTR;
+}
+
 static bool is_scalar(Type *ty) {
   return is_numeric(ty) || ty->kind == TY_PTR;
 }
@@ -1687,6 +1691,69 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
+static bool gen_inv_cmp(Node *node) {
+  if (!is_gp_ty(node->lhs->ty))
+    return false;
+
+  switch (node->kind) {
+  case ND_EQ: node->kind = ND_NE; break;
+  case ND_NE: node->kind = ND_EQ; break;
+  case ND_LT: node->kind = ND_GE; break;
+  case ND_LE: node->kind = ND_GT; break;
+  case ND_GT: node->kind = ND_LE; break;
+  case ND_GE: node->kind = ND_LT; break;
+  default: internal_error();
+  }
+  gen_expr(node);
+  return true;
+}
+
+static bool gen_bool_opt(Node *node) {
+  Node *boolexpr = NULL;
+  bool has_not = false;
+
+  for (;; node = node->lhs) {
+    switch (node->kind) {
+    case ND_NOT:
+      has_not = !has_not;
+      continue;
+    case ND_EQ:
+    case ND_NE:
+    case ND_LT:
+    case ND_LE:
+    case ND_GT:
+    case ND_GE:
+      if (has_not && gen_inv_cmp(node))
+        return true;
+    case ND_LOGOR:
+    case ND_LOGAND:
+      gen_expr(node);
+      if (has_not)
+        println("  xor $1, %%al");
+      return true;
+    }
+    if (node->ty->kind == TY_BOOL)
+      boolexpr = node;
+    if (node->kind == ND_CAST && is_scalar(node->ty))
+      continue;
+    break;
+  }
+
+  if (boolexpr) {
+    if (boolexpr->kind == ND_CAST && boolexpr->ty->kind == TY_BOOL) {
+      gen_expr(boolexpr->lhs);
+      cmp_zero(boolexpr->lhs->ty);
+      gen_cmp_setx(has_not ? ND_EQ : ND_NE, false);
+      return true;
+    }
+    gen_expr(boolexpr);
+    if (has_not)
+      println("  xor $1, %%al");
+    return true;
+  }
+  return false;
+}
+
 static bool gen_expr_opt(Node *node) {
   NodeKind kind = node->kind;
   Type *ty = node->ty;
@@ -1711,6 +1778,13 @@ static bool gen_expr_opt(Node *node) {
       gen_expr(node->els);
     return true;
   }
+
+  if (kind == ND_CAST && ty->kind == TY_BOOL)
+    if (gen_bool_opt(lhs))
+      return true;
+
+  if (kind == ND_NOT && gen_bool_opt(node))
+    return true;
 
   if (kind != ND_NUM) {
     int64_t ival;
