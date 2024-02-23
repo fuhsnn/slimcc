@@ -78,8 +78,16 @@ static int count(void) {
   return i++;
 }
 
+static bool is_scalar(Type *ty) {
+  return is_numeric(ty) || ty->kind == TY_PTR;
+}
+
 static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
+}
+
+static bool is_lvar(Node *node) {
+  return node->kind == ND_VAR && node->var->is_local;
 }
 
 static void save_tmp_regs(void) {
@@ -393,8 +401,29 @@ static void gen_addr(Node *node) {
   error_tok(node->tok, "not an lvalue");
 }
 
+static void load2(Type *ty, int sofs, char *sptr) {
+  switch (ty->kind) {
+  case TY_FLOAT:
+    println("  movss %d(%s), %%xmm0", sofs, sptr);
+    return;
+  case TY_DOUBLE:
+    println("  movsd %d(%s), %%xmm0", sofs, sptr);
+    return;
+  case TY_LDOUBLE:
+    println("  fldt %d(%s)", sofs, sptr);
+    return;
+  }
+
+  load_extend_int(ty, sofs, sptr, regop_ax(ty));
+}
+
 // Load a value from where %rax is pointing to.
 static void load(Type *ty) {
+  if (is_scalar(ty)) {
+    load2(ty, 0, "%rax");
+    return;
+  }
+
   switch (ty->kind) {
   case TY_ARRAY:
   case TY_STRUCT:
@@ -408,49 +437,35 @@ static void load(Type *ty) {
     // This is where "array is automatically converted to a pointer to
     // the first element of the array in C" occurs.
     return;
+  }
+  internal_error();
+}
+
+static void store2(Type *ty, int dofs, char *dptr) {
+  switch (ty->kind) {
+  case TY_ARRAY:
+  case TY_STRUCT:
+  case TY_UNION:
+    gen_mem_copy(0, "%rax", dofs, dptr, ty->size);
+    return;
   case TY_FLOAT:
-    println("  movss (%%rax), %%xmm0");
+    println("  movss %%xmm0, %d(%s)", dofs, dptr);
     return;
   case TY_DOUBLE:
-    println("  movsd (%%rax), %%xmm0");
+    println("  movsd %%xmm0, %d(%s)", dofs, dptr);
     return;
   case TY_LDOUBLE:
-    println("  fldt (%%rax)");
+    println("  fstpt %d(%s)", dofs, dptr);
     return;
   }
 
-  load_extend_int(ty, 0, "%rax", regop_ax(ty));
+  println("  mov %s, %d(%s)", reg_ax(ty->size), dofs, dptr);
 }
 
 // Store %rax to an address that the stack top is pointing to.
 static void store(Type *ty) {
   char *reg = pop_inreg("%rcx");
-
-  switch (ty->kind) {
-  case TY_ARRAY:
-  case TY_STRUCT:
-  case TY_UNION:
-    gen_mem_copy(0, "%rax", 0, reg, ty->size);
-    return;
-  case TY_FLOAT:
-    println("  movss %%xmm0, (%s)", reg);
-    return;
-  case TY_DOUBLE:
-    println("  movsd %%xmm0, (%s)", reg);
-    return;
-  case TY_LDOUBLE:
-    println("  fstpt (%s)", reg);
-    return;
-  }
-
-  if (ty->size == 1)
-    println("  mov %%al, (%s)", reg);
-  else if (ty->size == 2)
-    println("  mov %%ax, (%s)", reg);
-  else if (ty->size == 4)
-    println("  mov %%eax, (%s)", reg);
-  else
-    println("  mov %%rax, (%s)", reg);
+  store2(ty, 0, reg);
 }
 
 static void cmp_zero(Type *ty) {
@@ -1689,6 +1704,19 @@ static void gen_stmt(Node *node) {
 static bool gen_expr_opt(Node *node) {
   NodeKind kind = node->kind;
   Type *ty = node->ty;
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
+  if (is_lvar(node) && (is_scalar(ty))) {
+    load2(ty, node->var->ofs, node->var->ptr);
+    return true;
+  }
+
+  if (kind == ND_ASSIGN && is_lvar(lhs)) {
+    gen_expr(rhs);
+    store2(lhs->var->ty, lhs->var->ofs, lhs->var->ptr);
+    return true;
+  }
 
   if (kind != ND_NUM) {
     int64_t ival;
