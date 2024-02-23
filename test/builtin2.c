@@ -44,9 +44,24 @@ int va_in_comma(int i, ...) {
   i;
 }
 
+static int garr[2];
+static void va_fn1(void) { garr[0] = 111; }
+static void va_fn2(void) { garr[1] = 222; }
+static void va_fn0(int cnt, ...) {
+    va_list ap;
+    va_start(ap, cnt);
+    for(int i = 0; i < cnt; i++)
+        va_arg(ap, void(*)(void))();
+    va_end(ap);
+}
+
 int main(void) {
   ASSERT(30, va_expr_in_arg(17));
   ASSERT(33, va_in_comma(0,33));
+
+  va_fn0(2, &va_fn1, &va_fn2);
+  ASSERT(111, garr[0]);
+  ASSERT(222, garr[1]);
 
   printf("OK\n");
 }

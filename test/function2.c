@@ -146,17 +146,6 @@ static int add_all2(int n, ...) {
   return sum;
 }
 
-static void va_fn0(int cnt, ...) {
-    va_list ap;
-    va_start(ap, cnt);
-    for(int i = 0; i < cnt; i++)
-        va_arg(ap, void(*)(void))();
-    va_end(ap);
-}
-static int garr[2];
-static void va_fn1(void) { garr[0] = 111; }
-static void va_fn2(void) { garr[1] = 222; }
-
 int main(void) {
   G g[] = {10,11,12,13,14,15};
   F f[] = {20,21,22,23,24,25,26,27};
@@ -206,13 +195,13 @@ Aligned1024 s = {.c = 77};
     (int) 11,
     (int) 22,
     (long double) 2.3,
-    (Aligned1024) s,
+    s, // (Aligned1024)
     (int) 33,
     (double) 4.5,
     (double) 5.6,
     (double) 6.7,
     (double) 7.8,
-    (Aligned1024) s,
+    s, // (Aligned1024)
     (long double) 11.1));
 
   ASSERT(257, struct_test130(
@@ -221,13 +210,13 @@ Aligned1024 s = {.c = 77};
     (int) 11,
     (int) 22,
     (long double) 2.3,
-    (Aligned1024) s,
+    s, // (Aligned1024)
     (int) 33,
     (double) 4.5,
     (double) 5.6,
     (double) 6.7,
     (double) 7.8,
-    (Aligned1024) s,
+    s, // (Aligned1024)
     (long double) 11.1));
 
     {
@@ -276,10 +265,6 @@ Aligned1024 s = {.c = 77};
 
   ASSERT(6, add_all2(3,1,2,3));
   ASSERT(5, add_all2(4,1,2,3,-1));
-
-  va_fn0(2, &va_fn1, &va_fn2);
-  ASSERT(111, garr[0]);
-  ASSERT(222, garr[1]);
 
   printf("OK\n");
 
