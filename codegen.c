@@ -43,6 +43,7 @@ struct {
 
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
+static bool gen_expr_opt(Node *node);
 
 FMTCHK(1,2)
 static void println(char *fmt, ...) {
@@ -1030,6 +1031,9 @@ static void gen_expr(Node *node) {
   if (opt_g)
     print_loc(node->tok);
 
+  if (opt_optimize && gen_expr_opt(node))
+    return;
+
   switch (node->kind) {
   case ND_NULL_EXPR:
     return;
@@ -1680,6 +1684,26 @@ static void gen_stmt(Node *node) {
   }
 
   error_tok(node->tok, "invalid statement");
+}
+
+static bool gen_expr_opt(Node *node) {
+  NodeKind kind = node->kind;
+  Type *ty = node->ty;
+
+  if (kind != ND_NUM) {
+    int64_t ival;
+    if (is_integer(ty) && is_const_expr(node, &ival)) {
+      load_val(ty, ival);
+      return true;
+    }
+
+    long double fval;
+    if (is_flonum(ty) && is_const_double(node, &fval)) {
+      load_fval(ty, fval);
+      return true;
+    }
+  }
+  return false;
 }
 
 static void calc_stack_align(Scope *scp, int *align) {
