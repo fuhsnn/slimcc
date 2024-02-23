@@ -1716,6 +1716,9 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     Node *node = new_node(ND_SWITCH, tok);
     tok = skip(tok->next, "(");
     node->cond = expr(&tok, tok);
+    add_type(node->cond);
+    if (!is_integer(node->cond->ty))
+      error_tok(tok, "controlling expression not integer");
     tok = skip(tok, ")");
 
     Node *sw = current_switch;
@@ -1747,25 +1750,21 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     int64_t begin = const_expr(&tok, tok->next);
     int64_t end;
 
-    add_type(current_switch->cond);
-
     // [GNU] Case ranges, e.g. "case 1 ... 5:"
     if (equal(tok, "..."))
       end = const_expr(&tok, tok->next);
     else
       end = begin;
 
-    if (current_switch->cond->ty->size == 4) {
-      if (!current_switch->cond->ty->is_unsigned) {
-        begin = (int32_t) begin;
-        end = (int32_t) end;
-      } else {
-        begin = (uint32_t) begin;
-        end = (uint32_t) end;
-      }
+    Type *cond_ty = current_switch->cond->ty;
+    if (cond_ty->size <= 4) {
+      if (!cond_ty->is_unsigned)
+        begin = (int32_t)begin, end = (int32_t)end;
+      else
+        begin = (uint32_t)begin, end = (uint32_t)end;
     }
-    if ((!current_switch->cond->ty->is_unsigned && (end < begin)) ||
-      ((current_switch->cond->ty->is_unsigned && ((uint64_t)end < begin))))
+    if ((!cond_ty->is_unsigned && (end < begin)) ||
+      ((cond_ty->is_unsigned && ((uint64_t)end < begin))))
       error_tok(tok, "empty case range specified");
 
     tok = skip(tok, ":");
@@ -2273,6 +2272,8 @@ bool is_const_double(Node *node, long double *fval) {
 int64_t const_expr(Token **rest, Token *tok) {
   Node *node = conditional(rest, tok);
   add_type(node);
+  if (!is_integer(node->ty))
+    error_tok(tok, "constant expression not integer");
   return eval(node);
 }
 
