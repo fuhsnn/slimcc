@@ -487,6 +487,74 @@ static void load_val(Type *ty, int64_t val) {
   println("  mov $%"PRIi64", %%rax", val);
 }
 
+static void load_fval(Type *ty, long double fval) {
+  if (ty->kind == TY_FLOAT) {
+    float pos_z = +0.0f;
+    float fv = fval;
+    if (!memcmp(&pos_z, &fv, sizeof(float))) {
+      println("  xorps %%xmm0, %%xmm0");
+      return;
+    }
+  }
+  if (ty->kind == TY_DOUBLE) {
+    double pos_z = +0.0;
+    double dv = fval;
+    if (!memcmp(&pos_z, &dv, sizeof(double))) {
+      println("  xorps %%xmm0, %%xmm0");
+      return;
+    }
+  }
+  if (ty->kind == TY_LDOUBLE) {
+    long double pos_z = +0.0L;
+    if (!memcmp(&pos_z, &fval, 10)) {
+      println("  fldz");
+      return;
+    }
+    long double neg_z = -0.0L;
+    if (!memcmp(&neg_z, &fval, 10)) {
+      println("  fldz");
+      println("  fchs");
+      return;
+    }
+    if (fval == 1) {
+      println("  fld1");
+      return;
+    }
+    if (fval == -1) {
+      println("  fld1");
+      println("  fchs");
+      return;
+    }
+  }
+  switch (ty->kind) {
+  case TY_FLOAT: {
+    union { float f32; uint32_t u32; } u = { fval };
+    println("  movl $%u, %%eax", u.u32);
+    println("  movd %%eax, %%xmm0");
+    return;
+  }
+  case TY_DOUBLE: {
+    union { double f64; uint64_t u64; } u = { fval };
+    println("  movq $%lu, %%rax", u.u64);
+    println("  movq %%rax, %%xmm0");
+    return;
+  }
+  case TY_LDOUBLE: {
+    union { long double f80; uint64_t u64[2]; } u;
+    memset(&u, 0, sizeof(u));
+    u.f80 = fval;
+    println("  movq $%lu, %%rax", u.u64[0]);
+    println("  movw $%lu, %%dx", u.u64[1]);
+    println("  push %%rdx");
+    println("  push %%rax");
+    println("  fldt (%%rsp)");
+    println("  add $16, %%rsp");
+    return;
+  }
+  }
+  internal_error();
+}
+
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
 
 static int getTypeId(Type *ty) {
@@ -966,32 +1034,10 @@ static void gen_expr(Node *node) {
   case ND_NULL_EXPR:
     return;
   case ND_NUM: {
-    switch (node->ty->kind) {
-    case TY_FLOAT: {
-      union { float f32; uint32_t u32; } u = { node->fval };
-      println("  mov $%u, %%eax  # float %Lf", u.u32, node->fval);
-      println("  movq %%rax, %%xmm0");
+    if (is_flonum(node->ty)) {
+      load_fval(node->ty, node->fval);
       return;
     }
-    case TY_DOUBLE: {
-      union { double f64; uint64_t u64; } u = { node->fval };
-      println("  mov $%lu, %%rax  # double %Lf", u.u64, node->fval);
-      println("  movq %%rax, %%xmm0");
-      return;
-    }
-    case TY_LDOUBLE: {
-      union { long double f80; uint64_t u64[2]; } u;
-      memset(&u, 0, sizeof(u));
-      u.f80 = node->fval;
-      println("  mov $%lu, %%rax  # long double %Lf", u.u64[0], node->fval);
-      println("  mov %%rax, -16(%%rsp)");
-      println("  mov $%lu, %%rax", u.u64[1]);
-      println("  mov %%rax, -8(%%rsp)");
-      println("  fldt -16(%%rsp)");
-      return;
-    }
-    }
-
     load_val(node->ty, node->val);
     return;
   }
