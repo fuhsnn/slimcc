@@ -77,6 +77,10 @@ static int count(void) {
   return i++;
 }
 
+static bool in_imm_range (int64_t val) {
+  return val == (int32_t)val;
+}
+
 static void save_tmp_regs(void) {
   for (int i = 0; i < tmp_stack.depth; i++)
     tmp_stack.data[i].kind = SL_ST;
@@ -469,6 +473,18 @@ static void cmp_zero(Type *ty) {
     println("  cmp $0, %%eax");
   else
     println("  cmp $0, %%rax");
+}
+
+static void load_val(Type *ty, int64_t val) {
+  if (val == 0) {
+    println("  xor %%eax, %%eax");
+    return;
+  }
+  if (ty->size <= 4 ? in_imm_range(val) : (uint64_t)val <= UINT32_MAX) {
+    println("  movl $%"PRIi64", %%eax", val);
+    return;
+  }
+  println("  mov $%"PRIi64", %%rax", val);
 }
 
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
@@ -976,7 +992,7 @@ static void gen_expr(Node *node) {
     }
     }
 
-    println("  mov $%ld, %%rax", node->val);
+    load_val(node->ty, node->val);
     return;
   }
   case ND_POS:

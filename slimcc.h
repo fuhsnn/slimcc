@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <glob.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <stdarg.h>
 #include <stdbool.h>
