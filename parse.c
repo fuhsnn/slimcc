@@ -695,6 +695,8 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
 
   Node *expr = assign(&tok, tok);
   add_type(expr);
+  if (!is_integer(expr->ty))
+    error_tok(tok, "size of array not integer");
   tok = skip(tok, "]");
 
   if (equal(tok, "["))
