@@ -486,9 +486,9 @@ static void cmp_zero(Type *ty) {
   }
 
   if (is_integer(ty) && ty->size <= 4)
-    println("  cmp $0, %%eax");
+    println("  test %%eax, %%eax");
   else
-    println("  cmp $0, %%rax");
+    println("  test %%rax, %%rax");
 }
 
 static void load_val(Type *ty, int64_t val) {
@@ -1167,7 +1167,7 @@ static void gen_expr(Node *node) {
   case ND_COND: {
     int c = count();
     gen_expr(node->cond);
-    cmp_zero(node->cond->ty);
+    println("  test %%al, %%al");
     println("  je .L.else.%d", c);
     gen_expr(node->then);
     println("  jmp .L.end.%d", c);
@@ -1178,9 +1178,7 @@ static void gen_expr(Node *node) {
   }
   case ND_NOT:
     gen_expr(node->lhs);
-    cmp_zero(node->lhs->ty);
-    println("  sete %%al");
-    println("  movzx %%al, %%rax");
+    println("  xor $1, %%al");
     return;
   case ND_BITNOT:
     gen_expr(node->lhs);
@@ -1189,31 +1187,19 @@ static void gen_expr(Node *node) {
   case ND_LOGAND: {
     int c = count();
     gen_expr(node->lhs);
-    cmp_zero(node->lhs->ty);
+    println("  test %%al, %%al");
     println("  je .L.false.%d", c);
     gen_expr(node->rhs);
-    cmp_zero(node->rhs->ty);
-    println("  je .L.false.%d", c);
-    println("  mov $1, %%rax");
-    println("  jmp .L.end.%d", c);
     println(".L.false.%d:", c);
-    println("  mov $0, %%rax");
-    println(".L.end.%d:", c);
     return;
   }
   case ND_LOGOR: {
     int c = count();
     gen_expr(node->lhs);
-    cmp_zero(node->lhs->ty);
+    println("  test %%al, %%al");
     println("  jne .L.true.%d", c);
     gen_expr(node->rhs);
-    cmp_zero(node->rhs->ty);
-    println("  jne .L.true.%d", c);
-    println("  mov $0, %%rax");
-    println("  jmp .L.end.%d", c);
     println(".L.true.%d:", c);
-    println("  mov $1, %%rax");
-    println(".L.end.%d:", c);
     return;
   }
   case ND_SHL:
