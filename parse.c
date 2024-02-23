@@ -2104,6 +2104,18 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     if (node->lhs->ty->is_unsigned)
       return (uint64_t)eval(node->lhs) <= eval(node->rhs);
     return eval(node->lhs) <= eval(node->rhs);
+  case ND_GT:
+    if (is_flonum(node->lhs->ty))
+      return eval_double(node->lhs) > eval_double(node->rhs);
+    if (node->lhs->ty->is_unsigned)
+      return (uint64_t)eval(node->lhs) > eval(node->rhs);
+    return eval(node->lhs) > eval(node->rhs);
+  case ND_GE:
+    if (is_flonum(node->lhs->ty))
+      return eval_double(node->lhs) >= eval_double(node->rhs);
+    if (node->lhs->ty->is_unsigned)
+      return (uint64_t)eval(node->lhs) >= eval(node->rhs);
+    return eval(node->lhs) >= eval(node->rhs);
   case ND_COND:
     return eval(node->cond) ? eval2(node->then, ctx) : eval2(node->els, ctx);
   case ND_CHAIN:
@@ -2584,12 +2596,12 @@ static Node *relational(Token **rest, Token *tok) {
     }
 
     if (equal(tok, ">")) {
-      node = new_binary(ND_LT, shift(&tok, tok->next), node, start);
+      node = new_binary(ND_GT, node, shift(&tok, tok->next), start);
       continue;
     }
 
     if (equal(tok, ">=")) {
-      node = new_binary(ND_LE, shift(&tok, tok->next), node, start);
+      node = new_binary(ND_GE, node, shift(&tok, tok->next), start);
       continue;
     }
 
