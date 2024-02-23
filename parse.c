@@ -245,11 +245,22 @@ static Node *new_var_node(Obj *var, Token *tok) {
 
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
-  Node *node = calloc(1, sizeof(Node));
-  node->kind = ND_CAST;
-  node->tok = expr->tok;
-  node->lhs = expr;
-  node->ty = copy_type(ty);
+
+  Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .lhs = expr, .ty = ty};
+  if (opt_optimize) {
+    if ((is_integer(ty) && is_const_expr(&tmp_node, &tmp_node.val)) ||
+      (is_flonum(ty) && is_const_double(&tmp_node, &tmp_node.fval))) {
+      expr->kind = ND_NUM;
+      expr->val = tmp_node.val;
+      expr->fval = tmp_node.fval;
+      expr->ty = ty;
+      return expr;
+    }
+    if (expr->ty == ty && !is_bitfield(expr))
+      return expr;
+  }
+  Node *node = malloc(sizeof(Node));
+  *node = tmp_node;
   return node;
 }
 
@@ -665,6 +676,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
 
   leave_scope();
 
+  add_type(vla_calc);
   fn_ty->param_list = head.param_next;
   fn_ty->vla_calc = vla_calc;
   fn_ty->is_variadic = is_variadic;
@@ -1526,15 +1538,15 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     return cur;
   add_type(init->expr);
 
-  switch(ty->kind) {
+  switch (ty->kind) {
   case TY_FLOAT:
-    *(float *)(buf + offset) = eval_double(init->expr);
+    *(float *)(buf + offset) = eval_double(new_cast(init->expr, ty_float));
     return cur;
   case TY_DOUBLE:
-    *(double *)(buf + offset) = eval_double(init->expr);
+    *(double *)(buf + offset) = eval_double(new_cast(init->expr, ty_double));
     return cur;
   case TY_LDOUBLE:
-    *(long double *)(buf + offset) = eval_double(init->expr);
+    *(long double *)(buf + offset) = eval_double(new_cast(init->expr, ty_ldouble));
     return cur;
   }
 
@@ -2015,6 +2027,14 @@ static char *eval_constexpr_agg(Node *node) {
   return var->constexpr_data + ofs;
 }
 
+static void eval_void(Node *node) {
+  if (is_flonum(node->ty)) {
+    eval_double(node);
+    return;
+  }
+  eval(node);
+}
+
 static int64_t eval(Node *node) {
   return eval2(node, &(EvalContext){0});
 }
@@ -2026,6 +2046,10 @@ static int64_t eval(Node *node) {
 // number. The latter form is accepted only as an initialization
 // expression for a global variable.
 static int64_t eval2(Node *node, EvalContext *ctx) {
+  assert(!(ctx->kind == EV_CONST && is_flonum(node->ty)));
+  if (eval_recover && *eval_recover)
+    return 0;
+
   switch (node->kind) {
   case ND_ADD:
     return eval2(node->lhs, ctx) + eval(node->rhs);
@@ -2118,9 +2142,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval(node->lhs) >= eval(node->rhs);
   case ND_COND:
     return eval(node->cond) ? eval2(node->then, ctx) : eval2(node->els, ctx);
-  case ND_CHAIN:
   case ND_COMMA:
-    eval2(node->lhs, ctx);
+    eval_void(node->lhs);
     return eval2(node->rhs, ctx);
   case ND_NOT:
     return !eval(node->lhs);
@@ -2234,6 +2257,19 @@ bool is_const_expr(Node *node, int64_t *val) {
   return !failed;
 }
 
+bool is_const_double(Node *node, long double *fval) {
+  add_type(node);
+  bool failed = false;
+
+  assert(!eval_recover);
+  eval_recover = &failed;
+  long double v = eval_double(node);
+  if (fval)
+    *fval = v;
+  eval_recover = NULL;
+  return !failed;
+}
+
 int64_t const_expr(Token **rest, Token *tok) {
   Node *node = conditional(rest, tok);
   add_type(node);
@@ -2241,11 +2277,9 @@ int64_t const_expr(Token **rest, Token *tok) {
 }
 
 static long double eval_double(Node *node) {
-  if (is_integer(node->ty)) {
-    if (node->ty->is_unsigned)
-      return (unsigned long)eval(node);
-    return eval(node);
-  }
+  assert(!is_integer(node->ty));
+  if (eval_recover && *eval_recover)
+    return false;
 
   switch (node->kind) {
   case ND_ADD:
@@ -2261,10 +2295,9 @@ static long double eval_double(Node *node) {
   case ND_NEG:
     return -eval_double(node->lhs);
   case ND_COND:
-    return eval_double(node->cond) ? eval_double(node->then) : eval_double(node->els);
-  case ND_CHAIN:
+    return eval(node->cond) ? eval_double(node->then) : eval_double(node->els);
   case ND_COMMA:
-    eval_double(node->lhs);
+    eval_void(node->lhs);
     return eval_double(node->rhs);
   case ND_CAST:
     if (is_flonum(node->lhs->ty)) {

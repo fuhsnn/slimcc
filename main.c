@@ -7,7 +7,7 @@ typedef enum {
 StringArray include_paths;
 bool opt_fcommon = true;
 bool opt_fpic;
-bool opt_optimize;
+bool opt_optimize = true;
 bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;

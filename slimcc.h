@@ -472,6 +472,7 @@ bool is_numeric(Type *ty);
 bool is_bitfield(Node *node);
 bool is_compatible(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
+bool is_const_double(Node *node, long double *fval);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *func_type(Type *return_ty);
