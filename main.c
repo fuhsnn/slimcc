@@ -480,8 +480,7 @@ static void run_subprocess(char **argv) {
 
   // Wait for the child process to finish.
   int status;
-  while (wait(&status) > 0);
-  if (status != 0)
+  if (wait(&status) <= 0 || status != 0)
     exit(1);
 }
 
@@ -669,8 +668,13 @@ static char *find_file(char *pattern) {
 
 // Returns true if a given file exists.
 bool file_exists(char *path) {
+  assert(!errno);
+
   struct stat st;
-  return !stat(path, &st);
+  bool found = !stat(path, &st);
+  if (!found && errno == ENOENT)
+    errno = 0;
+  return found;
 }
 
 static char *find_libpath(void) {

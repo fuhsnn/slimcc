@@ -1142,10 +1142,14 @@ static Token *counter_macro(Token *start) {
 // modification time of the current file. E.g.
 // "Fri Jul 24 01:32:50 2020"
 static Token *timestamp_macro(Token *start) {
+  assert(!errno);
+
   Token *tok;
   struct stat st;
   if (stat(start->file->name, &st) != 0) {
     tok = new_str_token("??? ??? ?? ??:??:?? ????", start);
+    if (errno == ENOENT)
+      errno = 0;
   } else {
     char buf[30];
     ctime_r(&st.st_mtime, buf);
