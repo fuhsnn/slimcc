@@ -1718,6 +1718,14 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
+  if (kind == ND_COND && node->cond->kind == ND_NUM) {
+    if (node->cond->val)
+      gen_expr(node->then);
+    else
+      gen_expr(node->els);
+    return true;
+  }
+
   if (kind != ND_NUM) {
     int64_t ival;
     if (is_integer(ty) && is_const_expr(node, &ival)) {
