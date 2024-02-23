@@ -1691,6 +1691,67 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
+static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
+  char *ins;
+  switch (kind) {
+  case ND_ADD: ins = "add"; break;
+  case ND_SUB: ins = "sub"; break;
+  case ND_MUL: ins = "imul"; break;
+  case ND_BITAND: ins = "and"; break;
+  case ND_BITOR:ins =  "or"; break;
+  case ND_BITXOR: ins = "xor"; break;
+  case ND_SHL: ins = "shl"; break;
+  case ND_SHR: ins = "shr"; break;
+  case ND_SAR: ins = "sar"; break;
+  default: internal_error();
+  }
+
+  if (in_imm_range(val)) {
+    println("  %s $%"PRIi64", %s", ins, val, op);
+    return;
+  }
+  println("  mov $%"PRIi64", %s", val, tmp);
+  println("  %s %s, %s", ins, tmp, op);
+  return;
+}
+
+static bool imm_arith(NodeKind kind, Type *ty, Node *expr, int64_t val) {
+  char *ax = reg_ax(ty->size);
+  char *dx = reg_dx(ty->size);
+
+  gen_expr(expr);
+  imm_arith2(kind, ax, dx, val);
+  return true;
+}
+
+static bool gen_gp_opt(Node *node) {
+  NodeKind kind = node->kind;
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+  Type *ty = node->ty;
+
+  switch (kind) {
+  case ND_ADD:
+  case ND_MUL:
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+    if (lhs->kind == ND_NUM)
+      return imm_arith(kind, ty, rhs, lhs->val);
+    if (rhs->kind == ND_NUM)
+      return imm_arith(kind, ty, lhs, rhs->val);
+    break;
+  case ND_SUB:
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR:
+    if (rhs->kind == ND_NUM)
+      return imm_arith(kind, ty, lhs, rhs->val);
+    break;
+  }
+  return false;
+}
+
 static bool gen_inv_cmp(Node *node) {
   if (!is_gp_ty(node->lhs->ty))
     return false;
@@ -1770,6 +1831,9 @@ static bool gen_expr_opt(Node *node) {
     store2(lhs->var->ty, lhs->var->ofs, lhs->var->ptr);
     return true;
   }
+
+  if (is_gp_ty(ty) && gen_gp_opt(node))
+    return true;
 
   if (kind == ND_COND && node->cond->kind == ND_NUM) {
     if (node->cond->val)
