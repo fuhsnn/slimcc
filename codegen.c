@@ -124,11 +124,11 @@ static Slot *pop_tmpstack(void) {
   return sl;
 }
 
-static void push_tmp(void) {
+static void push(void) {
   push_tmpstack(SL_GP);
 }
 
-static void pop_tmp2(Slot *sl, bool is_r64, char *arg) {
+static void pop2(Slot *sl, bool is_r64, char *arg) {
   char *ax = is_r64 ? "%rax" : "%eax";
 
   if (sl->kind == SL_GP) {
@@ -141,12 +141,22 @@ static void pop_tmp2(Slot *sl, bool is_r64, char *arg) {
   println("  mov %d(%s), %s", sl->st_offset, lvar_ptr, arg);
 }
 
-static void pop_tmp(char *arg) {
+static void pop(char *arg) {
   Slot *sl = pop_tmpstack();
-  pop_tmp2(sl, true, arg);
+  pop2(sl, true, arg);
 }
 
-static char *pop_tmp_keep_reg(bool is_r64) {
+static char *req_gp(char **regtbl, int i) {
+  assert(i + 1 <= GP_SLOTS);
+
+  if (tmp_stack.depth > 0) {
+    Slot *sl = &tmp_stack.data[tmp_stack.depth - 1];
+    sl->gp_depth = MAX(sl->gp_depth, i + 1);
+  }
+  return regtbl[i];
+}
+
+static char *pop_inreg2(bool is_r64, char *fallback_reg) {
   Slot *sl = pop_tmpstack();
 
   if (sl->kind == SL_GP) {
@@ -155,16 +165,19 @@ static char *pop_tmp_keep_reg(bool is_r64) {
     insrtln("  mov %s, %s", sl->loc, ax, reg);
     return reg;
   }
-  char *reg = is_r64 ? "%rcx" : "%ecx";
-  pop_tmp2(sl, is_r64, reg);
-  return reg;
+  pop2(sl, is_r64, fallback_reg);
+  return fallback_reg;
 }
 
-static void push_tmpf(void) {
+static char *pop_inreg(char *fallback_reg) {
+  return pop_inreg2(true, fallback_reg);
+}
+
+static void pushf(void) {
   push_tmpstack(SL_FP);
 }
 
-static int pop_tmpf_keep_reg(bool is_xmm64) {
+static int popf_inreg(bool is_xmm64) {
   Slot *sl = pop_tmpstack();
   char *mv = is_xmm64 ? "movsd" : "movss";
 
@@ -391,7 +404,7 @@ static void load(Type *ty) {
 
 // Store %rax to an address that the stack top is pointing to.
 static void store(Type *ty) {
-  char *reg = pop_tmp_keep_reg(true);
+  char *reg = pop_inreg("%rcx");
 
   switch (ty->kind) {
   case TY_ARRAY:
@@ -1005,7 +1018,7 @@ static void gen_expr(Node *node) {
     return;
   case ND_ASSIGN:
     gen_addr(node->lhs);
-    push_tmp();
+    push();
     gen_expr(node->rhs);
 
     if (is_bitfield(node->lhs)) {
@@ -1016,8 +1029,8 @@ static void gen_expr(Node *node) {
       println("  and %%rdx, %%rax");
       println("  mov %%rax, %%rcx");
 
-      pop_tmp("%rax");
-      push_tmp();
+      pop("%rax");
+      push();
       load(mem->ty);
 
       long mask = ((1L << mem->bit_width) - 1) << mem->bit_offset;
@@ -1111,10 +1124,10 @@ static void gen_expr(Node *node) {
   case ND_SHL:
   case ND_SHR:
     gen_expr(node->lhs);
-    push_tmp();
+    push();
     gen_expr(node->rhs);
     println("  mov %%eax, %%ecx");
-    pop_tmp("%rax");
+    pop("%rax");
     if (node->kind == ND_SHL)
       println("  shl %%cl, %s", regop_ax(node->ty));
     else if (node->lhs->ty->is_unsigned)
@@ -1130,15 +1143,15 @@ static void gen_expr(Node *node) {
     }
 
     gen_expr(node->lhs);
-    push_tmp();
+    push();
 
     if (node->args_expr)
       gen_expr(node->args_expr);
 
-    pop_tmp("%r10");
+    pop("%r10");
 
     println("  mov %%rsp, %%rax");
-    push_tmp();
+    push();
 
     save_tmp_regs();
 
@@ -1160,7 +1173,7 @@ static void gen_expr(Node *node) {
 
     println("  call *%%r10");
 
-    pop_tmp("%rsp");
+    pop("%rsp");
 
     // It looks like the most significant 48 or 56 bits in RAX may
     // contain garbage if a function return type is short or bool/char,
@@ -1198,30 +1211,32 @@ static void gen_expr(Node *node) {
     return;
   case ND_CAS: {
     gen_expr(node->cas_addr);
-    push_tmp();
+    push();
     gen_expr(node->cas_old);
-    push_tmp();
+    push();
     gen_expr(node->cas_new);
     int sz = node->cas_addr->ty->base->size;
     println("  mov %s, %s", reg_ax(sz), reg_dx(sz));
-    pop_tmp("%rax"); // old
-    pop_tmp("%rcx"); // addr
-    println("  mov %%rax, %s", tmpreg64[0]);
+    pop("%rax"); // old
+    pop("%rcx"); // addr
+
+    char *r0 = req_gp(tmpreg64, 0);
+    println("  mov %%rax, %s", r0);
     load(node->cas_old->ty->base);
 
     println("  lock cmpxchg %s, (%%rcx)", reg_dx(sz));
     println("  sete %%cl");
     println("  je 1f");
-    println("  mov %s, (%s)", reg_ax(sz), tmpreg64[0]);
+    println("  mov %s, (%s)", reg_ax(sz), r0);
     println("1:");
     println("  movzbl %%cl, %%eax");
     return;
   }
   case ND_EXCH: {
     gen_expr(node->lhs);
-    push_tmp();
+    push();
     gen_expr(node->rhs);
-    char *reg = pop_tmp_keep_reg(true);
+    char *reg = pop_inreg("%rcx");
 
     int sz = node->lhs->ty->base->size;
     println("  xchg %s, (%s)", reg_ax(sz), reg);
@@ -1240,9 +1255,9 @@ static void gen_expr(Node *node) {
   }
   case ND_VA_COPY: {
     gen_expr(node->lhs);
-    push_tmp();
+    push();
     gen_expr(node->rhs);
-    char *reg = pop_tmp_keep_reg(true);
+    char *reg = pop_inreg("%rcx");
     gen_mem_copy(0, "%rax", 0, reg, 24);
     return;
   }
@@ -1292,11 +1307,11 @@ static void gen_expr(Node *node) {
   case TY_FLOAT:
   case TY_DOUBLE: {
     gen_expr(node->lhs);
-    push_tmpf();
+    pushf();
     gen_expr(node->rhs);
 
     bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
-    int reg = pop_tmpf_keep_reg(is_xmm64);
+    int reg = popf_inreg(is_xmm64);
     char *sz = is_xmm64 ? "sd" : "ss";
 
     switch (node->kind) {
@@ -1387,12 +1402,13 @@ static void gen_expr(Node *node) {
   }
 
   gen_expr(node->lhs);
-  push_tmp();
+  push();
   gen_expr(node->rhs);
 
   bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
   char *ax = is_r64 ? "%rax" : "%eax";
-  char *op = pop_tmp_keep_reg(is_r64);
+  char *cx = is_r64 ? "%rcx" : "%ecx";
+  char *op = pop_inreg2(is_r64, cx);
 
   switch (node->kind) {
   case ND_ADD:
