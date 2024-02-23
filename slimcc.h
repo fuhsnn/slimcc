@@ -240,6 +240,7 @@ typedef enum {
   ND_BITXOR,    // ^
   ND_SHL,       // <<
   ND_SHR,       // >>
+  ND_SAR,       // arithmetic >>
   ND_EQ,        // ==
   ND_NE,        // !=
   ND_LT,        // <

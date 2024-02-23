@@ -371,6 +371,7 @@ void add_type(Node *node) {
   case ND_BITNOT:
   case ND_SHL:
   case ND_SHR:
+  case ND_SAR:
     if (!is_integer(node->lhs->ty))
       error_tok(node->lhs->tok, "invalid operand");
     int_promotion(&node->lhs);

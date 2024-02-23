@@ -1123,17 +1123,20 @@ static void gen_expr(Node *node) {
   }
   case ND_SHL:
   case ND_SHR:
+  case ND_SAR:
     gen_expr(node->lhs);
     push();
     gen_expr(node->rhs);
-    println("  mov %%eax, %%ecx");
-    pop("%rax");
-    if (node->kind == ND_SHL)
-      println("  shl %%cl, %s", regop_ax(node->ty));
-    else if (node->lhs->ty->is_unsigned)
-      println("  shr %%cl, %s", regop_ax(node->ty));
-    else
-      println("  sar %%cl, %s", regop_ax(node->ty));
+    println("  mov %%al, %%cl");
+
+    char *ax = regop_ax(node->ty);
+    pop2(pop_tmpstack(), (node->ty->size == 8), ax);
+
+    switch (node->kind) {
+    case ND_SHL: println("  shl %%cl, %s", ax); break;
+    case ND_SHR: println("  shr %%cl, %s", ax); break;
+    case ND_SAR: println("  sar %%cl, %s", ax); break;
+    }
     return;
   case ND_FUNCALL: {
     if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
