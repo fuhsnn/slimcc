@@ -44,7 +44,9 @@ struct {
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
+static bool gen_addr_opt(Node *node);
 
+static void imm_add(char *op, char *tmp, int64_t val);
 static void imm_sub(char *op, char *tmp, int64_t val);
 static void imm_and(char *op, char *tmp, int64_t val);
 static void imm_cmp(char *op, char *tmp, int64_t val);
@@ -329,6 +331,9 @@ static void gen_bit_extract(Type *ty, int bit_width, int bit_offset) {
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 static void gen_addr(Node *node) {
+  if (opt_optimize && gen_addr_opt(node))
+    return;
+
   switch (node->kind) {
   case ND_VAR:
     // Variable-length array, which is always local.
@@ -410,22 +415,18 @@ static void gen_addr(Node *node) {
     gen_addr(node->rhs);
     return;
   case ND_MEMBER:
-    switch(node->lhs->kind) {
+    switch (node->lhs->kind) {
     case ND_FUNCALL:
-      if (!node->lhs->ret_buffer)
-        break;
     case ND_ASSIGN:
     case ND_COND:
     case ND_STMT_EXPR:
     case ND_VA_ARG:
-      if (node->lhs->ty->kind != TY_STRUCT && node->lhs->ty->kind != TY_UNION)
-        break;
       gen_expr(node->lhs);
-      println("  add $%d, %%rax", node->member->offset);
+      imm_add("%rax", "%rdx", node->member->offset);
       return;
     default:
       gen_addr(node->lhs);
-      println("  add $%d, %%rax", node->member->offset);
+      imm_add("%rax", "%rdx", node->member->offset);
       return;
     }
   }
@@ -1746,6 +1747,15 @@ static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
   return;
 }
 
+static void imm_add(char *op, char *tmp, int64_t val) {
+  switch (val) {
+  case 0: return;
+  case 1: println("  inc %s", op); return;
+  case -1: println("  dec %s", op); return;
+  }
+  imm_arith2(ND_ADD, op, tmp, val);
+}
+
 static void imm_sub(char *op, char *tmp, int64_t val) {
   switch (val) {
   case 0: return;
@@ -1810,6 +1820,33 @@ static bool gen_gp_opt(Node *node) {
       return imm_arith(kind, ty, lhs, rhs->val);
     break;
   }
+  return false;
+}
+
+static int gen_member_opt(Node *node, Type *load_ty, int64_t *ofs) {
+  while (node->kind == ND_MEMBER) {
+    *ofs += node->member->offset;
+    node = node->lhs;
+  }
+  if (is_lvar(node)) {
+    if (load_ty) {
+      load2(load_ty, *ofs + node->var->ofs, node->var->ptr);
+      return true;
+    }
+    println("  lea %"PRIi64"(%s), %%rax", *ofs + node->var->ofs, node->var->ptr);
+    *ofs = 0;
+    return false;
+  }
+  switch (node->kind) {
+  case ND_FUNCALL:
+  case ND_ASSIGN:
+  case ND_COND:
+  case ND_STMT_EXPR:
+  case ND_VA_ARG:
+    gen_expr(node);
+    return false;
+  }
+  gen_addr(node);
   return false;
 }
 
@@ -1911,6 +1948,25 @@ static bool gen_expr_opt(Node *node) {
   if (kind == ND_NOT && gen_bool_opt(node))
     return true;
 
+  if (kind == ND_MEMBER) {
+    int64_t ofs = 0;
+    Type *load_ty = is_scalar(ty) && !is_bitfield(node) ? ty : NULL;
+
+    if (gen_member_opt(node, load_ty, &ofs))
+      return true;
+
+    if (is_scalar(ty)) {
+      load2(ty, ofs, "%rax");
+
+      Member *mem = node->member;
+      if (mem->is_bitfield)
+        gen_bit_extract(mem->ty, mem->bit_width, mem->bit_offset);
+      return true;
+    }
+    imm_add("%rax", "%rdx", ofs);
+    return true;
+  }
+
   if (kind != ND_NUM) {
     int64_t ival;
     if (is_integer(ty) && is_const_expr(node, &ival)) {
@@ -1924,6 +1980,19 @@ static bool gen_expr_opt(Node *node) {
       return true;
     }
   }
+  return false;
+}
+
+static bool gen_addr_opt(Node *node) {
+  NodeKind kind = node->kind;
+
+  if (kind == ND_MEMBER) {
+    int64_t ofs = 0;
+    gen_member_opt(node, NULL, &ofs);
+    imm_add("%rax", "%rdx", ofs);
+    return true;
+  }
+
   return false;
 }
 
