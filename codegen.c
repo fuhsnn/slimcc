@@ -1799,6 +1799,26 @@ static bool imm_arith(NodeKind kind, Type *ty, Node *expr, int64_t val) {
   return true;
 }
 
+static bool gen_cmp_opt(Node *lhs, Node *rhs) {
+  int sz = lhs->ty->size;
+  char *ins = sz <= 4 ? "cmpl" : "cmpq";
+  if (is_lvar(lhs)) {
+    if (is_imm_num(rhs)) {
+      println("  %s $%"PRIi64", %d(%s)", ins, rhs->val, lhs->var->ofs, lhs->var->ptr);
+      return true;
+    }
+    gen_expr(rhs);
+    println("  %s %s, %d(%s)", ins, reg_ax(sz), lhs->var->ofs, lhs->var->ptr);
+    return true;
+  }
+  if (rhs->kind == ND_NUM) {
+    gen_expr(lhs);
+    imm_cmp(reg_ax(sz), reg_dx(sz), rhs->val);
+    return true;
+  }
+  return false;
+}
+
 static bool gen_gp_opt(Node *node) {
   NodeKind kind = node->kind;
   Node *lhs = node->lhs;
@@ -1822,6 +1842,29 @@ static bool gen_gp_opt(Node *node) {
   case ND_SAR:
     if (rhs->kind == ND_NUM)
       return imm_arith(kind, ty, lhs, rhs->val);
+    break;
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+    if (!is_gp_ty(lhs->ty))
+      return false;
+    if (gen_cmp_opt(lhs, rhs)) {
+      gen_cmp_setx(kind, lhs->ty->is_unsigned);
+      return true;
+    }
+    if (gen_cmp_opt(rhs, lhs)) {
+      switch (kind) {
+      case ND_LT: kind = ND_GT; break;
+      case ND_LE: kind = ND_GE; break;
+      case ND_GT: kind = ND_LT; break;
+      case ND_GE: kind = ND_LE; break;
+      }
+      gen_cmp_setx(kind, lhs->ty->is_unsigned);
+      return true;
+    }
     break;
   }
   return false;
