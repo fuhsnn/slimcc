@@ -92,6 +92,10 @@ static bool is_scalar(Type *ty) {
   return is_numeric(ty) || ty->kind == TY_PTR;
 }
 
+static bool is_pow_of_two(uint64_t val) {
+  return !(val & (val - 1));
+}
+
 static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
@@ -1794,6 +1798,116 @@ static bool imm_arith(NodeKind kind, Type *ty, Node *expr, int64_t val) {
   char *ax = reg_ax(ty->size);
   char *dx = reg_dx(ty->size);
 
+  switch (kind) {
+  case ND_ADD: gen_expr(expr); imm_add(ax, dx, val); return true;
+  case ND_SUB: gen_expr(expr); imm_sub(ax, dx, val); return true;
+  case ND_BITAND: gen_expr(expr); imm_and(ax, dx, val); return true;
+  }
+
+  if (val == 0) {
+    switch (kind) {
+    case ND_BITOR:
+    case ND_BITXOR:
+    case ND_SHL:
+    case ND_SHR:
+    case ND_SAR:
+      gen_expr(expr);
+      return true;
+    case ND_MUL:
+      gen_expr(expr);
+      println("  xor %%eax, %%eax");
+      return true;
+    }
+  }
+
+  if (val == 1) {
+    switch (kind) {
+    case ND_MUL:
+    case ND_DIV:
+      gen_expr(expr);
+      return true;
+    case ND_MOD:
+      gen_expr(expr);
+      println("  xor %%eax, %%eax");
+      return true;
+    }
+  }
+
+  if (val == -1) {
+    switch (kind) {
+    case ND_MUL:
+      gen_expr(expr);
+      println("  neg %s", ax);
+      return true;
+    case ND_DIV:
+      gen_expr(expr);
+      if (ty->is_unsigned) {
+        println("  cmp $-1, %s", ax);
+        gen_cmp_setx(ND_EQ, false);
+        return true;
+      }
+      println("  neg %s", ax);
+      return true;
+    case ND_MOD:
+      gen_expr(expr);
+      if (ty->is_unsigned) {
+        println("  xor %%edx, %%edx");
+        println("  cmp $-1, %s", ax);
+        println("  cmove %s, %s", dx, ax);
+        return true;
+      }
+      println("  xor %%eax, %%eax");
+      return true;
+    case ND_BITOR:
+      gen_expr(expr);
+      println("  mov $-1, %s", ax);
+      return true;
+    case ND_BITXOR:
+      gen_expr(expr);
+      println("  not %s", ax);
+      return true;
+    }
+  }
+
+  if (kind == ND_MUL && is_pow_of_two(val)) {
+    for (int i = 1; i < ty->size * 8; i++) {
+      if (1LL << i == val) {
+        gen_expr(expr);
+        println("  shl $%d, %s", i, ax);
+        return true;
+      }
+    }
+  }
+
+  if (kind == ND_DIV && is_pow_of_two(val) && ty->is_unsigned) {
+    for (int i = 1; i < ty->size * 8; i++) {
+      if (1LL << i == val) {
+        gen_expr(expr);
+        println("  shr $%d, %s", i, ax);
+        return true;
+      }
+    }
+  }
+
+  if (kind == ND_MOD && is_pow_of_two(val) && ty->is_unsigned && val != 0) {
+    gen_expr(expr);
+
+    uint64_t msk = val - 1;
+    if (msk == UINT32_MAX) {
+      println("  movl %%eax, %%eax");
+      return true;
+    }
+    if (msk <= INT32_MAX) {
+      println("  and $%d, %%eax", (int)msk);
+      return true;
+    }
+    imm_and(ax, dx, msk);
+    return true;
+  }
+
+  if (kind == ND_DIV || kind == ND_MOD)
+    return false;
+
   gen_expr(expr);
   imm_arith2(kind, ax, dx, val);
   return true;
@@ -1837,6 +1951,8 @@ static bool gen_gp_opt(Node *node) {
       return imm_arith(kind, ty, lhs, rhs->val);
     break;
   case ND_SUB:
+  case ND_DIV:
+  case ND_MOD:
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
