@@ -45,6 +45,8 @@ static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
 
+static void imm_and(char *op, char *tmp, int64_t val);
+
 FMTCHK(1,2)
 static void println(char *fmt, ...) {
   va_list ap;
@@ -296,6 +298,30 @@ static void gen_cmp_setx(NodeKind kind, bool is_unsigned) {
   }
   println("  %s %%al", ins);
   println("  movzbl %%al, %%eax");
+}
+
+static void gen_bit_extract(Type *ty, int bit_width, int bit_offset) {
+  if (bit_offset == 0 && bit_width == ty->size * 8)
+    return;
+
+  char *ax;
+  int reg_width;
+
+  if (ty->size == 8)
+    ax = "%rax", reg_width = 64;
+  else
+    ax = "%eax", reg_width = 32;
+
+  if (bit_offset == 0 && ty->is_unsigned) {
+    imm_and(ax, "%rdx", (1LL << bit_width) - 1);
+    return;
+  }
+
+  println("  shl $%d, %s", reg_width - bit_width - bit_offset, ax);
+  if (ty->is_unsigned)
+    println("  shr $%d, %s", reg_width - bit_width, ax);
+  else
+    println("  sar $%d, %s", reg_width - bit_width, ax);
 }
 
 // Compute the absolute address of a given node.
@@ -1099,13 +1125,8 @@ static void gen_expr(Node *node) {
     load(node->ty);
 
     Member *mem = node->member;
-    if (mem->is_bitfield) {
-      println("  shl $%d, %%rax", 64 - mem->bit_width - mem->bit_offset);
-      if (mem->ty->is_unsigned)
-        println("  shr $%d, %%rax", 64 - mem->bit_width);
-      else
-        println("  sar $%d, %%rax", 64 - mem->bit_width);
-    }
+    if (mem->is_bitfield)
+      gen_bit_extract(mem->ty, mem->bit_width, mem->bit_offset);
     return;
   }
   case ND_DEREF:
@@ -1124,28 +1145,34 @@ static void gen_expr(Node *node) {
       // If the lhs is a bitfield, we need to read the current value
       // from memory and merge it with a new value.
       Member *mem = node->lhs->member;
-      println("  mov $%ld, %%rdx", (1L << mem->bit_width) - 1);
-      println("  and %%rdx, %%rax");
-      println("  mov %%rax, %%rcx");
-
-      pop("%rax");
-      push();
-      load(mem->ty);
-
-      long mask = ((1L << mem->bit_width) - 1) << mem->bit_offset;
-      println("  mov $%ld, %%rdx", ~mask);
-      println("  and %%rdx, %%rax");
-
-      println("  mov %%rcx, %%rdx");
-      println("  shl $%d, %%rdx", mem->bit_offset);
-      println("  or %%rdx, %%rax");
-      store(node->ty);
-      println("  mov %%rcx, %%rax");
-
-      if (!mem->ty->is_unsigned) {
-        println("  shl $%d, %%rax", 64 - mem->bit_width);
-        println("  sar $%d, %%rax", 64 - mem->bit_width);
+      if (mem->bit_offset == 0 && mem->bit_width == mem->ty->size * 8) {
+        store(mem->ty);
+        return;
       }
+
+      char *ax, *dx, *r0;
+      if (mem->ty->size == 8)
+        ax = "%rax", dx = "%rdx", r0 = req_gp(tmpreg64, 0);
+      else
+        ax = "%eax", dx = "%edx", r0 = req_gp(tmpreg32, 0);
+
+      imm_and(ax, dx, (1LL << mem->bit_width) - 1);
+      println("  mov %s, %s", ax, r0);
+
+      char *ptr = pop_inreg("%rcx");
+      load2(mem->ty, 0, ptr);
+
+      imm_and(ax, dx, ~(((1LL << mem->bit_width) - 1) << mem->bit_offset));
+
+      println("  mov %s, %s", r0, dx);
+      if (mem->bit_offset)
+        println("  shl $%d, %s", mem->bit_offset, dx);
+      println("  or %s, %s", dx, ax);
+      store2(mem->ty, 0, ptr);
+
+      println("  mov %s, %s", r0, ax);
+      if (!mem->ty->is_unsigned)
+        gen_bit_extract(mem->ty, mem->bit_width, 0);
       return;
     }
 
@@ -1713,6 +1740,14 @@ static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
   println("  mov $%"PRIi64", %s", val, tmp);
   println("  %s %s, %s", ins, tmp, op);
   return;
+}
+
+static void imm_and(char *op, char *tmp, int64_t val) {
+  switch (val) {
+  case 0: println("  xor %s, %s", op, op); return;
+  case -1: return;
+  }
+  imm_arith2(ND_BITAND, op, tmp, val);
 }
 
 static bool imm_arith(NodeKind kind, Type *ty, Node *expr, int64_t val) {
