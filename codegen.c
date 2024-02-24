@@ -1823,6 +1823,37 @@ static bool gen_gp_opt(Node *node) {
   return false;
 }
 
+static int64_t gen_deref_opt(Node *node, Type *load_ty, int64_t *ofs) {
+  for (;; node = node->lhs) {
+    if (node->kind == ND_CAST && node->ty->base)
+      continue;
+
+    if (node->kind == ND_DEREF && node->ty->kind == TY_ARRAY)
+      continue;
+
+    if (node->kind == ND_ADD && node->rhs->kind == ND_NUM) {
+      *ofs += node->rhs->val;
+      continue;
+    }
+    if (node->kind == ND_SUB && node->rhs->kind == ND_NUM) {
+      *ofs -= node->rhs->val;
+      continue;
+    }
+    break;
+  }
+  if (is_lvar(node) && node->var->ty->kind == TY_ARRAY) {
+    if (load_ty) {
+      load2(load_ty, *ofs + node->var->ofs, node->var->ptr);
+      return true;
+    }
+    println("  lea %"PRIi64"(%s), %%rax", *ofs + node->var->ofs, node->var->ptr);
+    *ofs = 0;
+    return false;
+  }
+  gen_expr(node);
+  return false;
+}
+
 static int gen_member_opt(Node *node, Type *load_ty, int64_t *ofs) {
   while (node->kind == ND_MEMBER) {
     *ofs += node->member->offset;
@@ -1948,6 +1979,21 @@ static bool gen_expr_opt(Node *node) {
   if (kind == ND_NOT && gen_bool_opt(node))
     return true;
 
+  if (kind == ND_DEREF) {
+    int64_t ofs = 0;
+    Type *load_ty = is_scalar(ty) ? ty : NULL;
+
+    if (gen_deref_opt(node->lhs, load_ty, &ofs))
+      return true;
+
+    if (is_scalar(ty)) {
+      load2(ty, ofs, "%rax");
+      return true;
+    }
+    imm_add("%rax", "%rdx", ofs);
+    return true;
+  }
+
   if (kind == ND_MEMBER) {
     int64_t ofs = 0;
     Type *load_ty = is_scalar(ty) && !is_bitfield(node) ? ty : NULL;
@@ -1985,6 +2031,13 @@ static bool gen_expr_opt(Node *node) {
 
 static bool gen_addr_opt(Node *node) {
   NodeKind kind = node->kind;
+
+  if (kind == ND_DEREF) {
+    int64_t ofs = 0;
+    gen_deref_opt(node->lhs, NULL, &ofs);
+    imm_add("%rax", "%rdx", ofs);
+    return true;
+  }
 
   if (kind == ND_MEMBER) {
     int64_t ofs = 0;
