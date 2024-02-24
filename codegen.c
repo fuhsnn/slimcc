@@ -96,6 +96,10 @@ static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
 
+static bool is_imm_num(Node *node) {
+  return node->kind == ND_NUM && is_integer(node->ty) && in_imm_range(node->val);
+}
+
 static bool is_lvar(Node *node) {
   return node->kind == ND_VAR && node->var->is_local;
 }
@@ -2011,6 +2015,29 @@ static bool gen_expr_opt(Node *node) {
     }
     imm_add("%rax", "%rdx", ofs);
     return true;
+  }
+
+  if (kind == ND_CAST && ty->size > lhs->ty->size) {
+    if (ty->base && is_imm_num(lhs) && lhs->val == 0) {
+      println("  xor %%eax, %%eax");
+      return true;
+    }
+    if (is_lvar(lhs) && is_integer(ty) && is_integer(lhs->ty)) {
+      if (lhs->ty->is_unsigned) {
+        load_extend_int(lhs->ty, lhs->var->ofs, lhs->var->ptr, "%eax");
+        return true;
+      }
+      if (!lhs->ty->is_unsigned && !ty->is_unsigned) {
+        char *ax = regop_ax(ty);
+        switch (lhs->ty->size) {
+        case 4: println("  movsl %d(%s), %s", lhs->var->ofs, lhs->var->ptr, ax); break;
+        case 2: println("  movsw %d(%s), %s", lhs->var->ofs, lhs->var->ptr, ax); break;
+        case 1: println("  movsb %d(%s), %s", lhs->var->ofs, lhs->var->ptr, ax); break;
+        default: internal_error();
+        }
+        return true;
+      }
+    }
   }
 
   if (kind != ND_NUM) {
