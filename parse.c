@@ -2100,6 +2100,11 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_BITXOR:
     return eval(node->lhs) ^ eval(node->rhs);
   case ND_SHL:
+    if (node->ty->size == 4) {
+      if (node->ty->is_unsigned)
+        return (uint32_t)eval(node->lhs) << eval(node->rhs);
+      return (int32_t)eval(node->lhs) << eval(node->rhs);
+    }
     return eval(node->lhs) << eval(node->rhs);
   case ND_SHR:
     if (node->ty->size == 4)
