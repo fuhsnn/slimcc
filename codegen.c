@@ -45,7 +45,9 @@ static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
 
+static void imm_sub(char *op, char *tmp, int64_t val);
 static void imm_and(char *op, char *tmp, int64_t val);
+static void imm_cmp(char *op, char *tmp, int64_t val);
 
 FMTCHK(1,2)
 static void println(char *fmt, ...) {
@@ -1644,17 +1646,19 @@ static void gen_stmt(Node *node) {
       ax = "%eax", cx = "%ecx", dx = "%edx";
 
     for (Node *n = node->case_next; n; n = n->case_next) {
-      if (n->begin == n->end) {
-        println("  mov $%ld, %s", n->begin, dx);
-        println("  cmp %s, %s", dx, ax);
+      if (n->end == n->begin) {
+        imm_cmp(ax, dx, n->begin);
         println("  je %s", n->label);
         continue;
       }
+      if (n->begin == 0) {
+        imm_cmp(ax, dx, n->end);
+        println("  jbe %s", n->label);
+        continue;
+      }
       println("  mov %s, %s", ax, cx);
-      println("  mov $%ld, %s", n->begin, dx);
-      println("  sub %s, %s", dx, cx);
-      println("  mov $%ld, %s", n->end - n->begin, dx);
-      println("  cmp %s, %s", dx, cx);
+      imm_sub(cx, dx, n->begin);
+      imm_cmp(cx, dx, n->end - n->begin);
       println("  jbe %s", n->label);
     }
 
@@ -1742,12 +1746,34 @@ static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
   return;
 }
 
+static void imm_sub(char *op, char *tmp, int64_t val) {
+  switch (val) {
+  case 0: return;
+  case 1: println("  dec %s", op); return;
+  case -1: println("  inc %s", op); return;
+  }
+  imm_arith2(ND_SUB, op, tmp, val);
+}
+
 static void imm_and(char *op, char *tmp, int64_t val) {
   switch (val) {
   case 0: println("  xor %s, %s", op, op); return;
   case -1: return;
   }
   imm_arith2(ND_BITAND, op, tmp, val);
+}
+
+static void imm_cmp(char *op, char *tmp, int64_t val) {
+  if (val == 0) {
+    println("  test %s, %s", op, op);
+    return;
+  }
+  if (in_imm_range(val)) {
+    println("  cmp $%"PRIi64", %s", val, op);
+    return;
+  }
+  println("  mov $%"PRIi64", %s", val, tmp);
+  println("  cmp %s, %s", tmp, op);
 }
 
 static bool imm_arith(NodeKind kind, Type *ty, Node *expr, int64_t val) {
