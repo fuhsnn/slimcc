@@ -41,6 +41,8 @@ struct {
   int bottom;
 } static tmp_stack;
 
+static void store_gp2(char **reg, int sz, int ofs, char *ptr);
+
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
@@ -933,77 +935,53 @@ static void copy_ret_buffer(Obj *var) {
   Type *ty = var->ty;
   int gp = 0, fp = 0;
 
-  if (has_flonum1(ty)) {
-    assert(ty->size == 4 || 8 <= ty->size);
-    if (ty->size == 4)
-      println("  movss %%xmm0, %d(%s)", var->ofs, var->ptr);
-    else
-      println("  movsd %%xmm0, %d(%s)", var->ofs, var->ptr);
-    fp++;
-  } else {
-    for (int i = 0; i < MIN(8, ty->size); i++) {
-      println("  mov %%al, %d(%s)", var->ofs + i, var->ptr);
-      println("  shr $8, %%rax");
-    }
-    gp++;
-  }
+  for (int ofs = 0; ofs < ty->size; ofs += 8) {
+    int chunk_sz = MIN(8, ty->size - ofs);
 
-  if (ty->size > 8) {
-    if (has_flonum2(ty)) {
-      assert(ty->size == 12 || ty->size == 16);
-      if (ty->size == 12)
-        println("  movss %%xmm%d, %d(%s)", fp, var->ofs + 8, var->ptr);
+    if ((ofs == 0) ? has_flonum1(ty) : has_flonum2(ty)) {
+      if (chunk_sz == 4)
+        println("  movss %%xmm%d, %d(%s)", fp, ofs + var->ofs, var->ptr);
       else
-        println("  movsd %%xmm%d, %d(%s)", fp, var->ofs + 8, var->ptr);
-    } else {
-      char *reg1 = (gp == 0) ? "%al" : "%dl";
-      char *reg2 = (gp == 0) ? "%rax" : "%rdx";
-      for (int i = 8; i < MIN(16, ty->size); i++) {
-        println("  mov %s, %d(%s)", reg1, var->ofs + i, var->ptr);
-        println("  shr $8, %s", reg2);
-      }
+        println("  movsd %%xmm%d, %d(%s)", fp, ofs + var->ofs, var->ptr);
+      fp++;
+      continue;
     }
+    if (gp == 0)
+      store_gp2((char *[]){reg_ax(1), reg_ax(2), reg_ax(4), reg_ax(8)},
+                chunk_sz, ofs + var->ofs, var->ptr);
+    else
+      store_gp2((char *[]){reg_dx(1), reg_dx(2), reg_dx(4), reg_dx(8)},
+                chunk_sz, ofs + var->ofs, var->ptr);
+    gp++;
   }
 }
 
 static void copy_struct_reg(void) {
   Type *ty = current_fn->ty->return_ty;
   int gp = 0, fp = 0;
+  char *sptr = "%rax";
 
-  println("  mov %%rax, %%rcx");
+  for (int ofs = 0; ofs < ty->size; ofs += 8) {
+    int chunk_sz = MIN(8, ty->size - ofs);
 
-  if (has_flonum1(ty)) {
-    assert(ty->size == 4 || 8 <= ty->size);
-    if (ty->size == 4)
-      println("  movss (%%rcx), %%xmm0");
-    else
-      println("  movsd (%%rcx), %%xmm0");
-    fp++;
-  } else {
-    println("  mov $0, %%rax");
-    for (int i = MIN(8, ty->size) - 1; i >= 0; i--) {
-      println("  shl $8, %%rax");
-      println("  mov %d(%%rcx), %%al", i);
-    }
-    gp++;
-  }
-
-  if (ty->size > 8) {
-    if (has_flonum2(ty)) {
-      assert(ty->size == 12 || ty->size == 16);
-      if (ty->size == 12)
-        println("  movss 8(%%rcx), %%xmm%d", fp);
+    if ((ofs == 0) ? has_flonum1(ty) : has_flonum2(ty)) {
+      if (chunk_sz == 4)
+        println("  movss %d(%s), %%xmm%d", ofs, sptr, fp);
       else
-        println("  movsd 8(%%rcx), %%xmm%d", fp);
-    } else {
-      char *reg1 = (gp == 0) ? "%al" : "%dl";
-      char *reg2 = (gp == 0) ? "%rax" : "%rdx";
-      println("  mov $0, %s", reg2);
-      for (int i = MIN(16, ty->size) - 1; i >= 8; i--) {
-        println("  shl $8, %s", reg2);
-        println("  mov %d(%%rcx), %s", i, reg1);
-      }
+        println("  movsd %d(%s), %%xmm%d", ofs, sptr, fp);
+      fp++;
+      continue;
     }
+    if (gp == 0) {
+      println("  mov %%rax, %%rcx");
+      sptr = "%rcx";
+    }
+    int regsz = (chunk_sz > 4) ? 8 : (chunk_sz > 2) ? 4 : (chunk_sz > 1) ? 2 : 1;
+    if (gp == 0)
+      println("  mov %d(%%rcx), %s", ofs, reg_ax(regsz));
+    else
+      println("  mov %d(%%rcx), %s", ofs, reg_dx(regsz));
+    gp++;
   }
 }
 
@@ -1017,30 +995,28 @@ static void copy_struct_mem(void) {
 }
 
 static void gen_vaarg_reg_copy(Type *ty, Obj *var) {
-  bool reg_class[2] = {!has_flonum1(ty), !has_flonum2(ty)};
-
-  int gp_inc = reg_class[0] + reg_class[1];
+  int gp_inc = !has_flonum1(ty) + !has_flonum2(ty);
   if (gp_inc) {
     println("  cmpl $%d, (%%rax)", 48 - gp_inc * 8);
     println("  ja 1f");
   }
-  int fp_inc = !reg_class[0] + !reg_class[1];
+  int fp_inc = has_flonum1(ty) + has_flonum2(ty);
   println("  cmpl $%d, 4(%%rax)", 176 - fp_inc * 16);
   println("  ja 1f");
 
-  for (int i = 0; i < 2; i++) {
-    if (reg_class[i]) {
-      println("  movl (%%rax), %%ecx");   // gp_offset
-      println("  addq 16(%%rax), %%rcx"); // reg_save_area
-      println("  addq $8, (%%rax)");
-    } else {
+  for (int ofs = 0; ofs < ty->size; ofs += 8) {
+    if ((ofs == 0) ? has_flonum1(ty) : has_flonum2(ty)) {
       println("  movl 4(%%rax), %%ecx");  // fp_offset
       println("  addq 16(%%rax), %%rcx"); // reg_save_area
       println("  addq $16, 4(%%rax)");
+    } else {
+      println("  movl (%%rax), %%ecx");   // gp_offset
+      println("  addq 16(%%rax), %%rcx"); // reg_save_area
+      println("  addq $8, (%%rax)");
     }
     gen_mem_copy(0, "%rcx",
-                 i * 8 + var->ofs, var->ptr,
-                 MIN((ty->size - i * 8), 8));
+                 ofs + var->ofs, var->ptr,
+                 MIN(8, ty->size - ofs));
   }
   println("  lea %d(%s), %%rdx", var->ofs, var->ptr);
   return;
@@ -2385,27 +2361,25 @@ static void store_fp(int r, int sz, int ofs, char *ptr) {
   internal_error();
 }
 
-static void store_gp(int r, int sz, int ofs, char *ptr) {
-  switch (sz) {
-  case 1:
-    println("  mov %s, %d(%s)", argreg8[r], ofs, ptr);
-    return;
-  case 2:
-    println("  mov %s, %d(%s)", argreg16[r], ofs, ptr);
-    return;
-  case 4:
-    println("  mov %s, %d(%s)", argreg32[r], ofs, ptr);
-    return;
-  case 8:
-    println("  mov %s, %d(%s)", argreg64[r], ofs, ptr);
-    return;
-  default:
-    for (int i = 0; i < sz; i++) {
-      println("  mov %s, %d(%s)", argreg8[r], ofs + i, ptr);
-      println("  shr $8, %s", argreg64[r]);
+static void store_gp2(char **reg, int sz, int dofs, char *dptr) {
+  for (int ofs = 0;;) {
+    int rem = sz - ofs;
+    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
+    switch (p2) {
+    case 1: println("  mov %s, %d(%s)", reg[0], ofs + dofs, dptr); break;
+    case 2: println("  mov %s, %d(%s)", reg[1], ofs + dofs, dptr); break;
+    case 4: println("  mov %s, %d(%s)", reg[2], ofs + dofs, dptr); break;
+    case 8: println("  mov %s, %d(%s)", reg[3], ofs + dofs, dptr); break;
     }
-    return;
+    ofs += p2;
+    if (ofs >= sz)
+      return;
+    println("  shr $%d, %s", p2 * 8, reg[3]);
   }
+}
+
+static void store_gp(int r, int sz, int ofs, char *ptr) {
+  store_gp2((char *[]){argreg8[r], argreg16[r], argreg32[r], argreg64[r]}, sz, ofs, ptr);
 }
 
 static void emit_text(Obj *prog) {
