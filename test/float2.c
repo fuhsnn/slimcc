@@ -36,11 +36,15 @@ int main(void) {
     float pos_z; pos_z = +0.0f;
     float neg_z; neg_z = -0.0f;
     ASSERT(1, pos_z == neg_z && memcmp(&pos_z, &neg_z, sizeof(float)));
+    pos_z = -pos_z;
+    ASSERT(1, pos_z == neg_z && !memcmp(&pos_z, &neg_z, sizeof(float)));
   }
   {
     double pos_z; pos_z = +0.0;
     double neg_z; neg_z = -0.0;
     ASSERT(1, pos_z == neg_z && memcmp(&pos_z, &neg_z, sizeof(double)));
+    neg_z = -neg_z;
+    ASSERT(1, pos_z == neg_z && !memcmp(&pos_z, &neg_z, sizeof(double)));
   }
   {
     long double pos_z; pos_z = +0.0L;

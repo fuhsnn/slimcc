@@ -1109,14 +1109,12 @@ static void gen_expr(Node *node) {
 
     switch (node->ty->kind) {
     case TY_FLOAT:
-      println("  mov $1, %%rax");
-      println("  shl $31, %%rax");
-      println("  movq %%rax, %%xmm1");
+      println("  mov $0x80000000, %%eax");
+      println("  movd %%eax, %%xmm1");
       println("  xorps %%xmm1, %%xmm0");
       return;
     case TY_DOUBLE:
-      println("  mov $1, %%rax");
-      println("  shl $63, %%rax");
+      println("  mov $0x8000000000000000, %%rax");
       println("  movq %%rax, %%xmm1");
       println("  xorpd %%xmm1, %%xmm0");
       return;
@@ -1125,7 +1123,7 @@ static void gen_expr(Node *node) {
       return;
     }
 
-    println("  neg %%rax");
+    println("  neg %s", regop_ax(node->lhs->ty));
     return;
   case ND_VAR:
     gen_addr(node);
