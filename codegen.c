@@ -2440,9 +2440,8 @@ static void emit_text(Obj *prog) {
     println("  mov %%rsp, %%rbp");
     if (use_rbx) {
       println("  push %%rbx");
+      println("  and $-%d, %%rsp", fn->stack_align);
       println("  mov %%rsp, %%rbx");
-      println("  and $-%d, %%rbx", fn->stack_align);
-      println("  mov %%rbx, %%rsp");
     }
 
     long stack_alloc_loc = resrvln();
@@ -2518,21 +2517,21 @@ static void emit_text(Obj *prog) {
     gen_stmt(fn->body);
     assert(tmp_stack.depth == 0);
 
-    insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(tmp_stack.bottom, 16));
+    if (tmp_stack.bottom)
+      insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(tmp_stack.bottom, 16));
 
     // [https://www.sigbus.info/n1570#5.1.2.2.3p1] The C spec defines
     // a special rule for the main function. Reaching the end of the
     // main function is equivalent to returning 0, even though the
     // behavior is undefined for the other functions.
     if (strcmp(fn->name, "main") == 0)
-      println("  mov $0, %%rax");
+      println("  xor %%eax, %%eax");
 
     // Epilogue
     println("9:");
     if (use_rbx)
       println("  mov -8(%%rbp), %%rbx");
-    println("  mov %%rbp, %%rsp");
-    println("  pop %%rbp");
+    println("  leave");
     println("  ret");
   }
 }
