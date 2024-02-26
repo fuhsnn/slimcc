@@ -290,6 +290,17 @@ static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
 }
 
 static void gen_mem_zero(int dofs, char *dptr, int sz) {
+  if (sz >= 16) {
+    println("  xorps %%xmm0, %%xmm0");
+    for (int i = 0; i < sz;) {
+      if (sz < i + 16)
+        i = sz - 16;
+      println("  movups %%xmm0, %d(%s)", i + dofs, dptr);
+      i += 16;
+    }
+    return;
+  }
+
   println("  xor %%eax, %%eax");
   for (int i = 0; i < sz;) {
     int rem = sz - i;
