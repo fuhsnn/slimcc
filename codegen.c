@@ -1242,18 +1242,17 @@ static void gen_expr(Node *node) {
       return;
     }
 
-    gen_expr(node->lhs);
-    push();
+    bool fn_ptr = !(node->lhs->kind == ND_VAR && node->lhs->var->ty->kind == TY_FUNC);
+    if (fn_ptr) {
+      gen_expr(node->lhs);
+      push();
+    }
 
     if (node->args_expr)
       gen_expr(node->args_expr);
 
-    pop("%r10");
-
-    println("  mov %%rsp, %%rax");
-    push();
-
-    save_tmp_regs();
+    if (fn_ptr)
+      pop("%r10");
 
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
@@ -1261,40 +1260,49 @@ static void gen_expr(Node *node) {
 
     int fp_count, stack_align;
     int args_size = calling_convention(node->args, gp_start, NULL, &fp_count, &stack_align);
+    if (args_size) {
+      if (stack_align > 16) {
+        println("  mov %%rsp, %%rax");
+        push();
+        println("  sub $%d, %%rsp", args_size);
+        println("  and $-%d, %%rsp", stack_align);
+      } else {
+        println("  sub $%d, %%rsp", align_to(args_size, 16));
+      }
+    }
 
-    println("  sub $%d, %%rsp", args_size);
-    println("  and $-%d, %%rsp", stack_align);
+    save_tmp_regs();
 
     place_stack_args(node);
     place_reg_args(node, gp_start);
 
-    if (node->lhs->ty->is_variadic)
-      println("  movl $%d, %%eax", fp_count);
+    if (node->lhs->ty->is_variadic) {
+      if (fp_count)
+        println("  movb $%d, %%al", fp_count);
+      else
+        println("  xor %%al, %%al");
+    }
 
-    println("  call *%%r10");
+    if (fn_ptr)
+      println("  call *%%r10");
+    else
+      println("  call \"%s\"%s", node->lhs->var->name, opt_fpic ? "@PLT" : "");
 
-    pop("%rsp");
+    if (args_size) {
+      if (stack_align > 16)
+        pop("%rsp");
+      else
+        println("  add $%d, %%rsp", align_to(args_size, 16));
+    }
 
     // It looks like the most significant 48 or 56 bits in RAX may
     // contain garbage if a function return type is short or bool/char,
     // respectively. We clear the upper bits here.
-    switch (node->ty->kind) {
-    case TY_BOOL:
-      println("  movzx %%al, %%eax");
-      return;
-    case TY_PCHAR:
-    case TY_CHAR:
-      if (node->ty->is_unsigned)
-        println("  movzbl %%al, %%eax");
+    if (is_integer(node->ty) && node->ty->size < 4) {
+      if (node->ty->kind == TY_BOOL)
+        cast(ty_int, ty_uchar);
       else
-        println("  movsbl %%al, %%eax");
-      return;
-    case TY_SHORT:
-      if (node->ty->is_unsigned)
-        println("  movzwl %%ax, %%eax");
-      else
-        println("  movswl %%ax, %%eax");
-      return;
+        cast(ty_int, node->ty);
     }
 
     // If the return type is a small struct, a value is returned
