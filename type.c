@@ -49,22 +49,24 @@ bool is_bitfield(Node *node) {
 }
 
 static bool is_bitfield2(Node *node, int *width) {
-  if (node->kind == ND_MEMBER) {
-    if (!node->member->is_bitfield)
-      return false;
-    *width = node->member->bit_width;
-    return true;
-  }
-  if (node->kind == ND_COMMA)
-    return is_bitfield2(node->rhs, width);
-  if (node->kind == ND_ASSIGN)
+  switch (node->kind) {
+  case ND_ASSIGN:
     return is_bitfield2(node->lhs, width);
-  if (node->kind == ND_STMT_EXPR && node->body) {
+  case ND_CHAIN:
+  case ND_COMMA:
+    return is_bitfield2(node->rhs, width);
+  case ND_STMT_EXPR: {
     Node *stmt = node->body;
     while (stmt->next)
       stmt = stmt->next;
     if (stmt->kind == ND_EXPR_STMT)
       return is_bitfield2(stmt->lhs, width);
+  }
+  case ND_MEMBER:
+    if (!node->member->is_bitfield)
+      return false;
+    *width = node->member->bit_width;
+    return true;
   }
   return false;
 }
