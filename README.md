@@ -12,6 +12,7 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) that
  - support VLA auto-deallocation
  - basic stack reuse optimization
  - basic register allocation of temporaries
+ - constant folding and basic strength reduction
 
 # Platform support
 Should just work on recent (2.28+) glibc-based x86-64 Linux. Musl support is almost there.
