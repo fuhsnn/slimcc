@@ -26,11 +26,17 @@ static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
 static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
-static Obj *current_fn;
-static char *lvar_ptr;
+
 static char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
 static char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
 
+static Obj *current_fn;
+static char *lvar_ptr;
+static int va_gp_start;
+static int va_fp_start;
+static int va_st_start;
+static int vla_base_ofs;
+static int rtn_ptr_ofs;
 
 bool dont_reuse_stack;
 
@@ -39,6 +45,7 @@ struct {
   int capacity;
   int depth;
   int bottom;
+  int base;
 } static tmp_stack;
 
 static void store_gp2(char **reg, int sz, int ofs, char *ptr);
@@ -149,7 +156,7 @@ static Slot *pop_tmpstack(void) {
       tmp_stack.bottom += 8;
       sl->st_offset = -tmp_stack.bottom;
     } else {
-      int bottom = current_fn->lvar_stack_size + (sl->st_depth + 1) * 8;
+      int bottom = tmp_stack.base + (sl->st_depth + 1) * 8;
       tmp_stack.bottom = MAX(tmp_stack.bottom, bottom);
       sl->st_offset = -bottom;
     }
@@ -998,9 +1005,8 @@ static void copy_struct_reg(void) {
 
 static void copy_struct_mem(void) {
   Type *ty = current_fn->ty->return_ty;
-  Obj *var = current_fn->ty->param_list;
 
-  println("  mov %d(%s), %%rcx", var->ofs, var->ptr);
+  println("  mov -%d(%s), %%rcx", rtn_ptr_ofs, lvar_ptr);
   gen_mem_copy(0, "%rax", 0, "%rcx", ty->size);
   println("  mov %%rcx, %%rax");
 }
@@ -1047,14 +1053,13 @@ static void builtin_alloca(Node *node) {
 }
 
 static void dealloc_vla(Node *node) {
-  if (!current_fn->vla_base || node->top_vla == node->target_vla)
+  if (!current_fn->dealloc_vla || node->top_vla == node->target_vla)
     return;
-  Obj *vla;
+
   if (node->target_vla)
-    vla = node->target_vla;
+    println("  mov %d(%s), %%rsp", node->target_vla->ofs, node->target_vla->ptr);
   else
-    vla = current_fn->vla_base;
-  println("  mov %d(%s), %%rsp", vla->ofs, vla->ptr);
+    println("  mov -%d(%s), %%rsp", vla_base_ofs, lvar_ptr);
 }
 
 static void print_loc(Token *tok) {
@@ -1363,12 +1368,11 @@ static void gen_expr(Node *node) {
   }
   case ND_VA_START: {
     gen_expr(node->lhs);
-    Obj *fn = current_fn;
-    println("  movl $%d, (%%rax)", fn->va_gp_ofs);
-    println("  movl $%d, 4(%%rax)", fn->va_fp_ofs);
-    println("  lea %d(%%rbp), %%rdx", fn->va_st_ofs);
+    println("  movl $%d, (%%rax)", va_gp_start);
+    println("  movl $%d, 4(%%rax)", va_fp_start);
+    println("  lea %d(%%rbp), %%rdx", va_st_start);
     println("  movq %%rdx, 8(%%rax)");
-    println("  lea %d(%s), %%rdx", fn->va_area->ofs, fn->va_area->ptr);
+    println("  lea -176(%s), %%rdx", lvar_ptr);
     println("  movq %%rdx, 16(%%rax)");
     return;
   }
@@ -2228,20 +2232,24 @@ static bool gen_addr_opt(Node *node) {
   return false;
 }
 
-static void calc_stack_align(Scope *scp, int *align) {
+static int get_lvar_align(Scope *scp, int align) {
   for (Obj *var = scp->locals; var; var = var->next) {
-    if (var->ofs)
+    if (var->pass_by_stack)
       continue;
-    *align = MAX(*align, var->align);
+    align = MAX(align, var->align);
   }
   for (Scope *sub = scp->children; sub; sub = sub->sibling_next)
-    calc_stack_align(sub, align);
+    align = MAX(align, get_lvar_align(sub, align));
+  return align;
 }
 
-static int assign_lvar_offsets2(Scope *sc, int bottom, char *ptr) {
+static int assign_lvar_offsets(Scope *sc, int bottom) {
   for (Obj *var = sc->locals; var; var = var->next) {
-    if (var->ofs)
+    if (var->pass_by_stack) {
+      var->ofs = var->stack_offset + 16;
+      var->ptr = "%rbp";
       continue;
+    }
 
     // AMD64 System V ABI has a special alignment rule for an array of
     // length at least 16 bytes. We need to align such array to at least
@@ -2253,54 +2261,18 @@ static int assign_lvar_offsets2(Scope *sc, int bottom, char *ptr) {
     bottom += var->ty->size;
     bottom = align_to(bottom, align);
     var->ofs = -bottom;
-    var->ptr = ptr;
+    var->ptr = lvar_ptr;
   }
 
   int max_depth = bottom;
   for (Scope *sub = sc->children; sub; sub = sub->sibling_next) {
-    int sub_depth= assign_lvar_offsets2(sub, bottom, ptr);
+    int sub_depth= assign_lvar_offsets(sub, bottom);
     if (dont_reuse_stack)
       bottom = max_depth = sub_depth;
     else
       max_depth = MAX(max_depth, sub_depth);
   }
   return max_depth;
-}
-
-// Assign offsets to local variables.
-static void assign_lvar_offsets(Obj *prog) {
-  for (Obj *fn = prog; fn; fn = fn->next) {
-    if (!fn->is_function || !fn->is_definition)
-      continue;
-
-    if (fn->large_rtn) {
-      fn->large_rtn->param_next = fn->ty->param_list;
-      fn->ty->param_list = fn->large_rtn;
-    }
-
-    // If a function has many parameters, some parameters are
-    // inevitably passed by stack rather than by register.
-    // The first passed-by-stack parameter resides at RBP+16.
-    int top = 16;
-
-    calling_convention(fn->ty->param_list, 0, NULL, NULL, NULL);
-
-    // Assign offsets to pass-by-stack parameters.
-    for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
-      if (!var->pass_by_stack)
-        continue;
-
-      var->ofs = var->stack_offset + top;
-      var->ptr = "%rbp";
-    }
-
-    int st_align = 16;
-    calc_stack_align(fn->ty->scopes, &st_align);
-    fn->stack_align = st_align;
-
-    char *lvar_ptr = (fn->stack_align > 16) ? "%rbx" : "%rbp";
-    fn->lvar_stack_size = assign_lvar_offsets2(fn->ty->scopes, 0, lvar_ptr);
-  }
 }
 
 static void emit_data(Obj *prog) {
@@ -2415,66 +2387,80 @@ static void emit_text(Obj *prog) {
       println("  .local \"%s\"", fn->name);
     else
       println("  .globl \"%s\"", fn->name);
-
     if (opt_func_sections)
       println("  .section .text.\"%s\",\"ax\",@progbits", fn->name);
     else
       println("  .text");
     println("  .type \"%s\", @function", fn->name);
     println("\"%s\":", fn->name);
-    current_fn = fn;
-    tmp_stack.bottom = fn->lvar_stack_size;
 
-    bool use_rbx = fn->stack_align > 16;
-    lvar_ptr = use_rbx ? "%rbx" : "%rbp";
+    bool large_rtn = fn->ty->return_ty->size > 16;
+    int gp_count, fp_count;
+    int args_size = calling_convention(fn->ty->param_list, large_rtn, &gp_count, &fp_count, NULL);
+
+    int lvar_align = get_lvar_align(fn->ty->scopes, 16);
+    lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
+    current_fn = fn;
 
     // Prologue
     println("  push %%rbp");
     println("  mov %%rsp, %%rbp");
-    if (use_rbx) {
+    if (lvar_align > 16) {
       println("  push %%rbx");
-      println("  and $-%d, %%rsp", fn->stack_align);
+      println("  and $-%d, %%rsp", lvar_align);
       println("  mov %%rsp, %%rbx");
     }
 
     long stack_alloc_loc = resrvln();
 
-    if (fn->vla_base)
-      println("  mov %%rsp, %d(%s)", fn->vla_base->ofs, fn->vla_base->ptr);
+    int lvar_stack = 0;
 
     // Save arg registers if function is variadic
-    if (fn->va_area) {
-      int gp, fp;
-      int stack = calling_convention(fn->ty->param_list, 0, &gp, &fp, NULL);
-      fn->va_gp_ofs = gp * 8;
-      fn->va_fp_ofs = fp * 16 + 48;
-      fn->va_st_ofs = stack + 16;
+    if (fn->ty->is_variadic) {
+      va_gp_start = gp_count * 8;
+      va_fp_start = fp_count * 16 + 48;
+      va_st_start = args_size + 16;
+      lvar_stack = 176;
 
-      int off = fn->va_area->ofs;
-      char *ptr = lvar_ptr;
-
-      // __reg_save_area__
-      println("  movq %%rdi, %d(%s)", off, ptr);
-      println("  movq %%rsi, %d(%s)", off + 8, ptr);
-      println("  movq %%rdx, %d(%s)", off + 16, ptr);
-      println("  movq %%rcx, %d(%s)", off + 24, ptr);
-      println("  movq %%r8, %d(%s)", off + 32, ptr);
-      println("  movq %%r9, %d(%s)", off + 40, ptr);
-      println("  test %%al, %%al");
-      println("  je 1f");
-      println("  movups %%xmm0, %d(%s)", off + 48, ptr);
-      println("  movups %%xmm1, %d(%s)", off + 64, ptr);
-      println("  movups %%xmm2, %d(%s)", off + 80, ptr);
-      println("  movups %%xmm3, %d(%s)", off + 96, ptr);
-      println("  movups %%xmm4, %d(%s)", off + 112, ptr);
-      println("  movups %%xmm5, %d(%s)", off + 128, ptr);
-      println("  movups %%xmm6, %d(%s)", off + 144, ptr);
-      println("  movups %%xmm7, %d(%s)", off + 160, ptr);
-      println("1:");
+      switch (gp_count) {
+      case 0: println("  movq %%rdi, -176(%s)", lvar_ptr);
+      case 1: println("  movq %%rsi, -168(%s)", lvar_ptr);
+      case 2: println("  movq %%rdx, -160(%s)", lvar_ptr);
+      case 3: println("  movq %%rcx, -152(%s)", lvar_ptr);
+      case 4: println("  movq %%r8, -144(%s)", lvar_ptr);
+      case 5: println("  movq %%r9, -136(%s)", lvar_ptr);
+      }
+      if (fp_count < 8) {
+        println("  test %%al, %%al");
+        println("  je 1f");
+        switch (fp_count) {
+        case 0: println("  movaps %%xmm0, -128(%s)", lvar_ptr);
+        case 1: println("  movaps %%xmm1, -112(%s)", lvar_ptr);
+        case 2: println("  movaps %%xmm2, -96(%s)", lvar_ptr);
+        case 3: println("  movaps %%xmm3, -80(%s)", lvar_ptr);
+        case 4: println("  movaps %%xmm4, -64(%s)", lvar_ptr);
+        case 5: println("  movaps %%xmm5, -48(%s)", lvar_ptr);
+        case 6: println("  movaps %%xmm6, -32(%s)", lvar_ptr);
+        case 7: println("  movaps %%xmm7, -16(%s)", lvar_ptr);
+        }
+        println("1:");
+      }
     }
 
+    if (fn->dealloc_vla) {
+      vla_base_ofs = lvar_stack += 8;
+      println("  mov %%rsp, -%d(%s)", vla_base_ofs, lvar_ptr);
+    }
+
+    if (large_rtn) {
+      rtn_ptr_ofs = lvar_stack += 8;
+      println("  mov %s, -%d(%s)", argreg64[0], rtn_ptr_ofs, lvar_ptr);
+    }
+
+    tmp_stack.base = tmp_stack.bottom = assign_lvar_offsets(fn->ty->scopes, lvar_stack);
+
     // Save passed-by-register arguments to the stack
-    int gp = 0, fp = 0;
+    int gp = large_rtn, fp = 0;
     for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
       if (var->pass_by_stack)
         continue;
@@ -2522,7 +2508,7 @@ static void emit_text(Obj *prog) {
 
     // Epilogue
     println("9:");
-    if (use_rbx)
+    if (lvar_align > 16)
       println("  mov -8(%%rbp), %%rbx");
     println("  leave");
     println("  ret");
@@ -2537,7 +2523,6 @@ void codegen(Obj *prog, FILE *out) {
     for (int i = 0; files[i]; i++)
       println("  .file %d \"%s\"", files[i]->file_no, files[i]->name);
   }
-  assign_lvar_offsets(prog);
   emit_data(prog);
   emit_text(prog);
   println("  .section  .note.GNU-stack,\"\",@progbits");

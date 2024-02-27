@@ -632,6 +632,9 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
 // func-params = ("void" | param ("," param)* ("," "...")?)? ")"
 // param       = declspec declarator
 static Type *func_params(Token **rest, Token *tok, Type *ty) {
+  if (ty->base && ty->kind != TY_PTR)
+    error_tok(tok, "function return type cannot be array");
+
   if (equal(tok, "void") && consume(rest, tok->next, ")"))
     return func_type(ty);
 
@@ -3696,23 +3699,16 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr, T
     ty->scopes = scope;
   }
 
-  // A buffer for a struct/union return value is passed
-  // as the hidden first parameter.
-  Type *rty = ty->return_ty;
-  if ((rty->kind == TY_STRUCT || rty->kind == TY_UNION) && rty->size > 16)
-    fn->large_rtn = new_lvar(NULL, pointer_to(rty));
-
-  if (ty->is_variadic)
-    fn->va_area = new_lvar(NULL, array_of(ty_pchar, 176));
-
   fn->body = compound_stmt(rest, tok->next, ND_BLOCK);
+
   if (ty->vla_calc) {
     Node *calc = new_unary(ND_EXPR_STMT, ty->vla_calc, tok);
     calc->next = fn->body->body;
     fn->body->body = calc;
   }
+
   if (fn_use_vla && !dont_dealloc_vla && !dont_reuse_stack)
-    fn->vla_base = new_lvar(NULL, pointer_to(ty_char));
+    fn->dealloc_vla = true;
 
   leave_scope();
   resolve_goto_labels();

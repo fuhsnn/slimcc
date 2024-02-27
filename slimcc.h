@@ -200,15 +200,8 @@ struct Obj {
 
   // Function
   bool is_inline;
+  bool dealloc_vla;
   Node *body;
-  Obj *large_rtn;
-  Obj *va_area;
-  int va_gp_ofs;
-  int va_fp_ofs;
-  int va_st_ofs;
-  Obj *vla_base;
-  int stack_align;
-  int lvar_stack_size;
 
   // Static inline function
   bool is_live;
