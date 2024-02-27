@@ -511,6 +511,21 @@ Token *tokenize(File *file, Token **end) {
   has_space = false;
 
   while (*p) {
+    // Skip newline.
+    if (*p == '\n') {
+      p++;
+      at_bol = true;
+      has_space = false;
+      continue;
+    }
+
+    // Skip whitespace characters.
+    if (isspace(*p)) {
+      p++;
+      has_space = true;
+      continue;
+    }
+
     // Skip line comments.
     if (startswith(p, "//")) {
       p += 2;
@@ -526,21 +541,6 @@ Token *tokenize(File *file, Token **end) {
       if (!q)
         error_at(p, "unclosed block comment");
       p = q + 2;
-      has_space = true;
-      continue;
-    }
-
-    // Skip newline.
-    if (*p == '\n') {
-      p++;
-      at_bol = true;
-      has_space = false;
-      continue;
-    }
-
-    // Skip whitespace characters.
-    if (isspace(*p)) {
-      p++;
       has_space = true;
       continue;
     }
