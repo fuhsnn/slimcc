@@ -3427,6 +3427,7 @@ static Node *primary(Token **rest, Token *tok) {
     Type *ty = typename(&tok, tok);
     tok = skip(tok, ",");
 
+    Node *node = NULL;
     int offset = 0;
     do {
       Member *mem;
@@ -3436,15 +3437,25 @@ static Node *primary(Token **rest, Token *tok) {
         ty = mem->ty;
       } while (!mem->name);
 
-      while (ty->base && consume(&tok, tok, "[")) {
-        offset += ty->base->size * const_expr(&tok, tok);
+      for (; ty->base && consume(&tok, tok, "["); tok = skip(tok, "]")) {
         ty = ty->base;
-        tok = skip(tok, "]");
+        Node *expr = conditional(&tok, tok);
+        int64_t val;
+        if (is_const_expr(expr, &val)) {
+          offset += ty->size * val;
+          continue;
+        }
+        if (!node)
+          node = new_binary(ND_MUL, expr, new_long(ty->size, tok), tok);
+        else
+          node = new_binary(ND_ADD, node, new_binary(ND_MUL, expr, new_long(ty->size, tok), tok), tok);
       }
     } while (consume(&tok, tok, "."));
 
     *rest = skip(tok, ")");
-    return new_ulong(offset, tok);
+    if (!node)
+      return new_ulong(offset, tok);
+    return new_binary(ND_ADD, node, new_ulong(offset, tok), tok);
   }
 
   if (equal(tok, "__builtin_types_compatible_p")) {

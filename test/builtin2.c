@@ -16,12 +16,12 @@ struct ofs_S1 {
     struct {
       char k[7];
     } n;
+    char z;
     };
-  } m[4][4];
+  } m[7][7];
   };
 };
-_Static_assert(__builtin_offsetof(struct ofs_S1, m[1][2].n.k[3]) == 46,"");
-
+_Static_assert(__builtin_offsetof(struct ofs_S1, m[1][2].n.k[3]) == 76,"");
 
 int va_expr_in_arg(int i, ...) {
   __builtin_va_list ap, ap2;
@@ -62,6 +62,11 @@ int main(void) {
   va_fn0(2, &va_fn1, &va_fn2);
   ASSERT(111, garr[0]);
   ASSERT(222, garr[1]);
+
+#define runtime_ofs(x,y,z) __builtin_offsetof(struct ofs_S1, m[x][y].n.k[z])
+  ASSERT(324, ({int x = 5, y = 3; runtime_ofs(x,5,y); }));
+  ASSERT(100, ({int x = 1, y = 5, z = 3; runtime_ofs(x,y,z); }));
+  ASSERT(222, ({int y = 6; runtime_ofs(3,y,5); }));
 
   printf("OK\n");
 }
