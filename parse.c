@@ -1968,9 +1968,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   current_vla = node->target_vla;
   leave_scope();
 
-  if (node->kind == ND_STMT_EXPR) {
-    if (!cur->lhs)
-      error_tok(node->tok, "statement expression returning void is not supported");
+  if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
     add_type(cur->lhs);
     Type *ty = cur->lhs->ty;
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {

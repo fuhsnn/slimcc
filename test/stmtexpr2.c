@@ -18,6 +18,15 @@ int main() {
   ASSERT(sizeof(void*), sizeof ({ int arr[17]; arr; }) );
   ASSERT(sizeof(void*), sizeof ({ int arr[s1.a]; arr; }) );
 
+  ({
+    if (s1.a == 11) {
+      s1.a = 7;
+    } else {
+      s1.a = 13;
+    }
+  });
+  ASSERT(7, s1.a);
+
   printf("OK\n");
   return 0;
 }
