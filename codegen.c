@@ -2184,11 +2184,18 @@ static bool gen_expr_opt(Node *node) {
         return true;
       }
       if (!lhs->ty->is_unsigned && !ty->is_unsigned) {
-        char *ax = regop_ax(ty);
+        if (ty->size == 8) {
+          switch (lhs->ty->size) {
+          case 4: println("  movslq %d(%s), %%rax", lhs->var->ofs, lhs->var->ptr); break;
+          case 2: println("  movswq %d(%s), %%rax", lhs->var->ofs, lhs->var->ptr); break;
+          case 1: println("  movsbq %d(%s), %%rax", lhs->var->ofs, lhs->var->ptr); break;
+          default: internal_error();
+          }
+          return true;
+        }
         switch (lhs->ty->size) {
-        case 4: println("  movsl %d(%s), %s", lhs->var->ofs, lhs->var->ptr, ax); break;
-        case 2: println("  movsw %d(%s), %s", lhs->var->ofs, lhs->var->ptr, ax); break;
-        case 1: println("  movsb %d(%s), %s", lhs->var->ofs, lhs->var->ptr, ax); break;
+        case 2: println("  movswl %d(%s), %%eax", lhs->var->ofs, lhs->var->ptr); break;
+        case 1: println("  movsbl %d(%s), %%eax", lhs->var->ofs, lhs->var->ptr); break;
         default: internal_error();
         }
         return true;
