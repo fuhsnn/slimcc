@@ -668,13 +668,8 @@ static char *find_file(char *pattern) {
 
 // Returns true if a given file exists.
 bool file_exists(char *path) {
-  assert(!errno);
-
   struct stat st;
-  bool found = !stat(path, &st);
-  if (!found && errno == ENOENT)
-    errno = 0;
-  return found;
+  return !stat(path, &st);
 }
 
 static char *find_libpath(void) {
