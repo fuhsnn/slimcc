@@ -69,10 +69,8 @@ void error_tok(Token *tok, char *fmt, ...) {
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
   va_end(ap);
 
-  while (tok->origin) {
+  if (tok->origin)
     warn_tok(tok->origin, "in expansion of macro");
-    tok = tok->origin;
-  }
   exit(1);
 }
 

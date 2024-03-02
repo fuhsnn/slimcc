@@ -693,6 +693,8 @@ static Token *subst(Token *tok, MacroArg *args) {
 static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
   Token head = {0};
   Token *cur = &head;
+  if (orig->origin)
+    orig = orig->origin;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
     if (equal(tok, "##")) {
@@ -713,6 +715,8 @@ static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
 static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
   Token head = {0};
   Token *cur = &head;
+  if (orig->origin)
+    orig = orig->origin;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
     if (tok->kind == TK_PMARK)
@@ -898,7 +902,7 @@ static void read_line_marker(Token **rest, Token *tok) {
 
 static void add_loc_info(Token *tok) {
   Token *tmpl = tok;
-  while (tmpl->origin)
+  if (tmpl->origin)
     tmpl = tmpl->origin;
 
   tok->display_file_no = tmpl->file->display_file->file_no;
@@ -1113,7 +1117,7 @@ static Macro *add_builtin(char *name, macro_handler_fn *fn) {
 
 static Token *file_macro(Token *start) {
   Token *tok = start;
-  while (tok->origin)
+  if (tok->origin)
     tok = tok->origin;
   tok = new_str_token(tok->file->display_file->name, tok);
   tok->next = start->next;
@@ -1122,7 +1126,7 @@ static Token *file_macro(Token *start) {
 
 static Token *line_macro(Token *start) {
   Token *tok = start;
-  while (tok->origin)
+  if (tok->origin)
     tok = tok->origin;
   int i = tok->line_no + tok->file->line_delta;
   tok = new_num_token(i, tok);
