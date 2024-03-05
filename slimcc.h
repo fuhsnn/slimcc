@@ -127,7 +127,6 @@ struct Token {
   bool at_bol;      // True if this token is at beginning of line
   bool has_space;   // True if this token follows a space character
   bool dont_expand; // True if a macro token is encountered during the macro's expansion
-  bool is_hidden_attr;
   Token *origin;    // If this is expanded from a macro, the original token
   char *guard_file; // The path of a potentially include-guarded file
   Token *attr_next;

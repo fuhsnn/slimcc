@@ -759,7 +759,6 @@ static bool expand_macro(Token **rest, Token *tok) {
   if (!m->is_objlike && m->body->kind == TK_EOF && equal(tok, "__attribute__")) {
     char *slash = strrchr(m->body->file->name, '/');
     if (slash && !strcmp(slash + 1, "cdefs.h")) {
-      tok->is_hidden_attr = true;
       push_macro_lock(m, skip_paren(skip(tok->next, "(")));
       return true;
     }
@@ -1437,7 +1436,7 @@ static long is_supported_attr(Token **vendor, Token *tok) {
   return 0;
 }
 
-static void filter_attr(Token *tok, Token *lst, bool is_hidden, bool is_bracket) {
+static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
   bool first = true;
   for (; tok->kind != TK_EOF; first = false) {
     if (!first)
@@ -1451,12 +1450,12 @@ static void filter_attr(Token *tok, Token *lst, bool is_hidden, bool is_bracket)
       }
       if (is_supported_attr(&vendor, tok)) {
         tok->kind = TK_BATTR;
-        lst = lst->attr_next = tok;
+        *lst = (*lst)->attr_next = tok;
       }
     } else {
       if (is_supported_attr(NULL, tok)) {
         tok->kind = TK_ATTR;
-        lst = lst->attr_next = tok;
+        *lst = (*lst)->attr_next = tok;
       }
     }
     if (consume(&tok, tok->next, "(")) {
@@ -1472,16 +1471,17 @@ static Token *preprocess3(Token *tok) {
   Token head = {0};
   Token *cur = &head;
 
-  while (tok->kind != TK_EOF) {
-    if (equal(tok, "__attribute__")) {
-      bool is_hidden = tok->is_hidden_attr;
+  Token attr_head = {0};
+  Token *attr_cur = &attr_head;
 
+  while (tok->kind != TK_EOF) {
+    if (equal(tok, "__attribute__") || equal(tok, "__attribute")) {
       tok = skip(tok->next, "(");
       tok = skip(tok, "(");
       Token *list = split_paren(&tok, tok);
       tok = skip(tok, ")");
 
-      filter_attr(list, tok, is_hidden, false);
+      filter_attr(list, &attr_cur, false);
       continue;
     }
 
@@ -1489,7 +1489,7 @@ static Token *preprocess3(Token *tok) {
       Token *list = split_bracket(&tok, tok);
       tok = skip(tok, "]");
 
-      filter_attr(list, tok, false, true);
+      filter_attr(list, &attr_cur, true);
       continue;
     }
 
@@ -1498,6 +1498,10 @@ static Token *preprocess3(Token *tok) {
 
     if (tok->kind == TK_STR && tok->next->kind == TK_STR)
       join_adjacent_string_literals(tok);
+
+    tok->attr_next = attr_head.attr_next;
+    attr_head.attr_next = NULL;
+    attr_cur = &attr_head;
 
     cur = cur->next = tok;
     tok = tok->next;
