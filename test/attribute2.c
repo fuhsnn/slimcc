@@ -41,13 +41,17 @@ void packed(void) {
   EASSERT(1, offsetof(struct [[gnu::packed]] T { char a; int b[2]; }, b));
 
   // no-op
-#ifndef __clang__
+#ifdef NOTCLANG
   ASSERT(8, ({ struct { char a; int b; } [[gnu::packed]] x; sizeof(x); }));
   EASSERT(0, offsetof(struct { char a; int b; } [[gnu::packed]], a));
   EASSERT(4, offsetof(struct { char a; int b; } [[gnu::packed]], b));
 #endif
   ASSERT(12, ({ typedef struct [[packed]] { char a; int b[2]; } T; sizeof(T); }));
   EASSERT(4, offsetof(struct [[packed]] { char a; int b[2]; }, b));
+
+  ASSERT(9, ({ struct {  struct { char m2; long m5;  } __attribute__((packed)); } T; sizeof(T); }));
+  ASSERT(2, ({ typedef struct { struct { int :9, m16; } __attribute__((packed)); } T; offsetof(T, m16); }));
+  ASSERT(12, ({ struct __attribute__((packed)) { long :48, :46; } a; sizeof(a); }));
 }
 
 int main() {

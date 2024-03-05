@@ -14,7 +14,7 @@ int main() {
   ASSERT(9, ({ typedef struct __attribute__((packed)) { char a; int b[2]; } T; sizeof(T); }));
 
   EASSERT(1, offsetof(struct __attribute__((packed)) T { char a; int b[2]; }, b));
-//  ASSERT(1, _Alignof(struct __attribute__((packed)) { char a; int b[2]; }));
+  EASSERT(1, _Alignof(struct __attribute__((packed)) { char a; int b[2]; }));
 
 //  ASSERT(8, ({ struct __attribute__((aligned(8))) { int a; } x; _Alignof(x); }));
 //  ASSERT(8, ({ struct { int a; } __attribute__((aligned(8))) x; _Alignof(x); }));

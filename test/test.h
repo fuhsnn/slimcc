@@ -8,7 +8,14 @@
 
 #define ASSERT(x, y) test_assert((int)(x), (int)(y), #y)
 #define DASSERT(x) static_assert(x,""); ASSERT(1, x)
-#define EASSERT(x,y) static_assert((int)(x) == (int)(y),""); ASSERT(x, y)
+#define EASSERT(x,y) do{static_assert((int)(x) == (int)(y),"");}while(0); ASSERT(x, y)
+
+#if defined(__slimcc__) || defined(__clang__)
+#define NOTGCC
+#endif
+#if defined(__slimcc__) || !defined(__clang__)
+#define NOTCLANG
+#endif
 
 extern
 #if defined __cplusplus

@@ -2929,10 +2929,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   ty->members = head.next;
 }
 
-static void attribute_packed(Token *tok, Type *ty, bool no_battr) {
+static void attribute_packed(Token *tok, Type *ty, bool allow_battr) {
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
     if (equal(lst, "packed") || equal(lst, "__packed__")) {
-      if (no_battr && lst->kind == TK_BATTR)
+      if (!allow_battr && lst->kind == TK_BATTR)
         continue;
       ty->is_packed = true;
       continue;
@@ -2943,7 +2943,7 @@ static void attribute_packed(Token *tok, Type *ty, bool no_battr) {
 // struct-union-decl = attribute? ident? ("{" struct-members)?
 static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
   Type *ty = struct_type();
-  attribute_packed(tok, ty, false);
+  attribute_packed(tok, ty, true);
 
   // Read a tag.
   Token *tag = NULL;
@@ -2969,7 +2969,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
 
   // Construct a struct object.
   struct_members(&tok, tok, ty);
-  attribute_packed(tok, ty, true);
+  attribute_packed(tok, ty, false);
   *rest = tok;
 
   if (tag) {
@@ -3008,14 +3008,17 @@ static Type *struct_decl(Token **rest, Token *tok) {
       bits = align_to(bits, mem->ty->size * 8);
     } else if (mem->is_bitfield) {
       int sz = mem->ty->size;
-      if (bits / (sz * 8) != (bits + mem->bit_width - 1) / (sz * 8))
-        bits = align_to(bits, sz * 8);
+      if (!ty->is_packed)
+        if (bits / (sz * 8) != (bits + mem->bit_width - 1) / (sz * 8))
+          bits = align_to(bits, sz * 8);
 
       mem->offset = align_down(bits / 8, sz);
       mem->bit_offset = bits % (sz * 8);
       bits += mem->bit_width;
     } else {
-      if (!ty->is_packed)
+      if (ty->is_packed)
+        bits = align_to(bits, 8);
+      else
         bits = align_to(bits, mem->align * 8);
       mem->offset = bits / 8;
       bits += mem->ty->size * 8;
@@ -3024,15 +3027,17 @@ static Type *struct_decl(Token **rest, Token *tok) {
     if (!mem->name && mem->is_bitfield)
       continue;
 
-    if (!ty->is_packed && ty->align < mem->align)
-      ty->align = mem->align;
-
+    if (!ty->is_packed)
+      ty->align = MAX(ty->align, mem->align);
     cur = cur->next = mem;
   }
   cur->next = NULL;
-
   ty->members = head.next;
-  ty->size = align_to(bits, ty->align * 8) / 8;
+
+  if (ty->is_packed)
+    ty->size = align_to(bits, 8) / 8;
+  else
+    ty->size = align_to(bits, ty->align * 8) / 8;
   return ty;
 }
 
@@ -3062,8 +3067,8 @@ static Type *union_decl(Token **rest, Token *tok) {
     if (!mem->name && mem->is_bitfield)
       continue;
 
-    if (ty->align < mem->align)
-      ty->align = mem->align;
+    if (!ty->is_packed)
+      ty->align = MAX(ty->align, mem->align);
 
     cur = cur->next = mem;
   }
