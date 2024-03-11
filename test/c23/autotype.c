@@ -32,6 +32,9 @@ int main(void) {
     }
   }
 
+  ASSERT(1, ({const int init = 0; auto i = init; _Generic(&i, int *:1);}));
+  ASSERT(1, ({const int init = 0; const auto i = init; _Generic(&i, int const*:1);}));
+
   printf("OK\n");
 }
 

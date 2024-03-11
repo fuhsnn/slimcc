@@ -7,6 +7,7 @@
 #include <assert.h>
 
 #define ASSERT(x, y) test_assert((int)(x), (int)(y), #y)
+#define SASSERT(x) static_assert(x,"")
 #define DASSERT(x) static_assert(x,""); ASSERT(1, x)
 #define EASSERT(x,y) do{static_assert((int)(x) == (int)(y),"");}while(0); ASSERT(x, y)
 

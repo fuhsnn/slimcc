@@ -262,6 +262,7 @@ Node *new_cast(Node *expr, Type *ty) {
   }
   Node *node = malloc(sizeof(Node));
   *node = tmp_node;
+  node->ty = unqual(ty);
   return node;
 }
 
@@ -357,6 +358,21 @@ static Obj *new_string_literal(char *p, Type *ty) {
   Obj *var = new_anon_gvar(ty);
   var->init_data = p;
   return var;
+}
+
+static Type *new_qualified_type(Type *ty) {
+  if (ty->origin)
+    ty = ty->origin;
+
+  Type *ret = calloc(1, sizeof(Type));
+  *ret = *ty;
+  ret->origin = ty;
+
+  if (ty->size < 0) {
+    ret->decl_next = ty->decl_next;
+    ty->decl_next = ret;
+  }
+  return ret;
 }
 
 static char *get_ident(Token *tok) {
@@ -467,6 +483,9 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   Type *ty = NULL;
   int counter = 0;
   bool is_atomic = false;
+  bool is_const = false;
+  bool is_restrict = false;
+  bool is_volatile = false;
   bool is_auto = false;
   for (;;) {
     if (attr)
@@ -504,10 +523,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     }
 
     // These keywords are recognized but ignored.
-    if (consume(&tok, tok, "const") || consume(&tok, tok, "volatile") ||
-        consume(&tok, tok, "_Noreturn") || consume(&tok, tok, "register") ||
-        consume(&tok, tok, "restrict") || consume(&tok, tok, "__restrict") ||
-        consume(&tok, tok, "__restrict__"))
+    if (consume(&tok, tok, "_Noreturn") || consume(&tok, tok, "register"))
       continue;
 
     if (equal(tok, "__auto_type") || equal(tok, "auto")) {
@@ -517,13 +533,28 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
-    if (equal(tok, "_Atomic")) {
-      tok = tok->next;
-      if (equal(tok , "(")) {
-        ty = typename(&tok, tok->next);
+    if (consume(&tok, tok, "_Atomic")) {
+      if (consume(&tok, tok , "(")) {
+        ty = typename(&tok, tok);
         tok = skip(tok, ")");
       }
       is_atomic = true;
+      continue;
+    }
+
+    if (consume(&tok, tok, "const")) {
+      is_const = true;
+      continue;
+    }
+
+    if (consume(&tok, tok, "volatile")) {
+      is_volatile = true;
+      continue;
+    }
+
+    if (consume(&tok, tok, "restrict") || consume(&tok, tok, "__restrict") ||
+        consume(&tok, tok, "__restrict__")) {
+      is_restrict = true;
       continue;
     }
 
@@ -673,16 +704,21 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     Node *node = assign(&(Token *){0}, tok->next->next);
     add_type(node);
     leave_scope();
-    ty = array_to_pointer(node->ty);
+    ty = unqual(array_to_pointer(node->ty));
   }
 
   if (!ty)
     ty = ty_int;
 
-  if (is_atomic) {
-    ty = copy_type(ty);
-    ty->is_atomic = true;
+  if (is_atomic || is_const || is_volatile || is_restrict) {
+    Type *ty2 = new_qualified_type(ty);
+    ty2->is_atomic = is_atomic;
+    ty2->is_const = is_const;
+    ty2->is_volatile = is_volatile;
+    ty2->is_restrict = is_restrict;
+    return ty2;
   }
+
   return ty;
 }
 
@@ -720,7 +756,12 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     if (ty2->kind == TY_ARRAY || ty2->kind == TY_VLA) {
       // "array of T" is converted to "pointer to T" only in the parameter
       // context. For example, *argv[] is converted to **argv by this.
-      ty2 = pointer_to(ty2->base);
+      Type *ty3 = pointer_to(ty2->base);
+      ty3->is_atomic = ty2->is_atomic;
+      ty3->is_const = ty2->is_const;
+      ty3->is_volatile = ty2->is_volatile;
+      ty3->is_restrict = ty2->is_restrict;
+      ty2 = ty3;
     } else if (ty2->kind == TY_FUNC) {
       // Likewise, a function is converted to a pointer to a function
       // only in the parameter context.
@@ -772,6 +813,22 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   return vla_of(ty, expr);
 }
 
+static void pointer_qualifiers(Token **rest, Token *tok, Type *ty) {
+  for (;; tok = tok->next) {
+    if (equal(tok, "_Atomic"))
+      ty->is_atomic = true;
+    else if (equal(tok, "const"))
+      ty->is_const = true;
+    else if (equal(tok, "volatile"))
+      ty->is_volatile = true;
+    else if (equal(tok, "restrict") || equal(tok, "__restrict") || equal(tok, "__restrict__"))
+      ty->is_restrict = true;
+    else
+      break;
+  }
+  *rest = tok;
+}
+
 // type-suffix = "(" func-params
 //             | "[" array-dimensions
 //             | ε
@@ -780,9 +837,14 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
     return func_params(rest, tok->next, ty);
 
   if (consume(&tok, tok, "[")) {
-    while (equal(tok, "static") || equal(tok, "const") || equal(tok, "volatile") ||
-           equal(tok, "restrict") || equal(tok, "__restrict") || equal(tok, "__restrict__"))
-      tok = tok->next;
+    if (tok->kind == TK_KEYWORD) {
+      Token *start = tok;
+      pointer_qualifiers(&tok, tok, &(Type){0});
+      consume(&tok, tok, "static");
+      Type *ty2 = array_dimensions(rest, tok, ty);
+      pointer_qualifiers(&(Token *){0}, start, ty2);
+      return ty2;
+    }
     return array_dimensions(rest, tok, ty);
   }
   *rest = tok;
@@ -793,9 +855,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
   while (consume(&tok, tok, "*")) {
     ty = pointer_to(ty);
-    while (equal(tok, "const") || equal(tok, "volatile") || equal(tok, "restrict") ||
-           equal(tok, "__restrict") || equal(tok, "__restrict__"))
-      tok = tok->next;
+    pointer_qualifiers(&tok, tok, ty);
   }
   *rest = tok;
   return ty;
@@ -3037,17 +3097,23 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   else
     ty = union_decl(ty, alt_align);
 
-  if (tag) {
-    // If this is a redefinition, overwrite a previous type.
-    // Otherwise, register the struct type.
-    Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
-    if (ty2) {
-      *ty2 = *ty;
-      return ty2;
-    }
+  if (!tag)
+    return ty;
 
-    push_tag_scope(tag, ty);
+  Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
+  if (ty2) {
+    for (Type *t = ty2; t; t = t->decl_next) {
+      t->size = ty->size;
+      t->align = MAX(t->align, ty->align);
+      t->members = ty->members;
+      t->is_flexible = ty->is_flexible;
+      t->is_packed = ty->is_packed;
+      t->origin = ty;
+    }
+    return ty2;
   }
+
+  push_tag_scope(tag, ty);
   return ty;
 }
 
@@ -3687,7 +3753,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
       error_tok(tok, "typedef name omitted");
 
     if (alt_align) {
-      ty = copy_type(ty);
+      ty = new_qualified_type(ty);
       ty->align = alt_align;
     }
     push_scope(get_ident(name))->type_def = ty;

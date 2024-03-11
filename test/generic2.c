@@ -1,4 +1,16 @@
 #include "test.h"
+
+void paramty(int a[volatile], int sz, int b[const restrict static sz]) {
+  ASSERT(1, _Generic(a, int *: 1, int volatile*: 0));
+  ASSERT(1, _Generic(a, int volatile*: 0, int *: 1));
+
+  ASSERT(1, _Generic(&a, int **: 0, int *volatile *: 1));
+  ASSERT(1, _Generic(&a, int *volatile *: 1, int **: 0));
+
+  ASSERT(1, _Generic(&b, int **: 0, int *restrict const *: 1));
+  ASSERT(1, _Generic(&b, int *restrict const *: 1, int **: 0));
+}
+
 int main(int argc, char**argv) {
 
   ASSERT(1, ({ char c; _Generic(c << 1, int:1 ); }) );
@@ -42,6 +54,25 @@ int main(int argc, char**argv) {
   ASSERT(1, _Generic("a", unsigned char*:0, char*:1, signed char*:0) );
 
   ASSERT(1, ({ int vla[argc]; _Generic(vla, int*:1 ); }) );
+
+  ASSERT(1, ({ const int *p; _Generic(p, int const *:1, int *:0);}));
+  ASSERT(1, ({ volatile int *p; _Generic(p, int *:0, int volatile *:1);}));
+  ASSERT(1, ({ _Atomic int *p; _Generic(p, int *:0, int _Atomic *:1);}));
+  ASSERT(1, ({ int *_Atomic p; _Generic(p, int *:1);}));
+  ASSERT(1, ({ int *_Atomic *p; _Generic(p, int *_Atomic *:1, int**:0);}));
+  ASSERT(1, ({ int *_Atomic *p; _Generic(p, int**:0, int *_Atomic *:1);}));
+  ASSERT(1, ({ int *restrict p; _Generic(p, int *:1);}));
+  ASSERT(1, ({ int *restrict *p; _Generic(p, int *restrict *:1, int **:0);}));
+  ASSERT(1, ({ int *restrict *p; _Generic(p, int **:0, int *restrict *:1);}));
+
+#ifdef NOTCLANG
+  ASSERT(1, ({ const int (*fn)(void); _Generic(fn, int(*)(void): 1);}));
+#endif
+  ASSERT(1, ({ const int(*fn)(void); typeof(fn()) i; _Generic(&i, int *:1);}));
+  ASSERT(1, ({ void (*fn)(const int); _Generic(fn, void(*)(int): 1);}));
+
+  paramty(0,0,0);
+
 
   printf("OK\n");
 }

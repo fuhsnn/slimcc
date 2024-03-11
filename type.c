@@ -29,6 +29,20 @@ Type *new_type(TypeKind kind, int size, int align) {
   return ty;
 }
 
+Type *unqual(Type *ty) {
+  if (ty->origin)
+    ty = ty->origin;
+
+  if (ty->is_atomic || ty->is_const || ty->is_volatile || ty->is_restrict) {
+    ty = copy_type(ty);
+    ty->is_atomic = false;
+    ty->is_const = false;
+    ty->is_volatile = false;
+    ty->is_restrict = false;
+  }
+  return ty;
+}
+
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
   return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||
@@ -71,6 +85,18 @@ static bool is_bitfield2(Node *node, int *width) {
   return false;
 }
 
+static bool is_compatible2(Type *t1, Type *t2) {
+  if (t1->is_atomic != t2->is_atomic)
+    return false;
+  if (t1->is_const != t2->is_const)
+    return false;
+  if (t1->is_volatile != t2->is_volatile)
+    return false;
+  if (t1->is_restrict != t2->is_restrict)
+    return false;
+  return is_compatible(t1, t2);
+}
+
 bool is_compatible(Type *t1, Type *t2) {
   if (t1 == t2)
     return true;
@@ -97,7 +123,7 @@ bool is_compatible(Type *t1, Type *t2) {
   case TY_LDOUBLE:
     return true;
   case TY_PTR:
-    return is_compatible(t1->base, t2->base);
+    return is_compatible2(t1->base, t2->base);
   case TY_FUNC: {
     if (!is_compatible(t1->return_ty, t2->return_ty))
       return false;
@@ -112,7 +138,7 @@ bool is_compatible(Type *t1, Type *t2) {
     return p1 == NULL && p2 == NULL;
   }
   case TY_ARRAY:
-    if (!is_compatible(t1->base, t2->base))
+    if (!is_compatible2(t1->base, t2->base))
       return false;
     return t1->array_len < 0 && t2->array_len < 0 &&
            t1->array_len == t2->array_len;
@@ -123,7 +149,6 @@ bool is_compatible(Type *t1, Type *t2) {
 Type *copy_type(Type *ty) {
   Type *ret = calloc(1, sizeof(Type));
   *ret = *ty;
-  ret->origin = ty;
   return ret;
 }
 
@@ -144,7 +169,7 @@ Type *func_type(Type *return_ty) {
   // The C spec disallows sizeof(<function type>), but
   // GCC allows that and the expression is evaluated to 1.
   Type *ty = new_type(TY_FUNC, 1, 1);
-  ty->return_ty = return_ty;
+  ty->return_ty = unqual(return_ty);
   return ty;
 }
 

@@ -391,7 +391,11 @@ struct Type {
   int align;          // alignment
   bool is_unsigned;   // unsigned or signed
   bool is_atomic;     // true if _Atomic
+  bool is_const;
+  bool is_volatile;
+  bool is_restrict;
   Type *origin;       // for type compatibility check
+  Type *decl_next;    // forward declarations
 
   // Pointer-to or array-of type. We intentionally use the same member
   // to represent pointer/array duality in C.
@@ -475,6 +479,7 @@ Type *vla_of(Type *base, Node *expr);
 Type *enum_type(void);
 Type *new_type(TypeKind kind, int size, int align);
 void add_type(Node *node);
+Type *unqual(Type *ty);
 
 //
 // codegen.c
