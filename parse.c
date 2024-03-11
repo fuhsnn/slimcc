@@ -464,9 +464,10 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     UNSIGNED = 1 << 18,
   };
 
-  Type *ty = ty_int;
+  Type *ty = NULL;
   int counter = 0;
   bool is_atomic = false;
+  bool is_auto = false;
   for (;;) {
     if (attr)
       attr_aligned(tok, &attr->align);
@@ -504,10 +505,17 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
 
     // These keywords are recognized but ignored.
     if (consume(&tok, tok, "const") || consume(&tok, tok, "volatile") ||
-        consume(&tok, tok, "auto") || consume(&tok, tok, "register") ||
+        consume(&tok, tok, "_Noreturn") || consume(&tok, tok, "register") ||
         consume(&tok, tok, "restrict") || consume(&tok, tok, "__restrict") ||
-        consume(&tok, tok, "__restrict__") || consume(&tok, tok, "_Noreturn"))
+        consume(&tok, tok, "__restrict__"))
       continue;
+
+    if (equal(tok, "__auto_type") || equal(tok, "auto")) {
+      if (equal(tok, "__auto_type") || opt_std >= STD_C23)
+        is_auto = true;
+      tok = tok->next;
+      continue;
+    }
 
     if (equal(tok, "_Atomic")) {
       tok = tok->next;
@@ -535,7 +543,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
 
     Type *ty2 = find_typedef(tok);
     if (ty2) {
-      if (counter)
+      if (counter || is_auto)
         break;
       ty = ty2;
       tok = tok->next;
@@ -656,12 +664,25 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     tok = tok->next;
   }
 
+  *rest = tok;
+
+  if (!ty && is_auto) {
+    if (tok->kind != TK_IDENT || !equal(tok->next, "="))
+      error_tok(tok, "unsupported form for type inference");
+    enter_scope();
+    Node *node = assign(&(Token *){0}, tok->next->next);
+    add_type(node);
+    leave_scope();
+    ty = array_to_pointer(node->ty);
+  }
+
+  if (!ty)
+    ty = ty_int;
+
   if (is_atomic) {
     ty = copy_type(ty);
     ty->is_atomic = true;
   }
-
-  *rest = tok;
   return ty;
 }
 
@@ -1656,7 +1677,7 @@ static bool is_typename(Token *tok) {
       "void", "_Bool", "char", "short", "int", "long", "struct", "union",
       "typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
       "const", "volatile", "auto", "register", "restrict", "__restrict",
-      "__restrict__", "_Noreturn", "float", "double", "inline",
+      "__restrict__", "_Noreturn", "float", "double", "inline", "__auto_type",
       "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__"
     };
 

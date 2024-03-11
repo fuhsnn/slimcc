@@ -468,6 +468,7 @@ bool is_const_expr(Node *node, int64_t *val);
 bool is_const_double(Node *node, long double *fval);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
+Type *array_to_pointer(Type *ty);
 Type *func_type(Type *return_ty);
 Type *array_of(Type *base, int size);
 Type *vla_of(Type *base, Node *expr);
