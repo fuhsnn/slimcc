@@ -1481,33 +1481,24 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
   init->expr = assign(rest, tok);
 }
 
-static Type *copy_struct_type(Type *ty) {
-  ty = copy_type(ty);
-
-  Member head = {0};
-  Member *cur = &head;
-  for (Member *mem = ty->members; mem; mem = mem->next) {
-    Member *m = calloc(1, sizeof(Member));
-    *m = *mem;
-    cur = cur->next = m;
-  }
-
-  ty->members = head.next;
-  return ty;
-}
-
 static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_ty) {
   Initializer *init = new_initializer(ty, true);
   initializer2(rest, tok, init);
 
-  if ((ty->kind == TY_STRUCT || ty->kind == TY_UNION) && ty->is_flexible) {
-    ty = copy_struct_type(ty);
+  if (ty->kind == TY_STRUCT && ty->is_flexible) {
+    ty = copy_type(ty);
 
-    Member *mem = ty->members;
-    while (mem->next)
-      mem = mem->next;
-    mem->ty = init->children[mem->idx]->ty;
-    ty->size += mem->ty->size;
+    Member head = {0};
+    Member *cur = &head;
+    for (Member *mem = ty->members; mem; mem = mem->next) {
+      Member *m = calloc(1, sizeof(Member));
+      *m = *mem;
+      cur = cur->next = m;
+    }
+
+    cur->ty = init->children[cur->idx]->ty;
+    ty->size += cur->ty->size;
+    ty->members = head.next;
 
     *new_ty = ty;
     return init;
@@ -3050,6 +3041,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   // called a "flexible array member". It should behave as if
   // if were a zero-sized array.
   if (cur != &head && cur->ty->kind == TY_ARRAY && cur->ty->array_len < 0) {
+    if (ty->kind != TY_STRUCT)
+      error_tok(tok, "flexible array member not allowed in union");
     cur->ty = array_of(cur->ty->base, 0);
     ty->is_flexible = true;
   }
