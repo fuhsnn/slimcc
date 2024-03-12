@@ -69,14 +69,15 @@ struct InitDesg {
 };
 
 typedef enum {
-  EV_CONST = 0, // constant expression
+  EV_CONST,     // constant expression
   EV_LABEL,     // relocation label
   EV_AGG,       // "constexpr" aggregate
 } EvalKind;
 
 typedef struct {
   EvalKind kind;
-  void *ptr;
+  char **label;
+  Obj *var;
 } EvalContext;
 
 // Likewise, global variables are accumulated to this list.
@@ -1675,21 +1676,17 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     return cur;
   }
 
-  char **label = NULL;
   EvalContext ctx = {.kind = kind};
-  if (kind == EV_LABEL)
-    ctx.ptr= &label;
-
   uint64_t val = eval2(init->expr, &ctx);
 
-  if (!label) {
+  if (!ctx.label) {
     write_buf(buf + offset, val, ty->size);
     return cur;
   }
 
   Relocation *rel = calloc(1, sizeof(Relocation));
   rel->offset = offset;
-  rel->label = label;
+  rel->label = ctx.label;
   rel->addend = val;
   cur->next = rel;
   return cur->next;
@@ -2139,14 +2136,13 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
 }
 
 static char *eval_constexpr_agg(Node *node) {
-  Obj *var;
-  EvalContext cxt = {.kind = EV_AGG, .ptr = &var};
-  int ofs = eval2(node, &cxt);
+  EvalContext ctx = {.kind = EV_AGG};
+  int ofs = eval2(node, &ctx);
   if (eval_recover && *eval_recover)
     return NULL;
-  if (ofs < 0 || (var->ty->size < (ofs + node->ty->size)))
+  if (ofs < 0 || (ctx.var->ty->size < (ofs + node->ty->size)))
     return (char *)eval_error(node->tok, "constexpr access out of bounds");
-  return var->constexpr_data + ofs;
+  return ctx.var->constexpr_data + ofs;
 }
 
 static void eval_void(Node *node) {
@@ -2158,7 +2154,7 @@ static void eval_void(Node *node) {
 }
 
 static int64_t eval(Node *node) {
-  return eval2(node, &(EvalContext){0});
+  return eval2(node, &(EvalContext){.kind = EV_CONST});
 }
 
 // Evaluate a given node as a constant expression.
@@ -2326,12 +2322,12 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     case ND_MEMBER:
       return eval2(node->lhs, ctx) + node->member->offset;
     case ND_LABEL_VAL:
-      *((char ***)ctx->ptr) = &node->unique_label;
+      ctx->label = &node->unique_label;
       return 0;
     case ND_VAR:
       if (node->var->is_local)
         return eval_error(node->tok, "not a compile-time constant");
-      *((char ***)ctx->ptr) = &node->var->name;
+      ctx->label = &node->var->name;
       return 0;
     }
     return eval_error(node->tok, "invalid initializer");
@@ -2343,7 +2339,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     if (node->kind == ND_MEMBER)
       return eval2(node->lhs, ctx) + node->member->offset;
     if (node->kind == ND_VAR && node->var->constexpr_data) {
-      *((Obj **)ctx->ptr) = node->var;
+      ctx->var = node->var;
       return 0;
     }
     return eval_error(node->tok, "not a compile-time constant");
