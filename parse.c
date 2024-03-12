@@ -1050,6 +1050,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
       // static local variable
       Obj *var = new_anon_gvar(ty);
+      var->is_tls = attr->is_tls;
       if (alt_align)
         var->align = alt_align;
       push_scope(get_ident(name))->var = var;
