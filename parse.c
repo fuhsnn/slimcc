@@ -3540,6 +3540,13 @@ static Node *primary(Token **rest, Token *tok) {
     if (ty->size < 0)
       error_tok(tok, "sizeof applied to incomplete type");
 
+    if (ty->kind == TY_STRUCT && ty->is_flexible) {
+      Member *mem = ty->members;
+      while (mem->next)
+        mem = mem->next;
+      if (mem->ty->kind == TY_ARRAY)
+        return new_ulong((ty->size - mem->ty->size), start);
+    }
     return new_ulong(ty->size, start);
   }
 

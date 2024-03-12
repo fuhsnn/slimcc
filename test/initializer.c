@@ -178,8 +178,8 @@ int main() {
   ASSERT(3, sizeof(g60));
   ASSERT(6, sizeof(g61));
 
-  ASSERT(4, sizeof(g65));
-  ASSERT(7, sizeof(g66));
+  ASSERT(1, sizeof(g65));
+  ASSERT(1, sizeof(g66));
   ASSERT(0, strcmp(g65.b, "oo"));
   ASSERT(0, strcmp(g66.b, "oobar"));
 
@@ -206,17 +206,6 @@ int main() {
 
   ASSERT(10, ({ char x[]={[10-3]=1,2,3}; sizeof(x); }));
   ASSERT(20, ({ char x[][2]={[8][1]=1,2}; sizeof(x); }));
-
-  ASSERT(3, sizeof(g60));
-  ASSERT(6, sizeof(g61));
-
-  ASSERT(4, sizeof(g65));
-  ASSERT(7, sizeof(g66));
-  ASSERT(0, strcmp(g65.b, "oo"));
-  ASSERT(0, strcmp(g66.b, "oobar"));
-
-  ASSERT(7, ((int[10]){ [3] 7 })[3]);
-  ASSERT(0, ((int[10]){ [3] 7 })[4]);
 
   ASSERT(4, ({ struct { int a,b; } x={1,2,.b=3,.a=4}; x.a; }));
   ASSERT(3, ({ struct { int a,b; } x={1,2,.b=3,.a=4}; x.b; }));
