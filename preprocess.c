@@ -1433,6 +1433,10 @@ static long is_supported_attr(Token **vendor, Token *tok) {
     (!vendor || vendor_gnu)) {
     return 1;
   }
+  if ((equal(tok, "aligned") || equal(tok, "__aligned__")) &&
+    (!vendor || vendor_gnu)) {
+    return 1;
+  }
   return 0;
 }
 

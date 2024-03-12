@@ -21,7 +21,7 @@ Type *ty_float = &(Type){TY_FLOAT, 4, 4};
 Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
 Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
 
-static Type *new_type(TypeKind kind, int size, int align) {
+Type *new_type(TypeKind kind, int size, int align) {
   Type *ty = calloc(1, sizeof(Type));
   ty->kind = kind;
   ty->size = size;
@@ -164,10 +164,6 @@ Type *vla_of(Type *base, Node *len) {
 
 Type *enum_type(void) {
   return new_type(TY_ENUM, 4, 4);
-}
-
-Type *struct_type(void) {
-  return new_type(TY_STRUCT, 0, 1);
 }
 
 int int_rank(Type *t) {

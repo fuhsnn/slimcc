@@ -429,8 +429,8 @@ struct Member {
   Type *ty;
   Token *name;
   int idx;
-  int align;
   int offset;
+  int alt_align;
 
   // Bitfield
   bool is_bitfield;
@@ -472,7 +472,7 @@ Type *func_type(Type *return_ty);
 Type *array_of(Type *base, int size);
 Type *vla_of(Type *base, Node *expr);
 Type *enum_type(void);
-Type *struct_type(void);
+Type *new_type(TypeKind kind, int size, int align);
 void add_type(Node *node);
 
 //

@@ -147,13 +147,14 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Node *cast(Token **rest, Token *tok);
 static Member *get_struct_member(Type *ty, Token *tok);
-static Type *struct_decl(Token **rest, Token *tok);
-static Type *union_decl(Token **rest, Token *tok);
+static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind);
+static Type *struct_decl(Type *ty, int alt_align);
+static Type *union_decl(Type *ty, int alt_align);
 static Node *postfix(Token **rest, Token *tok);
 static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
-static Node *parse_typedef(Token **rest, Token *tok, Type *basety);
+static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
@@ -399,6 +400,31 @@ static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comm
   return true;
 }
 
+static void attr_aligned(Token *tok, int *align) {
+  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
+    if (equal(lst, "aligned") || equal(lst, "__aligned__")) {
+      Token *tok2;
+      if (consume(&tok2, lst->next, "(")) {
+        int align2 = const_expr(&tok2, tok2);
+        *align = MAX(*align, align2);
+        continue;
+      }
+      *align = MAX(*align, 16);
+    }
+  }
+}
+
+static void attr_packed(Token *tok, Type *ty, bool allow_battr) {
+  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
+    if (equal(lst, "packed") || equal(lst, "__packed__")) {
+      if (!allow_battr && lst->kind == TK_BATTR)
+        continue;
+      ty->is_packed = true;
+      continue;
+    }
+  }
+}
+
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 //             | "typedef" | "static" | "extern" | "inline"
 //             | "_Thread_local" | "__thread"
@@ -441,8 +467,13 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   Type *ty = ty_int;
   int counter = 0;
   bool is_atomic = false;
+  for (;;) {
+    if (attr)
+      attr_aligned(tok, &attr->align);
 
-  while (is_typename(tok)) {
+    if (!is_typename(tok))
+      break;
+
     // Handle storage class specifiers.
     if (equal(tok, "typedef") || equal(tok, "static") || equal(tok, "extern") ||
         equal(tok, "inline") || equal(tok, "_Thread_local") || equal(tok, "__thread") ||
@@ -492,34 +523,39 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       if (!attr)
         error_tok(tok, "_Alignas is not allowed in this context");
       tok = skip(tok->next, "(");
-
+      int align;
       if (is_typename(tok))
-        attr->align = typename(&tok, tok)->align;
+        align = typename(&tok, tok)->align;
       else
-        attr->align = const_expr(&tok, tok);
+        align = const_expr(&tok, tok);
+      attr->align = MAX(attr->align, align);
       tok = skip(tok, ")");
       continue;
     }
 
-    // Handle user-defined types.
     Type *ty2 = find_typedef(tok);
-    if (equal(tok, "struct") || equal(tok, "union") || equal(tok, "enum") ||
-        equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__") || ty2) {
+    if (ty2) {
       if (counter)
         break;
+      ty = ty2;
+      tok = tok->next;
+      counter += OTHER;
+      continue;
+    }
 
-      if (equal(tok, "struct")) {
-        ty = struct_decl(&tok, tok->next);
-      } else if (equal(tok, "union")) {
-        ty = union_decl(&tok, tok->next);
-      } else if (equal(tok, "enum")) {
+    if (equal(tok, "struct") || equal(tok, "union") || equal(tok, "enum") ||
+        equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__")) {
+      if (counter)
+        error_tok(tok, "invalid type");
+
+      if (equal(tok, "struct"))
+        ty = struct_union_decl(&tok, tok->next, TY_STRUCT);
+      else if (equal(tok, "union"))
+        ty = struct_union_decl(&tok, tok->next, TY_UNION);
+      else if (equal(tok, "enum"))
         ty = enum_specifier(&tok, tok->next);
-      } else if (equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__")) {
+      else
         ty = typeof_specifier(&tok, tok->next);
-      } else {
-        ty = ty2;
-        tok = tok->next;
-      }
 
       counter += OTHER;
       continue;
@@ -782,6 +818,16 @@ static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
   return type_suffix(rest, tok, ty);
 }
 
+static Type *declarator2(Token **rest, Token *tok, Type *basety, Token **name, int *align) {
+  attr_aligned(tok, align);
+
+  Type *ty = declarator(&tok, tok, basety, name);
+
+  attr_aligned(tok, align);
+  *rest = tok;
+  return ty;
+}
+
 // type-name = declspec abstract-declarator
 static Type *typename(Token **rest, Token *tok) {
   Type *ty = declspec(&tok, tok, NULL);
@@ -898,7 +944,9 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
   bool first = true;
   for (; comma_list(rest, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator(&tok, tok, basety, &name);
+    int alt_align = attr ? attr->align : 0;
+    Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
+
     if (ty->kind == TY_FUNC) {
       if (!name)
         error_tok(tok, "function name omitted");
@@ -921,6 +969,8 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
       // static local variable
       Obj *var = new_anon_gvar(ty);
+      if (alt_align)
+        var->align = alt_align;
       push_scope(get_ident(name))->var = var;
 
       if (attr->is_constexpr) {
@@ -943,10 +993,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       // x = alloca(tmp)`.
       Obj *var = new_lvar(get_ident(name), ty);
       Obj *top = new_lvar(NULL, ty);
-
-      int align = (attr && attr->align) ? attr->align : 16;
-
-      chain_expr(&expr, new_alloca(new_var_node(ty->vla_size, name), var, top, align));
+      chain_expr(&expr, new_alloca(new_var_node(ty->vla_size, name), var, top, MAX(alt_align, 16)));
 
       top->vla_next = current_vla;
       current_vla = top;
@@ -955,8 +1002,8 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     }
 
     Obj *var = new_lvar(get_ident(name), ty);
-    if (attr && attr->align)
-      var->align = attr->align;
+    if (alt_align)
+      var->align = alt_align;
 
     if (attr && attr->is_constexpr) {
       if (!equal(tok, "="))
@@ -1945,7 +1992,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
       Type *basety = declspec(&tok, tok, &attr);
 
       if (attr.is_typedef) {
-        Node *expr = parse_typedef(&tok, tok, basety);
+        Node *expr = parse_typedef(&tok, tok, basety, &attr);
         if (expr)
           cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
         continue;
@@ -2887,10 +2934,12 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 
     // Anonymous struct member
     if ((basety->kind == TY_STRUCT || basety->kind == TY_UNION) &&
-        consume(&tok, tok, ";")) {
+        equal(tok, ";")) {
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = basety;
-      mem->align = attr.align ? attr.align : mem->ty->align;
+      // mem->alt_align = attr.align; // clang bahaviour
+      attr_aligned(tok, &mem->alt_align);
+      tok = tok->next;
       cur = cur->next = mem;
       continue;
     }
@@ -2899,10 +2948,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
       Member *mem = calloc(1, sizeof(Member));
-      Token *name = NULL;
-      mem->ty = declarator(&tok, tok, basety, &name);
-      mem->name = name;
-      mem->align = attr.align ? attr.align : mem->ty->align;
+      mem->alt_align = attr.align;
+      mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
 
       for (Type *t = mem->ty; t; t = t->base)
         if (t->kind == TY_VLA)
@@ -2911,8 +2958,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       if (consume(&tok, tok, ":")) {
         mem->is_bitfield = true;
         mem->bit_width = const_expr(&tok, tok);
+        attr_aligned(tok, &mem->alt_align);
       }
-
       cur = cur->next = mem;
     }
   }
@@ -2929,21 +2976,13 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   ty->members = head.next;
 }
 
-static void attribute_packed(Token *tok, Type *ty, bool allow_battr) {
-  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
-    if (equal(lst, "packed") || equal(lst, "__packed__")) {
-      if (!allow_battr && lst->kind == TK_BATTR)
-        continue;
-      ty->is_packed = true;
-      continue;
-    }
-  }
-}
-
 // struct-union-decl = attribute? ident? ("{" struct-members)?
-static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
-  Type *ty = struct_type();
-  attribute_packed(tok, ty, true);
+static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
+  Type *ty = new_type(kind, -1, 1);
+
+  int alt_align = 0;
+  attr_aligned(tok, &alt_align);
+  attr_packed(tok, ty, true);
 
   // Read a tag.
   Token *tag = NULL;
@@ -2954,13 +2993,11 @@ static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
 
   if (tag && !equal(tok, "{")) {
     *rest = tok;
-    *no_list = true;
 
     Type *ty2 = find_tag(tag);
     if (ty2)
       return ty2;
 
-    ty->size = -1;
     push_tag_scope(tag, ty);
     return ty;
   }
@@ -2969,8 +3006,15 @@ static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
 
   // Construct a struct object.
   struct_members(&tok, tok, ty);
-  attribute_packed(tok, ty, false);
+
+  attr_aligned(tok, &alt_align);
+  attr_packed(tok, ty, false);
   *rest = tok;
+
+  if (kind == TY_STRUCT)
+    ty = struct_decl(ty, alt_align);
+  else
+    ty = union_decl(ty, alt_align);
 
   if (tag) {
     // If this is a redefinition, overwrite a previous type.
@@ -2983,30 +3027,38 @@ static Type *struct_union_decl(Token **rest, Token *tok, bool *no_list) {
 
     push_tag_scope(tag, ty);
   }
-
   return ty;
 }
 
-// struct-decl = struct-union-decl
-static Type *struct_decl(Token **rest, Token *tok) {
-  bool no_list = false;
-  Type *ty = struct_union_decl(rest, tok, &no_list);
-  ty->kind = TY_STRUCT;
-
-  if (no_list)
-    return ty;
-
-  // Assign offsets within the struct to members.
+static Type *struct_decl(Type *ty, int alt_align) {
   int bits = 0;
   Member head = {0};
   Member *cur = &head;
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    if (mem->is_bitfield && mem->bit_width == 0) {
-      // Zero-width anonymous bitfield has a special meaning.
-      // It affects only alignment.
-      bits = align_to(bits, mem->ty->size * 8);
-    } else if (mem->is_bitfield) {
+    bool affect_alignment = false;
+
+    if (!mem->is_bitfield || mem->name) {
+      cur = cur->next = mem;
+      affect_alignment = true;
+    }
+
+    if (!ty->is_packed) {
+      if (mem->alt_align && (mem->is_bitfield || mem->alt_align > mem->ty->align))
+        bits = align_to(bits, mem->alt_align * 8);
+      if (affect_alignment)
+        alt_align = MAX(alt_align, MAX(mem->alt_align, mem->ty->align));
+    } else if (mem->alt_align && (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION)) {
+      bits = align_to(bits, mem->alt_align * 8);
+      if (affect_alignment)
+        alt_align = MAX(alt_align, mem->alt_align);
+    }
+
+    if (mem->is_bitfield) {
+      if (mem->bit_width == 0) {
+        bits = align_to(bits, mem->ty->size * 8);
+        continue;
+      }
       int sz = mem->ty->size;
       if (!ty->is_packed)
         if (bits / (sz * 8) != (bits + mem->bit_width - 1) / (sz * 8))
@@ -3015,47 +3067,43 @@ static Type *struct_decl(Token **rest, Token *tok) {
       mem->offset = align_down(bits / 8, sz);
       mem->bit_offset = bits % (sz * 8);
       bits += mem->bit_width;
-    } else {
-      if (ty->is_packed)
-        bits = align_to(bits, 8);
-      else
-        bits = align_to(bits, mem->align * 8);
-      mem->offset = bits / 8;
-      bits += mem->ty->size * 8;
+      continue;
     }
 
-    if (!mem->name && mem->is_bitfield)
-      continue;
+    if (ty->is_packed)
+      bits = align_to(bits, 8);
+    else
+      bits = align_to(bits, mem->ty->align * 8);
 
-    if (!ty->is_packed)
-      ty->align = MAX(ty->align, mem->align);
-    cur = cur->next = mem;
+    mem->offset = bits / 8;
+    bits += mem->ty->size * 8;
   }
+
   cur->next = NULL;
   ty->members = head.next;
 
-  if (ty->is_packed)
+  if (alt_align)
+    ty->align = alt_align;
+
+  if (ty->is_packed && !alt_align)
     ty->size = align_to(bits, 8) / 8;
   else
     ty->size = align_to(bits, ty->align * 8) / 8;
   return ty;
 }
 
-// union-decl = struct-union-decl
-static Type *union_decl(Token **rest, Token *tok) {
-  bool no_list = false;
-  Type *ty = struct_union_decl(rest, tok, &no_list);
-  ty->kind = TY_UNION;
-
-  if (no_list)
-    return ty;
-
-  // If union, we don't have to assign offsets because they
-  // are already initialized to zero. We need to compute the
-  // alignment and the size though.
+static Type *union_decl(Type *ty, int alt_align) {
   Member head = {0};
   Member *cur = &head;
   for (Member *mem = ty->members; mem; mem = mem->next) {
+    if (!mem->is_bitfield || mem->name) {
+      cur = cur->next = mem;
+      if (!ty->is_packed)
+        alt_align = MAX(alt_align, MAX(mem->alt_align, mem->ty->align));
+      else if (mem->alt_align && (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION))
+        alt_align = MAX(alt_align, mem->alt_align);
+    }
+
     int sz;
     if (mem->is_bitfield)
       sz = align_to(mem->bit_width, 8) / 8;
@@ -3063,18 +3111,14 @@ static Type *union_decl(Token **rest, Token *tok) {
       sz = mem->ty->size;
 
     ty->size = MAX(ty->size, sz);
-
-    if (!mem->name && mem->is_bitfield)
-      continue;
-
-    if (!ty->is_packed)
-      ty->align = MAX(ty->align, mem->align);
-
-    cur = cur->next = mem;
   }
-  cur->next = NULL;
 
+  cur->next = NULL;
   ty->members = head.next;
+
+  if (alt_align)
+    ty->align = alt_align;
+
   ty->size = align_to(ty->size, ty->align);
   return ty;
 }
@@ -3611,14 +3655,20 @@ static Node *primary(Token **rest, Token *tok) {
   error_tok(tok, "expected an expression");
 }
 
-static Node *parse_typedef(Token **rest, Token *tok, Type *basety) {
+static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   Node *node = NULL;
   bool first = true;
   for (; comma_list(rest, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator(&tok, tok, basety, &name);
+    int alt_align = attr->align;
+    Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
     if (!name)
       error_tok(tok, "typedef name omitted");
+
+    if (alt_align) {
+      ty = copy_type(ty);
+      ty->align = alt_align;
+    }
     push_scope(get_ident(name))->type_def = ty;
     chain_expr(&node, compute_vla_size(ty, tok));
   }
@@ -3733,7 +3783,8 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator(&tok, tok, basety, &name);
+    int alt_align = attr->align;
+    Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
 
     if (ty->kind == TY_FUNC) {
       if (equal(tok, "{")) {
@@ -3753,8 +3804,8 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     var->is_definition = !attr->is_extern;
     var->is_static = attr->is_static;
     var->is_tls = attr->is_tls;
-    if (attr->align)
-      var->align = attr->align;
+    if (alt_align)
+      var->align = alt_align;
 
     if (attr->is_constexpr) {
       if (!equal(tok, "="))
@@ -3821,7 +3872,7 @@ Obj *parse(Token *tok) {
 
     // Typedef
     if (attr.is_typedef) {
-      parse_typedef(&tok, tok, basety);
+      parse_typedef(&tok, tok, basety, &attr);
       continue;
     }
 
