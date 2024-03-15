@@ -182,6 +182,7 @@ struct Obj {
   Obj *vla_next;
   bool pass_by_stack;
   int stack_offset;
+  Node *param_arg;
 
   // Global variable or function
   bool is_function;
@@ -308,7 +309,6 @@ struct Node {
   // Function call
   Obj *ret_buffer;
   Obj *args;
-  Node *args_expr;
 
   // Goto or labeled statement, or labels-as-values
   char *label;
@@ -471,6 +471,7 @@ bool is_bitfield(Node *node);
 bool is_compatible(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
 bool is_const_double(Node *node, long double *fval);
+bool is_nullptr(Node *node);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *array_to_pointer(Type *ty);
@@ -489,7 +490,7 @@ Type *unqual(Type *ty);
 void codegen(Obj *prog, FILE *out);
 int align_to(int n, int align);
 bool va_arg_need_copy(Type *ty);
-
+bool is_trivial_arg(Node *node);
 extern bool dont_reuse_stack;
 
 //

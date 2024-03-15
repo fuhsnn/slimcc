@@ -3357,7 +3357,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   Obj head = {0};
   Obj *cur = &head;
-  Node *expr = NULL;
 
   enter_tmp_scope();
 
@@ -3366,8 +3365,11 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     add_type(arg);
 
     if (param) {
-      if (param->ty->kind != TY_STRUCT && param->ty->kind != TY_UNION)
+      if (param->ty->kind != TY_STRUCT && param->ty->kind != TY_UNION &&
+        !(arg->ty->kind == TY_PTR && param->ty->kind == TY_PTR) &&
+        !(arg->ty->kind == param->ty->kind && arg->ty->is_unsigned == param->ty->is_unsigned))
         arg = new_cast(arg, param->ty);
+
       param = param->param_next;
     } else {
       if (!ty->is_variadic)
@@ -3383,10 +3385,15 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
     add_type(arg);
 
-    Obj *var = new_lvar(NULL, arg->ty);
-    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok));
-    add_type(expr);
-
+    Obj *var;
+    if (opt_optimize && is_trivial_arg(arg)) {
+      var = new_var(NULL, arg->ty);
+      var->param_arg = arg;
+    } else {
+      var = new_lvar(NULL, arg->ty);
+      var->param_arg = new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok);
+      add_type(var->param_arg);
+    }
     cur = cur->param_next = var;
   }
   if (param)
@@ -3397,7 +3404,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Node *node = new_unary(ND_FUNCALL, fn, tok);
   node->ty = ty->return_ty;
   node->args = head.param_next;
-  node->args_expr = expr;
 
   // If a function returns a struct, it is caller's responsibility
   // to allocate a space for the return value.

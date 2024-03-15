@@ -117,6 +117,11 @@ static bool is_lvar(Node *node) {
   return node->kind == ND_VAR && node->var->is_local;
 }
 
+bool is_trivial_arg(Node *arg) {
+  return (arg->kind == ND_VAR && arg->var->is_local) ||
+    (arg->kind == ND_NUM && arg->ty->kind != TY_LDOUBLE) || is_nullptr(arg);
+}
+
 static void save_tmp_regs(void) {
   for (int i = 0; i < tmp_stack.depth; i++)
     tmp_stack.data[i].kind = SL_ST;
@@ -568,84 +573,84 @@ static void cmp_zero(Type *ty) {
     println("  test %%rax, %%rax");
 }
 
-static void load_val(Type *ty, int64_t val) {
+static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64) {
   if (val == 0) {
-    println("  xor %%eax, %%eax");
+    println("  xor %s, %s", gp32, gp32);
     return;
   }
   if (ty->size <= 4 ? in_imm_range(val) : (uint64_t)val <= UINT32_MAX) {
-    println("  movl $%"PRIi64", %%eax", val);
+    println("  movl $%"PRIi64", %s", val, gp32);
     return;
   }
-  println("  mov $%"PRIi64", %%rax", val);
+  println("  mov $%"PRIi64", %s", val, gp64);
 }
 
-static void load_fval(Type *ty, long double fval) {
+static void load_val(Type *ty, int64_t val) {
+  load_val2(ty, val, "%eax", "%rax");
+}
+
+static void load_fval2(Type *ty, long double fval, int reg) {
   if (ty->kind == TY_FLOAT) {
     float pos_z = +0.0f;
     float fv = fval;
     if (!memcmp(&pos_z, &fv, sizeof(float))) {
-      println("  xorps %%xmm0, %%xmm0");
+      println("  xorps %%xmm%d, %%xmm%d", reg, reg);
       return;
     }
-  }
-  if (ty->kind == TY_DOUBLE) {
-    double pos_z = +0.0;
-    double dv = fval;
-    if (!memcmp(&pos_z, &dv, sizeof(double))) {
-      println("  xorps %%xmm0, %%xmm0");
-      return;
-    }
-  }
-  if (ty->kind == TY_LDOUBLE) {
-    long double pos_z = +0.0L;
-    if (!memcmp(&pos_z, &fval, 10)) {
-      println("  fninit; fldz");
-      return;
-    }
-    long double neg_z = -0.0L;
-    if (!memcmp(&neg_z, &fval, 10)) {
-      println("  fninit; fldz");
-      println("  fchs");
-      return;
-    }
-    if (fval == 1) {
-      println("  fninit; fld1");
-      return;
-    }
-    if (fval == -1) {
-      println("  fninit; fld1");
-      println("  fchs");
-      return;
-    }
-  }
-  switch (ty->kind) {
-  case TY_FLOAT: {
     union { float f32; uint32_t u32; } u = { fval };
     println("  movl $%u, %%eax", u.u32);
-    println("  movd %%eax, %%xmm0");
+    println("  movd %%eax, %%xmm%d", reg);
     return;
   }
-  case TY_DOUBLE: {
-    union { double f64; uint64_t u64; } u = { fval };
-    println("  movq $%lu, %%rax", u.u64);
-    println("  movq %%rax, %%xmm0");
+
+  double pos_z = +0.0;
+  double dv = fval;
+  if (!memcmp(&pos_z, &dv, sizeof(double))) {
+    println("  xorps %%xmm%d, %%xmm%d", reg, reg);
     return;
   }
-  case TY_LDOUBLE: {
-    union { long double f80; uint64_t u64[2]; } u;
-    memset(&u, 0, sizeof(u));
-    u.f80 = fval;
-    println("  movq $%lu, %%rax", u.u64[0]);
-    println("  movw $%lu, %%dx", u.u64[1]);
-    println("  push %%rdx");
-    println("  push %%rax");
-    println("  fninit; fldt (%%rsp)");
-    println("  add $16, %%rsp");
+  union { double f64; uint64_t u64; } u = { fval };
+  println("  movq $%lu, %%rax", u.u64);
+  println("  movq %%rax, %%xmm%d", reg);
+  return;
+}
+
+static void load_fval(Type *ty, long double fval) {
+  if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE) {
+    load_fval2(ty, fval, 0);
     return;
   }
+
+  long double pos_z = +0.0L;
+  if (!memcmp(&pos_z, &fval, 10)) {
+    println("  fninit; fldz");
+    return;
   }
-  internal_error();
+  long double neg_z = -0.0L;
+  if (!memcmp(&neg_z, &fval, 10)) {
+    println("  fninit; fldz");
+    println("  fchs");
+    return;
+  }
+  if (fval == 1) {
+    println("  fninit; fld1");
+    return;
+  }
+  if (fval == -1) {
+    println("  fninit; fld1");
+    println("  fchs");
+    return;
+  }
+  union { long double f80; uint64_t u64[2]; } u;
+  memset(&u, 0, sizeof(u));
+  u.f80 = fval;
+  println("  movq $%lu, %%rax", u.u64[0]);
+  println("  movw $%lu, %%dx", u.u64[1]);
+  println("  push %%rdx");
+  println("  push %%rax");
+  println("  fninit; fldt (%%rsp)");
+  println("  add $16, %%rsp");
+  return;
 }
 
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
@@ -909,19 +914,38 @@ static void place_stack_args(Node *node) {
     if (!var->pass_by_stack)
       continue;
 
+    if (var->param_arg->kind == ND_NUM || is_nullptr(var->param_arg)) {
+      if (is_flonum(var->param_arg->ty))
+        load_fval(var->param_arg->ty, var->param_arg->fval);
+      else
+        load_val(var->param_arg->ty, var->param_arg->val);
+      store2(var->param_arg->ty, var->stack_offset, "%rsp");
+      continue;
+    }
+
+    int ofs;
+    char *ptr;
+    if (is_trivial_arg(var->param_arg)) {
+      ofs = var->param_arg->var->ofs;
+      ptr = var->param_arg->var->ptr;
+    } else {
+      ofs = var->ofs;
+      ptr = var->ptr;
+    }
+
     switch (var->ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
     case TY_FLOAT:
     case TY_DOUBLE:
     case TY_LDOUBLE:
-      gen_mem_copy(var->ofs, var->ptr,
+      gen_mem_copy(ofs, ptr,
                    var->stack_offset, "%rsp",
                    var->ty->size);
       continue;
     }
 
-    load_extend_int(var->ty, var->ofs, var->ptr, regop_ax(var->ty));
+    load_extend_int(var->ty, ofs, ptr, regop_ax(var->ty));
     println("  mov %%rax, %d(%%rsp)", var->stack_offset);
   }
 }
@@ -937,31 +961,51 @@ static void place_reg_args(Node *node, bool gp_start) {
     if (var->pass_by_stack)
       continue;
 
+    if (var->param_arg->kind == ND_NUM || is_nullptr(var->param_arg)) {
+      if (is_flonum(var->param_arg->ty))
+        load_fval2(var->param_arg->ty, var->param_arg->fval, fp++);
+      else
+        load_val2(var->param_arg->ty, var->param_arg->val, argreg32[gp], argreg64[gp]), gp++;
+      continue;
+    }
+
+    int ofs;
+    char *ptr;
+    if (is_trivial_arg(var->param_arg)) {
+      ofs = var->param_arg->var->ofs;
+      ptr = var->param_arg->var->ptr;
+    } else {
+      ofs = var->ofs;
+      ptr = var->ptr;
+    }
+
     switch (var->ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
       if (has_flonum1(var->ty))
-        println("  movsd %d(%s), %%xmm%d", var->ofs, var->ptr, fp++);
+        println("  movsd %d(%s), %%xmm%d", ofs, ptr, fp++);
       else
-        println("  mov %d(%s), %s",  var->ofs, var->ptr, argreg64[gp++]);
+        println("  mov %d(%s), %s",  ofs, ptr, argreg64[gp++]);
 
       if (var->ty->size > 8) {
         if (has_flonum2(var->ty))
-          println("  movsd %d(%s), %%xmm%d", 8 + var->ofs, var->ptr, fp++);
+          println("  movsd %d(%s), %%xmm%d", 8 + ofs, ptr, fp++);
         else
-          println("  mov %d(%s), %s",  8 + var->ofs, var->ptr, argreg64[gp++]);
+          println("  mov %d(%s), %s",  8 + ofs, ptr, argreg64[gp++]);
       }
       continue;
     case TY_FLOAT:
-      println("  movss %d(%s), %%xmm%d", var->ofs, var->ptr, fp++);
+      println("  movss %d(%s), %%xmm%d", ofs, ptr, fp++);
       continue;
     case TY_DOUBLE:
-      println("  movsd %d(%s), %%xmm%d", var->ofs, var->ptr, fp++);
+      println("  movsd %d(%s), %%xmm%d", ofs, ptr, fp++);
       continue;
     }
 
-    char *argreg = var->ty->size <= 4 ? argreg32[gp++] : argreg64[gp++];
-    load_extend_int(var->ty, var->ofs, var->ptr, argreg);
+    if (var->ty->size <= 4)
+      load_extend_int(var->ty, ofs, ptr, argreg32[gp++]);
+    else
+      load_extend_int(var->ty, ofs, ptr, argreg64[gp++]);
   }
 }
 
@@ -1268,7 +1312,7 @@ static void gen_expr(Node *node) {
     return;
   case ND_FUNCALL: {
     if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
-      gen_expr(node->args_expr);
+      gen_expr(node->args->param_arg);
       builtin_alloca(node);
       return;
     }
@@ -1279,8 +1323,9 @@ static void gen_expr(Node *node) {
       push();
     }
 
-    if (node->args_expr)
-      gen_expr(node->args_expr);
+    for (Obj *var = node->args; var; var = var->param_next)
+      if (!is_trivial_arg(var->param_arg))
+        gen_expr(var->param_arg);
 
     if (fn_ptr)
       pop("%r10");

@@ -208,7 +208,7 @@ int int_rank(Type *t) {
   internal_error();
 }
 
-static bool is_nullptr(Node *node) {
+bool is_nullptr(Node *node) {
   if (node->kind == ND_CAST &&
     node->ty->kind == TY_PTR && node->ty->base->kind == TY_VOID)
     node = node->lhs;
