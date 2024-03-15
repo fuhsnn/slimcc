@@ -1061,11 +1061,10 @@ static void builtin_alloca(Node *node) {
   // Align frame pointer
   int align = node->val > 16 ? node->val : 16;
   println("  and $-%d, %%rsp", align);
-  if (node->var) {
+  if (node->var)
     println("  mov %%rsp, %d(%s)", node->var->ofs, node->var->ptr);
-    println("  mov %%rsp, %d(%s)", node->top_vla->ofs, node->top_vla->ptr);
-  }
-  println("  mov %%rsp, %%rax");
+  else
+    println("  mov %%rsp, %%rax");
 }
 
 static void dealloc_vla(Node *node) {
@@ -1382,6 +1381,10 @@ static void gen_expr(Node *node) {
     println("  xchg %s, (%s)", reg_ax(sz), reg);
     return;
   }
+  case ND_ALLOCA:
+    gen_expr(node->lhs);
+    builtin_alloca(node);
+    return;
   case ND_VA_START: {
     gen_expr(node->lhs);
     println("  movl $%d, (%%rax)", va_gp_start);
