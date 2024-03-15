@@ -1254,7 +1254,8 @@ static Token *has_c_attribute_macro(Token *start) {
 static Token *has_builtin_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  bool has_it = equal(tok, "__builtin_offsetof") ||
+  bool has_it = equal(tok, "__builtin_alloca") ||
+    equal(tok, "__builtin_offsetof") ||
     equal(tok, "__builtin_types_compatible_p") ||
     equal(tok, "__builtin_va_start") ||
     equal(tok, "__builtin_va_copy") ||

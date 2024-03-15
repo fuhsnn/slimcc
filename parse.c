@@ -3547,6 +3547,15 @@ static Node *primary(Token **rest, Token *tok) {
   if (equal(tok, "_Generic"))
     return generic_selection(rest, tok->next);
 
+  if (equal(tok, "__builtin_alloca")) {
+    Node *node = new_node(ND_ALLOCA, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = assign(&tok, tok);
+    *rest = skip(tok, ")");
+    node->ty = pointer_to(ty_void);
+    return node;
+  }
+
   if (equal(tok, "__builtin_offsetof")) {
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);
