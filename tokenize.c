@@ -210,7 +210,7 @@ static int read_escaped_char(char **new_pos, char *p) {
 
     int c = 0;
     for (; isxdigit(*p); p++)
-      c = (c << 4) + from_hex(*p);
+      c = ((unsigned)c << 4) + from_hex(*p);
     *new_pos = p;
     return c;
   }

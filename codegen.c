@@ -1220,7 +1220,7 @@ static void gen_expr(Node *node) {
       char *ptr = pop_inreg("%rcx");
       load2(mem->ty, 0, ptr);
 
-      imm_and(ax, dx, ~(((1LL << mem->bit_width) - 1) << mem->bit_offset));
+      imm_and(ax, dx, ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset));
 
       println("  mov %s, %s", r0, dx);
       if (mem->bit_offset)
