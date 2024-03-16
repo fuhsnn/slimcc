@@ -57,6 +57,16 @@ int main(void) {
   ASSERT(1, alloca_p2 != alloca_p3);
   ASSERT(1, alloca_p3 != alloca_p4);
 
+  {
+    int *p;
+    for (_Bool j = 1; j; j = 0)
+      p = &(int){17};
+    {
+      int i = 33;
+    }
+    ASSERT(17, *p);
+  }
+
   va_fn(0, (M){55,66});
 
   printf("OK\n");

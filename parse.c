@@ -1918,7 +1918,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     tok = skip(tok->next, "(");
 
     node->target_vla = current_vla;
-    enter_scope();
+    enter_tmp_scope();
 
     if (is_typename(tok)) {
       Type *basety = declspec(&tok, tok, NULL);
