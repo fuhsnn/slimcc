@@ -555,9 +555,8 @@ static void print_dependencies(void) {
 
   for (int i = 0; files[i]; i++) {
     char *name = files[i]->name;
-    if (opt_MMD)
-      if (in_std_include_path(name) || !strcmp(name, "slimcc_builtins"))
-        continue;
+    if ((opt_MMD && in_std_include_path(name)) || !strcmp(name, "slimcc_builtins"))
+      continue;
     fprintf(out, " \\\n  %s", name);
   }
 
@@ -566,9 +565,8 @@ static void print_dependencies(void) {
   if (opt_MP) {
     for (int i = 1; files[i]; i++) {
       char *name = files[i]->name;
-      if (opt_MMD)
-        if (in_std_include_path(name) || !strcmp(name, "slimcc_builtins"))
-          continue;
+      if ((opt_MMD && in_std_include_path(name)) || !strcmp(name, "slimcc_builtins"))
+        continue;
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
   }
