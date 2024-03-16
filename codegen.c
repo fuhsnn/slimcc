@@ -1681,11 +1681,13 @@ static void gen_stmt(Node *node) {
     cmp_zero(node->cond->ty);
     println("  je  .L.else.%d", c);
     gen_stmt(node->then);
-    println("  jmp .L.end.%d", c);
-    println(".L.else.%d:", c);
     if (node->els)
+      println("  jmp .L.end.%d", c);
+    println(".L.else.%d:", c);
+    if (node->els) {
       gen_stmt(node->els);
-    println(".L.end.%d:", c);
+      println(".L.end.%d:", c);
+    }
     return;
   }
   case ND_FOR: {
