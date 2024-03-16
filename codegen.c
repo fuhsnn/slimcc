@@ -837,10 +837,10 @@ bool va_arg_need_copy(Type *ty) {
   return false;
 }
 
-static int calling_convention(Obj *var, int gp_start, int *gp_count, int *fp_count, int *stack_align) {
+static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack_align) {
   int stack = 0;
   int max_align = 16;
-  int gp = gp_start, fp = 0;
+  int gp = *gp_count, fp = *fp_count;
   for (; var; var = var->param_next) {
     Type *ty = var->ty;
     assert(ty->size != 0);
@@ -880,10 +880,8 @@ static int calling_convention(Obj *var, int gp_start, int *gp_count, int *fp_cou
     var->stack_offset = stack;
     stack += align_to(ty->size, 8);
   }
-  if (gp_count)
-    *gp_count = MIN(gp, GP_MAX);
-  if (fp_count)
-    *fp_count = MIN(fp, FP_MAX);
+  *gp_count = MIN(gp, GP_MAX);
+  *fp_count = MIN(fp, FP_MAX);
   if (stack_align)
     *stack_align = max_align;
 
@@ -1327,15 +1325,27 @@ static void gen_expr(Node *node) {
       if (!is_trivial_arg(var->param_arg))
         gen_expr(var->param_arg);
 
-    if (fn_ptr)
-      pop("%r10");
-
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
-    bool gp_start = node->ret_buffer && node->ty->size > 16;
+    bool large_rtn = node->ret_buffer && node->ty->size > 16;
+    int gp_count = large_rtn;
+    int fp_count = 0;
+    int stack_align;
+    int args_size = calling_convention(node->args, &gp_count, &fp_count, &stack_align);
 
-    int fp_count, stack_align;
-    int args_size = calling_convention(node->args, gp_start, NULL, &fp_count, &stack_align);
+    char *fn_ptr_reg;
+    if (fn_ptr) {
+      if (gp_count) {
+        if (gp_count <= 2)
+          req_gp(tmpreg64, gp_count - 1);
+        else if (gp_count <= 4)
+          req_gp(tmpreg64, 1);
+        else
+          req_gp(tmpreg64, gp_count - 3);
+      }
+      fn_ptr_reg = pop_inreg("%r10");
+    }
+
     if (args_size) {
       if (stack_align > 16) {
         println("  mov %%rsp, %%rax");
@@ -1347,10 +1357,8 @@ static void gen_expr(Node *node) {
       }
     }
 
-    save_tmp_regs();
-
     place_stack_args(node);
-    place_reg_args(node, gp_start);
+    place_reg_args(node, large_rtn);
 
     if (node->lhs->ty->is_variadic) {
       if (fp_count)
@@ -1360,9 +1368,11 @@ static void gen_expr(Node *node) {
     }
 
     if (fn_ptr)
-      println("  call *%%r10");
+      println("  call *%s", fn_ptr_reg);
     else
       println("  call \"%s\"%s", node->lhs->var->name, opt_fpic ? "@PLT" : "");
+
+    save_tmp_regs();
 
     if (args_size) {
       if (stack_align > 16)
@@ -2468,8 +2478,9 @@ static void emit_text(Obj *prog) {
     println("\"%s\":", fn->name);
 
     bool large_rtn = fn->ty->return_ty->size > 16;
-    int gp_count, fp_count;
-    int args_size = calling_convention(fn->ty->param_list, large_rtn, &gp_count, &fp_count, NULL);
+    int gp_count = large_rtn;
+    int fp_count = 0;
+    int args_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
 
     int lvar_align = get_lvar_align(fn->ty->scopes, 16);
     lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
