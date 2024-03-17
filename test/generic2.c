@@ -11,6 +11,31 @@ void paramty(int a[volatile], int sz, int b[const restrict static sz]) {
   ASSERT(1, _Generic(&b, int *restrict const *: 1, int **: 0));
 }
 
+void param_arrptr_ty(int sz, int(*a)[13], int(*b)[]) {
+  ASSERT(1, _Generic(a, default:0, int(*)[13]:1, int(*)[17]:2));
+  ASSERT(0, _Generic(a, default:0, int(*)[13][17]:1));
+
+  ASSERT(1, _Generic(b, default:0, typeof(a):1));
+  ASSERT(1, _Generic(a, default:0, typeof(b):1));
+
+  ASSERT(1, _Generic(b, default:0, int(*)[17]:1));
+  ASSERT(0, _Generic(b, default:0, int(*)[13][17]:1));
+
+  int vla1[sz];
+  int vla2[sz][13];
+  ASSERT(1, _Generic(&vla1, default :0, typeof(a):1));
+  ASSERT(1, _Generic(&vla1, default :0, typeof(b):1));
+  ASSERT(0, _Generic(&vla2, default :0, typeof(a):1));
+  ASSERT(1, _Generic(&vla2[1], default :0, typeof(a):1));
+}
+
+
+void param_vlaptr_ty(int sz, int (*a)[sz]) {
+  ASSERT(0, _Generic(a, default:0, int *:1));
+  ASSERT(1, _Generic(a, default:0, int(*)[13]:1));
+  ASSERT(0, _Generic(a, default:0, int(*)[13][17]:1));
+}
+
 int main(int argc, char**argv) {
 
   ASSERT(1, ({ char c; _Generic(c << 1, int:1 ); }) );
@@ -72,6 +97,8 @@ int main(int argc, char**argv) {
   ASSERT(1, ({ void (*fn)(const int); _Generic(fn, void(*)(int): 1);}));
 
   paramty(0,0,0);
+  param_arrptr_ty(0,0,0);
+  param_vlaptr_ty(0,0);
 
 
   printf("OK\n");

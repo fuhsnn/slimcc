@@ -107,6 +107,11 @@ bool is_compatible(Type *t1, Type *t2) {
   if (t2->origin)
     return is_compatible(t1, t2->origin);
 
+  if ((t1->kind == TY_VLA && t2->kind == TY_VLA) ||
+    (t1->kind == TY_VLA && t2->kind == TY_ARRAY) ||
+    (t1->kind == TY_ARRAY && t2->kind == TY_VLA))
+    return is_compatible2(t1->base, t2->base);
+
   if (t1->kind != t2->kind)
     return false;
 
@@ -140,7 +145,7 @@ bool is_compatible(Type *t1, Type *t2) {
   case TY_ARRAY:
     if (!is_compatible2(t1->base, t2->base))
       return false;
-    return t1->array_len < 0 && t2->array_len < 0 &&
+    return t1->array_len < 0 || t2->array_len < 0 ||
            t1->array_len == t2->array_len;
   }
   return false;
