@@ -1409,19 +1409,28 @@ static void gen_expr(Node *node) {
     gen_expr(node->cas_old);
     push();
     gen_expr(node->cas_new);
-    int sz = node->cas_addr->ty->base->size;
-    println("  mov %s, %s", reg_ax(sz), reg_dx(sz));
-    pop("%rax"); // old
-    pop("%rcx"); // addr
 
-    char *r0 = req_gp(tmpreg64, 0);
-    println("  mov %%rax, %s", r0);
-    load(node->cas_old->ty->base);
+    char *old = pop_inreg(tmpreg64[0]);
+    char *addr = pop_inreg(tmpreg64[1]);
 
-    println("  lock cmpxchg %s, (%%rcx)", reg_dx(sz));
+    Type *ty = node->cas_addr->ty->base;
+    char *ax = reg_ax(ty->size);
+    char *dx = reg_dx(ty->size);
+
+    if (!is_scalar(ty) || ty->kind == TY_LDOUBLE)
+      error_tok(node->tok, "unsupported type for atomic CAS");
+
+    switch (ty->kind) {
+    case TY_DOUBLE: println("  movq %%xmm0, %s", dx); break;
+    case TY_FLOAT: println("  movd %%xmm0, %s", dx); break;
+    default: println("  mov %s, %s", ax, dx); break;
+    }
+
+    println("  mov (%s), %s", old, ax);
+    println("  lock cmpxchg %s, (%s)", dx, addr);
     println("  sete %%cl");
     println("  je 1f");
-    println("  mov %s, (%s)", reg_ax(sz), r0);
+    println("  mov %s, (%s)", ax, old);
     println("1:");
     println("  movzbl %%cl, %%eax");
     return;
