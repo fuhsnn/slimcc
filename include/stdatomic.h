@@ -34,17 +34,17 @@ typedef enum {
 #define atomic_load_explicit(addr, order) (*(addr))
 #define atomic_store_explicit(addr, val, order) (*(addr) = (val))
 
-#define atomic_fetch_add(obj, val) (*(obj) += (val))
-#define atomic_fetch_sub(obj, val) (*(obj) -= (val))
-#define atomic_fetch_or(obj, val) (*(obj) |= (val))
-#define atomic_fetch_xor(obj, val) (*(obj) ^= (val))
-#define atomic_fetch_and(obj, val) (*(obj) &= (val))
+#define atomic_fetch_add(addr, val) __builtin_atomic_fetch_add(addr, val)
+#define atomic_fetch_sub(addr, val) __builtin_atomic_fetch_sub(addr, val)
+#define atomic_fetch_or(addr, val) __builtin_atomic_fetch_or(addr, val)
+#define atomic_fetch_xor(addr, val) __builtin_atomic_fetch_xor(addr, val)
+#define atomic_fetch_and(addr, val) __builtin_atomic_fetch_and(addr, val)
 
-#define atomic_fetch_add_explicit(obj, val, order) (*(obj) += (val))
-#define atomic_fetch_sub_explicit(obj, val, order) (*(obj) -= (val))
-#define atomic_fetch_or_explicit(obj, val, order) (*(obj) |= (val))
-#define atomic_fetch_xor_explicit(obj, val, order) (*(obj) ^= (val))
-#define atomic_fetch_and_explicit(obj, val, order) (*(obj) &= (val))
+#define atomic_fetch_add_explicit(addr, val, order) __builtin_atomic_fetch_add(addr, val)
+#define atomic_fetch_sub_explicit(addr, val, order) __builtin_atomic_fetch_sub(addr, val)
+#define atomic_fetch_or_explicit(addr, val, order) __builtin_atomic_fetch_or(addr, val)
+#define atomic_fetch_xor_explicit(addr, val, order) __builtin_atomic_fetch_xor(addr, val)
+#define atomic_fetch_and_explicit(addr, val, order) __builtin_atomic_fetch_and(addr, val)
 
 #define atomic_compare_exchange_weak(p, old, new) \
   __builtin_compare_and_swap((p), (old), (new))
