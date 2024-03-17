@@ -408,6 +408,7 @@ static void parse_args(int argc, char **argv) {
         !strcmp(argv[i], "-fno-strict-overflow") ||
         !strcmp(argv[i], "-fwrapv") ||
         !strcmp(argv[i], "-m64") ||
+        !strcmp(argv[i], "-mfpmath=sse") ||
         !strcmp(argv[i], "-mno-red-zone") ||
         !strcmp(argv[i], "-pedantic") ||
         !strcmp(argv[i], "-w"))
