@@ -228,6 +228,11 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (!strcmp(argv[i], "-rdynamic")) {
+      strarray_push(&input_paths, "-Wl,--export-dynamic");
+      continue;
+    }
+
     if (!strcmp(argv[i], "-Xlinker")) {
       strarray_push(&ld_extra_args, argv[++i]);
       continue;
