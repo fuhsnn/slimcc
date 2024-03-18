@@ -182,8 +182,10 @@ bool is_keyword(Token *tok) {
       hashmap_put(&map, "asm", (void *)1);
     if (opt_std == STD_NONE || opt_std >= STD_C23)
       hashmap_put(&map, "typeof", (void *)1);      
-    if (opt_std >= STD_C23)
+    if (opt_std >= STD_C23) {
       hashmap_put(&map, "constexpr", (void *)1);
+      hashmap_put(&map, "typeof_unqual", (void *)1);
+    }
   }
 
   return hashmap_get2(&map, tok->loc, tok->len);

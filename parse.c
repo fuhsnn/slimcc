@@ -581,7 +581,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     }
 
     if (equal(tok, "struct") || equal(tok, "union") || equal(tok, "enum") ||
-        equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__")) {
+        equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__") ||
+        equal(tok, "typeof_unqual")) {
       if (counter)
         error_tok(tok, "invalid type");
 
@@ -591,6 +592,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
         ty = struct_union_decl(&tok, tok->next, TY_UNION);
       else if (equal(tok, "enum"))
         ty = enum_specifier(&tok, tok->next);
+      else if (equal(tok, "typeof_unqual"))
+        ty = unqual(typeof_specifier(&tok, tok->next));
       else
         ty = typeof_specifier(&tok, tok->next);
 
@@ -1730,8 +1733,10 @@ static bool is_typename(Token *tok) {
 
     if (opt_std == STD_NONE || opt_std >= STD_C23)
       hashmap_put(&map, "typeof", (void *)1);
-    if (opt_std >= STD_C23)
+    if (opt_std >= STD_C23) {
       hashmap_put(&map, "constexpr", (void *)1);
+      hashmap_put(&map, "typeof_unqual", (void *)1);
+    }
   }
 
   return hashmap_get2(&map, tok->loc, tok->len) || find_typedef(tok);
