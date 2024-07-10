@@ -70,6 +70,7 @@ static HashMap include_guards;
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
+static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroArg *args);
 static long is_supported_attr(Token **vendor, Token *tok);
 
@@ -427,6 +428,11 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
       Macro *m = find_macro(tok);
       if (m && m->is_locked)
         tok->dont_expand = true;
+    }
+
+    if (is_hash(tok) && !locked_macros) {
+      tok = directives(&cur, tok);
+      continue;
     }
 
     if (level == 0 && equal(tok, ")"))
@@ -920,176 +926,16 @@ static Token *preprocess2(Token *tok) {
     if (expand_macro(&tok, tok))
       continue;
 
-    if (!is_hash(tok) || locked_macros) {
-      if (opt_g)
-        add_loc_info(tok);
-      cur = cur->next = tok;
-      tok = tok->next;
+    if (is_hash(tok) && !locked_macros) {
+      tok = directives(&cur, tok);
       continue;
     }
 
-    Token *start = tok;
+    if (opt_g)
+      add_loc_info(tok);
+
+    cur = cur->next = tok;
     tok = tok->next;
-
-    if (equal(tok, "include")) {
-      bool is_dquote;
-      char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
-      if (filename[0] != '/' && is_dquote) {
-        char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
-        if (file_exists(path)) {
-          tok = include_file(tok, path, start->next->next);
-          continue;
-        }
-      }
-
-      char *path = search_include_paths(filename);
-      tok = include_file(tok, path ? path : filename, start->next->next);
-      continue;
-    }
-
-    if (equal(tok, "include_next")) {
-      bool ignore;
-      char *filename = read_include_filename(split_line(&tok, tok->next), &ignore);
-      char *path = search_include_next(filename);
-      tok = include_file(tok, path ? path : filename, start->next->next);
-      continue;
-    }
-
-    if (equal(tok, "define")) {
-      read_macro_definition(&tok, tok->next);
-      continue;
-    }
-
-    if (equal(tok, "undef")) {
-      tok = tok->next;
-      if (tok->kind != TK_IDENT)
-        error_tok(tok, "macro name must be an identifier");
-      undef_macro(strndup(tok->loc, tok->len));
-      tok = skip_line(tok->next);
-      continue;
-    }
-
-    if (equal(tok, "if")) {
-      long val = eval_const_expr(&tok, tok);
-      push_cond_incl(start, val);
-      if (!val)
-        tok = skip_cond_incl(tok);
-      continue;
-    }
-
-    if (equal(tok, "ifdef")) {
-      bool defined = find_macro(tok->next);
-      push_cond_incl(tok, defined);
-      tok = skip_line(tok->next->next);
-      if (!defined)
-        tok = skip_cond_incl(tok);
-      continue;
-    }
-
-    if (equal(tok, "ifndef")) {
-      bool defined = find_macro(tok->next);
-      push_cond_incl(tok, !defined);
-      tok = skip_line(tok->next->next);
-      if (defined)
-        tok = skip_cond_incl(tok);
-      continue;
-    }
-
-    if (equal(tok, "elif")) {
-      if (!cond_incl || cond_incl->ctx == IN_ELSE)
-        error_tok(start, "stray #elif");
-      cond_incl->ctx = IN_ELIF;
-
-      if (!cond_incl->included && eval_const_expr(&tok, tok))
-        cond_incl->included = true;
-      else
-        tok = skip_cond_incl(tok);
-      continue;
-    }
-
-    if (equal(tok, "else")) {
-      if (!cond_incl || cond_incl->ctx == IN_ELSE)
-        error_tok(start, "stray #else");
-      cond_incl->ctx = IN_ELSE;
-      tok = skip_line(tok->next);
-
-      if (cond_incl->included)
-        tok = skip_cond_incl(tok);
-      continue;
-    }
-
-    if (equal(tok, "endif")) {
-      if (!cond_incl)
-        error_tok(start, "stray #endif");
-
-      if (tok->guard_file && tok->guard_file == cond_incl->tok->guard_file) {
-        Token *name_tok = cond_incl->tok->next;
-        char *guard_name = strndup(name_tok->loc, name_tok->len);
-        hashmap_put(&include_guards, tok->guard_file, guard_name);
-      }
-
-      cond_incl = cond_incl->next;
-      tok = skip_line(tok->next);
-      continue;
-    }
-
-    if (equal(tok, "line")) {
-      read_line_marker(&tok, tok->next);
-      continue;
-    }
-
-    if (tok->kind == TK_PP_NUM) {
-      read_line_marker(&tok, tok);
-      continue;
-    }
-
-    if (equal(tok, "pragma") && equal(tok->next, "once")) {
-      hashmap_put(&pragma_once, tok->file->name, (void *)1);
-      tok = skip_line(tok->next->next);
-      continue;
-    }
-
-    if (equal(tok, "pragma") && opt_E) {
-      tok = start;
-      do {
-        cur = cur->next = tok;
-        tok = tok->next;
-      } while (!tok->at_bol);
-      continue;
-    }
-
-    if (equal(tok, "pragma")) {
-      do {
-        tok = tok->next;
-      } while (!tok->at_bol);
-      continue;
-    }
-
-    if (equal(tok, "error"))
-      error_tok(tok, "error");
-
-    if (equal(tok, "warning")) {
-      warn_tok(tok, "warning");
-      do {
-        tok = tok->next;
-      } while (!tok->at_bol);
-      continue;
-    }
-
-    if (opt_cc1_asm_pp) {
-      tok = start;
-      do {
-        cur = cur->next = tok;
-        tok = tok->next;
-      } while (!tok->at_bol);
-      continue;
-    }
-
-    // `#`-only line is legal. It's called a null directive.
-    if (tok->at_bol)
-      continue;
-
-    error_tok(tok, "invalid preprocessor directive");
   }
 
   if (start_m != locked_macros) {
@@ -1097,6 +943,170 @@ static Token *preprocess2(Token *tok) {
   }
   cur->next = tok;
   return head.next;
+}
+
+static Token *directives(Token **cur, Token *start) {
+  Token *tok = start->next;
+
+  if (equal(tok, "include")) {
+    bool is_dquote;
+    char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
+    if (filename[0] != '/' && is_dquote) {
+      char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
+      if (file_exists(path)) {
+        tok = include_file(tok, path, start->next->next);
+        return tok;
+      }
+    }
+
+    char *path = search_include_paths(filename);
+    tok = include_file(tok, path ? path : filename, start->next->next);
+    return tok;
+  }
+
+  if (equal(tok, "include_next")) {
+    bool ignore;
+    char *filename = read_include_filename(split_line(&tok, tok->next), &ignore);
+    char *path = search_include_next(filename);
+    tok = include_file(tok, path ? path : filename, start->next->next);
+    return tok;
+  }
+
+  if (equal(tok, "define")) {
+    read_macro_definition(&tok, tok->next);
+    return tok;
+  }
+
+  if (equal(tok, "undef")) {
+    tok = tok->next;
+    if (tok->kind != TK_IDENT)
+      error_tok(tok, "macro name must be an identifier");
+    undef_macro(strndup(tok->loc, tok->len));
+    tok = skip_line(tok->next);
+    return tok;
+  }
+
+  if (equal(tok, "if")) {
+    long val = eval_const_expr(&tok, tok);
+    push_cond_incl(start, val);
+    if (!val)
+      tok = skip_cond_incl(tok);
+    return tok;
+  }
+
+  if (equal(tok, "ifdef")) {
+    bool defined = find_macro(tok->next);
+    push_cond_incl(tok, defined);
+    tok = skip_line(tok->next->next);
+    if (!defined)
+      tok = skip_cond_incl(tok);
+    return tok;
+  }
+
+  if (equal(tok, "ifndef")) {
+    bool defined = find_macro(tok->next);
+    push_cond_incl(tok, !defined);
+    tok = skip_line(tok->next->next);
+    if (defined)
+      tok = skip_cond_incl(tok);
+    return tok;
+  }
+
+  if (equal(tok, "elif")) {
+    if (!cond_incl || cond_incl->ctx == IN_ELSE)
+      error_tok(start, "stray #elif");
+    cond_incl->ctx = IN_ELIF;
+
+    if (!cond_incl->included && eval_const_expr(&tok, tok))
+      cond_incl->included = true;
+    else
+      tok = skip_cond_incl(tok);
+    return tok;
+  }
+
+  if (equal(tok, "else")) {
+    if (!cond_incl || cond_incl->ctx == IN_ELSE)
+      error_tok(start, "stray #else");
+    cond_incl->ctx = IN_ELSE;
+    tok = skip_line(tok->next);
+
+    if (cond_incl->included)
+      tok = skip_cond_incl(tok);
+    return tok;
+  }
+
+  if (equal(tok, "endif")) {
+    if (!cond_incl)
+      error_tok(start, "stray #endif");
+
+    if (tok->guard_file && tok->guard_file == cond_incl->tok->guard_file) {
+      Token *name_tok = cond_incl->tok->next;
+      char *guard_name = strndup(name_tok->loc, name_tok->len);
+      hashmap_put(&include_guards, tok->guard_file, guard_name);
+    }
+
+    cond_incl = cond_incl->next;
+    tok = skip_line(tok->next);
+    return tok;
+  }
+
+  if (equal(tok, "line")) {
+    read_line_marker(&tok, tok->next);
+    return tok;
+  }
+
+  if (tok->kind == TK_PP_NUM) {
+    read_line_marker(&tok, tok);
+    return tok;
+  }
+
+  if (equal(tok, "pragma") && equal(tok->next, "once")) {
+    hashmap_put(&pragma_once, tok->file->name, (void *)1);
+    tok = skip_line(tok->next->next);
+    return tok;
+  }
+
+  if (equal(tok, "pragma") && opt_E) {
+    tok = start;
+    do {
+      *cur = (**cur).next = tok;
+      tok = tok->next;
+    } while (!tok->at_bol);
+    return tok;
+  }
+
+  if (equal(tok, "pragma")) {
+    do {
+      tok = tok->next;
+    } while (!tok->at_bol);
+    return tok;
+  }
+
+  if (equal(tok, "error"))
+    error_tok(tok, "error");
+
+  if (equal(tok, "warning")) {
+    warn_tok(tok, "warning");
+    do {
+      tok = tok->next;
+    } while (!tok->at_bol);
+    return tok;
+  }
+
+  if (opt_cc1_asm_pp) {
+    tok = start;
+    do {
+      *cur = (**cur).next = tok;
+      tok = tok->next;
+    } while (!tok->at_bol);
+    return tok;
+  }
+
+  // `#`-only line is legal. It's called a null directive.
+  if (tok->at_bol)
+    return tok;
+
+  error_tok(tok, "invalid preprocessor directive");
 }
 
 void define_macro(char *name, char *buf) {
