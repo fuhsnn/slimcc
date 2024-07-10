@@ -268,6 +268,15 @@ Node *to_bool(Node *expr) {
   return new_cast(expr, ty_bool);
 }
 
+static void apply_cv_qualifier(Node *node, Type *ty) {
+  add_type(node);
+  if (node->ty->is_const < ty->is_const || node->ty->is_volatile < ty->is_volatile) {
+    node->ty = copy_type(node->ty);
+    node->ty->is_const |= ty->is_const;
+    node->ty->is_volatile |= ty->is_volatile;
+  }
+}
+
 static VarScope *push_scope(char *name) {
   VarScope *sc = calloc(1, sizeof(VarScope));
   hashmap_put(&scope->vars, name, sc);
@@ -2968,7 +2977,13 @@ static Node *unary(Token **rest, Token *tok) {
     add_type(node);
     if (node->ty->kind == TY_FUNC)
       return node;
-    return new_unary(ND_DEREF, node, tok);
+
+    Type *ty = node->ty;
+    node = new_unary(ND_DEREF, node, tok);
+
+    if (is_array(ty))
+      apply_cv_qualifier(node, ty);
+    return node;
   }
 
   if (equal(tok, "!"))
@@ -3254,6 +3269,8 @@ static Node *struct_ref(Node *node, Token *tok) {
       error_tok(tok, "no such member");
     node = new_unary(ND_MEMBER, node, tok);
     node->member = mem;
+    apply_cv_qualifier(node, ty);
+
     if (mem->name)
       break;
     ty = mem->ty;
@@ -3327,7 +3344,13 @@ static Node *postfix(Token **rest, Token *tok) {
       Token *start = tok;
       Node *idx = expr(&tok, tok->next);
       tok = skip(tok, "]");
+
+      add_type(node);
+      Type *ty = node->ty;
       node = new_unary(ND_DEREF, new_add(node, idx, start), start);
+
+      if (is_array(ty))
+        apply_cv_qualifier(node, ty);
       continue;
     }
 
@@ -3339,8 +3362,13 @@ static Node *postfix(Token **rest, Token *tok) {
 
     if (equal(tok, "->")) {
       // x->y is short for (*x).y
+      add_type(node);
+      Type *ty = node->ty;
       node = new_unary(ND_DEREF, node, tok);
       node = struct_ref(node, tok->next);
+
+      if (is_array(ty))
+        apply_cv_qualifier(node, ty);
       tok = tok->next->next;
       continue;
     }
