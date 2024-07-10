@@ -2051,7 +2051,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   node->target_vla = current_vla;
   enter_scope();
 
-  for (; !equal(tok, "}"); add_type(cur)) {
+  while (!equal(tok, "}")) {
     if (equal(tok, "_Static_assert")) {
       static_assertion(&tok, tok->next);
       continue;
@@ -2063,8 +2063,10 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
 
       if (attr.is_typedef) {
         Node *expr = parse_typedef(&tok, tok, basety, &attr);
-        if (expr)
+        if (expr) {
           cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
+          add_type(cur);
+        }
         continue;
       }
 
@@ -2074,11 +2076,14 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
       }
 
       Node *expr = declaration(&tok, tok, basety, &attr);
-      if (expr)
+      if (expr) {
         cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
+        add_type(cur);
+      }
       continue;
     }
     cur = cur->next = stmt(&tok, tok, false);
+    add_type(cur);
   }
 
   node->top_vla = current_vla;
