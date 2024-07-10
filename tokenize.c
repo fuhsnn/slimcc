@@ -353,8 +353,34 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
   return tok;
 }
 
-static bool convert_pp_int(Token *tok) {
-  char *p = tok->loc;
+// The definition of the numeric literal at the preprocessing stage
+// is more relaxed than the definition of that at the later stages.
+// In order to handle that, a numeric literal is tokenized as a
+// "pp-number" token first and then converted to a regular number
+// token after preprocessing.
+static Token *new_pp_number(char *start, char *p) {
+  for (;;) {
+    if (*p == '.') {
+      p++;
+      continue;
+    } else if (*p == '\'' && isalnum(p[1])) {
+      p += 2;
+      continue;
+    } else if (p[0] && p[1] && strchr("eEpP", p[0]) && strchr("+-", p[1])) {
+      p += 2;
+      continue;
+    }
+    char *pos;
+    if (is_ident2(decode_utf8(&pos, p))) {
+      p = pos;
+      continue;
+    }
+    return new_token(TK_PP_NUM, start, p);
+  }
+}
+
+static bool convert_pp_int(Token *tok, char *loc, int len) {
+  char *p = loc;
 
   // Read a binary, octal, decimal or hexadecimal number.
   int base = 10;
@@ -395,7 +421,7 @@ static bool convert_pp_int(Token *tok) {
     u = true;
   }
 
-  if (p != tok->loc + tok->len)
+  if (p != loc + len)
     return false;
 
   // Infer a type.
@@ -440,21 +466,31 @@ static bool convert_pp_int(Token *tok) {
   return true;
 }
 
-// The definition of the numeric literal at the preprocessing stage
-// is more relaxed than the definition of that at the later stages.
-// In order to handle that, a numeric literal is tokenized as a
-// "pp-number" token first and then converted to a regular number
-// token after preprocessing.
-//
-// This function converts a pp-number token to a regular number token.
+// Converts a pp-number token to a regular number token.
 void convert_pp_number(Token *tok) {
+  // Remove digit seperators
+  int len = 0;
+  char buf[227];
+
+  if (tok->len >= 227)
+    error_tok(tok, "numeric literal exceeds static buffer size");
+
+  for (int i = 0; i < tok->len; i++) {
+    if (tok->loc[i] == '\'')
+      continue;
+
+    buf[len++] = tok->loc[i];
+  }
+
+  buf[len] = '\0';
+
   // Try to parse as an integer constant.
-  if (convert_pp_int(tok))
+  if (convert_pp_int(tok, buf, len))
     return;
 
   // If it's not an integer, it must be a floating point constant.
   char *end;
-  long double val = strtold(tok->loc, &end);
+  long double val = strtold(buf, &end);
 
   Type *ty;
   if (*end == 'f' || *end == 'F') {
@@ -467,7 +503,7 @@ void convert_pp_number(Token *tok) {
     ty = ty_double;
   }
 
-  if (tok->loc + tok->len != end)
+  if (&buf[len] != end)
     error_tok(tok, "invalid numeric constant");
 
   tok->kind = TK_NUM;
@@ -547,21 +583,10 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // Numeric literal
-    if (isdigit(*p) || (*p == '.' && isdigit(p[1]))) {
-      char *q = p++;
-      for (;;) {
-        if (p[0] && p[1] && strchr("eEpP", p[0]) && strchr("+-", p[1])) {
-          p += 2;
-        } else if (*p == '.') {
-          p++;
-        } else {
-          char *pos;
-          if (!is_ident2(decode_utf8(&pos, p)))
-            break;
-          p = pos;
-        }
-      }
-      cur = cur->next = new_token(TK_PP_NUM, q, p);
+    char *p2 = (*p == '.') ? p + 1 : p;
+    if (isdigit(*p2)) {
+      cur = cur->next = new_pp_number(p, p2 + 1);
+      p += cur->len;
       continue;
     }
 
