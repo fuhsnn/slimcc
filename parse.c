@@ -754,7 +754,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
 
     chain_expr(&vla_calc, compute_vla_size(ty2, tok));
 
-    if (ty2->kind == TY_ARRAY || ty2->kind == TY_VLA) {
+    if (is_array(ty2)) {
       // "array of T" is converted to "pointer to T" only in the parameter
       // context. For example, *argv[] is converted to **argv by this.
       Type *ty3 = pointer_to(ty2->base);
@@ -2283,8 +2283,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval(node->lhs) || eval(node->rhs);
   case ND_CAST: {
     if (node->ty->kind == TY_BOOL) {
-      if (node->lhs->kind == ND_VAR &&
-        (node->lhs->ty->kind == TY_ARRAY || node->lhs->ty->kind == TY_VLA))
+      if (node->lhs->kind == ND_VAR && is_array(node->lhs->ty))
         return 1;
       if (is_flonum(node->lhs->ty))
         return !!eval_double(node->lhs);
@@ -3391,7 +3390,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
       if (arg->ty->kind == TY_FLOAT)
         arg = new_cast(arg, ty_double);
-      else if (arg->ty->kind == TY_ARRAY || arg->ty->kind == TY_VLA)
+      else if (is_array(arg->ty))
         arg = new_cast(arg, pointer_to(arg->ty->base));
       else if (!param && (arg->ty->kind == TY_FUNC))
         arg = new_cast(arg, pointer_to(arg->ty));
@@ -3440,7 +3439,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Type *t1 = ctrl->ty;
   if (t1->kind == TY_FUNC)
     t1 = pointer_to(t1);
-  else if (t1->kind == TY_ARRAY || t1->kind == TY_VLA)
+  else if (is_array(t1))
     t1 = pointer_to(t1->base);
 
   Node *ret = NULL;
@@ -3558,7 +3557,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (!is_typename(tok))
       error_tok(tok, "expected type name");
     Type *ty = typename(&tok, tok);
-    while (ty->kind == TY_VLA || ty->kind == TY_ARRAY)
+    while (is_array(ty))
       ty = ty->base;
     *rest = skip(tok, ")");
     return new_ulong(ty->align, tok);

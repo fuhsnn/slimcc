@@ -58,6 +58,10 @@ bool is_numeric(Type *ty) {
   return is_integer(ty) || is_flonum(ty);
 }
 
+bool is_array(Type *ty) {
+  return ty->kind == TY_ARRAY || ty->kind == TY_VLA;
+}
+
 bool is_bitfield(Node *node) {
   return node->kind == ND_MEMBER && node->member->is_bitfield;
 }
@@ -107,9 +111,8 @@ bool is_compatible(Type *t1, Type *t2) {
   if (t2->origin)
     return is_compatible(t1, t2->origin);
 
-  if ((t1->kind == TY_VLA && t2->kind == TY_VLA) ||
-    (t1->kind == TY_VLA && t2->kind == TY_ARRAY) ||
-    (t1->kind == TY_ARRAY && t2->kind == TY_VLA))
+  if ((t1->kind == TY_VLA && is_array(t2)) ||
+    (is_array(t1) && t2->kind == TY_VLA))
     return is_compatible2(t1->base, t2->base);
 
   if (t1->kind != t2->kind)

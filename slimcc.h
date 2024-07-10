@@ -467,6 +467,7 @@ extern Type *ty_ldouble;
 bool is_integer(Type *ty);
 bool is_flonum(Type *ty);
 bool is_numeric(Type *ty);
+bool is_array(Type *ty);
 bool is_bitfield(Node *node);
 bool is_compatible(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
