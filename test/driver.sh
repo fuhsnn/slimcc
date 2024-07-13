@@ -319,14 +319,14 @@ check -L
 echo 'int foo() {}' | $testcc -c -o $tmp/foo.o -xc -
 echo 'int foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
-$refcc -Wl,-z,muldefs,--gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
+$testcc -Wl,-z,muldefs,--gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Wl,
 
 # -Xlinker
 echo 'int foo() {}' | $testcc -c -o $tmp/foo.o -xc -
 echo 'int foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
-$refcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
+$testcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Xlinker
 
 echo OK
