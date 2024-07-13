@@ -2872,9 +2872,9 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
 
   // ptr - ptr, which returns how many elements are between the two.
   if (lhs->ty->base && rhs->ty->base) {
-    Node *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node->ty = ty_long;
-    return new_binary(ND_DIV, node, new_num(lhs->ty->base->size, tok), tok);
+    int sz = lhs->ty->base->size;
+    Node *node = new_binary(ND_SUB, new_cast(lhs, ty_llong), new_cast(rhs, ty_llong), tok);
+    return new_binary(ND_DIV, node, new_num(sz, tok), tok);
   }
 
   error_tok(tok, "invalid operands");
