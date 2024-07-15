@@ -89,6 +89,36 @@ static bool is_bitfield2(Node *node, int *width) {
   return false;
 }
 
+bool is_redundant_cast(Node *expr, Type *ty) {
+  if (expr->kind != ND_CAST)
+    return false;
+
+  Type *ty2 = expr->ty;
+  Type *ty3 = expr->lhs->ty;
+  int sz = ty->size;
+  int sz2 = ty2->size;
+  int sz3 = ty3->size;
+
+  if (is_integer(ty) && is_integer(ty2) && is_integer(ty3)) {
+    if (ty3->kind == TY_BOOL)
+      return true;
+    if (ty2->kind == TY_BOOL)
+      return false;
+    if (ty->kind == TY_BOOL)
+      return sz2 >= sz3;
+
+    if (sz <= sz3)
+      return sz <= sz2;
+    if (sz <= sz2)
+      return true;
+    if (sz2 == sz3)
+      return ty3->is_unsigned == ty2->is_unsigned;
+    if (sz2 > sz3)
+      return ty3->is_unsigned || !ty2->is_unsigned;
+  }
+  return false;
+}
+
 static bool is_compatible2(Type *t1, Type *t2) {
   if (t1->is_atomic != t2->is_atomic)
     return false;
@@ -402,11 +432,18 @@ void add_type(Node *node) {
     node->ty = ty_int;
     return;
   case ND_BITNOT:
+    if (!is_integer(node->lhs->ty))
+      error_tok(node->lhs->tok, "invalid operand");
+    int_promotion(&node->lhs);
+    node->ty = node->lhs->ty;
+    return;
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
     if (!is_integer(node->lhs->ty))
       error_tok(node->lhs->tok, "invalid operand");
+    if (!is_integer(node->rhs->ty))
+      error_tok(node->rhs->tok, "invalid operand");
     int_promotion(&node->lhs);
     node->ty = node->lhs->ty;
     return;

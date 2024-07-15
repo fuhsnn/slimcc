@@ -257,6 +257,11 @@ Node *new_cast(Node *expr, Type *ty) {
     }
     if (expr->ty == ty && !is_bitfield(expr))
       return expr;
+
+    if (is_redundant_cast(expr, ty)) {
+      expr->ty = unqual(ty);
+      return expr;
+    }
   }
   Node *node = malloc(sizeof(Node));
   *node = tmp_node;

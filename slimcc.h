@@ -469,6 +469,7 @@ bool is_flonum(Type *ty);
 bool is_numeric(Type *ty);
 bool is_array(Type *ty);
 bool is_bitfield(Node *node);
+bool is_redundant_cast(Node *expr, Type *ty);
 bool is_compatible(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
 bool is_const_double(Node *node, long double *fval);

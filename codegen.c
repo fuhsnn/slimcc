@@ -122,6 +122,10 @@ bool is_trivial_arg(Node *arg) {
     (arg->kind == ND_NUM && arg->ty->kind != TY_LDOUBLE) || is_nullptr(arg);
 }
 
+static bool is_int_to_int_cast(Node *node) {
+  return node->kind == ND_CAST && is_integer(node->ty) && is_integer(node->lhs->ty);
+}
+
 static void save_tmp_regs(void) {
   for (int i = 0; i < tmp_stack.depth; i++)
     tmp_stack.data[i].kind = SL_ST;
@@ -260,6 +264,15 @@ static void load_extend_int(Type *ty, int ofs, char *ptr, char *reg) {
   case 2: println("  %swl %d(%s), %s", insn, ofs, ptr, reg); return;
   case 4: println("  movl %d(%s), %s", ofs, ptr, reg); return;
   case 8: println("  mov %d(%s), %s", ofs, ptr, reg); return;
+  }
+  internal_error();
+}
+
+static void load_extend_int64(Node *node, char *reg) {
+  switch (node->ty->size) {
+  case 4: println("  movslq %d(%s), %s", node->var->ofs, node->var->ptr, reg); return;
+  case 2: println("  movswq %d(%s), %s", node->var->ofs, node->var->ptr, reg); return;
+  case 1: println("  movsbq %d(%s), %s", node->var->ofs, node->var->ptr, reg); return;
   }
   internal_error();
 }
@@ -2019,6 +2032,46 @@ static bool gen_cmp_opt(Node *lhs, Node *rhs) {
   return false;
 }
 
+static bool lvar_rhs_arith_opt(NodeKind kind, Node *lhs, Node *rhs) {
+  char *ax = reg_ax(rhs->ty->size);
+  char *dx = reg_dx(rhs->ty->size);
+
+  if (is_int_to_int_cast(rhs) && is_lvar(rhs->lhs)) {
+    if (rhs->ty->size > rhs->lhs->ty->size) {
+      gen_expr(lhs);
+
+      Node *lhs = rhs->lhs;
+      if (!lhs->ty->is_unsigned && rhs->ty->size == 8)
+        load_extend_int64(lhs, "%rdx");
+      else
+        load_extend_int(lhs->ty, lhs->var->ofs, lhs->var->ptr, "%edx");
+
+      println("  %s %s, %s", arith_ins(kind), dx, ax);
+      return true;
+    }
+    if (rhs->ty->size <= rhs->lhs->ty->size) {
+      gen_expr(lhs);
+      println("  %s %d(%s), %s", arith_ins(kind), rhs->lhs->var->ofs, rhs->lhs->var->ptr, ax);
+      return true;
+    }
+  }
+
+  if (is_lvar(rhs)) {
+    gen_expr(lhs);
+    println("  %s %d(%s), %s", arith_ins(kind), rhs->var->ofs, rhs->var->ptr, ax);
+    return true;
+  }
+  return false;
+}
+
+static bool lvar_rhs_shift_opt(NodeKind kind, Node *node, Type *ty) {
+  char *ax = reg_ax(ty->size);
+
+  println("  mov %d(%s), %%cl", node->var->ofs, node->var->ptr);
+  println("  %s %%cl, %s", arith_ins(kind), ax);
+  return true;
+}
+
 static bool gen_gp_opt(Node *node) {
   NodeKind kind = node->kind;
   Node *lhs = node->lhs;
@@ -2036,12 +2089,14 @@ static bool gen_gp_opt(Node *node) {
   case ND_SUB:
     if (rhs->kind == ND_NUM)
       return gen_expr(lhs), imm_arith(kind, ty, rhs->val), true;
-    return false;
+    return lvar_rhs_arith_opt(kind, lhs, rhs);
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
     if (rhs->kind == ND_NUM)
       return gen_expr(lhs), imm_arith(kind, ty, rhs->val), true;
+    if (is_lvar(rhs))
+      return gen_expr(lhs), lvar_rhs_shift_opt(kind, rhs, ty), true;
     return false;
   case ND_DIV:
   case ND_MOD:
@@ -2264,33 +2319,22 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
-  if (kind == ND_CAST && ty->size > lhs->ty->size) {
-    if (ty->base && is_imm_num(lhs) && lhs->val == 0) {
-      println("  xor %%eax, %%eax");
+  if (node->kind == ND_CAST && node->ty->base && is_imm_num(node->lhs) && !node->lhs->val) {
+    println("  xor %%eax, %%eax");
+    return true;
+  }
+
+  if (is_int_to_int_cast(node) && is_lvar(lhs)) {
+    if (ty->size > lhs->ty->size) {
+      if (!lhs->ty->is_unsigned && node->ty->size == 8)
+        load_extend_int64(lhs, "%rax");
+      else
+        load_extend_int(lhs->ty, lhs->var->ofs, lhs->var->ptr, "%eax");
       return true;
     }
-    if (is_lvar(lhs) && is_integer(ty) && is_integer(lhs->ty)) {
-      if (lhs->ty->is_unsigned) {
-        load_extend_int(lhs->ty, lhs->var->ofs, lhs->var->ptr, "%eax");
-        return true;
-      }
-      if (!lhs->ty->is_unsigned && !ty->is_unsigned) {
-        if (ty->size == 8) {
-          switch (lhs->ty->size) {
-          case 4: println("  movslq %d(%s), %%rax", lhs->var->ofs, lhs->var->ptr); break;
-          case 2: println("  movswq %d(%s), %%rax", lhs->var->ofs, lhs->var->ptr); break;
-          case 1: println("  movsbq %d(%s), %%rax", lhs->var->ofs, lhs->var->ptr); break;
-          default: internal_error();
-          }
-          return true;
-        }
-        switch (lhs->ty->size) {
-        case 2: println("  movswl %d(%s), %%eax", lhs->var->ofs, lhs->var->ptr); break;
-        case 1: println("  movsbl %d(%s), %%eax", lhs->var->ofs, lhs->var->ptr); break;
-        default: internal_error();
-        }
-        return true;
-      }
+    if (ty->size < lhs->ty->size && ty->kind != TY_BOOL) {
+      load_extend_int(ty, lhs->var->ofs, lhs->var->ptr, "%eax");
+      return true;
     }
   }
 
