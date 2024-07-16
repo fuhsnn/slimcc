@@ -273,12 +273,13 @@ Node *to_bool(Node *expr) {
   return new_cast(expr, ty_bool);
 }
 
-static void apply_cv_qualifier(Node *node, Type *ty) {
+static void apply_cv_qualifier(Node *node, Type *ty2) {
   add_type(node);
-  if (node->ty->is_const < ty->is_const || node->ty->is_volatile < ty->is_volatile) {
-    node->ty = copy_type(node->ty);
-    node->ty->is_const |= ty->is_const;
-    node->ty->is_volatile |= ty->is_volatile;
+  Type *ty = node->ty;
+  if (ty->is_const < ty2->is_const || ty->is_volatile < ty2->is_volatile) {
+    node->ty = new_qualified_type(ty);
+    node->ty->is_const = ty->is_const | ty2->is_const;
+    node->ty->is_volatile = ty->is_volatile | ty2->is_volatile;
   }
 }
 
@@ -370,21 +371,6 @@ static Obj *new_string_literal(char *p, Type *ty) {
   Obj *var = new_anon_gvar(ty);
   var->init_data = p;
   return var;
-}
-
-static Type *new_qualified_type(Type *ty) {
-  if (ty->origin)
-    ty = ty->origin;
-
-  Type *ret = calloc(1, sizeof(Type));
-  *ret = *ty;
-  ret->origin = ty;
-
-  if (ty->size < 0) {
-    ret->decl_next = ty->decl_next;
-    ty->decl_next = ret;
-  }
-  return ret;
 }
 
 static char *get_ident(Token *tok) {

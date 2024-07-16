@@ -29,6 +29,12 @@ Type *new_type(TypeKind kind, int size, int align) {
   return ty;
 }
 
+Type *copy_type(Type *ty) {
+  Type *ret = calloc(1, sizeof(Type));
+  *ret = *ty;
+  return ret;
+}
+
 Type *unqual(Type *ty) {
   if (ty->origin)
     ty = ty->origin;
@@ -41,6 +47,21 @@ Type *unqual(Type *ty) {
     ty->is_restrict = false;
   }
   return ty;
+}
+
+Type *new_qualified_type(Type *ty) {
+  if (ty->origin)
+    ty = ty->origin;
+
+  Type *ret = calloc(1, sizeof(Type));
+  *ret = *ty;
+  ret->origin = ty;
+
+  if (ty->size < 0) {
+    ret->decl_next = ty->decl_next;
+    ty->decl_next = ret;
+  }
+  return ret;
 }
 
 bool is_integer(Type *ty) {
@@ -182,12 +203,6 @@ bool is_compatible(Type *t1, Type *t2) {
            t1->array_len == t2->array_len;
   }
   return false;
-}
-
-Type *copy_type(Type *ty) {
-  Type *ret = calloc(1, sizeof(Type));
-  *ret = *ty;
-  return ret;
 }
 
 Type *pointer_to(Type *base) {

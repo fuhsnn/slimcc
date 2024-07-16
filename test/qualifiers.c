@@ -62,7 +62,21 @@ void cv_qualified_member(int i) {
   SASSERT(__builtin_types_compatible_p(typeof(&(*p4->s).i), int const*));
 }
 
+struct B {
+  int i;
+};
+typedef struct {
+  struct B b1;
+  struct B b2;
+} A;
+int regress1(const A* a, int i) {
+  return (((i) ? &((a)->b1) : &((a)->b2)))->i;
+}
+
 int main(int argc, char** argv) {
+
+  ASSERT(17, regress1(&(A){31,17}, 0));
+  ASSERT(31, regress1(&(A){31,17}, 1));
 
   printf("OK\n");
   return 0;

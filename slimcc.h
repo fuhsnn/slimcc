@@ -486,6 +486,7 @@ Type *enum_type(void);
 Type *new_type(TypeKind kind, int size, int align);
 void add_type(Node *node);
 Type *unqual(Type *ty);
+Type *new_qualified_type(Type *ty);
 
 //
 // codegen.c
