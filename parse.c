@@ -737,27 +737,98 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   return ty;
 }
 
-// func-params = ("void" | param ("," param)* ("," "...")?)? ")"
-// param       = declspec declarator
-static Type *func_params(Token **rest, Token *tok, Type *ty) {
-  if (ty->base && ty->kind != TY_PTR)
-    error_tok(tok, "function return type cannot be array");
+static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
+  Token *start = tok;
+  tok = skip_paren(tok);
 
-  if (equal(tok, "void") && consume(rest, tok->next, ")"))
-    return func_type(ty);
+  enter_scope();
+  fn_ty->scopes = scope;
+  Node *expr = NULL;
+
+  while (is_typename(tok)) {
+    Type *basety = declspec(&tok, tok, NULL);
+    do {
+      Token *name = NULL;
+      Type *ty = declarator(&tok, tok, basety, &name);
+      if (!name)
+        error_tok(tok, "expected identifier");
+
+      Obj *promoted = NULL;
+      if (is_integer(ty) && ty->size < ty_int->size)
+        promoted = new_lvar(NULL, ty_int);
+      else if (ty->kind == TY_FLOAT)
+        promoted = new_lvar(NULL, ty_double);
+      else if (ty->kind == TY_ARRAY || ty->kind == TY_VLA)
+        ty = pointer_to(ty->base);
+      else if (ty->kind == TY_FUNC)
+        ty = pointer_to(ty);
+
+      Obj *var = new_lvar(get_ident(name), ty);
+      if (promoted) {
+        var->param_promoted = promoted;
+        chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
+                                     new_var_node(promoted, tok), tok));
+      }
+      chain_expr(&expr, compute_vla_size(ty, tok));
+    } while (comma_list(&tok, &tok, ";", true));
+  }
+  *rest = tok;
 
   Obj head = {0};
   Obj *cur = &head;
-  bool is_variadic = false;
-  Type *fn_ty = func_type(ty);
-  Node *vla_calc = NULL;
+
+  for (tok = start; comma_list(&tok, &tok, ")", cur != &head);) {
+    VarScope *sc = hashmap_get2(&fn_ty->scopes->vars, tok->loc, tok->len);
+
+    Obj *nxt;
+    if (!sc)
+      nxt = new_lvar(get_ident(tok), ty_int);
+    else if (sc->var->param_promoted)
+      nxt = sc->var->param_promoted;
+    else
+      nxt = sc->var;
+
+    cur = cur->param_next = nxt;
+    tok = tok->next;
+  }
+  leave_scope();
+  add_type(expr);
+  fn_ty->param_list = head.param_next;
+  fn_ty->is_oldstyle = true;
+  fn_ty->pre_calc = expr;
+  return fn_ty;
+}
+
+// func-params = ("void" | param ("," param)* ("," "...")?)? ")"
+// param       = declspec declarator
+static Type *func_params(Token **rest, Token *tok, Type *ty) {
+  Type *fn_ty = func_type(ty, tok);
+
+  if (equal(tok, "...") && consume(rest, tok->next, ")")) {
+    fn_ty->is_variadic = true;
+    return fn_ty;
+  }
+  if (equal(tok, "void") && consume(rest, tok->next, ")"))
+    return fn_ty;
+
+  if (consume(rest, tok, ")")) {
+    if (opt_std < STD_C23)
+      fn_ty->is_oldstyle = true;
+    return fn_ty;
+  }
+  if (!is_typename(tok))
+    return func_params_old_style(rest, tok, fn_ty);
+
+  Obj head = {0};
+  Obj *cur = &head;
+  Node *expr = NULL;
 
   enter_scope();
   fn_ty->scopes = scope;
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
     if (equal(tok, "...")) {
-      is_variadic = true;
+      fn_ty->is_variadic = true;
       *rest = skip(tok->next, ")");
       break;
     }
@@ -766,7 +837,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     Token *name = NULL;
     ty2 = declarator(&tok, tok, ty2, &name);
 
-    chain_expr(&vla_calc, compute_vla_size(ty2, tok));
+    chain_expr(&expr, compute_vla_size(ty2, tok));
 
     if (is_array(ty2)) {
       // "array of T" is converted to "pointer to T" only in the parameter
@@ -782,20 +853,13 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
       // only in the parameter context.
       ty2 = pointer_to(ty2);
     }
-
     char *var_name = name ? get_ident(name) : NULL;
     cur = cur->param_next = new_lvar(var_name, ty2);
   }
-
-  if (cur == &head)
-    is_variadic = true;
-
   leave_scope();
-
-  add_type(vla_calc);
+  add_type(expr);
   fn_ty->param_list = head.param_next;
-  fn_ty->vla_calc = vla_calc;
-  fn_ty->is_variadic = is_variadic;
+  fn_ty->pre_calc = expr;
   return fn_ty;
 }
 
@@ -3404,7 +3468,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     error_tok(fn->tok, "not a function");
 
   Type *ty = (fn->ty->kind == TY_FUNC) ? fn->ty : fn->ty->base;
-  Obj *param = ty->param_list;
+  Obj *param = ty->is_oldstyle ? NULL : ty->param_list;
 
   Obj head = {0};
   Obj *cur = &head;
@@ -3423,14 +3487,14 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
       param = param->param_next;
     } else {
-      if (!ty->is_variadic)
+      if (!ty->is_variadic && !ty->is_oldstyle)
         error_tok(tok, "too many arguments");
 
       if (arg->ty->kind == TY_FLOAT)
         arg = new_cast(arg, ty_double);
       else if (is_array(arg->ty))
         arg = new_cast(arg, pointer_to(arg->ty->base));
-      else if (!param && (arg->ty->kind == TY_FUNC))
+      else if (arg->ty->kind == TY_FUNC)
         arg = new_cast(arg, pointer_to(arg->ty));
     }
 
@@ -3939,8 +4003,8 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr, T
 
   fn->body = compound_stmt(rest, tok->next, ND_BLOCK);
 
-  if (ty->vla_calc) {
-    Node *calc = new_unary(ND_EXPR_STMT, ty->vla_calc, tok);
+  if (ty->pre_calc) {
+    Node *calc = new_unary(ND_EXPR_STMT, ty->pre_calc, tok);
     calc->next = fn->body->body;
     fn->body->body = calc;
   }

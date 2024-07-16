@@ -203,7 +203,10 @@ Type *array_to_pointer(Type *ty) {
   return ty;
 }
 
-Type *func_type(Type *return_ty) {
+Type *func_type(Type *return_ty, Token *tok) {
+  if (return_ty->base && return_ty->kind != TY_PTR)
+    error_tok(tok, "function return type cannot be array");
+
   // The C spec disallows sizeof(<function type>), but
   // GCC allows that and the expression is evaluated to 1.
   Type *ty = new_type(TY_FUNC, 1, 1);

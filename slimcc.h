@@ -183,6 +183,7 @@ struct Obj {
   bool pass_by_stack;
   int stack_offset;
   Node *param_arg;
+  Obj *param_promoted;
 
   // Global variable or function
   bool is_function;
@@ -424,8 +425,9 @@ struct Type {
   Scope *scopes;
   Type *return_ty;
   Obj *param_list;
-  Node *vla_calc;
+  Node *pre_calc;
   bool is_variadic;
+  bool is_oldstyle;
 };
 
 // Struct member
@@ -477,7 +479,7 @@ bool is_nullptr(Node *node);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *array_to_pointer(Type *ty);
-Type *func_type(Type *return_ty);
+Type *func_type(Type *return_ty, Token *tok);
 Type *array_of(Type *base, int size);
 Type *vla_of(Type *base, Node *expr);
 Type *enum_type(void);
