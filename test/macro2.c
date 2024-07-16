@@ -1,5 +1,14 @@
 #include "test.h"
 
+
+#define AAA
+#define MACRO_WITH_DEFINED_INSIDE   (defined(AAA) && !defined(BBB))
+
+#if MACRO_WITH_DEFINED_INSIDE
+#else
+#error
+#endif
+
 int main(void) {
 #define H(x) #x
 #define STR(x) H(x)

@@ -276,13 +276,21 @@ static Token *new_num_token(int val, Token *tmpl) {
   return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
 }
 
-static Token *read_const_expr(Token **rest, Token *tok) {
-  tok = split_line(rest, tok);
+static void to_int_token(Token *tok, int64_t val) {
+  tok->kind = TK_NUM;
+  tok->val = val;
+  tok->ty = ty_int;
+}
 
+static Token *read_const_expr(Token *tok) {
   Token head = {0};
   Token *cur = &head;
+  Macro *start_m = locked_macros;
 
-  while (tok->kind != TK_EOF) {
+  for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
+    if (expand_macro(&tok, tok))
+      continue;
+
     // "defined(foo)" or "defined foo" becomes "1" if macro "foo"
     // is defined. Otherwise "0".
     if (equal(tok, "defined")) {
@@ -292,50 +300,44 @@ static Token *read_const_expr(Token **rest, Token *tok) {
 
       if (tok->kind != TK_IDENT)
         error_tok(start, "macro name must be an identifier");
-      Macro *m = find_macro(tok);
-      tok = tok->next;
 
+      to_int_token(start, !!find_macro(tok));
+      cur = cur->next = start;
+      tok = tok->next;
       if (has_paren)
         tok = skip(tok, ")");
-
-      cur = cur->next = new_num_token(m ? 1 : 0, start);
       continue;
     }
+
+    // Replace remaining non-macro identifiers with "0" before
+    // evaluating a constant expression. For example, `#if foo` is
+    // equivalent to `#if 0` if foo is not defined.
+    if (tok->kind == TK_IDENT)
+      to_int_token(tok, 0);
 
     cur = cur->next = tok;
     tok = tok->next;
   }
-
   cur->next = tok;
+
+  if (start_m != locked_macros)
+    internal_error();
   return head.next;
 }
 
 // Read and evaluate a constant expression.
-static long eval_const_expr(Token **rest, Token *tok) {
-  Token *start = tok;
-  Token *expr = read_const_expr(rest, tok->next);
-  expr = preprocess2(expr);
+static bool eval_const_expr(Token **rest, Token *start) {
+  Token *tok = split_line(rest, start->next);
+  tok = read_const_expr(tok);
 
-  if (expr->kind == TK_EOF)
+  if (tok->kind == TK_EOF)
     error_tok(start, "no expression");
 
-  // [https://www.sigbus.info/n1570#6.10.1p4] The standard requires
-  // we replace remaining non-macro identifiers with "0" before
-  // evaluating a constant expression. For example, `#if foo` is
-  // equivalent to `#if 0` if foo is not defined.
-  for (Token *t = expr; t->kind != TK_EOF; t = t->next) {
-    if (t->kind == TK_IDENT) {
-      Token *next = t->next;
-      if (equal(next, "("))
-        error_tok(t, "undefined function-like macro");
-      *t = *new_num_token(0, t);
-      t->next = next;
-    }
-  }
-  Token *rest2;
-  long val = const_expr(&rest2, expr);
-  if (rest2->kind != TK_EOF)
-    error_tok(rest2, "extra token");
+  Token *end;
+  bool val = !!const_expr(&end, tok);
+
+  if (end->kind != TK_EOF)
+    error_tok(end, "extra token");
   return val;
 }
 
@@ -508,11 +510,10 @@ static Token *expand_arg(MacroArg *arg) {
     cur = cur->next = copy_token(tok);
     tok = tok->next;
   }
-
-  if (start_m != locked_macros) {
-    internal_error();
-  }
   cur->next = new_eof(tok);
+
+  if (start_m != locked_macros)
+    internal_error();
   return arg->expanded = head.next;
 }
 
@@ -937,11 +938,10 @@ static Token *preprocess2(Token *tok) {
     cur = cur->next = tok;
     tok = tok->next;
   }
-
-  if (start_m != locked_macros) {
-    internal_error();
-  }
   cur->next = tok;
+
+  if (start_m != locked_macros)
+    internal_error();
   return head.next;
 }
 
@@ -987,7 +987,7 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "if")) {
-    long val = eval_const_expr(&tok, tok);
+    bool val = eval_const_expr(&tok, tok);
     push_cond_incl(start, val);
     if (!val)
       tok = skip_cond_incl(tok);
