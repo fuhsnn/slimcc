@@ -2209,12 +2209,38 @@ static char *eval_constexpr_agg(Node *node) {
   int ofs = eval2(node, &ctx);
   if (eval_recover && *eval_recover)
     return NULL;
+
+  if (!ctx.var)
+    return (char *)eval_error(node->tok, "not a compile-time constant");
   if (ofs < 0 || (ctx.var->ty->size < (ofs + node->ty->size)))
     return (char *)eval_error(node->tok, "constexpr access out of bounds");
-  return ctx.var->constexpr_data + ofs;
+
+  if (ctx.var->constexpr_data)
+    return ctx.var->constexpr_data + ofs;
+  if (ctx.var->init_data)
+    return ctx.var->init_data + ofs;
+
+  internal_error();
+}
+
+static int64_t eval_sign_extend(Type *ty, uint64_t val) {
+  switch (ty->size) {
+  case 1: return ty->is_unsigned ? (uint8_t)val : (int64_t)(int8_t)val;
+  case 2: return ty->is_unsigned ? (uint16_t)val : (int64_t)(int16_t)val;
+  case 4: return ty->is_unsigned ? (uint32_t)val : (int64_t)(int32_t)val;
+  case 8: return val;
+  }
+  internal_error();
+}
+
+static int64_t read_buf_sign_extend(Type *ty, char *data) {
+  return eval_sign_extend(ty, read_buf(data, ty->size));
 }
 
 static void eval_void(Node *node) {
+  if (node->kind == ND_VAR)
+    return;
+
   if (is_flonum(node->ty)) {
     eval_double(node);
     return;
@@ -2364,23 +2390,13 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval_double(node->lhs);
     }
     int64_t val = eval2(node->lhs, ctx);
-    if (is_integer(node->ty)) {
-      switch (node->ty->size) {
-      case 1: return node->ty->is_unsigned ? (uint8_t)val : (int64_t)(int8_t)val;
-      case 2: return node->ty->is_unsigned ? (uint16_t)val : (int64_t)(int16_t)val;
-      case 4: return node->ty->is_unsigned ? (uint32_t)val : (int64_t)(int32_t)val;
-      }
-    }
+    if (is_integer(node->ty))
+      return eval_sign_extend(node->ty, val);
     return val;
   }
   case ND_NUM:
     return node->val;
   }
-
-  if (node->kind == ND_ADDR && node->lhs->kind == ND_DEREF)
-    return eval2(node->lhs->lhs, ctx);
-  if (node->kind == ND_DEREF && node->lhs->kind == ND_ADDR)
-    return eval2(node->lhs->lhs, ctx);
 
   if (ctx->kind == EV_LABEL) {
     switch (node->kind) {
@@ -2401,37 +2417,46 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval_error(node->tok, "invalid initializer");
   }
 
+  if (node->ty->is_volatile)
+    return eval_error(node->tok, "volatile-qualified type");
+
   if (ctx->kind == EV_AGG) {
-    if (node->kind == ND_DEREF)
-      return eval2(node->lhs, ctx);
-    if (node->kind == ND_MEMBER)
-      return eval2(node->lhs, ctx) + node->member->offset;
-    if (node->kind == ND_VAR && node->var->constexpr_data) {
-      ctx->var = node->var;
-      return 0;
+    switch (node->kind) {
+    case ND_DEREF: return eval2(node->lhs, ctx);
+    case ND_MEMBER: return eval2(node->lhs, ctx) + node->member->offset;
+    case ND_VAR:
+      if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION || node->ty->kind == TY_ARRAY) {
+        if (node->var->constexpr_data ||
+          (opt_optimize && node->var->ty->is_const && node->var->init_data)) {
+          ctx->var = node->var;
+          return 0;
+        }
+      }
     }
-    return eval_error(node->tok, "not a compile-time constant");
   }
-
-  if (ctx->kind == EV_CONST) {
-    if (node->kind == ND_VAR && node->var->constexpr_data)
-      return read_buf(node->var->constexpr_data, node->var->ty->size);
-
+  if (ctx->kind == EV_CONST && is_integer(node->ty)) {
     if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
       char *data = eval_constexpr_agg(node);
       if (!data)
         return 0;
-      int64_t val = read_buf(data, node->ty->size);
+      int64_t val = read_buf_sign_extend(node->ty, data);
       if (is_bitfield(node)) {
-        val <<= 64 - node->member->bit_width - node->member->bit_offset;
+        int unused_msb = 64 - node->member->bit_width;
+        val <<= (unused_msb - node->member->bit_offset);
+
         if (node->ty->is_unsigned)
-          return (uint64_t)val >> (64 - node->member->bit_width);
-        return val >> (64 - node->member->bit_width);
+          return (uint64_t)val >> unused_msb;
+        return val >> unused_msb;
       }
       return val;
     }
+    if (node->kind == ND_VAR) {
+      if (node->var->constexpr_data)
+        return read_buf_sign_extend(node->ty, node->var->constexpr_data);
+      if (opt_optimize && node->var->ty->is_const && node->var->init_data)
+        return read_buf_sign_extend(node->ty, node->var->init_data);
+    }
   }
-
   return eval_error(node->tok, "not a compile-time constant");
 }
 

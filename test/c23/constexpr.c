@@ -58,8 +58,20 @@ int main() {
   DASSERT(s.x == -44);
   DASSERT(s.d == 55);
 
+  {
+    struct S { int i; };
+    constexpr _Bool b = (0 && (((struct S*)0)->i));
+  }
+  {
+    constexpr int32_t x = -6L;
+    constexpr uint64_t y = (uint64_t)x;
+    static_assert((uint64_t)-6L == y);
+  }
+  {
+    constexpr struct {  char c[23]; } s = {0};
+    static_assert((s,1));
+  }
   printf("OK\n");
   return 0;
 }
-
 
