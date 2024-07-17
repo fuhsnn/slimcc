@@ -2259,139 +2259,142 @@ static int64_t eval(Node *node) {
 // number. The latter form is accepted only as an initialization
 // expression for a global variable.
 static int64_t eval2(Node *node, EvalContext *ctx) {
-  assert(!(ctx->kind == EV_CONST && is_flonum(node->ty)));
   if (eval_recover && *eval_recover)
     return 0;
 
+  Type *ty = node->ty;
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
   switch (node->kind) {
   case ND_ADD:
-    return eval2(node->lhs, ctx) + eval(node->rhs);
+    return eval2(lhs, ctx) + eval(rhs);
   case ND_SUB:
-    return eval2(node->lhs, ctx) - eval(node->rhs);
+    return eval2(lhs, ctx) - eval(rhs);
   case ND_MUL:
-    return eval(node->lhs) * eval(node->rhs);
+    return eval(lhs) * eval(rhs);
   case ND_DIV: {
-    int64_t lhs = eval(node->lhs);
-    int64_t rhs = eval(node->rhs);
-    if (!rhs)
-      return eval_error(node->rhs->tok, "division by zero during constant evaluation");
-    if (rhs == -1 && !node->ty->is_unsigned) {
-      if (node->ty->size == 4 && lhs == INT32_MIN)
+    int64_t lval = eval(lhs);
+    int64_t rval = eval(rhs);
+    if (!rval)
+      return eval_error(rhs->tok, "division by zero during constant evaluation");
+    if (rval == -1 && !ty->is_unsigned) {
+      if (ty->size == 4 && lval == INT32_MIN)
         return INT32_MIN;
-      if (node->ty->size == 8 && lhs == INT64_MIN)
+      if (ty->size == 8 && lval == INT64_MIN)
         return INT64_MIN;
     }
-    if (node->ty->is_unsigned)
-      return (uint64_t)lhs / rhs;
-    return lhs / rhs;
+    if (ty->is_unsigned)
+      return (uint64_t)lval / rval;
+    return lval / rval;
+  }
+  case ND_MOD: {
+    int64_t lval = eval(lhs);
+    int64_t rval = eval(rhs);
+    if (!rval)
+      return eval_error(rhs->tok, "remainder by zero during constant evaluation");
+    if (rval == -1 && !ty->is_unsigned && ty->size == 8 && lval == INT64_MIN)
+        return 0;
+    if (ty->is_unsigned)
+      return (uint64_t)lval % rval;
+    return lval % rval;
   }
   case ND_POS:
-    return eval(node->lhs);
+    return eval(lhs);
   case ND_NEG:
-    if (node->ty->size == 4) {
-      if (node->ty->is_unsigned)
-        return (uint32_t)-eval(node->lhs);
-      return (int32_t)-eval(node->lhs);
+    if (ty->size == 4) {
+      if (ty->is_unsigned)
+        return (uint32_t)-eval(lhs);
+      return (int32_t)-eval(lhs);
     }
-    return -eval(node->lhs);
-  case ND_MOD: {
-    int64_t lhs = eval(node->lhs);
-    int64_t rhs = eval(node->rhs);
-    if (!rhs)
-      return eval_error(node->rhs->tok, "remainder by zero during constant evaluation");
-    if (rhs == -1 && !node->ty->is_unsigned && node->ty->size == 8 && lhs == INT64_MIN)
-        return 0;
-    if (node->ty->is_unsigned)
-      return (uint64_t)lhs % rhs;
-    return lhs % rhs;
-  }
+    return -eval(lhs);
   case ND_BITAND:
-    return eval(node->lhs) & eval(node->rhs);
+    return eval(lhs) & eval(rhs);
   case ND_BITOR:
-    return eval(node->lhs) | eval(node->rhs);
+    return eval(lhs) | eval(rhs);
   case ND_BITXOR:
-    return eval(node->lhs) ^ eval(node->rhs);
+    return eval(lhs) ^ eval(rhs);
   case ND_SHL:
-    if (node->ty->size == 4) {
-      if (node->ty->is_unsigned)
-        return (uint32_t)eval(node->lhs) << eval(node->rhs);
-      return (int32_t)eval(node->lhs) << eval(node->rhs);
+    if (ty->size == 4) {
+      if (ty->is_unsigned)
+        return (uint32_t)eval(lhs) << eval(rhs);
+      return (int32_t)eval(lhs) << eval(rhs);
     }
-    return eval(node->lhs) << eval(node->rhs);
+    return eval(lhs) << eval(rhs);
   case ND_SHR:
-    if (node->ty->size == 4)
-      return (uint32_t)eval(node->lhs) >> eval(node->rhs);
-    return (uint64_t)eval(node->lhs) >> eval(node->rhs);
+    if (ty->size == 4)
+      return (uint32_t)eval(lhs) >> eval(rhs);
+    return (uint64_t)eval(lhs) >> eval(rhs);
   case ND_SAR:
-    if (node->ty->size == 4)
-      return (int32_t)eval(node->lhs) >> eval(node->rhs);
-    return eval(node->lhs) >> eval(node->rhs);
+    if (ty->size == 4)
+      return (int32_t)eval(lhs) >> eval(rhs);
+    return eval(lhs) >> eval(rhs);
   case ND_EQ:
-    if (is_flonum(node->lhs->ty))
-      return eval_double(node->lhs) == eval_double(node->rhs);
-    return eval(node->lhs) == eval(node->rhs);
+    if (is_flonum(lhs->ty))
+      return eval_double(lhs) == eval_double(rhs);
+    return eval(lhs) == eval(rhs);
   case ND_NE:
-    if (is_flonum(node->lhs->ty))
-      return eval_double(node->lhs) != eval_double(node->rhs);
-    return eval(node->lhs) != eval(node->rhs);
+    if (is_flonum(lhs->ty))
+      return eval_double(lhs) != eval_double(rhs);
+    return eval(lhs) != eval(rhs);
   case ND_LT:
-    if (is_flonum(node->lhs->ty))
-      return eval_double(node->lhs) < eval_double(node->rhs);
-    if (node->lhs->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs) < eval(node->rhs);
-    return eval(node->lhs) < eval(node->rhs);
+    if (is_flonum(lhs->ty))
+      return eval_double(lhs) < eval_double(rhs);
+    if (lhs->ty->is_unsigned)
+      return (uint64_t)eval(lhs) < eval(rhs);
+    return eval(lhs) < eval(rhs);
   case ND_LE:
-    if (is_flonum(node->lhs->ty))
-      return eval_double(node->lhs) <= eval_double(node->rhs);
-    if (node->lhs->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs) <= eval(node->rhs);
-    return eval(node->lhs) <= eval(node->rhs);
+    if (is_flonum(lhs->ty))
+      return eval_double(lhs) <= eval_double(rhs);
+    if (lhs->ty->is_unsigned)
+      return (uint64_t)eval(lhs) <= eval(rhs);
+    return eval(lhs) <= eval(rhs);
   case ND_GT:
-    if (is_flonum(node->lhs->ty))
-      return eval_double(node->lhs) > eval_double(node->rhs);
-    if (node->lhs->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs) > eval(node->rhs);
-    return eval(node->lhs) > eval(node->rhs);
+    if (is_flonum(lhs->ty))
+      return eval_double(lhs) > eval_double(rhs);
+    if (lhs->ty->is_unsigned)
+      return (uint64_t)eval(lhs) > eval(rhs);
+    return eval(lhs) > eval(rhs);
   case ND_GE:
-    if (is_flonum(node->lhs->ty))
-      return eval_double(node->lhs) >= eval_double(node->rhs);
-    if (node->lhs->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs) >= eval(node->rhs);
-    return eval(node->lhs) >= eval(node->rhs);
+    if (is_flonum(lhs->ty))
+      return eval_double(lhs) >= eval_double(rhs);
+    if (lhs->ty->is_unsigned)
+      return (uint64_t)eval(lhs) >= eval(rhs);
+    return eval(lhs) >= eval(rhs);
   case ND_COND:
     return eval(node->cond) ? eval2(node->then, ctx) : eval2(node->els, ctx);
   case ND_COMMA:
-    eval_void(node->lhs);
-    return eval2(node->rhs, ctx);
+    eval_void(lhs);
+    return eval2(rhs, ctx);
   case ND_NOT:
-    return !eval(node->lhs);
+    return !eval(lhs);
   case ND_BITNOT:
-    if (node->ty->size == 4) {
-      if (node->ty->is_unsigned)
-        return (uint32_t)~eval(node->lhs);
-      return (int32_t)~eval(node->lhs);
+    if (ty->size == 4) {
+      if (ty->is_unsigned)
+        return (uint32_t)~eval(lhs);
+      return (int32_t)~eval(lhs);
     }
-    return ~eval(node->lhs);
+    return ~eval(lhs);
   case ND_LOGAND:
-    return eval(node->lhs) && eval(node->rhs);
+    return eval(lhs) && eval(rhs);
   case ND_LOGOR:
-    return eval(node->lhs) || eval(node->rhs);
+    return eval(lhs) || eval(rhs);
   case ND_CAST: {
-    if (node->ty->kind == TY_BOOL) {
-      if (node->lhs->kind == ND_VAR && is_array(node->lhs->ty))
+    if (ty->kind == TY_BOOL) {
+      if (lhs->kind == ND_VAR && is_array(lhs->ty))
         return 1;
-      if (is_flonum(node->lhs->ty))
-        return !!eval_double(node->lhs);
-      return !!eval2(node->lhs, ctx);
+      if (is_flonum(lhs->ty))
+        return !!eval_double(lhs);
+      return !!eval2(lhs, ctx);
     }
-    if (is_flonum(node->lhs->ty)) {
-      if (node->ty->size == 8 && node->ty->is_unsigned)
-        return (uint64_t)eval_double(node->lhs);
-      return eval_double(node->lhs);
+    if (is_flonum(lhs->ty)) {
+      if (ty->size == 8 && ty->is_unsigned)
+        return (uint64_t)eval_double(lhs);
+      return eval_double(lhs);
     }
-    int64_t val = eval2(node->lhs, ctx);
-    if (is_integer(node->ty))
-      return eval_sign_extend(node->ty, val);
+    int64_t val = eval2(lhs, ctx);
+    if (is_integer(ty))
+      return eval_sign_extend(ty, val);
     return val;
   }
   case ND_NUM:
@@ -2402,9 +2405,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     switch (node->kind) {
     case ND_ADDR:
     case ND_DEREF:
-      return eval2(node->lhs, ctx);
+      return eval2(lhs, ctx);
     case ND_MEMBER:
-      return eval2(node->lhs, ctx) + node->member->offset;
+      return eval2(lhs, ctx) + node->member->offset;
     case ND_LABEL_VAL:
       ctx->label = &node->unique_label;
       return 0;
@@ -2417,15 +2420,15 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval_error(node->tok, "invalid initializer");
   }
 
-  if (node->ty->is_volatile)
+  if (ty->is_volatile)
     return eval_error(node->tok, "volatile-qualified type");
 
   if (ctx->kind == EV_AGG) {
     switch (node->kind) {
-    case ND_DEREF: return eval2(node->lhs, ctx);
-    case ND_MEMBER: return eval2(node->lhs, ctx) + node->member->offset;
+    case ND_DEREF: return eval2(lhs, ctx);
+    case ND_MEMBER: return eval2(lhs, ctx) + node->member->offset;
     case ND_VAR:
-      if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION || node->ty->kind == TY_ARRAY) {
+      if (ty->kind == TY_STRUCT || ty->kind == TY_UNION || ty->kind == TY_ARRAY) {
         if (node->var->constexpr_data ||
           (opt_optimize && node->var->ty->is_const && node->var->init_data)) {
           ctx->var = node->var;
@@ -2434,17 +2437,17 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       }
     }
   }
-  if (ctx->kind == EV_CONST && is_integer(node->ty)) {
+  if (ctx->kind == EV_CONST && is_integer(ty)) {
     if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
       char *data = eval_constexpr_agg(node);
       if (!data)
         return 0;
-      int64_t val = read_buf_sign_extend(node->ty, data);
+      int64_t val = read_buf_sign_extend(ty, data);
       if (is_bitfield(node)) {
         int unused_msb = 64 - node->member->bit_width;
         val <<= (unused_msb - node->member->bit_offset);
 
-        if (node->ty->is_unsigned)
+        if (ty->is_unsigned)
           return (uint64_t)val >> unused_msb;
         return val >> unused_msb;
       }
@@ -2452,9 +2455,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     }
     if (node->kind == ND_VAR) {
       if (node->var->constexpr_data)
-        return read_buf_sign_extend(node->ty, node->var->constexpr_data);
+        return read_buf_sign_extend(ty, node->var->constexpr_data);
       if (opt_optimize && node->var->ty->is_const && node->var->init_data)
-        return read_buf_sign_extend(node->ty, node->var->init_data);
+        return read_buf_sign_extend(ty, node->var->init_data);
     }
   }
   return eval_error(node->tok, "not a compile-time constant");
@@ -2495,39 +2498,42 @@ int64_t const_expr(Token **rest, Token *tok) {
 }
 
 static long double eval_double(Node *node) {
-  assert(!is_integer(node->ty));
   if (eval_recover && *eval_recover)
     return false;
 
+  Type *ty = node->ty;
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
   switch (node->kind) {
   case ND_ADD:
-    return eval_double(node->lhs) + eval_double(node->rhs);
+    return eval_double(lhs) + eval_double(rhs);
   case ND_SUB:
-    return eval_double(node->lhs) - eval_double(node->rhs);
+    return eval_double(lhs) - eval_double(rhs);
   case ND_MUL:
-    return eval_double(node->lhs) * eval_double(node->rhs);
+    return eval_double(lhs) * eval_double(rhs);
   case ND_DIV:
-    return eval_double(node->lhs) / eval_double(node->rhs);
+    return eval_double(lhs) / eval_double(rhs);
   case ND_POS:
-    return eval_double(node->lhs);
+    return eval_double(lhs);
   case ND_NEG:
-    return -eval_double(node->lhs);
+    return -eval_double(lhs);
   case ND_COND:
     return eval(node->cond) ? eval_double(node->then) : eval_double(node->els);
   case ND_COMMA:
-    eval_void(node->lhs);
-    return eval_double(node->rhs);
+    eval_void(lhs);
+    return eval_double(rhs);
   case ND_CAST:
-    if (is_flonum(node->lhs->ty)) {
-      if (node->ty->size == 4)
-        return (float)eval_double(node->lhs);
-      if (node->ty->size == 8)
-        return (double)eval_double(node->lhs);
-      return eval_double(node->lhs);
+    if (is_flonum(lhs->ty)) {
+      if (ty->size == 4)
+        return (float)eval_double(lhs);
+      if (ty->size == 8)
+        return (double)eval_double(lhs);
+      return eval_double(lhs);
     }
-    if (node->lhs->ty->size == 8 && node->lhs->ty->is_unsigned)
-      return (uint64_t)eval(node->lhs);
-    return eval(node->lhs);
+    if (lhs->ty->size == 8 && lhs->ty->is_unsigned)
+      return (uint64_t)eval(lhs);
+    return eval(lhs);
   case ND_NUM:
     return node->fval;
   }
@@ -2539,7 +2545,7 @@ static long double eval_double(Node *node) {
     char *data = eval_constexpr_agg(node);
     if (!data)
       return 0;
-    return read_double_buf(data, node->ty);
+    return read_double_buf(data, ty);
   }
 
   return eval_error(node->tok, "not a compile-time constant");
