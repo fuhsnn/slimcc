@@ -3115,12 +3115,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     Type *basety = declspec(&tok, tok, &attr);
 
     // Anonymous struct member
-    if ((basety->kind == TY_STRUCT || basety->kind == TY_UNION) &&
-        equal(tok, ";")) {
+    if (equal(tok, ";") &&
+      (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = basety;
-      // mem->alt_align = attr.align; // clang bahaviour
-      attr_aligned(tok, &mem->alt_align);
+
       tok = tok->next;
       cur = cur->next = mem;
       continue;
@@ -3226,23 +3225,16 @@ static Type *struct_decl(Type *ty, int alt_align) {
   Member *cur = &head;
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    bool affect_alignment = false;
-
     if (!mem->is_bitfield || mem->name) {
       cur = cur->next = mem;
-      affect_alignment = true;
+      if (!ty->is_packed)
+        alt_align = MAX(alt_align, mem->ty->align);
+      alt_align = MAX(alt_align, mem->alt_align);
     }
-
-    if (!ty->is_packed) {
-      if (mem->alt_align && (mem->is_bitfield || mem->alt_align > mem->ty->align))
+    if (mem->alt_align)
+      if (mem->alt_align > mem->ty->align ||
+        (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION))
         bits = align_to(bits, mem->alt_align * 8);
-      if (affect_alignment)
-        alt_align = MAX(alt_align, MAX(mem->alt_align, mem->ty->align));
-    } else if (mem->alt_align && (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION)) {
-      bits = align_to(bits, mem->alt_align * 8);
-      if (affect_alignment)
-        alt_align = MAX(alt_align, mem->alt_align);
-    }
 
     if (mem->is_bitfield) {
       if (mem->bit_width == 0) {
@@ -3259,7 +3251,6 @@ static Type *struct_decl(Type *ty, int alt_align) {
       bits += mem->bit_width;
       continue;
     }
-
     if (ty->is_packed)
       bits = align_to(bits, 8);
     else
@@ -3268,14 +3259,12 @@ static Type *struct_decl(Type *ty, int alt_align) {
     mem->offset = bits / 8;
     bits += mem->ty->size * 8;
   }
-
   cur->next = NULL;
   ty->members = head.next;
 
   if (alt_align)
     ty->align = alt_align;
-
-  if (ty->is_packed && !alt_align)
+  if (!alt_align && ty->is_packed)
     ty->size = align_to(bits, 8) / 8;
   else
     ty->size = align_to(bits, ty->align * 8) / 8;
@@ -3289,26 +3278,21 @@ static Type *union_decl(Type *ty, int alt_align) {
     if (!mem->is_bitfield || mem->name) {
       cur = cur->next = mem;
       if (!ty->is_packed)
-        alt_align = MAX(alt_align, MAX(mem->alt_align, mem->ty->align));
-      else if (mem->alt_align && (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION))
-        alt_align = MAX(alt_align, mem->alt_align);
+        alt_align = MAX(alt_align, mem->ty->align);
+      alt_align = MAX(alt_align, mem->alt_align);
     }
-
     int sz;
     if (mem->is_bitfield)
       sz = align_to(mem->bit_width, 8) / 8;
     else
       sz = mem->ty->size;
-
     ty->size = MAX(ty->size, sz);
   }
-
   cur->next = NULL;
   ty->members = head.next;
 
   if (alt_align)
     ty->align = alt_align;
-
   ty->size = align_to(ty->size, ty->align);
   return ty;
 }
