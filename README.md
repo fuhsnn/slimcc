@@ -18,27 +18,9 @@ make test-stage2 -j
 Run it in base directory like `CC=~/slimcc/slimcc`.
 
 # What can it build?
-`git v2.45.2`  (100% test success)
-```
-git clone --depth 1 https://github.com/git/git --branch v2.45.2
-cd git
-make CC=~/slimcc/slimcc V=1 test -j
-```
-`PostgreSQL v15.7` (All 212 tests passed.)
-```
-git clone --depth 1 https://github.com/postgres/postgres --branch REL_15_7
-cd postgres
-CC=~/slimcc/slimcc ./configure --disable-spinlocks --disable-atomics
-make check -j
-```
-`Python` (July 2024 trunk) (run=477/478 failed=1 skipped=31)
-```
-git clone --depth 1 https://github.com/fuhsnn/cpython --branch typeof
-cd cpython
-CC=~/slimcc/slimcc ./configure
-make test -j
-```
- - `libtool` doesn't generate the nessasary `-Wl,` `-fPIC` options for unknown compiler like ours; if you see `-soname` and PIC errors, try filling `*_wl=` `*_pic=` in configure scripts with `'-Wl,'` and `'-fPIC'`
+I regularly attempt to keep up with latest versions of Curl, git, Python, Postgress, Sqlite, Vim etc.
+
+[see widcc's list](https://github.com/fuhsnn/widcc?tab=readme-ov-file#building-real-world-projects) for detailed build script.
 
 # Can it pass `csmith`?
 1M tests were run with `--no-packed-struct` flag, all issues found were fixed.
@@ -53,7 +35,7 @@ Compare size of chibicc binary built with several compilers:
       text       data        bss      total filename
     112363      43987        616     156966 gcc_O0_build
     113867      43156        504     157527 clang_O0_build
-    138747      31913        456     171116 slimcc_build
+    138747      31913        456     170972 slimcc_build
     144896      29536        440     174872 tcc_build
     263659      41163        456     305278 chibicc_build
 ```
@@ -76,4 +58,4 @@ In general, code size is on par with TinyCC but execute 30% slower. Much work to
 musl linux and BSDs should be doable. Check hard-coded paths in `main.c`, and pre-defined macros in `preprocessor.c`.
 The biggest obstacle would be GNU inline assembly in some headers. Which is not supported yet.
 
-There is kind of a scene of porting chibicc to different real and virtual architecture going on, look around and have fun hacking.
+The [`widcc`](https://github.com/fuhsnn/widcc) branch is a less noisy codebase than `slimcc` that should be more appealing for developers to hack on.
