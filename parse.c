@@ -3139,6 +3139,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       if (consume(&tok, tok, ":")) {
         mem->is_bitfield = true;
         mem->bit_width = const_expr(&tok, tok);
+        if (mem->bit_width < 0)
+          error_tok(tok, "bit-field with negative width");
         attr_aligned(tok, &mem->alt_align);
       }
       cur = cur->next = mem;
