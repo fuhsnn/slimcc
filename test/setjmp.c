@@ -18,6 +18,13 @@ int main(void)
       fn(++count);
 
     ASSERT(10, acc);
+
+    count = 0;
+
+    if (5 > setjmp(jbuf))
+      fn(++count);
+    ASSERT(20, acc);
+
     printf("OK\n");
 }
 
