@@ -6,21 +6,6 @@
 #define GP_SLOTS 6
 #define FP_SLOTS 6
 
-typedef enum {
-  SL_GP,
-  SL_FP,
-  SL_ST,
-} SlotKind;
-
-typedef struct {
-  SlotKind kind;
-  int gp_depth;
-  int fp_depth;
-  int st_depth;
-  int st_offset;
-  long loc;
-} Slot;
-
 static FILE *output_file;
 static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
 static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
@@ -37,15 +22,30 @@ static int va_fp_start;
 static int va_st_start;
 static int vla_base_ofs;
 static int rtn_ptr_ofs;
+static int lvar_stk_sz;
+static int peak_stk_usage;
 
 bool dont_reuse_stack;
+
+typedef enum {
+  SL_GP,
+  SL_FP,
+  SL_ST,
+} SlotKind;
+
+typedef struct {
+  SlotKind kind;
+  int gp_depth;
+  int fp_depth;
+  int st_depth;
+  int st_offset;
+  long loc;
+} Slot;
 
 struct {
   Slot *data;
   int capacity;
   int depth;
-  int bottom;
-  int base;
 } static tmp_stack;
 
 static void store_gp2(char **reg, int sz, int ofs, char *ptr);
@@ -169,11 +169,11 @@ static Slot *pop_tmpstack2(int sz) {
 
   if (sl->kind == SL_ST) {
     if (dont_reuse_stack) {
-      tmp_stack.bottom += sz * 8;
-      sl->st_offset = -tmp_stack.bottom;
+      peak_stk_usage += sz * 8;
+      sl->st_offset = -peak_stk_usage;
     } else {
-      int bottom = tmp_stack.base + (sl->st_depth + sz) * 8;
-      tmp_stack.bottom = MAX(tmp_stack.bottom, bottom);
+      int bottom = lvar_stk_sz + (sl->st_depth + sz) * 8;
+      peak_stk_usage = MAX(peak_stk_usage, bottom);
       sl->st_offset = -bottom;
     }
   }
@@ -958,11 +958,11 @@ static void place_stack_args(Node *node) {
   }
 }
 
-static void place_reg_args(Node *node, bool gp_start) {
+static void place_reg_args(Node *node, bool rtn_by_stk) {
   int gp = 0, fp = 0;
   // If the return type is a large struct/union, the caller passes
   // a pointer to a buffer as if it were the first argument.
-  if (gp_start)
+  if (rtn_by_stk)
     println("  lea %d(%s), %s", node->ret_buffer->ofs, node->ret_buffer->ptr, argreg64[gp++]);
 
   for (Obj *var = node->args; var; var = var->param_next) {
@@ -1339,8 +1339,8 @@ static void gen_expr(Node *node) {
 
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
-    bool stk_rtn = node->ret_buffer && node->ty->size > 16;
-    int gp_count = stk_rtn;
+    bool rtn_by_stk= node->ret_buffer && node->ty->size > 16;
+    int gp_count = rtn_by_stk;
     int fp_count = 0;
     int arg_stk_align;
     int arg_stk_size = calling_convention(node->args, &gp_count, &fp_count, &arg_stk_align);
@@ -1372,7 +1372,7 @@ static void gen_expr(Node *node) {
     clobber_all_regs();
 
     place_stack_args(node);
-    place_reg_args(node, stk_rtn);
+    place_reg_args(node, rtn_by_stk);
 
     if (node->lhs->ty->is_variadic) {
       if (fp_count)
@@ -2534,8 +2534,8 @@ static void emit_text(Obj *prog) {
     println("  .type \"%s\", @function", fn->name);
     println("\"%s\":", fn->name);
 
-    bool stk_rtn = fn->ty->return_ty->size > 16;
-    int gp_count = stk_rtn;
+    bool rtn_by_stk = fn->ty->return_ty->size > 16;
+    int gp_count = rtn_by_stk;
     int fp_count = 0;
     int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
 
@@ -2554,14 +2554,14 @@ static void emit_text(Obj *prog) {
 
     long stack_alloc_loc = resrvln();
 
-    int lvar_stack = 0;
+    lvar_stk_sz = 0;
 
     // Save arg registers if function is variadic
     if (fn->ty->is_variadic) {
       va_gp_start = gp_count * 8;
       va_fp_start = fp_count * 16 + 48;
       va_st_start = arg_stk_size + 16;
-      lvar_stack = 176;
+      lvar_stk_sz += 176;
 
       switch (gp_count) {
       case 0: println("  movq %%rdi, -176(%s)", lvar_ptr);
@@ -2589,19 +2589,20 @@ static void emit_text(Obj *prog) {
     }
 
     if (fn->dealloc_vla) {
-      vla_base_ofs = lvar_stack += 8;
+      vla_base_ofs = lvar_stk_sz += 8;
       println("  mov %%rsp, -%d(%s)", vla_base_ofs, lvar_ptr);
     }
 
-    if (stk_rtn) {
-      rtn_ptr_ofs = lvar_stack += 8;
+    if (rtn_by_stk) {
+      rtn_ptr_ofs = lvar_stk_sz += 8;
       println("  mov %s, -%d(%s)", argreg64[0], rtn_ptr_ofs, lvar_ptr);
     }
 
-    tmp_stack.base = tmp_stack.bottom = assign_lvar_offsets(fn->ty->scopes, lvar_stack);
+    lvar_stk_sz = assign_lvar_offsets(fn->ty->scopes, lvar_stk_sz);
+    peak_stk_usage = lvar_stk_sz = align_to(lvar_stk_sz, 8);
 
     // Save passed-by-register arguments to the stack
-    int gp = stk_rtn, fp = 0;
+    int gp = rtn_by_stk, fp = 0;
     for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
       if (var->pass_by_stack)
         continue;
@@ -2637,8 +2638,8 @@ static void emit_text(Obj *prog) {
     gen_stmt(fn->body);
     assert(tmp_stack.depth == 0);
 
-    if (tmp_stack.bottom)
-      insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(tmp_stack.bottom, 16));
+    if (peak_stk_usage)
+      insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
 
     // [https://www.sigbus.info/n1570#5.1.2.2.3p1] The C spec defines
     // a special rule for the main function. Reaching the end of the
