@@ -18,9 +18,9 @@ make test-stage2 -j
 Run it in base directory like `CC=~/slimcc/slimcc`.
 
 # What can it build?
-I regularly attempt to keep up with latest versions of Curl, git, Python, Postgress, Sqlite, Vim etc.
+I regularly attempt to keep up with latest versions of Curl, Git, Python, PostgreSQL, Sqlite, Vim etc.
 
-[see widcc's list](https://github.com/fuhsnn/widcc?tab=readme-ov-file#building-real-world-projects) for detailed build script.
+Check out [widcc's list](https://github.com/fuhsnn/widcc?tab=readme-ov-file#building-real-world-projects) for detailed build scripts.
 
 # Can it pass `csmith`?
 1M tests were run with `--no-packed-struct` flag, all issues found were fixed.
