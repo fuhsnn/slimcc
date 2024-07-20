@@ -547,7 +547,7 @@ static void store2(Type *ty, int dofs, char *dptr) {
     return;
   case TY_LDOUBLE:
     println("  fstpt %d(%s)", dofs, dptr);
-    println("  fldt %d(%s)", dofs, dptr);
+    println("  fninit; fldt %d(%s)", dofs, dptr);
     return;
   }
 
