@@ -3353,6 +3353,15 @@ static Node *struct_ref(Node *node, Token *tok) {
 // Convert A++ to `(ptr = &A, tmp = *ptr, *ptr += 1, tmp)`
 static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   add_type(node);
+
+  if (opt_optimize && node->ty->kind != TY_BOOL && !is_bitfield(node) && !is_flonum(node->ty)) {
+    Type *ty = node->ty;
+    node = new_add(node, new_num(addend, tok), tok);
+    node = to_assign(node);
+    node = new_add(node, new_num(-addend, tok), tok);
+    return new_cast(node, ty);
+  }
+
   enter_tmp_scope();
 
   Node *ref;
