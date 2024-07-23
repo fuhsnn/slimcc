@@ -100,8 +100,8 @@ static char *cont_label;
 // a switch statement. Otherwise, NULL.
 static Node *current_switch;
 
-static Obj *current_vla;
-static Obj *brk_vla;
+static DeferStmt *current_defr;
+static DeferStmt *brk_defr;
 static bool fn_use_vla;
 static bool dont_dealloc_vla;
 
@@ -371,6 +371,17 @@ static Obj *new_string_literal(char *p, Type *ty) {
   Obj *var = new_anon_gvar(ty);
   var->init_data = p;
   return var;
+}
+
+static DeferStmt *new_defr(DeferKind kind) {
+  DeferStmt *defr = calloc(1, sizeof(DeferStmt));
+  defr->kind = kind;
+  if (current_defr) {
+    defr->vla = current_defr->vla;
+    defr->next = current_defr;
+  }
+  current_defr = defr;
+  return defr;
 }
 
 static char *get_ident(Token *tok) {
@@ -1139,8 +1150,8 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       Obj *var = new_lvar(get_ident(name), ty);
       chain_expr(&expr, new_vla(new_var_node(ty->vla_size, name), var, MAX(alt_align, 16)));
 
-      var->vla_next = current_vla;
-      current_vla = var;
+      DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
+      defr->vla = var;
       fn_use_vla = true;
       continue;
     }
@@ -1843,14 +1854,14 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
   brk_label = node->brk_label = new_unique_name();
   cont_label = node->cont_label = new_unique_name();
 
-  Obj *vla = brk_vla;
-  brk_vla = current_vla;
+  DeferStmt *defr = brk_defr;
+  brk_defr = current_defr;
 
   node->then = stmt(rest, tok, true);
 
   brk_label = brk;
   cont_label = cont;
-  brk_vla = vla;
+  brk_defr = defr;
 }
 
 // stmt = "return" expr? ";"
@@ -1913,21 +1924,21 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     char *brk = brk_label;
     brk_label = node->brk_label = new_unique_name();
 
-    Obj *vla = brk_vla;
-    brk_vla = current_vla;
+    DeferStmt *defr = brk_defr;
+    brk_defr = current_defr;
 
     node->then = stmt(rest, tok, true);
 
     current_switch = sw;
     brk_label = brk;
-    brk_vla = vla;
+    brk_defr = defr;
     return node;
   }
 
   if (equal(tok, "case")) {
     if (!current_switch)
       error_tok(tok, "stray case");
-    if (current_vla != brk_vla)
+    if (current_defr != brk_defr)
       error_tok(tok, "jump crosses VLA initialization");
 
     Node *node = new_node(ND_CASE, tok);
@@ -1968,7 +1979,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
   if (equal(tok, "default")) {
     if (!current_switch)
       error_tok(tok, "stray default");
-    if (current_vla != brk_vla)
+    if (current_defr != brk_defr)
       error_tok(tok, "jump crosses VLA initialization");
 
     Node *node = new_node(ND_CASE, tok);
@@ -1987,7 +1998,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
 
-    node->target_vla = current_vla;
+    node->defr_end = current_defr;
     enter_tmp_scope();
 
     if (is_typename(tok)) {
@@ -2011,8 +2022,8 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
 
     loop_body(rest, tok, node);
 
-    node->top_vla = current_vla;
-    current_vla = node->target_vla;
+    node->defr_start = current_defr;
+    current_defr = node->defr_end;
     leave_scope();
     return node;
   }
@@ -2056,7 +2067,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     Node *node = new_node(ND_GOTO, tok);
     node->label = get_ident(tok->next);
     node->goto_next = gotos;
-    node->top_vla = current_vla;
+    node->defr_start = current_defr;
     gotos = node;
     *rest = skip(tok->next->next, ";");
     return node;
@@ -2067,8 +2078,8 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
       error_tok(tok, "stray break");
     Node *node = new_node(ND_GOTO, tok);
     node->unique_label = brk_label;
-    node->target_vla = brk_vla;
-    node->top_vla = current_vla;
+    node->defr_end = brk_defr;
+    node->defr_start = current_defr;
     *rest = skip(tok->next, ";");
     return node;
   }
@@ -2078,8 +2089,8 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
       error_tok(tok, "stray continue");
     Node *node = new_node(ND_GOTO, tok);
     node->unique_label = cont_label;
-    node->target_vla = brk_vla;
-    node->top_vla = current_vla;
+    node->defr_end = brk_defr;
+    node->defr_start = current_defr;
     *rest = skip(tok->next, ";");
     return node;
   }
@@ -2095,7 +2106,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
       *rest = tok;
     node->unique_label = new_unique_name();
     node->goto_next = labels;
-    node->top_vla = current_vla;
+    node->defr_start = current_defr;
     labels = node;
     return node;
   }
@@ -2112,7 +2123,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   Node head = {0};
   Node *cur = &head;
 
-  node->target_vla = current_vla;
+  node->defr_end = current_defr;
   enter_scope();
 
   while (!equal(tok, "}")) {
@@ -2150,8 +2161,8 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
     add_type(cur);
   }
 
-  node->top_vla = current_vla;
-  current_vla = node->target_vla;
+  node->defr_start = current_defr;
+  current_defr = node->defr_end;
   leave_scope();
 
   if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
@@ -3930,17 +3941,17 @@ static void resolve_goto_labels(void) {
       error_tok(x->tok->next, "use of undeclared label");
 
     x->unique_label = dest->unique_label;
-    if (!dest->top_vla)
+    if (!dest->defr_start)
       continue;
 
-    Obj *vla = x->top_vla;
-    for (; vla; vla = vla->vla_next)
-      if (vla == dest->top_vla)
+    DeferStmt *defr= x->defr_start;
+    for (; defr; defr = defr->next)
+      if (defr == dest->defr_start)
         break;
-    if (!vla)
-      error_tok(x->tok->next, "jump crosses VLA initialization");
+    if (!defr)
+      error_tok(x->tok->next, "jump crosses defer statment");
 
-    x->target_vla = vla;
+    x->defr_end = defr;
   }
   gotos = labels = NULL;
 }
@@ -3993,7 +4004,7 @@ static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr, T
   fn->ty = ty;
 
   current_fn = fn;
-  current_vla = NULL;
+  current_defr = NULL;
   fn_use_vla = dont_dealloc_vla = false;
 
   if (ty->scopes) {

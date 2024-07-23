@@ -179,7 +179,6 @@ struct Obj {
   int ofs;
   char *ptr;
   Obj *param_next;
-  Obj *vla_next;
   bool pass_by_stack;
   int stack_offset;
   Node *param_arg;
@@ -218,6 +217,17 @@ struct Relocation {
   int offset;
   char **label;
   long addend;
+};
+
+typedef enum {
+  DF_VLA_DEALLOC,
+} DeferKind;
+
+typedef struct DeferStmt DeferStmt;
+struct DeferStmt {
+  DeferKind kind;
+  DeferStmt *next;
+  Obj *vla;
 };
 
 // AST node
@@ -324,8 +334,8 @@ struct Node {
   long begin;
   long end;
 
-  Obj *target_vla;
-  Obj *top_vla;
+  DeferStmt *defr_start;
+  DeferStmt *defr_end;
 
   // "asm" string literal
   char *asm_str;

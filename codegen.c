@@ -1146,14 +1146,31 @@ static void builtin_alloca(Node *node) {
     println("  mov %%rsp, %%rax");
 }
 
-static void dealloc_vla(Node *node) {
-  if (!current_fn->dealloc_vla || node->top_vla == node->target_vla)
-    return;
+static void gen_defr(Node *node) {
+  DeferStmt *defr = node->defr_start;
+  DeferStmt *end = node->defr_end;
 
-  if (node->target_vla)
-    println("  mov %d(%s), %%rsp", node->target_vla->ofs, node->target_vla->ptr);
-  else
-    println("  mov -%d(%s), %%rsp", vla_base_ofs, lvar_ptr);
+  while (defr != end) {
+    if (defr->kind == DF_VLA_DEALLOC) {
+      while (defr->next != end && defr->next->kind == DF_VLA_DEALLOC)
+        defr = defr->next;
+
+      if (!current_fn->dealloc_vla) {
+        defr = defr->next;
+        continue;
+      }
+
+      Obj *vla = defr->next ? defr->next->vla : NULL;
+      if (vla)
+        println("  mov %d(%s), %%rsp", vla->ofs, vla->ptr);
+      else
+        println("  mov -%d(%s), %%rsp", vla_base_ofs, lvar_ptr);
+
+      defr = defr->next;
+      continue;
+    }
+    internal_error();
+  }
 }
 
 static void print_loc(Token *tok) {
@@ -1276,7 +1293,7 @@ static void gen_expr(Node *node) {
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
-    dealloc_vla(node);
+    gen_defr(node);
     return;
   case ND_CHAIN:
   case ND_COMMA:
@@ -1750,7 +1767,7 @@ static void gen_stmt(Node *node) {
       gen_expr(node->inc);
     println("  jmp .L.begin.%d", c);
     println("%s:", node->brk_label);
-    dealloc_vla(node);
+    gen_defr(node);
     return;
   }
   case ND_DO: {
@@ -1806,10 +1823,10 @@ static void gen_stmt(Node *node) {
   case ND_BLOCK:
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
-    dealloc_vla(node);
+    gen_defr(node);
     return;
   case ND_GOTO:
-    dealloc_vla(node);
+    gen_defr(node);
     println("  jmp %s", node->unique_label);
     return;
   case ND_GOTO_EXPR:
