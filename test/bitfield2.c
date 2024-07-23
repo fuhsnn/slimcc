@@ -130,41 +130,6 @@ static int operand_promotion(void) {
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(1 ? (s.i = 0) : ({(0,s.i);})) < 0; }) );
 }
 
-static int postfix_overflow(void) {
-  struct S {
-    int pad :2;
-    int i : 3;
-    unsigned u : 3;
-    _Bool b: 1;
-  } s;
-
-  ASSERT(-4, (s.i = -4, s.i--));
-  ASSERT(3, (s.i = 3, s.i++));
-  ASSERT(0, (s.u = 0, s.u--));
-  ASSERT(7, (s.u = 7, s.u++));
-
-  _Bool x=0, y=0;
-  s.b = 0;
-  ASSERT(0, (x = s.b, x));
-  ASSERT(0, (y = s.b--, y));
-
-  ASSERT(1, (x = s.b, x));
-  ASSERT(1, (y = s.b--, y));
-
-  ASSERT(0, (x = s.b, x));
-  ASSERT(0, (y = s.b--, y));
-
-  s.b = 0;
-  ASSERT(0, (x = s.b, x));
-  ASSERT(0, (y = s.b++, y));
-
-  ASSERT(1, (x = s.b, x));
-  ASSERT(1, (y = s.b++, y));
-
-  ASSERT(1, (x = s.b, x));
-  ASSERT(1, (y = s.b++, y));
-}
-
 int main(void) {
   bitextract();
   struct_init();
@@ -173,7 +138,6 @@ int main(void) {
   large_field();
   uninit_global();
   operand_promotion();
-  postfix_overflow();
 
   printf("OK\n");
 

@@ -3355,39 +3355,29 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   add_type(node);
   enter_tmp_scope();
 
+  Node *ref;
+  Node *expr = NULL;
+
   if (is_bitfield(node)) {
-    Obj *tmp = new_lvar(NULL, node->ty);
     Obj *ptr = new_lvar(NULL, pointer_to(node->lhs->ty));
 
-    Node *expr = new_binary(ND_ASSIGN, new_var_node(ptr, tok),
-                             new_unary(ND_ADDR, node->lhs, tok), tok);
+    ref = new_unary(ND_MEMBER, new_unary(ND_DEREF, new_var_node(ptr, tok), tok), tok);
+    ref->member = node->member;
 
-    Node *memref1 = new_unary(ND_MEMBER,
-                              new_unary(ND_DEREF, new_var_node(ptr, tok), tok),
-                              tok);
-    memref1->member = node->member;
+    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(ptr, tok),
+                                 new_unary(ND_ADDR, node->lhs, tok), tok));
+  } else {
+    Obj *ptr = new_lvar(NULL, pointer_to(node->ty));
 
-    Node *memref2 = new_unary(ND_MEMBER,
-                              new_unary(ND_DEREF, new_var_node(ptr, tok), tok),
-                              tok);
-    memref2->member = node->member;
+    ref = new_unary(ND_DEREF, new_var_node(ptr, tok), tok);
 
-    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(tmp, tok), memref1, tok));
-    chain_expr(&expr, to_assign(new_add(memref2, new_num(addend, tok), tok)));
-    chain_expr(&expr, new_var_node(tmp, tok));
-    leave_scope();
-    return expr;
+    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(ptr, tok),
+                                 new_unary(ND_ADDR, node, tok), tok));
   }
-
   Obj *tmp = new_lvar(NULL, node->ty);
-  Obj *ptr = new_lvar(NULL, pointer_to(node->ty));
 
-  Node *expr = new_binary(ND_ASSIGN, new_var_node(ptr, tok),
-                          new_unary(ND_ADDR, node, tok), tok);
-  chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(tmp, tok),
-                               new_unary(ND_DEREF, new_var_node(ptr, tok), tok), tok));
-  chain_expr(&expr, to_assign(new_add(new_unary(ND_DEREF, new_var_node(ptr, tok), tok),
-                                      new_num(addend, tok), tok)));
+  chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(tmp, tok), ref, tok));
+  chain_expr(&expr, to_assign(new_add(ref, new_num(addend, tok), tok)));
   chain_expr(&expr, new_var_node(tmp, tok));
   leave_scope();
   return expr;

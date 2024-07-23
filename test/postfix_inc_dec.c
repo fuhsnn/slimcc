@@ -31,5 +31,29 @@ int main(void) {
   f = -0.0f;
   ASSERT(1, !memcmp(&f, &f2, sizeof(float)));
 
+  struct S {
+    int pad :2;
+    int i : 3;
+    unsigned u : 3;
+    _Bool b: 1;
+  } s;
+
+  ASSERT(-4, (s.i = -4, s.i--));
+  ASSERT(3, (s.i = 3, s.i++));
+  ASSERT(0, (s.u = 0, s.u--));
+  ASSERT(7, (s.u = 7, s.u++));
+
+  s.b = 0;
+  ASSERT(0, s.b--);
+  ASSERT(1, s.b--);
+  ASSERT(0, s.b--);
+  ASSERT(1, s.b--);
+
+  s.b = 0;
+  ASSERT(0, s.b++);
+  ASSERT(1, s.b++);
+  ASSERT(1, s.b++);
+  ASSERT(1, s.b++);
+
   printf("OK\n");
 }
