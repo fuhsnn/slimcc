@@ -38,7 +38,7 @@ typedef struct {
   int gp_depth;
   int fp_depth;
   int st_depth;
-  int st_offset;
+  int st_ofs;
   long loc;
 } Slot;
 
@@ -151,7 +151,7 @@ static void push_tmpstack(SlotKind kind) {
   return;
 }
 
-static Slot *pop_tmpstack2(int sz) {
+static Slot *pop_tmpstack(int sz) {
   tmp_stack.depth--;
   assert(tmp_stack.depth >= 0);
 
@@ -170,74 +170,76 @@ static Slot *pop_tmpstack2(int sz) {
   if (sl->kind == SL_ST) {
     if (dont_reuse_stack) {
       peak_stk_usage += sz * 8;
-      sl->st_offset = -peak_stk_usage;
+      sl->st_ofs = -peak_stk_usage;
     } else {
       int bottom = lvar_stk_sz + (sl->st_depth + sz) * 8;
       peak_stk_usage = MAX(peak_stk_usage, bottom);
-      sl->st_offset = -bottom;
+      sl->st_ofs = -bottom;
     }
   }
   return sl;
-}
-
-static Slot *pop_tmpstack(void) {
-  return pop_tmpstack2(1);
 }
 
 static void push(void) {
   push_tmpstack(SL_GP);
 }
 
-static void pop2(Slot *sl, bool is_r64, char *arg) {
+static char *pop_gp(bool is_r64, char *dest_reg, bool must_be_dest) {
   char *ax = is_r64 ? "%rax" : "%eax";
+  Slot *sl = pop_tmpstack(1);
 
   if (sl->kind == SL_GP) {
-    char *reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
-    insrtln("  mov %s, %s", sl->loc, ax, reg);
-    println("  mov %s, %s", reg, arg);
-    return;
+    char *pop_reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
+    insrtln("  mov %s, %s", sl->loc, ax, pop_reg);
+    if (!must_be_dest)
+      return pop_reg;
+    println("  mov %s, %s", pop_reg, dest_reg);
+    return dest_reg;
   }
-  insrtln("  mov %s, %d(%s)", sl->loc, ax, sl->st_offset, lvar_ptr);
-  println("  mov %d(%s), %s", sl->st_offset, lvar_ptr, arg);
-}
-
-static void pop(char *arg) {
-  Slot *sl = pop_tmpstack();
-  pop2(sl, true, arg);
+  insrtln("  mov %s, %d(%s)", sl->loc, ax, sl->st_ofs, lvar_ptr);
+  println("  mov %d(%s), %s", sl->st_ofs, lvar_ptr, dest_reg);
+  return dest_reg;
 }
 
 static char *pop_inreg2(bool is_r64, char *fallback_reg) {
-  Slot *sl = pop_tmpstack();
-
-  if (sl->kind == SL_GP) {
-    char *ax = is_r64 ? "%rax" : "%eax";
-    char *reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
-    insrtln("  mov %s, %s", sl->loc, ax, reg);
-    return reg;
-  }
-  pop2(sl, is_r64, fallback_reg);
-  return fallback_reg;
+  return pop_gp(is_r64, fallback_reg, false);
 }
 
 static char *pop_inreg(char *fallback_reg) {
   return pop_inreg2(true, fallback_reg);
 }
 
+static void pop2(bool is_r64, char *arg) {
+  pop_gp(is_r64, arg, true);
+}
+
+static void pop(char *arg) {
+  pop2(true, arg);
+}
+
 static void pushf(void) {
   push_tmpstack(SL_FP);
 }
 
-static int popf_inreg(bool is_xmm64) {
-  Slot *sl = pop_tmpstack();
+static int pop_fp(bool is_xmm64, int dest_reg, bool must_be_dest) {
+  Slot *sl = pop_tmpstack(1);
   char *mv = is_xmm64 ? "movsd" : "movss";
 
   if (sl->kind == SL_FP) {
-    insrtln("  %s %%xmm0, %%xmm%d", sl->loc, mv, sl->fp_depth + 2);
-    return sl->fp_depth + 2;
+    int pop_reg = sl->fp_depth + 2;
+    insrtln("  %s %%xmm0, %%xmm%d", sl->loc, mv, pop_reg);
+    if (!must_be_dest)
+      return pop_reg;
+    println("  %s %%xmm%d, %%xmm%d", mv, pop_reg, dest_reg);
+    return dest_reg;
   }
-  insrtln("  %s %%xmm0, %d(%s)", sl->loc, mv, sl->st_offset, lvar_ptr);
-  println("  %s %d(%s), %%xmm1", mv, sl->st_offset, lvar_ptr);
-  return 1;
+  insrtln("  %s %%xmm0, %d(%s)", sl->loc, mv, sl->st_ofs, lvar_ptr);
+  println("  %s %d(%s), %%xmm%d", mv, sl->st_ofs, lvar_ptr, dest_reg);
+  return dest_reg;
+}
+
+static int popf_inreg(bool is_xmm64, int reg) {
+  return pop_fp(is_xmm64, reg, false);
 }
 
 static void push_x87(void) {
@@ -245,9 +247,9 @@ static void push_x87(void) {
 }
 
 static bool pop_x87(void) {
-  Slot *sl = pop_tmpstack2(2);
-  insrtln("  fstpt %d(%s)", sl->loc, sl->st_offset, lvar_ptr);
-  println("  fldt %d(%s)", sl->st_offset, lvar_ptr);
+  Slot *sl = pop_tmpstack(2);
+  insrtln("  fstpt %d(%s)", sl->loc, sl->st_ofs, lvar_ptr);
+  println("  fldt %d(%s)", sl->st_ofs, lvar_ptr);
   return true;
 }
 
@@ -556,7 +558,7 @@ static void store2(Type *ty, int dofs, char *dptr) {
 
 // Store %rax to an address that the stack top is pointing to.
 static void store(Type *ty) {
-  char *reg = pop_inreg("%rcx");
+  char *reg = pop_inreg(tmpreg64[0]);
   store2(ty, 0, reg);
 }
 
@@ -1218,29 +1220,27 @@ static void gen_expr(Node *node) {
         return;
       }
 
-      char *ax, *dx, *r0;
+      char *ax, *dx, *cx;
       if (mem->ty->size == 8)
-        ax = "%rax", dx = "%rdx", r0 = tmpreg64[0];
+        ax = "%rax", cx = "%rcx", dx = "%rdx";
       else
-        ax = "%eax", dx = "%edx", r0 = tmpreg32[0];
-
-      clobber_gp(1);
+        ax = "%eax", cx = "%ecx", dx = "%edx";
 
       imm_and(ax, dx, (1LL << mem->bit_width) - 1);
-      println("  mov %s, %s", ax, r0);
+      println("  mov %s, %s", ax, cx);
 
-      char *ptr = pop_inreg("%rcx");
+      char *ptr = pop_inreg(tmpreg64[0]);
       load2(mem->ty, 0, ptr);
 
       imm_and(ax, dx, ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset));
 
-      println("  mov %s, %s", r0, dx);
+      println("  mov %s, %s", cx, dx);
       if (mem->bit_offset)
         println("  shl $%d, %s", mem->bit_offset, dx);
       println("  or %s, %s", dx, ax);
       store2(mem->ty, 0, ptr);
 
-      println("  mov %s, %s", r0, ax);
+      println("  mov %s, %s", cx, ax);
       if (!mem->ty->is_unsigned)
         gen_bit_extract(mem->ty, mem->bit_width, 0);
       return;
@@ -1312,7 +1312,7 @@ static void gen_expr(Node *node) {
     println("  mov %%al, %%cl");
 
     char *ax = regop_ax(node->ty);
-    pop2(pop_tmpstack(), (node->ty->size == 8), ax);
+    pop2((node->ty->size == 8), ax);
 
     switch (node->kind) {
     case ND_SHL: println("  shl %%cl, %s", ax); break;
@@ -1450,7 +1450,7 @@ static void gen_expr(Node *node) {
     gen_expr(node->lhs);
     push();
     gen_expr(node->rhs);
-    char *reg = pop_inreg("%rcx");
+    char *reg = pop_inreg(tmpreg64[0]);
 
     int sz = node->lhs->ty->base->size;
     println("  xchg %s, (%s)", reg_ax(sz), reg);
@@ -1474,7 +1474,7 @@ static void gen_expr(Node *node) {
     gen_expr(node->lhs);
     push();
     gen_expr(node->rhs);
-    char *reg = pop_inreg("%rcx");
+    char *reg = pop_inreg(tmpreg64[0]);
     gen_mem_copy(0, "%rax", 0, reg, 24);
     return;
   }
@@ -1528,7 +1528,7 @@ static void gen_expr(Node *node) {
     gen_expr(node->rhs);
 
     bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
-    int reg = popf_inreg(is_xmm64);
+    int reg = popf_inreg(is_xmm64, 1);
     char *sz = is_xmm64 ? "sd" : "ss";
 
     switch (node->kind) {
@@ -1636,8 +1636,7 @@ static void gen_expr(Node *node) {
 
   bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
   char *ax = is_r64 ? "%rax" : "%eax";
-  char *cx = is_r64 ? "%rcx" : "%ecx";
-  char *op = pop_inreg2(is_r64, cx);
+  char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
 
   switch (node->kind) {
   case ND_ADD:
