@@ -1,4 +1,11 @@
-This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with [fixes](https://github.com/fuhsnn/slimcc/issues?q=is%3Aissue+is%3Aclosed+label%3Aupstream) and [improvements](#changes-over-chibicc).
+This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with [fixes](https://github.com/fuhsnn/slimcc/issues?q=is%3Aissue+is%3Aclosed+label%3Aupstream) and improvements, including:
+ - C99 features: VLA parameters, VLA de-allocation.
+ - C11 features: `_Static_assert()`, over-aligned locals.
+ - C23 features: `constexpr`, type-inferrence, digit seperators, etc.
+ - GNU features: `cleanup`
+ - Basic optimizations.
+
+If you're just looking for "chibicc-with-only-fixes-to-build-stuff" checkout [widcc](https://github.com/fuhsnn/widcc).
 
 # Project goal
  - Compile correct code correctly.
@@ -35,24 +42,11 @@ Compare size of chibicc binary built with several compilers:
       text       data        bss      total filename
     112363      43987        616     156966 gcc_O0_build
     113867      43156        504     157527 clang_O0_build
-    138747      31913        456     170972 slimcc_build
+    131947      31913        456     164316 slimcc_build
     144896      29536        440     174872 tcc_build
     263659      41163        456     305278 chibicc_build
 ```
 In general, code size is on par with TinyCC but execute 30% slower. Much work to be done!
-
-# Changes over chibicc
- - Written in C99
- - New algorithm for macro expansion, better support for [deep recursion tricks](https://stackoverflow.com/a/70342272)
- - `setjmp.h` compatibility
- - Support `_Static_assert()`, `__has_include`
- - Support C23 `constexpr` and `auto` type inference
- - Support variably-modified types in function prototype (aka VLA parameters)
- - Support VLA auto-deallocation
- - Basic stack reuse optimization
- - Basic register allocation of temporaries
- - Constant folding and basic strength reduction
- - More involved x86-64 instruction selection
 
 # Porting
 musl linux and BSDs should be doable. Check hard-coded paths in `main.c`, and pre-defined macros in `preprocessor.c`.
