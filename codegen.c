@@ -1787,6 +1787,8 @@ static void gen_stmt(Node *node) {
     print_loc(node->tok);
 
   switch (node->kind) {
+  case ND_NULL_STMT:
+    return;
   case ND_IF: {
     int c = count();
     gen_expr(node->cond);

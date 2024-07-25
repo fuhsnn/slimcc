@@ -234,6 +234,7 @@ struct DeferStmt {
 
 // AST node
 typedef enum {
+  ND_NULL_STMT,
   ND_NULL_EXPR, // Do nothing
   ND_ADD,       // +
   ND_SUB,       // -

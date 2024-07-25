@@ -124,7 +124,7 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
-static Node *stmt(Token **rest, Token *tok, bool chained);
+static Node *stmt(Token **rest, Token *tok, bool is_labeled);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
@@ -1890,6 +1890,23 @@ static Node *asm_stmt(Token **rest, Token *tok) {
   return node;
 }
 
+static Node *secondary_block(Token **rest, Token *tok) {
+  Node *node = new_node(ND_BLOCK, tok);
+
+  node->defr_end = current_defr;
+  enter_scope();
+
+  node->body = stmt(rest, tok, true);
+
+  node->defr_start = current_defr;
+  current_defr = node->defr_end;
+  leave_scope();
+
+  if (node->body->kind == ND_RETURN || node->body->kind == ND_GOTO)
+    node->defr_start = node->defr_end;
+  return node;
+}
+
 static void loop_body(Token **rest, Token *tok, Node *node) {
   char *brk = brk_label;
   char *cont = cont_label;
@@ -1899,7 +1916,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
   DeferStmt *defr = brk_defr;
   brk_defr = current_defr;
 
-  node->then = stmt(rest, tok, true);
+  node->then = secondary_block(rest, tok);
 
   brk_label = brk;
   cont_label = cont;
@@ -1921,7 +1938,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 //      | ident ":" stmt
 //      | "{" compound-stmt
 //      | expr-stmt
-static Node *stmt(Token **rest, Token *tok, bool chained) {
+static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   if (equal(tok, "return")) {
     Node *node = new_node(ND_RETURN, tok);
     node->defr_start = current_defr;
@@ -1945,9 +1962,9 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     tok = skip(tok->next, "(");
     node->cond = expr(&tok, tok);
     tok = skip(tok, ")");
-    node->then = stmt(&tok, tok, true);
+    node->then = secondary_block(&tok, tok);
     if (equal(tok, "else"))
-      node->els = stmt(&tok, tok->next, true);
+      node->els = secondary_block(&tok, tok->next);
     *rest = tok;
     return node;
   }
@@ -1970,7 +1987,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     DeferStmt *defr = brk_defr;
     brk_defr = current_defr;
 
-    node->then = stmt(rest, tok, true);
+    node->then = secondary_block(rest, tok);
 
     current_switch = sw;
     brk_label = brk;
@@ -2008,7 +2025,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
       error_tok(tok, "empty case range specified");
 
     tok = skip(tok, ":");
-    if (chained)
+    if (is_labeled)
       node->lhs = stmt(rest, tok, true);
     else
       *rest = tok;
@@ -2029,7 +2046,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     node->label = new_unique_name();
 
     tok = skip(tok->next, ":");
-    if (chained)
+    if (is_labeled)
       node->lhs = stmt(rest, tok, true);
     else
       *rest = tok;
@@ -2143,7 +2160,7 @@ static Node *stmt(Token **rest, Token *tok, bool chained) {
     node->label = strndup(tok->loc, tok->len);
 
     tok = tok->next->next;
-    if (chained)
+    if (is_labeled)
       node->lhs = stmt(rest, tok, true);
     else
       *rest = tok;
@@ -2231,7 +2248,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
 // expr-stmt = expr? ";"
 static Node *expr_stmt(Token **rest, Token *tok) {
   if (consume(rest, tok, ";"))
-    return new_node(ND_BLOCK, tok);
+    return new_node(ND_NULL_STMT, tok);
 
   Node *node = new_node(ND_EXPR_STMT, tok);
   node->lhs = expr(&tok, tok);
