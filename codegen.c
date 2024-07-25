@@ -71,7 +71,7 @@ static void println(char *fmt, ...) {
 
 static long resrvln(void) {
   long loc = ftell(output_file);
-  fprintf(output_file, "                           \n");
+  fprintf(output_file, "                                                       \n");
   return loc;
 }
 
@@ -126,6 +126,10 @@ bool is_trivial_arg(Node *arg) {
 
 static bool is_int_to_int_cast(Node *node) {
   return node->kind == ND_CAST && is_integer(node->ty) && is_integer(node->lhs->ty);
+}
+
+static bool has_defr(Node *node) {
+  return node->defr_start != node->defr_end;
 }
 
 static void clobber_all_regs(void) {
@@ -244,6 +248,10 @@ static int popf_inreg(bool is_xmm64, int reg) {
   return pop_fp(is_xmm64, reg, false);
 }
 
+static int popf(int reg) {
+  return pop_fp(true, reg, true);
+}
+
 static void push_x87(void) {
   push_tmpstack(SL_ST);
 }
@@ -253,6 +261,41 @@ static bool pop_x87(void) {
   insrtln("  fstpt %d(%s)", sl->loc, sl->st_ofs, lvar_ptr);
   println("  fldt %d(%s)", sl->st_ofs, lvar_ptr);
   return true;
+}
+
+static void push_by_ty(Type *ty) {
+  switch (ty->kind) {
+  case TY_LDOUBLE: push_x87(); return;
+  case TY_DOUBLE:
+  case TY_FLOAT: pushf(); return;
+  default: push(); return;
+  }
+}
+
+static void pop_by_ty(Type *ty) {
+  switch (ty->kind) {
+  case TY_LDOUBLE: pop_x87(); return;
+  case TY_DOUBLE:
+  case TY_FLOAT: popf(0); return;
+  default: pop("%rax"); return;
+  }
+}
+
+static void push_copy(int sz) {
+  assert(sz > 0);
+  for (int ofs = ((sz - 1) / 8 * 8); ofs >= 0; ofs -= 8)
+    push_tmpstack(SL_ST);
+}
+
+static void pop_copy(int sz, char *sptr) {
+  assert(sz > 0);
+  int pos;
+  for (int ofs = ((sz - 1) / 8 * 8); ofs >= 0; ofs -= 8) {
+    Slot *sl = pop_tmpstack(1);
+    pos = sl->st_ofs;
+    insrtln("  mov %d(%s), %%rdx; mov %%rdx, %d(%s)", sl->loc, ofs, sptr, sl->st_ofs, lvar_ptr);
+  }
+  println("  lea %d(%s), %s", pos, lvar_ptr, sptr);
 }
 
 // When we load a char or a short value to a register, we always
@@ -1169,6 +1212,11 @@ static void gen_defr(Node *node) {
       defr = defr->next;
       continue;
     }
+    if (defr->kind == DF_CLEANUP_FN) {
+      gen_expr(defr->cleanup_fn);
+      defr = defr->next;
+      continue;
+    }
     internal_error();
   }
 }
@@ -1287,13 +1335,16 @@ static void gen_expr(Node *node) {
         gen_bit_extract(mem->ty, mem->bit_width, 0);
       return;
     }
-
     store(node->ty);
     return;
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
-    gen_defr(node);
+    if (has_defr(node)) {
+      push_by_ty(node->ty);
+      gen_defr(node);
+      pop_by_ty(node->ty);
+    }
     return;
   case ND_CHAIN:
   case ND_COMMA:
@@ -1838,24 +1889,44 @@ static void gen_stmt(Node *node) {
     if (node->lhs)
       gen_stmt(node->lhs);
     return;
-  case ND_RETURN:
-    if (node->lhs) {
-      gen_expr(node->lhs);
-      Type *ty = node->lhs->ty;
-
-      switch (ty->kind) {
-      case TY_STRUCT:
-      case TY_UNION:
-        if (ty->size <= 16)
-          copy_struct_reg();
-        else
-          copy_struct_mem();
-        break;
-      }
+  case ND_RETURN: {
+    if (!node->lhs) {
+      if (has_defr(node))
+        gen_defr(node);
+      println("  jmp 9f");
+      return;
     }
+    gen_expr(node->lhs);
+    Type *ty = node->lhs->ty;
 
+    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
+      if (ty->size <= 16) {
+        if (has_defr(node)) {
+          push_copy(ty->size);
+          gen_defr(node);
+          pop_copy(ty->size, "%rax");
+        }
+        copy_struct_reg();
+        println("  jmp 9f");
+        return;
+      }
+      copy_struct_mem();
+      if (has_defr(node)) {
+        push();
+        gen_defr(node);
+        pop("%rax");
+      }
+      println("  jmp 9f");
+      return;
+    }
+    if (has_defr(node)) {
+      push_by_ty(ty);
+      gen_defr(node);
+      pop_by_ty(ty);
+    }
     println("  jmp 9f");
     return;
+  }
   case ND_EXPR_STMT:
     gen_expr(node->lhs);
     return;

@@ -35,6 +35,7 @@ typedef struct {
   bool is_inline;
   bool is_tls;
   bool is_constexpr;
+  Obj *cleanup_fn;
   int align;
 } VarAttr;
 
@@ -156,6 +157,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
+static Obj *build_fn_param(Node *arg, Token *tok);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -439,6 +441,23 @@ static void attr_aligned(Token *tok, int *align) {
   }
 }
 
+static void attr_cleanup(Token *tok, Obj **fn, bool allow_battr) {
+  if (*fn)
+    return;
+  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
+    if (equal(lst, "cleanup") || equal(lst, "__cleanup__")) {
+      if (!allow_battr && lst->kind == TK_BATTR)
+        continue;
+      Token *tok2 = skip(lst->next, "(");
+      VarScope *sc = find_var(tok2);
+      if (!(sc && sc->var && sc->var->is_function))
+        error_tok(tok2, "cleanup function not found");
+      *fn = sc->var;
+      return;
+    }
+  }
+}
+
 static void attr_packed(Token *tok, Type *ty, bool allow_battr) {
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
     if (equal(lst, "packed") || equal(lst, "__packed__")) {
@@ -488,7 +507,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     SIGNED   = 1 << 17,
     UNSIGNED = 1 << 18,
   };
-
+  Token *start = tok;
   Type *ty = NULL;
   int counter = 0;
   bool is_atomic = false;
@@ -497,9 +516,10 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   bool is_volatile = false;
   bool is_auto = false;
   for (;;) {
-    if (attr)
+    if (attr) {
       attr_aligned(tok, &attr->align);
-
+      attr_cleanup(tok, &attr->cleanup_fn, start == tok);
+    }
     if (!is_typename(tok))
       break;
 
@@ -1092,6 +1112,16 @@ static Node *new_vla(Node *sz, Obj *var, int align) {
   return node;
 }
 
+static void defr_cleanup(Obj *var, Obj *fn, Token *tok) {
+  Node *n = new_unary(ND_FUNCALL, new_var_node(fn, tok), tok);
+  n->lhs->ty = fn->ty;
+  n->ty = ty_void;
+  n->args = build_fn_param(new_unary(ND_ADDR, new_var_node(var, tok), tok), tok);
+
+  DeferStmt *defr2 = new_defr(DF_CLEANUP_FN);
+  defr2->cleanup_fn = n;
+}
+
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   Node *expr = NULL;
@@ -1100,7 +1130,13 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
   for (; comma_list(rest, &tok, ";", !first); first = false) {
     Token *name = NULL;
     int alt_align = attr ? attr->align : 0;
+
+    Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
+    attr_cleanup(tok, &cleanup_fn, false);
+
     Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
+
+    attr_cleanup(tok, &cleanup_fn, true);
 
     if (ty->kind == TY_FUNC) {
       if (!name)
@@ -1144,6 +1180,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       if (equal(tok, "="))
         error_tok(tok, "variable-sized object may not be initialized");
 
+      fn_use_vla = true;
       // Variable length arrays (VLAs) are translated to alloca() calls.
       // For example, `int x[n+2]` is translated to `tmp = n + 2,
       // x = alloca(tmp)`.
@@ -1152,13 +1189,18 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
       DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
       defr->vla = var;
-      fn_use_vla = true;
+
+      if (cleanup_fn)
+        defr_cleanup(var, cleanup_fn, tok);
       continue;
     }
 
     Obj *var = new_lvar(get_ident(name), ty);
     if (alt_align)
       var->align = alt_align;
+
+    if (cleanup_fn)
+      defr_cleanup(var, cleanup_fn, tok);
 
     if (attr && attr->is_constexpr) {
       if (!equal(tok, "="))
@@ -1882,6 +1924,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 static Node *stmt(Token **rest, Token *tok, bool chained) {
   if (equal(tok, "return")) {
     Node *node = new_node(ND_RETURN, tok);
+    node->defr_start = current_defr;
     if (consume(rest, tok->next, ";"))
       return node;
 
@@ -2164,6 +2207,10 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   node->defr_start = current_defr;
   current_defr = node->defr_end;
   leave_scope();
+
+  if (kind == ND_BLOCK)
+    if (cur->kind == ND_RETURN || cur->kind == ND_GOTO)
+      node->defr_start = node->defr_end;
 
   if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
     add_type(cur->lhs);
@@ -3472,6 +3519,21 @@ static Node *postfix(Token **rest, Token *tok) {
   }
 }
 
+static Obj *build_fn_param(Node *arg, Token *tok) {
+  add_type(arg);
+
+  Obj *var;
+  if (is_trivial_arg(arg)) {
+    var = new_var(NULL, arg->ty);
+    var->param_arg = arg;
+  } else {
+    var = new_lvar(NULL, arg->ty);
+    var->param_arg = new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok);
+    add_type(var->param_arg);
+  }
+  return var;
+}
+
 // funcall = (assign ("," assign)*)? ")"
 static Node *funcall(Token **rest, Token *tok, Node *fn) {
   add_type(fn);
@@ -3511,18 +3573,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
         arg = new_cast(arg, pointer_to(arg->ty));
     }
 
-    add_type(arg);
-
-    Obj *var;
-    if (is_trivial_arg(arg)) {
-      var = new_var(NULL, arg->ty);
-      var->param_arg = arg;
-    } else {
-      var = new_lvar(NULL, arg->ty);
-      var->param_arg = new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok);
-      add_type(var->param_arg);
-    }
-    cur = cur->param_next = var;
+    cur = cur->param_next = build_fn_param(arg, tok);
   }
   if (param)
     error_tok(tok, "too few arguments");

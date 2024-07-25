@@ -1438,16 +1438,17 @@ static long is_supported_attr(Token **vendor, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
-  bool vendor_gnu = vendor && *vendor && equal(*vendor, "gnu");
+  bool gnu_if_vendored = !vendor || (vendor && *vendor && equal(*vendor, "gnu"));
 
-  if ((equal(tok, "packed") || equal(tok, "__packed__")) &&
-    (!vendor || vendor_gnu)) {
+  if ((equal(tok, "aligned") || equal(tok, "__aligned__")) && gnu_if_vendored)
     return 1;
-  }
-  if ((equal(tok, "aligned") || equal(tok, "__aligned__")) &&
-    (!vendor || vendor_gnu)) {
+
+  if ((equal(tok, "cleanup") || equal(tok, "__cleanup__")) && gnu_if_vendored)
     return 1;
-  }
+
+  if ((equal(tok, "packed") || equal(tok, "__packed__")) && gnu_if_vendored)
+    return 1;
+
   return 0;
 }
 
