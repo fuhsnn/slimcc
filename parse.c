@@ -3503,7 +3503,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     add_type(arg);
 
     Obj *var;
-    if (opt_optimize && is_trivial_arg(arg)) {
+    if (is_trivial_arg(arg)) {
       var = new_var(NULL, arg->ty);
       var->param_arg = arg;
     } else {

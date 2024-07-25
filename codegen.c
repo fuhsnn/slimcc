@@ -118,7 +118,9 @@ static bool is_lvar(Node *node) {
 }
 
 bool is_trivial_arg(Node *arg) {
-  return (arg->kind == ND_VAR && arg->var->is_local) ||
+  if (!opt_optimize)
+    return false;
+  return is_lvar(arg) || (arg->kind == ND_ADDR && is_lvar(arg->lhs)) ||
     (arg->kind == ND_NUM && arg->ty->kind != TY_LDOUBLE) || is_nullptr(arg);
 }
 
@@ -924,20 +926,30 @@ static void place_stack_args(Node *node) {
     if (!var->pass_by_stack)
       continue;
 
-    if (var->param_arg->kind == ND_NUM || is_nullptr(var->param_arg)) {
-      if (is_flonum(var->param_arg->ty))
-        load_fval(var->param_arg->ty, var->param_arg->fval);
-      else
-        load_val(var->param_arg->ty, var->param_arg->val);
-      store2(var->param_arg->ty, var->stack_offset, "%rsp");
-      continue;
+    Node *arg = var->param_arg;
+    if (is_trivial_arg(arg)) {
+      if (arg->kind == ND_NUM || is_nullptr(arg)) {
+        if (is_flonum(arg->ty))
+          load_fval(arg->ty, arg->fval);
+        else
+          load_val(arg->ty, arg->val);
+        store2(arg->ty, var->stack_offset, "%rsp");
+        continue;
+      }
+      if (arg->kind == ND_ADDR && is_lvar(arg->lhs)) {
+        gen_addr(arg->lhs);
+        store2(arg->ty, var->stack_offset, "%rsp");
+        continue;
+      }
+      if (!is_lvar(arg))
+        internal_error();
     }
 
     int ofs;
     char *ptr;
-    if (is_trivial_arg(var->param_arg)) {
-      ofs = var->param_arg->var->ofs;
-      ptr = var->param_arg->var->ptr;
+    if (is_lvar(arg)) {
+      ofs = arg->var->ofs;
+      ptr = arg->var->ptr;
     } else {
       ofs = var->ofs;
       ptr = var->ptr;
@@ -971,19 +983,32 @@ static void place_reg_args(Node *node, bool rtn_by_stk) {
     if (var->pass_by_stack)
       continue;
 
-    if (var->param_arg->kind == ND_NUM || is_nullptr(var->param_arg)) {
-      if (is_flonum(var->param_arg->ty))
-        load_fval2(var->param_arg->ty, var->param_arg->fval, fp++);
-      else
-        load_val2(var->param_arg->ty, var->param_arg->val, argreg32[gp], argreg64[gp]), gp++;
-      continue;
+    Node *arg = var->param_arg;
+    if (is_trivial_arg(arg)) {
+      if (arg->kind == ND_NUM || is_nullptr(arg)) {
+        if (is_flonum(arg->ty))
+          load_fval2(arg->ty, arg->fval, fp++);
+        else
+          load_val2(arg->ty, arg->val, argreg32[gp], argreg64[gp]), gp++;
+        continue;
+      }
+      if (arg->kind == ND_ADDR && is_lvar(arg->lhs)) {
+        Obj *var2 = arg->lhs->var;
+        if (var2->ty->kind == TY_VLA)
+          println("  mov %d(%s), %s", var2->ofs, var2->ptr, argreg64[gp++]);
+        else
+          println("  lea %d(%s), %s", var2->ofs, var2->ptr, argreg64[gp++]);
+        continue;
+      }
+      if (!is_lvar(arg))
+        internal_error();
     }
 
     int ofs;
     char *ptr;
-    if (is_trivial_arg(var->param_arg)) {
-      ofs = var->param_arg->var->ofs;
-      ptr = var->param_arg->var->ptr;
+    if (is_lvar(arg)) {
+      ofs = arg->var->ofs;
+      ptr = arg->var->ptr;
     } else {
       ofs = var->ofs;
       ptr = var->ptr;
