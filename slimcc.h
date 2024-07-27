@@ -21,7 +21,10 @@
 #define MAX(x, y) ((x) < (y) ? (y) : (x))
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-#ifdef __has_attribute
+#if defined(__GNUC__) && (__GNUC__ >= 3)
+#define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
+#define NORETURN __attribute__((noreturn))
+#elif defined(__has_attribute)
 #if __has_attribute(format)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
 #endif
