@@ -91,6 +91,7 @@ typedef enum {
   TK_IDENT,   // Identifiers
   TK_PUNCT,   // Punctuators
   TK_KEYWORD, // Keywords
+  TK_TYPEKW,  // Keywords
   TK_STR,     // String literals
   TK_NUM,     // Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
@@ -150,7 +151,7 @@ Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end);
 File *add_input_file(char *path, char *content);
 void convert_pp_number(Token *tok);
-bool is_keyword(Token *tok);
+TokenKind ident_keyword(Token *tok);
 
 #define internal_error() \
   error("internal error at %s:%d", __FILE__, __LINE__)

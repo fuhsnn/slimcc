@@ -238,6 +238,13 @@ static Node *new_ulong(long val, Token *tok) {
   return node;
 }
 
+static Node *new_boolean(bool val, Token *tok) {
+  Node *node = new_node(ND_NUM, tok);
+  node->val = val;
+  node->ty = ty_bool;
+  return node;
+}
+
 static Node *new_var_node(Obj *var, Token *tok) {
   Node *node = new_node(ND_VAR, tok);
   node->var = var;
@@ -427,6 +434,14 @@ static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comm
   return true;
 }
 
+static bool equal_kw(Token *tok, char *op) {
+  return tok->kind == TK_KEYWORD && equal(tok, op);
+}
+
+static bool equal_tykw(Token *tok, char *op) {
+  return tok->kind == TK_TYPEKW && equal(tok, op);
+}
+
 static void attr_aligned(Token *tok, int *align) {
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
     if (equal(lst, "aligned") || equal(lst, "__aligned__")) {
@@ -526,7 +541,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     // Handle storage class specifiers.
     if (equal(tok, "typedef") || equal(tok, "static") || equal(tok, "extern") ||
         equal(tok, "inline") || equal(tok, "_Thread_local") || equal(tok, "__thread") ||
-        equal(tok, "constexpr")) {
+        equal_tykw(tok, "thread_local") || equal_tykw(tok, "constexpr")) {
       if (!attr)
         error_tok(tok, "storage class specifier is not allowed in this context");
 
@@ -587,7 +602,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
-    if (equal(tok, "_Alignas")) {
+    if (equal(tok, "_Alignas") || equal_tykw(tok, "alignas")) {
       if (!attr)
         error_tok(tok, "_Alignas is not allowed in this context");
       tok = skip(tok->next, "(");
@@ -612,8 +627,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     }
 
     if (equal(tok, "struct") || equal(tok, "union") || equal(tok, "enum") ||
-        equal(tok, "typeof") || equal(tok, "__typeof") || equal(tok, "__typeof__") ||
-        equal(tok, "typeof_unqual")) {
+        equal(tok, "__typeof") || equal(tok, "__typeof__") ||
+        equal_tykw(tok, "typeof") || equal_tykw(tok, "typeof_unqual")) {
       if (counter)
         error_tok(tok, "invalid type");
 
@@ -635,7 +650,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     // Handle built-in types.
     if (equal(tok, "void"))
       counter += VOID;
-    else if (equal(tok, "_Bool"))
+    else if (equal(tok, "_Bool") || equal_tykw(tok, "bool"))
       counter += BOOL;
     else if (equal(tok, "char"))
       counter += CHAR;
@@ -933,7 +948,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
     return func_params(rest, tok->next, ty);
 
   if (consume(&tok, tok, "[")) {
-    if (tok->kind == TK_KEYWORD) {
+    if (tok->kind == TK_TYPEKW) {
       Token *start = tok;
       pointer_qualifiers(&tok, tok, &(Type){0});
       consume(&tok, tok, "static");
@@ -1834,29 +1849,7 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
 
 // Returns true if a given token represents a type.
 static bool is_typename(Token *tok) {
-  static HashMap map;
-
-  if (map.capacity == 0) {
-    static char *kw[] = {
-      "void", "_Bool", "char", "short", "int", "long", "struct", "union",
-      "typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
-      "const", "volatile", "auto", "register", "restrict", "__restrict",
-      "__restrict__", "_Noreturn", "float", "double", "inline", "__auto_type",
-      "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__"
-    };
-
-    for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
-      hashmap_put(&map, kw[i], (void *)1);
-
-    if (opt_std == STD_NONE || opt_std >= STD_C23)
-      hashmap_put(&map, "typeof", (void *)1);
-    if (opt_std >= STD_C23) {
-      hashmap_put(&map, "constexpr", (void *)1);
-      hashmap_put(&map, "typeof_unqual", (void *)1);
-    }
-  }
-
-  return hashmap_get2(&map, tok->loc, tok->len) || find_typedef(tok);
+  return tok->kind == TK_TYPEKW || find_typedef(tok);
 }
 
 static void static_assertion(Token **rest, Token *tok) {
@@ -2066,7 +2059,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
       Node *expr = declaration(&tok, tok, basety, NULL);
       if (expr)
         node->init = new_unary(ND_EXPR_STMT, expr, tok);
-    } else if (equal(tok, "_Static_assert")) {
+    } else if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
     } else {
       node->init = expr_stmt(&tok, tok);
@@ -2111,8 +2104,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (tok->kind == TK_KEYWORD &&
-    (equal(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")))
+  if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__"))
     return asm_stmt(rest, tok);
 
   if (equal(tok, "goto")) {
@@ -2187,7 +2179,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   enter_scope();
 
   while (!equal(tok, "}")) {
-    if (equal(tok, "_Static_assert")) {
+    if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
       continue;
     }
@@ -3181,7 +3173,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
 
   while (!equal(tok, "}")) {
-    if (equal(tok, "_Static_assert")) {
+    if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
       continue;
     }
@@ -3735,7 +3727,7 @@ static Node *primary(Token **rest, Token *tok) {
     return new_ulong(ty->size, start);
   }
 
-  if (equal(tok, "_Alignof")) {
+  if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
     tok = skip(tok->next, "(");
     if (!is_typename(tok))
       error_tok(tok, "expected type name");
@@ -3952,6 +3944,16 @@ static Node *primary(Token **rest, Token *tok) {
     Node *n = new_var_node(var, tok);
     add_type(n);
     return n;
+  }
+
+  if (equal_kw(tok, "false")) {
+    *rest = tok->next;
+    return new_boolean(0, tok);
+  }
+
+  if (equal_kw(tok, "true")) {
+    *rest = tok->next;
+    return new_boolean(1, tok);
   }
 
   if (tok->kind == TK_PP_NUM)
@@ -4176,7 +4178,7 @@ Obj *parse(Token *tok) {
   globals = NULL;
 
   while (tok->kind != TK_EOF) {
-    if (equal(tok, "_Static_assert")) {
+    if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
       continue;
     }

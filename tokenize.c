@@ -159,36 +159,47 @@ static int read_punct(char *p) {
   return ispunct(*p) ? 1 : 0;
 }
 
-bool is_keyword(Token *tok) {
+TokenKind ident_keyword(Token *tok) {
   static HashMap map;
 
   if (map.capacity == 0) {
     static char *kw[] = {
-      "return", "if", "else", "for", "while", "int", "sizeof", "char",
-      "struct", "union", "short", "long", "void", "typedef", "_Bool",
-      "enum", "static", "goto", "break", "continue", "switch", "case",
-      "default", "extern", "_Alignof", "_Alignas", "do", "signed",
-      "unsigned", "const", "volatile", "auto", "register", "restrict",
-      "__restrict", "__restrict__", "_Noreturn", "float", "double",
-      "_Thread_local", "__thread", "_Atomic", "__attribute__",
-      "__asm", "__asm__", "__typeof", "__typeof__", "inline",
-      "__auto_type"
+      "return", "if", "else", "for", "while", "do", "goto", "break", "continue",
+      "switch", "case", "default", "_Alignof", "sizeof", "__asm", "__asm__",
+      "_Static_assert"
     };
-
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
-      hashmap_put(&map, kw[i], (void *)1);
+      hashmap_put(&map, kw[i], (void *)TK_KEYWORD);
+
+    static char *ty_kw[] = {
+      "void", "_Bool", "char", "short", "int", "long", "struct", "union",
+      "typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
+      "const", "volatile", "auto", "register", "restrict", "__restrict",
+      "__restrict__", "_Noreturn", "float", "double", "inline", "__auto_type",
+      "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__",
+    };
+    for (int i = 0; i < sizeof(ty_kw) / sizeof(*ty_kw); i++)
+      hashmap_put(&map, ty_kw[i], (void *)TK_TYPEKW);
 
     if (opt_std == STD_NONE)
-      hashmap_put(&map, "asm", (void *)1);
+      hashmap_put(&map, "asm", (void *)TK_KEYWORD);
     if (opt_std == STD_NONE || opt_std >= STD_C23)
-      hashmap_put(&map, "typeof", (void *)1);      
+      hashmap_put(&map, "typeof", (void *)TK_TYPEKW);
     if (opt_std >= STD_C23) {
-      hashmap_put(&map, "constexpr", (void *)1);
-      hashmap_put(&map, "typeof_unqual", (void *)1);
+      hashmap_put(&map, "alignof", (void *)TK_KEYWORD);
+      hashmap_put(&map, "false", (void *)TK_KEYWORD);
+      hashmap_put(&map, "true", (void *)TK_KEYWORD);
+      hashmap_put(&map, "static_assert", (void *)TK_KEYWORD);
+
+      hashmap_put(&map, "alignas", (void *)TK_TYPEKW);
+      hashmap_put(&map, "bool", (void *)TK_TYPEKW);
+      hashmap_put(&map, "constexpr", (void *)TK_TYPEKW);
+      hashmap_put(&map, "thread_local", (void *)TK_TYPEKW);
+      hashmap_put(&map, "typeof_unqual", (void *)TK_TYPEKW);
     }
   }
-
-  return hashmap_get2(&map, tok->loc, tok->len);
+  void *val = hashmap_get2(&map, tok->loc, tok->len);
+  return val ? (TokenKind)(intptr_t)val : TK_IDENT;
 }
 
 static int read_escaped_char(char **new_pos, char *p) {

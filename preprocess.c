@@ -309,10 +309,9 @@ static Token *read_const_expr(Token *tok) {
       continue;
     }
 
-    // Replace remaining non-macro identifiers with "0" before
-    // evaluating a constant expression. For example, `#if foo` is
-    // equivalent to `#if 0` if foo is not defined.
-    if (tok->kind == TK_IDENT)
+    if (opt_std >= STD_C23 && equal(tok, "true"))
+      to_int_token(tok, 1);
+    else if (tok->kind == TK_IDENT)
       to_int_token(tok, 0);
 
     cur = cur->next = tok;
@@ -1509,8 +1508,8 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (tok->kind == TK_IDENT && is_keyword(tok))
-      tok->kind = TK_KEYWORD;
+    if (tok->kind == TK_IDENT)
+      tok->kind = ident_keyword(tok);
 
     if (tok->kind == TK_STR && tok->next->kind == TK_STR)
       join_adjacent_string_literals(tok);
