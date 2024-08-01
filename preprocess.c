@@ -813,6 +813,16 @@ char *search_include_paths(char *filename) {
   return NULL;
 }
 
+static char *search_include_paths2(char *filename, Token *start, bool is_dquote) {
+  if (filename[0] != '/' && is_dquote) {
+    char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
+    if (file_exists(path)) {
+      return path;
+    }
+  }
+  return search_include_paths(filename);
+}
+
 static char *search_include_next(char *filename) {
   for (; include_next_idx < include_paths.len; include_next_idx++) {
     char *path = format("%s/%s", include_paths.data[include_next_idx], filename);
@@ -950,25 +960,15 @@ static Token *directives(Token **cur, Token *start) {
   if (equal(tok, "include")) {
     bool is_dquote;
     char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
-    if (filename[0] != '/' && is_dquote) {
-      char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
-      if (file_exists(path)) {
-        tok = include_file(tok, path, start->next->next);
-        return tok;
-      }
-    }
-
-    char *path = search_include_paths(filename);
-    tok = include_file(tok, path ? path : filename, start->next->next);
-    return tok;
+    char *path = search_include_paths2(filename, start, is_dquote);
+    return include_file(tok, path ? path : filename, start->next->next);
   }
 
   if (equal(tok, "include_next")) {
     bool ignore;
     char *filename = read_include_filename(split_line(&tok, tok->next), &ignore);
     char *path = search_include_next(filename);
-    tok = include_file(tok, path ? path : filename, start->next->next);
-    return tok;
+    return include_file(tok, path ? path : filename, start->next->next);
   }
 
   if (equal(tok, "define")) {
@@ -1216,14 +1216,7 @@ static Token *has_include_macro(Token *start) {
 
   bool is_dquote;
   char *filename = read_include_filename(split_paren(&tok, tok), &is_dquote);
-
-  bool found = false;
-  if (filename[0] != '/' && is_dquote) {
-    char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
-    found = file_exists(path);
-  }
-  if (!found)
-    found = search_include_paths(filename);
+  bool found = search_include_paths2(filename, start, is_dquote);
 
   pop_macro_lock_until(start, tok);
   Token *tok2 = new_num_token(found, start);
