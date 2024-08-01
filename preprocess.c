@@ -227,7 +227,7 @@ static Token *split_line(Token **rest, Token *tok) {
   return head.next;
 }
 
-static Token *split_paren(Token **rest, Token *tok) {
+static Token *split_paren2(Token **rest, Token *tok, Token *next) {
   Token *start = tok;
   Token head = {0};
   Token *cur = &head;
@@ -245,8 +245,15 @@ static Token *split_paren(Token **rest, Token *tok) {
     tok = tok->next;
   }
   *rest = tok->next;
-  cur->next = to_eof(tok);
+  if (next)
+    cur->next = next;
+  else
+    cur->next = to_eof(tok);
   return head.next;
+}
+
+static Token *split_paren(Token **rest, Token *tok) {
+  return split_paren2(rest, tok, NULL);
 }
 
 static Token *split_bracket(Token **rest, Token *tok) {
@@ -276,10 +283,15 @@ static Token *new_num_token(int val, Token *tmpl) {
   return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
 }
 
-static void to_int_token(Token *tok, int64_t val) {
+static Token *new_comma_token(Token *tmpl) {
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, ","), NULL);
+}
+
+static Token *to_int_token(Token *tok, int64_t val) {
   tok->kind = TK_NUM;
   tok->val = val;
   tok->ty = ty_int;
+  return tok;
 }
 
 static Token *read_const_expr(Token *tok) {
@@ -325,15 +337,15 @@ static Token *read_const_expr(Token *tok) {
 }
 
 // Read and evaluate a constant expression.
-static bool eval_const_expr(Token **rest, Token *start) {
-  Token *tok = split_line(rest, start->next);
+static int64_t eval_const_expr(Token *tok) {
+  Token *start = tok;
   tok = read_const_expr(tok);
 
   if (tok->kind == TK_EOF)
     error_tok(start, "no expression");
 
   Token *end;
-  bool val = !!const_expr(&end, tok);
+  int64_t val = const_expr(&end, tok);
 
   if (end->kind != TK_EOF)
     error_tok(end, "extra token");
@@ -832,8 +844,7 @@ static char *search_include_next(char *filename) {
   return NULL;
 }
 
-// Read an #include argument.
-static char *read_include_filename(Token *tok, bool *is_dquote) {
+static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
   // Pattern 3: #include FOO
   // In this case FOO must be macro-expanded to either
   // a single string token or a sequence of "<" ... ">".
@@ -848,7 +859,10 @@ static char *read_include_filename(Token *tok, bool *is_dquote) {
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
     *is_dquote = true;
-    skip_line(tok->next);
+    if (rest)
+      *rest = tok->next;
+    else
+      skip_line(tok->next);
     return strndup(tok->loc + 1, tok->len - 2);
   }
 
@@ -864,11 +878,19 @@ static char *read_include_filename(Token *tok, bool *is_dquote) {
         error_tok(tok, "expected '>'");
 
     *is_dquote = false;
-    skip_line(tok->next);
+    if (rest)
+      *rest = tok->next;
+    else
+      skip_line(tok->next);
     return join_tokens(start->next, tok);
   }
 
   error_tok(tok, "expected a filename");
+}
+
+// Read an #include argument.
+static char *read_include_filename(Token *tok, bool *is_dquote) {
+  return read_filename(NULL, tok, is_dquote);
 }
 
 static Token *include_file(Token *tok, char *path, Token *filename_tok) {
@@ -893,6 +915,84 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok) {
 
   end->next = tok;
   return start;
+}
+
+static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
+  Token *limit_seq = NULL;
+  Token *if_empty_seq = NULL;
+  Token *prefix_seq = NULL;
+  Token *suffix_seq = NULL;
+
+  for (;;) {
+    if (equal(tok, "limit"))
+      tok = skip_paren(limit_seq = skip(tok->next, "("));
+    else if (equal(tok, "if_empty"))
+      tok = skip_paren(if_empty_seq = skip(tok->next, "("));
+    else if (equal(tok, "prefix"))
+      tok = skip_paren(prefix_seq = skip(tok->next, "("));
+    else if (equal(tok, "suffix"))
+      tok = skip_paren(suffix_seq = skip(tok->next, "("));
+    else
+      break;
+  }
+  Token *dummy;
+  int64_t limit = 0;
+  if (limit_seq)
+    limit = eval_const_expr(split_paren2(&dummy, limit_seq, NULL));
+
+  if (!cont) {
+    enum {
+      EMBED_NOT_FOUND = 0,
+      EMBED_FOUND = 1,
+      EMBED_EMPTY = 2
+    };
+
+    if (tok->kind != TK_EOF)
+      return to_int_token(start, EMBED_NOT_FOUND);
+
+    FILE *fp = fopen(path, "r");
+    if (!fp)
+      return to_int_token(start, EMBED_NOT_FOUND);
+    bool is_empty = !fread(&(char){0}, 1, sizeof(char), fp);
+    fclose(fp);
+    if (is_empty || (limit_seq && limit == 0))
+      return to_int_token(start, EMBED_EMPTY);
+    return to_int_token(start, EMBED_FOUND);
+  }
+  if (tok->kind != TK_EOF)
+    error_tok(start, "unknown embed parameter");
+
+  FILE *fp = fopen(path, "r");
+  if (!fp)
+    error_tok(start, "%s: cannot open file: %s", path, strerror(errno));
+
+  Token head;
+  Token *cur = &head;
+  for (; !limit_seq || limit > 0; limit--) {
+    unsigned char buf;
+    if (!fread(&buf, 1, sizeof(buf), fp))
+      break;
+
+    if (cur != &head) {
+      cur = cur->next = new_comma_token(start);
+      cur->at_bol = false;
+    }
+    cur = cur->next = new_num_token(buf, start);
+    cur->at_bol = false;
+  }
+  fclose(fp);
+  if (cur == &head) {
+    if (if_empty_seq)
+      return split_paren2(&dummy, if_empty_seq, cont);
+    return cont;
+  }
+  if (prefix_seq)
+    head.next = split_paren2(&dummy, prefix_seq, head.next);
+  if (suffix_seq)
+    cur->next = split_paren2(&dummy, suffix_seq, cont);
+  else
+    cur->next = cont;
+  return head.next;
 }
 
 // Read #line arguments
@@ -957,6 +1057,14 @@ static Token *preprocess2(Token *tok) {
 static Token *directives(Token **cur, Token *start) {
   Token *tok = start->next;
 
+  if (equal(tok, "embed")) {
+    Token *cont;
+    bool is_dquote;
+    char *filename = read_filename(&tok, split_line(&cont, tok->next), &is_dquote);
+    char *path = search_include_paths2(filename, start, is_dquote);
+    return embed_file(cont, tok, path ? path : filename, start->next->next);
+  }
+
   if (equal(tok, "include")) {
     bool is_dquote;
     char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
@@ -986,7 +1094,7 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "if")) {
-    bool val = eval_const_expr(&tok, tok);
+    bool val = eval_const_expr(split_line(&tok, tok->next));
     push_cond_incl(start, val);
     if (!val)
       tok = skip_cond_incl(tok);
@@ -1016,7 +1124,7 @@ static Token *directives(Token **cur, Token *start) {
       error_tok(start, "stray #elif");
     cond_incl->ctx = IN_ELIF;
 
-    if (!cond_incl->included && eval_const_expr(&tok, tok))
+    if (!cond_incl->included && eval_const_expr(split_line(&tok, tok->next)))
       cond_incl->included = true;
     else
       tok = skip_cond_incl(tok);
@@ -1224,6 +1332,20 @@ static Token *has_include_macro(Token *start) {
   return tok2;
 }
 
+static Token *has_embed_macro(Token *start) {
+  Token *tok = skip(start->next, "(");
+  Token *end;
+
+  bool is_dquote;
+  char *filename = read_filename(&tok, split_paren(&end, tok), &is_dquote);
+  char *path = search_include_paths2(filename, start, is_dquote);
+  Token *tok2 = embed_file(NULL, tok, path ? path : filename, start->next->next);
+
+  pop_macro_lock_until(start, end);
+  tok2->next = end;
+  return tok2;
+}
+
 static Token *has_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
@@ -1306,6 +1428,9 @@ void init_macros(void) {
   define_macro("__SIZEOF_SHORT__", "2");
   define_macro("__SIZEOF_SIZE_T__", "8");
   define_macro("__SIZE_TYPE__", "unsigned long");
+  define_macro("__STDC_EMBED_NOT_FOUND__", "0");
+  define_macro("__STDC_EMBED_FOUND__", "1");
+  define_macro("__STDC_EMBED_EMPTY__", "2");
   define_macro("__STDC_HOSTED__", "1");
   define_macro("__STDC_NO_COMPLEX__", "1");
   define_macro("__STDC_UTF_16__", "1");
@@ -1351,6 +1476,7 @@ void init_macros(void) {
   add_builtin("__has_c_attribute", has_c_attribute_macro);
   add_builtin("__has_builtin", has_builtin_macro);
   add_builtin("__has_include", has_include_macro);
+  add_builtin("__has_embed", has_embed_macro);
 
   time_t now = time(NULL);
   struct tm *tm = localtime(&now);
