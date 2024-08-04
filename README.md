@@ -1,7 +1,7 @@
 This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with [fixes](https://github.com/fuhsnn/slimcc/issues?q=is%3Aissue+is%3Aclosed+label%3Aupstream) and improvements, including:
- - C99 features: VLA parameters, VLA de-allocation.
- - C11 features: `_Static_assert()`, over-aligned locals.
- - C23 features: `constexpr`, type-inferrence, digit seperators, etc.
+ - C99 features: VLA parameters, VLA de-allocation, K&R old-style funtions.
+ - C11 features: `_Static_assert()`, over-aligned locals, `_Generic` with qualifiers.
+ - C23 features: `constexpr`, `#embed`, `auto` type-inferrence, etc.
  - GNU features: `cleanup`
  - Basic optimizations.
 
@@ -25,7 +25,7 @@ make test-stage2 -j
 Run it in base directory like `CC=~/slimcc/slimcc`.
 
 # What can it build?
-I regularly attempt to keep up with latest versions of Curl, Git, Python, PostgreSQL, Sqlite, Vim etc.
+I regularly keep up with latest versions of Curl, Git, Python, PostgreSQL, Sqlite, Vim etc.
 
 Check out [widcc's list](https://github.com/fuhsnn/widcc?tab=readme-ov-file#building-real-world-projects) for detailed build scripts.
 
