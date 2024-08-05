@@ -2531,8 +2531,14 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
 
 static void emit_data(Obj *prog) {
   for (Obj *var = prog; var; var = var->next) {
-    if (var->is_function || !var->is_definition)
+    if (!var->is_definition)
       continue;
+
+    if (var->is_function) {
+      if (var->is_live)
+        emit_data(var->static_lvars);
+      continue;
+    }
 
     if (var->is_static)
       println("  .local \"%s\"", var->name);
