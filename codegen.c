@@ -2548,10 +2548,15 @@ static void emit_data(Obj *prog) {
     int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
       ? MAX(16, var->align) : var->align;
 
-    // Common symbol
-    if (opt_fcommon && var->is_tentative) {
-      println("  .comm \"%s\", %d, %d", var->name, var->ty->size, align);
-      continue;
+    if (var->is_tentative) {
+      if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
+        var->ty->size = var->ty->base->size;
+
+      // Common symbol
+      if (opt_fcommon) {
+        println("  .comm \"%s\", %d, %d", var->name, var->ty->size, align);
+        continue;
+      }
     }
 
     // .data or .tdata

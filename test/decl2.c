@@ -14,6 +14,8 @@ int fn(float), var1 = 7, fn2(void), var2 = 11;
 int tentative_var;
 int tentative_var;
 
+short incomplete_tentative_arr[];
+
 int main(void) {
   {
     ASSERT(7, b6_);
@@ -36,6 +38,8 @@ int main(void) {
   }
 
   ASSERT(0, tentative_var);
+
+  ASSERT(0, incomplete_tentative_arr[0]);
 
   printf("OK\n");
 }
