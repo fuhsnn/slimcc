@@ -325,6 +325,12 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (!strcmp(argv[i], "-pthread")) {
+      define("_REENTRANT");
+      strarray_push(&input_paths, "-lpthread");
+      continue;
+    }
+
     if (!strcmp(argv[i], "-static")) {
       opt_static = true;
       strarray_push(&ld_extra_args, "-static");
