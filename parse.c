@@ -4136,10 +4136,14 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     if (!name)
       error_tok(tok, "variable name omitted");
 
+    bool is_definition = !attr->is_extern;
+    if (!is_definition && equal(tok, "="))
+      is_definition = true;
+
     VarScope *sc = find_var(name);
     Obj *var;
     if (sc && sc->var) {
-      if (attr->is_extern)
+      if (!is_definition)
         continue;
       if (sc->var->is_definition && !sc->var->is_tentative)
         continue;
@@ -4149,7 +4153,7 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     } else {
       var = new_gvar(get_ident(name), ty);
     }
-    var->is_definition = !attr->is_extern;
+    var->is_definition = is_definition;
     var->is_static = attr->is_static;
     var->is_tls = attr->is_tls;
     if (alt_align)
@@ -4164,7 +4168,7 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     }
     if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
-    else if (!attr->is_extern && !attr->is_tls)
+    else if (is_definition && !attr->is_tls)
       var->is_tentative = true;
   }
   return tok;
