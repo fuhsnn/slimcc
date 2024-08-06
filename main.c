@@ -89,6 +89,21 @@ static FileType parse_opt_x(char *s) {
   error("<command line>: unknown argument for -x: %s", s);
 }
 
+static void set_std(int val) {
+  if (val == 89 || val == 90)
+    opt_std = STD_C89;
+  else if (val == 99)
+    opt_std = STD_C99;
+  else if (val == 11)
+    opt_std = STD_C11;
+  else if (val == 17 || val == 18)
+    opt_std = STD_C17;
+  else if (val == 23)
+    opt_std = STD_C23;
+  else
+    error("unknown c standard");
+}
+
 static char *quote_makefile(char *s) {
   char *buf = calloc(1, strlen(s) * 2 + 1);
 
@@ -354,20 +369,21 @@ static void parse_args(int argc, char **argv) {
         opt_optimize = true;
       continue;
     }
-    if (!strncmp(argv[i], "-std=c", 6)) {
-      int val = strtoul(argv[i] + 6, NULL, 10);
-      if (val == 89 || val == 90)
-        opt_std = STD_C89;
-      else if (val == 99)
-        opt_std = STD_C99;
-      else if (val == 11)
-        opt_std = STD_C11;
-      else if (val == 17 || val == 18)
-        opt_std = STD_C17;
-      else if (val == 23)
-        opt_std = STD_C23;
-      else
+
+    if (!strcmp(argv[i], "-ansi")) {
+      set_std(89);
+      define("__STRICT_ANSI__");
+      continue;
+    } else if (!strncmp(argv[i], "-std=c", 6)) {
+      set_std(strtoul(argv[i] + 6, NULL, 10));
+      continue;
+    } else if (!strncmp(argv[i], "--std=c", 7)) {
+      set_std(strtoul(argv[i] + 7, NULL, 10));
+      continue;
+    } else if (!strcmp(argv[i], "--std")) {
+      if (*argv[++i] != 'c')
         error("unknown c standard");
+      set_std(strtoul(argv[i] + 1, NULL, 10));
       continue;
     }
 
