@@ -11,6 +11,9 @@ int *p1 = arr[1];
 
 int fn(float), var1 = 7, fn2(void), var2 = 11;
 
+int tentative_var;
+int tentative_var;
+
 int main(void) {
   {
     ASSERT(7, b6_);
@@ -31,6 +34,8 @@ int main(void) {
     ASSERT(22, (*&arr2)[1]);
     ASSERT(11, (**&arr2));
   }
+
+  ASSERT(0, tentative_var);
 
   printf("OK\n");
 }

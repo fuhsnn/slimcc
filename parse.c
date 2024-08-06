@@ -4136,7 +4136,19 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     if (!name)
       error_tok(tok, "variable name omitted");
 
-    Obj *var = new_gvar(get_ident(name), ty);
+    VarScope *sc = find_var(name);
+    Obj *var;
+    if (sc && sc->var) {
+      if (attr->is_extern)
+        continue;
+      if (sc->var->is_definition && !sc->var->is_tentative)
+        continue;
+      var = sc->var;
+      var->is_tentative = false;
+      var->ty = ty;
+    } else {
+      var = new_gvar(get_ident(name), ty);
+    }
     var->is_definition = !attr->is_extern;
     var->is_static = attr->is_static;
     var->is_tls = attr->is_tls;
@@ -4156,33 +4168,6 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
       var->is_tentative = true;
   }
   return tok;
-}
-
-// Remove redundant tentative definitions.
-static void scan_globals(void) {
-  Obj head;
-  Obj *cur = &head;
-
-  for (Obj *var = globals; var; var = var->next) {
-    if (!var->is_tentative) {
-      cur = cur->next = var;
-      continue;
-    }
-
-    // Find another definition of the same identifier.
-    Obj *var2 = globals;
-    for (; var2; var2 = var2->next)
-      if (var != var2 && var2->is_definition && !strcmp(var->name, var2->name))
-        break;
-
-    // If there's another definition, the tentative definition
-    // is redundant
-    if (!var2)
-      cur = cur->next = var;
-  }
-
-  cur->next = NULL;
-  globals = head.next;
 }
 
 // program = (typedef | function-definition | global-variable)*
@@ -4212,7 +4197,5 @@ Obj *parse(Token *tok) {
     if (var->is_root)
       mark_live(var);
 
-  // Remove redundant tentative definitions.
-  scan_globals();
   return globals;
 }
