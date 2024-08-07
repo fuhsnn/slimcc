@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <libgen.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -181,6 +182,8 @@ struct Obj {
   bool is_compound_lit;
   int align;     // alignment
 
+  Token *asm_str;
+
   // Local variable
   int ofs;
   char *ptr;
@@ -238,6 +241,40 @@ struct DeferStmt {
   Obj *vla;
   Node *cleanup_fn;
   Node *stmt;
+};
+
+typedef enum {
+  ASMOP_NULL = 0,
+  ASMOP_NUM,
+  ASMOP_SYMBOLIC,
+  ASMOP_MEM,
+  ASMOP_REG,
+  ASMOP_FLAG,
+} AsmOpKind;
+
+typedef struct AsmParam AsmParam;
+struct AsmParam {
+  AsmParam *next;
+  AsmOpKind kind;
+  Token *name;
+  Token *constraint;
+  char *flag;
+  AsmParam *match;
+  Node *arg;
+  Obj *ptr;
+  Obj *var;
+  int64_t val;
+  int label_id;
+  int reg;
+  bool is_mem;
+  bool is_gp;
+  bool is_fp;
+  bool is_x87;
+  bool is_early_clobber;
+  bool is_gp_highbyte;
+  bool is_gp_legacy;
+  bool is_gp_free;
+  bool is_clobbered_x87;
 };
 
 // AST node
@@ -351,7 +388,15 @@ struct Node {
   DeferStmt *defr_end;
 
   // "asm" string literal
-  char *asm_str;
+  Token *asm_str;
+  AsmParam *asm_outputs;
+  AsmParam *asm_inputs;
+  Token *asm_clobbers;
+  AsmParam *asm_labels;
+  int output_tmp_gp;
+  int alt_frame_ptr;
+  int alt_frame_ptr2;
+  int clobber_mask;
 
   // Atomic compare-and-swap
   Node *cas_addr;
@@ -392,6 +437,8 @@ Node *new_cast(Node *expr, Type *ty);
 int64_t const_expr(Token **rest, Token *tok);
 Obj *parse(Token *tok);
 Token *skip_paren(Token *tok);
+Obj *new_lvar(char *name, Type *ty);
+
 //
 // type.c
 //
@@ -525,6 +572,7 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_atomic);
 //
 
 void codegen(Obj *prog, FILE *out);
+void prepare_inline_asm(Node *node);
 int align_to(int n, int align);
 bool va_arg_need_copy(Type *ty);
 bool is_trivial_arg(Node *node);

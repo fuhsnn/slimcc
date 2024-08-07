@@ -6,6 +6,71 @@
 #define GP_SLOTS 6
 #define FP_SLOTS 6
 
+typedef enum {
+  REG_NULL = 0,
+  REG_AX,
+  REG_CX,
+  REG_DX,
+  REG_SI,
+  REG_DI,
+  REG_R8,
+  REG_R9,
+  REG_R10,
+  REG_R11,
+  REG_R12,
+  REG_R13,
+  REG_R14,
+  REG_R15,
+  REG_BX,
+  REG_BP,
+  REG_SP,
+  REG_XMM0,
+  REG_XMM1,
+  REG_XMM2,
+  REG_XMM3,
+  REG_XMM4,
+  REG_XMM5,
+  REG_XMM6,
+  REG_XMM7,
+  REG_XMM8,
+  REG_XMM9,
+  REG_XMM10,
+  REG_XMM11,
+  REG_XMM12,
+  REG_XMM13,
+  REG_XMM14,
+  REG_XMM15,
+  REG_X87_ST0,
+  REG_X87_ST1,
+  REG_X87_ST2,
+  REG_X87_ST3,
+  REG_X87_ST4,
+  REG_X87_ST5,
+  REG_X87_ST6,
+  REG_X87_ST7,
+  REG_END
+} Reg;
+
+static char *regs[REG_XMM0][4] = {
+  [REG_NULL] = {"null", "null", "null", "null"},
+  [REG_SP] = {"%spl", "%sp", "%esp", "%rsp"},
+  [REG_BP] = {"%bpl", "%bp", "%ebp", "%rbp"},
+  [REG_AX] = {"%al", "%ax", "%eax", "%rax"},
+  [REG_BX] = {"%bl", "%bx", "%ebx", "%rbx"},
+  [REG_CX] = {"%cl", "%cx", "%ecx", "%rcx"},
+  [REG_DX] = {"%dl", "%dx", "%edx", "%rdx"},
+  [REG_SI] = {"%sil", "%si", "%esi", "%rsi"},
+  [REG_DI] = {"%dil", "%di", "%edi", "%rdi"},
+  [REG_R8] = {"%r8b", "%r8w", "%r8d", "%r8"},
+  [REG_R9] = {"%r9b", "%r9w", "%r9d", "%r9"},
+  [REG_R10] = {"%r10b", "%r10w", "%r10d", "%r10"},
+  [REG_R11] = {"%r11b", "%r11w", "%r11d", "%r11"},
+  [REG_R12] = {"%r12b", "%r12w", "%r12d", "%r12"},
+  [REG_R13] = {"%r13b", "%r13w", "%r13d", "%r13"},
+  [REG_R14] = {"%r14b", "%r14w", "%r14d", "%r14"},
+  [REG_R15] = {"%r15b", "%r15w", "%r15d", "%r15"},
+};
+
 static FILE *output_file;
 static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
 static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
@@ -27,6 +92,22 @@ static int peak_stk_usage;
 static char *rtn_label;
 
 bool dont_reuse_stack;
+
+struct {
+  bool in[REG_END];
+  bool out[REG_END];
+} static asm_use;
+
+struct {
+ AsmParam **data;
+ int capacity;
+ int cnt;
+} static asm_ops;
+
+struct {
+  char *rbp;
+  char *rbx;
+} static asm_alt_ptr;
 
 typedef enum {
   SL_GP,
@@ -54,6 +135,7 @@ static void load2(Type *ty, int sofs, char *sptr);
 static void store2(Type *ty, int dofs, char *dptr);
 static void store_gp2(char **reg, int sz, int ofs, char *ptr);
 
+static void gen_asm(Node *node);
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static void gen_void_expr(Node *node);
@@ -138,6 +220,11 @@ static bool is_memop(Node *node, char *ofs, char **ptr, bool allow_atomic) {
     }
   }
   return false;
+}
+
+static bool has_memop(Node *node) {
+  char ofs[64], *ptr;
+  return is_memop(node, ofs, &ptr, true);
 }
 
 bool is_trivial_arg(Node *arg) {
@@ -2088,7 +2175,7 @@ static void gen_stmt(Node *node) {
     gen_void_expr(node->lhs);
     return;
   case ND_ASM:
-    println("  %s", node->asm_str);
+    gen_asm(node);
     return;
   }
 
@@ -2772,6 +2859,834 @@ static bool gen_addr_opt(Node *node) {
   return false;
 }
 
+static int asm_ops_push(AsmParam *ap) {
+  int idx = asm_ops.cnt++;
+  if (idx >= asm_ops.capacity) {
+    asm_ops.capacity = idx + 4;
+    asm_ops.data = realloc(asm_ops.data, sizeof(AsmParam *) * asm_ops.capacity);
+    asm_ops.data[idx] = NULL;
+  }
+  asm_ops.data[idx] = ap;
+  return idx;
+}
+
+static void asm_fill_ops(Node *node) {
+  asm_ops.cnt = 0;
+  for (int i = 0; i < asm_ops.capacity; i++)
+    asm_ops.data[i] = NULL;
+
+  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next)
+    asm_ops_push(ap);
+
+  for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next)
+    asm_ops_push(ap);
+}
+
+static void asm_fill_ops2(Node *node) {
+  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next)
+    if (*ap->constraint->str == '+')
+      asm_ops_push(ap);
+
+  for (AsmParam *ap = node->asm_labels; ap; ap = ap->next)
+    ap->label_id = asm_ops_push(ap);
+}
+
+static bool is_gp_reg(Reg reg) {
+  return REG_AX <= reg && reg <= REG_SP;
+}
+
+static bool is_xmm_reg(Reg reg) {
+  return REG_XMM0 <= reg && reg <= REG_XMM15;
+}
+
+static bool is_x87_reg(Reg reg) {
+  return REG_X87_ST0 <= reg && reg <= REG_X87_ST7;
+}
+
+static Reg ident_gp_reg(char *loc) {
+  static HashMap map;
+  if (map.capacity == 0) {
+    for (Reg r = REG_NULL; r < REG_END; r++)
+      if (is_gp_reg(r))
+        for (int j = 0; j < 4; j++)
+          hashmap_put(&map, &regs[r][j][1], (void *)(intptr_t)r);
+
+    hashmap_put(&map, "ah", (void *)(intptr_t)REG_AX);
+    hashmap_put(&map, "bh", (void *)(intptr_t)REG_BX);
+    hashmap_put(&map, "ch", (void *)(intptr_t)REG_CX);
+    hashmap_put(&map, "dh", (void *)(intptr_t)REG_DX);
+  }
+  return (intptr_t)hashmap_get(&map, loc);
+}
+
+static Reg ident_reg(Token *tok) {
+  char *loc = tok->str;
+  while (*loc == '%')
+    loc++;
+
+  Reg gpreg = ident_gp_reg(loc);
+  if (gpreg)
+    return gpreg;
+
+  if (!strncmp(loc, "xmm", 3) || !strncmp(loc, "ymm", 3) || !strncmp(loc, "zmm", 3))
+    return REG_XMM0 + strtoul(&loc[3], NULL, 10);
+
+  if (!strncmp(tok->str, "st", 2)) {
+    if (tok->str[2] == '(') {
+      unsigned long num = strtoul(&tok->str[3], NULL, 10);
+      return REG_X87_ST0 + MIN(num, 7);
+    }
+    return REG_X87_ST0;
+  }
+  error_tok(tok, "unknown register");
+}
+
+static void asm_clobbers(Token *tok, int *x87_clobber) {
+  for (; tok; tok = tok->next) {
+    if (equal(tok, "\"cc\""))
+      continue;
+    if (equal(tok, "\"memory\""))
+      continue;
+
+    Reg r = ident_reg(tok);
+    if (r == REG_SP)
+      continue;
+    if (is_x87_reg(r)) {
+      *x87_clobber = MAX(*x87_clobber, (r - REG_X87_ST0 + 1));
+      continue;
+    }
+    asm_use.in[r] = asm_use.out[r] = true;
+    continue;
+  }
+}
+
+static bool has_matching(AsmParam *ap) {
+  return ap->match && !ap->match->kind;
+}
+
+static bool asm_get_use(AsmParam *ap, Reg r) {
+  if (ap->constraint->str[0] != '=' && ap->constraint->str[0] != '+')
+    return asm_use.in[r];
+
+  if (ap->constraint->str[0] == '=' && ap->kind == ASMOP_REG &&
+    !ap->is_early_clobber && !has_matching(ap))
+    return asm_use.out[r];
+
+  return asm_use.in[r] || asm_use.out[r];
+}
+
+static void asm_set_use(AsmParam *ap) {
+  if (ap->constraint->str[0] != '=' && ap->constraint->str[0] != '+') {
+    asm_use.in[ap->reg] = true;
+    return;
+  }
+  if (ap->constraint->str[0] == '=' && ap->kind == ASMOP_REG &&
+    !ap->is_early_clobber && !has_matching(ap)) {
+    asm_use.out[ap->reg] = true;
+    return;
+  }
+  asm_use.out[ap->reg] = asm_use.in[ap->reg] = true;
+
+  if (has_matching(ap)) {
+    ap->match->kind = ASMOP_REG;
+    ap->match->reg = ap->reg;
+  }
+}
+
+static void fixed_reg(Reg *reg, Reg spec, Token *tok) {
+  if (*reg && *reg != spec)
+    error_tok(tok, "conflicting register constraints");
+  *reg = spec;
+}
+
+static void asm_constraint(AsmParam *ap, int x87_clobber) {
+  for (; ap; ap = ap->next) {
+    Reg reg = REG_NULL;
+    char *p = ap->constraint->str;
+    Token *tok = ap->arg->tok;
+    int match_idx = -1;
+    bool is_num = false;
+    bool is_symbolic = false;
+
+    if (!strncmp(p, "=@cc", 4)) {
+      ap->kind = ASMOP_FLAG;
+      ap->flag = strdup(&p[4]);
+      continue;
+    }
+    for (; *p != '\0'; p++) {
+      switch (*p) {
+      case '=':
+      case '+': continue;
+      case '&': ap->is_early_clobber = true; continue;
+      case 'm':
+      case 'o': ap->is_mem = true; continue;
+      case 'r':
+      case 'q': ap->is_gp = true; continue;
+      case 'Q': ap->is_gp_highbyte = true; continue;
+      case 'R': ap->is_gp_legacy = true; continue;
+      case 'U': ap->is_gp_free = true; continue;
+      case 'n':
+      case 'I':
+      case 'J':
+      case 'K':
+      case 'L':
+      case 'M':
+      case 'N':
+      case 'O':
+      case 'P': is_num = true; continue;
+      case 'i': is_num = is_symbolic = true; continue;
+      case 'x':
+      case 'v': ap->is_fp = true; continue;
+      case 'f': ap->is_x87 = true; continue;
+      case 'X': ap->is_fp = true;
+      case 'g': ap->is_mem = ap->is_gp = is_num = true; continue;
+      case 'a': fixed_reg(&reg, REG_AX, tok); continue;
+      case 'b': fixed_reg(&reg, REG_BX, tok); continue;
+      case 'c': fixed_reg(&reg, REG_CX, tok); continue;
+      case 'd': fixed_reg(&reg, REG_DX, tok); continue;
+      case 'S': fixed_reg(&reg, REG_SI, tok); continue;
+      case 'D': fixed_reg(&reg, REG_DI, tok); continue;
+      case 't': fixed_reg(&reg, REG_X87_ST0, tok); continue;
+      case 'u': fixed_reg(&reg, REG_X87_ST1, tok); continue;
+      }
+      if (*p >= '0' && *p <= '9') {
+        match_idx = strtoul(p, &p, 10);
+        continue;
+      }
+      error_tok(ap->constraint, "unknown constraint \"%c\"", *p);
+    }
+    if (is_num && is_integer(ap->arg->ty) && is_const_expr(ap->arg, &ap->val)) {
+      ap->kind = ASMOP_NUM;
+      continue;
+    }
+    if (is_symbolic) {
+      ap->kind = ASMOP_SYMBOLIC;
+      continue;
+    }
+    if (ap->is_mem && has_memop(ap->arg)) {
+      ap->kind = ASMOP_MEM;
+      continue;
+    }
+    if (ap->arg->kind == ND_VAR && ap->arg->var->asm_str) {
+      Reg r = ident_reg(ap->arg->var->asm_str);
+      if ((is_gp_reg(r) && !ap->is_gp) || (is_xmm_reg(r) && !ap->is_fp) ||
+        (is_x87_reg(r) && !ap->is_x87))
+        error_tok(ap->arg->tok, "constraint mismatch with variable register");
+      fixed_reg(&reg, r, tok);
+    }
+    if (reg) {
+      if (reg == REG_X87_ST0 && x87_clobber >= 1)
+        ap->is_clobbered_x87 = true;
+      else if (reg == REG_X87_ST1 && x87_clobber >= 2)
+        ap->is_clobbered_x87 = true;
+
+      ap->reg = reg;
+      ap->kind = ASMOP_REG;
+      asm_set_use(ap);
+      continue;
+    }
+    if (match_idx >= 0) {
+      if (match_idx >= asm_ops.cnt)
+        error_tok(ap->arg->tok, "matching constraint exceeds operand count");
+      asm_ops.data[match_idx]->match = ap;
+    }
+  }
+}
+
+static Reg find_free_reg(AsmParam *ap, Reg start, Reg end) {
+  for (Reg i = start; i <= end; i++) {
+    if (!asm_get_use(ap, i)) {
+      ap->reg = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+static void asm_assign_oprands2(Reg *reg_list, size_t bofs) {
+  for (int i = 0; i < asm_ops.cnt; i++) {
+    AsmParam *ap = asm_ops.data[i];
+    if (ap->kind || !*((bool *)ap + bofs))
+      continue;
+    for (Reg *r = reg_list; *r != REG_NULL; r++) {
+      if (!asm_get_use(ap, *r)) {
+        ap->reg = *r;
+        ap->kind = ASMOP_REG;
+        asm_set_use(ap);
+        break;
+      }
+    }
+  }
+}
+
+static void asm_assign_oprands(void) {
+  static Reg highbyte[] = {REG_AX, REG_CX, REG_DX, REG_BX, REG_NULL};
+  static Reg legacy[] = {REG_AX, REG_CX, REG_DX, REG_SI, REG_DI, REG_BX, REG_BP, REG_NULL};
+  static Reg free[] = {
+    REG_AX, REG_CX, REG_DX, REG_SI, REG_DI, REG_R8, REG_R9, REG_R10, REG_R11, REG_NULL};
+
+  asm_assign_oprands2(highbyte, offsetof(AsmParam, is_gp_highbyte));
+  asm_assign_oprands2(legacy, offsetof(AsmParam, is_gp_legacy));
+  asm_assign_oprands2(free, offsetof(AsmParam, is_gp_free));
+
+  for (int i = 0; i < asm_ops.cnt; i++) {
+    AsmParam *ap = asm_ops.data[i];
+    if (ap->kind)
+      continue;
+    if ((ap->is_fp && find_free_reg(ap, REG_XMM0, REG_XMM15)) ||
+      (ap->is_x87 && find_free_reg(ap, REG_X87_ST0, REG_X87_ST7)) ||
+      (ap->is_gp && find_free_reg(ap, REG_AX, REG_R15))) {
+      ap->kind = ASMOP_REG;
+      asm_set_use(ap);
+      continue;
+    }
+    if (ap->is_mem && find_free_reg(ap, REG_AX, REG_R15)) {
+      ap->kind = ASMOP_MEM;
+      asm_set_use(ap);
+      continue;
+    }
+    error_tok(ap->arg->tok, "cannot assign register");
+  }
+}
+
+static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
+  for (Reg r = REG_AX; r <= REG_R15; r++) {
+    if (use1[r] || (use2 && use2[r]))
+      continue;
+    use1[r] = true;
+    if (use2)
+      use2[r] = true;
+    return r;
+  }
+  error_tok(tok, "out of registers");
+}
+
+static void ptr_transfrom(Node **node) {
+  Node *arg = *node;
+  add_type(arg);
+  if (is_array(arg->ty))
+    *node = new_cast(arg, pointer_to(arg->ty->base));
+  else if (arg->ty->kind == TY_FUNC)
+    *node = new_cast(arg, pointer_to(arg->ty));
+}
+
+void prepare_inline_asm(Node *node) {
+  for (int i = 0; i < REG_END; i++)
+    asm_use.in[i] = asm_use.out[i] = false;
+
+  asm_fill_ops(node);
+
+  int x87_clobber = 0;
+  asm_clobbers(node->asm_clobbers, &x87_clobber);
+
+  asm_constraint(node->asm_inputs, x87_clobber);
+  asm_constraint(node->asm_outputs, 0);
+
+  asm_assign_oprands();
+
+  if (asm_use.in[REG_BP] || asm_use.out[REG_BP])
+    node->alt_frame_ptr = acquire_gp(asm_use.in, asm_use.out, node->tok);
+  if (asm_use.in[REG_BX] || asm_use.out[REG_BX])
+    node->alt_frame_ptr2 = acquire_gp(asm_use.in, asm_use.out, node->tok);
+
+  if (node->asm_outputs) {
+    if (node->alt_frame_ptr && !asm_use.out[REG_BP])
+      node->output_tmp_gp = REG_BP;
+    else if (node->alt_frame_ptr2 && !asm_use.out[REG_BX])
+      node->output_tmp_gp = REG_BX;
+    else
+      node->output_tmp_gp = acquire_gp(asm_use.out, NULL, node->tok);
+  }
+
+  for (Reg r = REG_R12; r <= REG_BP; r++)
+    if (asm_use.in[r] || asm_use.out[r])
+      node->clobber_mask |= 1U << r;
+
+  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+    if (ap->kind == ASMOP_REG)
+      ptr_transfrom(&ap->arg);
+    if (has_memop(ap->arg))
+      continue;
+    ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
+  }
+  for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next) {
+    if (ap->kind == ASMOP_REG)
+      ptr_transfrom(&ap->arg);
+    if (has_memop(ap->arg))
+      continue;
+    if (ap->kind == ASMOP_REG)
+      ap->var = new_lvar(NULL, ap->arg->ty);
+    else if (ap->kind == ASMOP_MEM)
+      ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
+  }
+}
+
+static char *reg_high_byte(Reg reg, Token *tok) {
+  switch (reg) {
+  case REG_AX: return "%ah";
+  case REG_BX: return "%bh";
+  case REG_CX: return "%ch";
+  case REG_DX: return "%dh";
+  }
+  return regs[reg][0];
+}
+
+static char *reg_sz(Reg reg, int sz) {
+  if (is_gp_reg(reg)) {
+    switch (sz) {
+    case 1: return regs[reg][0];
+    case 2: return regs[reg][1];
+    case 4: return regs[reg][2];
+    case 8: return regs[reg][3];
+    }
+  }
+  internal_error();
+}
+
+static void asm_gen_operands(void) {
+  for (int i = 0; i < asm_ops.cnt; i++) {
+    AsmParam *ap = asm_ops.data[i];
+    if (ap->ptr) {
+      Node var_node = {.kind = ND_VAR, .var = ap->ptr, .tok = ap->arg->tok};
+      Node addr_node = {.kind = ND_ADDR, .lhs = ap->arg, .tok = ap->arg->tok};
+      Node assign_node = {
+        .kind = ND_ASSIGN, .lhs = &var_node, .rhs = &addr_node, .tok = ap->arg->tok};
+      add_type(&assign_node);
+      gen_void_expr(&assign_node);
+      continue;
+    }
+    if (ap->var) {
+      Node var_node = {.kind = ND_VAR, .var = ap->var, .tok = ap->arg->tok};
+      Node assign_node = {
+        .kind = ND_ASSIGN, .lhs = &var_node, .rhs = ap->arg, .tok = ap->arg->tok};
+      add_type(&assign_node);
+      gen_void_expr(&assign_node);
+      continue;
+    }
+  }
+}
+
+static char *alt_ptr(char *reg) {
+  if (asm_alt_ptr.rbp && !strcmp("%rbp", reg))
+    return asm_alt_ptr.rbp;
+  if (asm_alt_ptr.rbx && !strcmp("%rbx", reg))
+    return asm_alt_ptr.rbx;
+  return reg;
+}
+
+static void asm_gen_ptr(AsmParam *ap, char *ofs, char **ptr, Reg tmpreg) {
+  if (is_memop(ap->arg, ofs, ptr, true)) {
+    *ptr = alt_ptr(*ptr);
+    return;
+  }
+  if (ap->ptr) {
+    snprintf(ofs, 64, "0");
+    *ptr = regs[tmpreg][3];
+    println("  movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), *ptr);
+    return;
+  }
+  if (ap->var) {
+    snprintf(ofs, 64, "%d", ap->var->ofs);
+    *ptr = alt_ptr(ap->var->ptr);
+    return;
+  }
+  internal_error();
+}
+
+static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
+  char ofs[64], *ptr = NULL;
+  asm_gen_ptr(ap, ofs, &ptr, tmpreg);
+
+  if (is_gp_reg(ap->reg)) {
+    switch (ap->arg->ty->size) {
+    case 1: println("  movb %s(%s), %s", ofs, ptr, regs[ap->reg][0]); return;
+    case 2: println("  movw %s(%s), %s", ofs, ptr, regs[ap->reg][1]); return;
+    case 4: println("  movl %s(%s), %s", ofs, ptr, regs[ap->reg][2]); return;
+    case 8: println("  movq %s(%s), %s", ofs, ptr, regs[ap->reg][3]); return;
+    }
+  }
+  if (is_xmm_reg(ap->reg)) {
+    switch (ap->arg->ty->size) {
+    case 4: println("  movss %s(%s), %%xmm%d", ofs, ptr, ap->reg - REG_XMM0); return;
+    case 8: println("  movsd %s(%s), %%xmm%d", ofs, ptr, ap->reg - REG_XMM0); return;
+    }
+  }
+  if (is_x87_reg(ap->reg)) {
+    switch (ap->arg->ty->size) {
+    case 4: println("  flds %s(%s)", ofs, ptr); return;
+    case 8: println("  fldl %s(%s)", ofs, ptr); return;
+    case 16: println("  fldt %s(%s)", ofs, ptr); return;
+    }
+  }
+  error_tok(ap->arg->tok, "unsupported operand size");
+}
+
+static void asm_reg_output(AsmParam *ap, Reg tmpreg) {
+  char ofs[64], *ptr = NULL;
+  asm_gen_ptr(ap, ofs, &ptr, tmpreg);
+
+  if (is_gp_reg(ap->reg)) {
+    switch (ap->arg->ty->size) {
+    case 1: println("  movb %s, %s(%s)", regs[ap->reg][0], ofs, ptr); return;
+    case 2: println("  movw %s, %s(%s)", regs[ap->reg][1], ofs, ptr); return;
+    case 4: println("  movl %s, %s(%s)", regs[ap->reg][2], ofs, ptr); return;
+    case 8: println("  movq %s, %s(%s)", regs[ap->reg][3], ofs, ptr); return;
+    }
+  }
+  if (is_xmm_reg(ap->reg)) {
+    switch (ap->arg->ty->size) {
+    case 4: println("  movss %%xmm%d, %s(%s)", ap->reg - REG_XMM0, ofs, ptr); return;
+    case 8: println("  movsd %%xmm%d, %s(%s)", ap->reg - REG_XMM0, ofs, ptr); return;
+    }
+  }
+  if (is_x87_reg(ap->reg)) {
+    switch (ap->arg->ty->size) {
+    case 4: println("  fstps %s(%s)", ofs, ptr); return;
+    case 8: println("  fstpl %s(%s)", ofs, ptr); return;
+    case 16: println("  fstpt %s(%s)", ofs, ptr); return;
+    }
+  }
+  error_tok(ap->arg->tok, "unsupported operand size");
+}
+
+static bool asm_bitfield_out(AsmParam *ap, Reg tmpreg) {
+  if (!is_bitfield(ap->arg))
+    return false;
+
+  Member *mem = ap->arg->member;
+  char *val = regs[ap->reg][3];
+  char *tmp = regs[tmpreg][3];
+
+  println("  shl $%d, %s", (64 - mem->bit_width), val);
+  println("  shr $%d, %s", (64 - mem->bit_width - mem->bit_offset), val);
+
+  if (mem->bit_width + mem->bit_offset != 64) {
+    println("  movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), tmp);
+    println("  mov (%s), %s", tmp, reg_sz(tmpreg, mem->ty->size));
+    println("  shr $%d, %s", (mem->bit_width + mem->bit_offset), tmp);
+    println("  shl $%d, %s", (mem->bit_width + mem->bit_offset), tmp);
+    println("  or %s, %s", tmp, val);
+  }
+  if (mem->bit_offset) {
+    println("  movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), tmp);
+    println("  mov (%s), %s", tmp, reg_sz(tmpreg, mem->ty->size));
+    println("  shl $%d, %s", (64 - mem->bit_offset), tmp);
+    println("  shr $%d, %s", (64 - mem->bit_offset), tmp);
+    println("  or %s, %s", tmp, val);
+  }
+  println("  movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), tmp);
+  println("  mov %s, (%s)", reg_sz(ap->reg, mem->ty->size), tmp);
+  return true;
+}
+
+static Reg get_input_reg(AsmParam *ap) {
+  if (ap->kind == ASMOP_REG && *ap->constraint->str != '=')
+    return ap->reg;
+  return REG_NULL;
+}
+
+static void asm_xmm_inputs(void) {
+  for (int i = 0; i < asm_ops.cnt; i++) {
+    AsmParam *ap = asm_ops.data[i];
+    if (is_xmm_reg(get_input_reg(ap)))
+      asm_reg_input(ap, REG_DX);
+  }
+}
+
+static void asm_gp_inputs(void) {
+  for (int i = 0; i < asm_ops.cnt; i++) {
+    AsmParam *ap = asm_ops.data[i];
+    if (ap->kind == ASMOP_MEM && ap->reg)
+      println("  movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), regs[ap->reg][3]);
+    if (is_gp_reg(get_input_reg(ap)))
+      asm_reg_input(ap, ap->reg);
+  }
+}
+
+static int asm_x87_inputs(Node *node) {
+  AsmParam *sort_buf[8] = {0};
+
+  for (int i = 0; i < asm_ops.cnt; i++) {
+    AsmParam *ap = asm_ops.data[i];
+    Reg reg = get_input_reg(ap);
+    if (is_x87_reg(reg))
+      sort_buf[reg - REG_X87_ST0] = ap;
+  }
+
+  int cnt = 0;
+  for (int i = 0; i < 8; i++) {
+    AsmParam *ap = sort_buf[7 - i];
+    if (ap) {
+      if (!ap->is_clobbered_x87)
+        cnt++;
+      asm_reg_input(ap, REG_DX);
+    }
+  }
+  return cnt;
+}
+
+static void asm_x87_outputs(Node *node, int in_cnt) {
+  AsmParam *sort_buf[8] = {0};
+  int out_cnt = 0;
+  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+    if (is_x87_reg(ap->reg)) {
+      sort_buf[ap->reg - REG_X87_ST0] = ap;
+      out_cnt++;
+    }
+  }
+  out_cnt = MAX(out_cnt, in_cnt);
+  for (int i = 0; i < out_cnt; i++) {
+    AsmParam *ap = sort_buf[i];
+    if (ap)
+      asm_reg_output(ap, node->output_tmp_gp);
+    else
+      println("  fstp %%st(0)");
+  }
+}
+
+static void asm_outputs(Node *node) {
+  Reg freereg = node->output_tmp_gp;
+
+  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+    if (ap->kind == ASMOP_REG) {
+      if (is_x87_reg(ap->reg))
+        continue;
+      if (asm_bitfield_out(ap, freereg))
+        continue;
+      asm_reg_output(ap, freereg);
+      continue;
+    }
+    if (ap->kind == ASMOP_FLAG) {
+      char ofs[64], *ptr;
+      asm_gen_ptr(ap, ofs, &ptr, freereg);
+      if (ap->arg->ty->size != 1)
+        println("  mov%s $0, %s(%s)", size_suffix(ap->arg->ty->size), ofs, ptr);
+      println("  set%s %s(%s)", ap->flag, ofs, ptr);
+      continue;
+    }
+  }
+}
+
+static bool named_op(char *p, int len, char *str, char **rest) {
+  if (len && !strncmp(&p[1], str, len) && p[1 + len] == ']') {
+    *rest = &p[2 + len];
+    return true;
+  }
+  return false;
+}
+
+static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
+  if (*p == '[') {
+    for (int i = 0; i < asm_ops.cnt; i++) {
+      AsmParam *op = asm_ops.data[i];
+      if (is_label && op->arg->label)
+        if (named_op(p, strlen(op->arg->label), op->arg->label, rest))
+          return op;
+
+      if (!is_label && op->name)
+        if (named_op(p, op->name->len, op->name->loc, rest))
+          return op;
+    }
+  } else if (*p >= '0' && *p <= '9') {
+    unsigned long idx = strtoul(p, rest, 10);
+    if (idx < asm_ops.cnt)
+      return asm_ops.data[idx];
+  }
+  error_tok(tok, "operand not found");
+}
+
+static void asm_body(Node *node) {
+  for (char *p = node->asm_str->str; *p != '\0';) {
+    if (*p != '%') {
+      fputc(*p, output_file);
+      p++;
+      continue;
+    }
+    p++;
+
+    if (*p == '%') {
+      fputc('%', output_file);
+      p++;
+      continue;
+    }
+    if (*p == 'l' && (p[1] == '[' || (p[1] >= '0' && p[1] <= '9'))) {
+      AsmParam *ap = find_op(p + 1, &p, node->asm_str, true);
+      if (!ap->arg->unique_label)
+        error_tok(ap->arg->tok, "not a label");
+
+      if (node->asm_outputs)
+        fprintf(output_file, "%df", ap->label_id);
+      else
+        fprintf(output_file, "%s", ap->arg->unique_label);
+      continue;
+    }
+
+    char mod = 0;
+    switch (*p) {
+    case 'h':
+    case 'b':
+    case 'w':
+    case 'k':
+    case 'q':
+    case 'c':
+      mod = *p;
+      p++;
+    }
+    if (*p == '[' || (*p >= '0' && *p <= '9')) {
+      AsmParam *ap = find_op(p, &p, node->asm_str, false);
+      char *punct = (mod == 'c') ? "" : "$";
+
+      switch (ap->kind) {
+      case ASMOP_NUM:
+        fprintf(output_file, "%s%"PRIi64, punct, ap->val);
+        continue;
+      case ASMOP_SYMBOLIC:{
+        if (ap->arg->kind == ND_VAR && !ap->arg->var->is_local && !opt_fpic) {
+          fprintf(output_file, "%s\"%s\"", punct, ap->arg->var->name);
+          continue;
+        }
+        char ofs[64], *ptr;
+        if (ap->arg->kind == ND_ADDR &&
+          is_memop(ap->arg->lhs, ofs, &ptr, true) && !strcmp(ptr, "%rip")) {
+          fprintf(output_file, "%s%s", punct, ofs);
+          continue;
+        }
+        break;
+      }
+      case ASMOP_MEM: {
+        char ofs[64], *ptr;
+        if (is_memop(ap->arg, ofs, &ptr, true)) {
+          fprintf(output_file, "%s(%s)", ofs, alt_ptr(ptr));
+          continue;
+        }
+        if (ap->reg) {
+          fprintf(output_file, "(%s)", regs[ap->reg][3]);
+          continue;
+        }
+        break;
+      }
+      case ASMOP_REG:
+        if (is_xmm_reg(ap->reg)) {
+          fprintf(output_file, "%%xmm%d", ap->reg - REG_XMM0);
+          continue;
+        }
+        if (is_x87_reg(ap->reg)) {
+          fprintf(output_file, "%%st(%d)", ap->reg - REG_X87_ST0);
+          continue;
+        }
+        if (is_gp_reg(ap->reg)) {
+          char *regname = NULL;
+          switch (mod) {
+          case 'h': regname = reg_high_byte(ap->reg, ap->arg->tok); break;
+          case 'b': regname = regs[ap->reg][0]; break;
+          case 'w': regname = regs[ap->reg][1]; break;
+          case 'k': regname = regs[ap->reg][2]; break;
+          case 'q': regname = regs[ap->reg][3]; break;
+          default: regname = reg_sz(ap->reg, ap->arg->ty->size); break;
+          }
+          fprintf(output_file, "%s", regname);
+          continue;
+        }
+      }
+      error_tok(ap->arg->tok, "invalid operand");
+    }
+    error_tok(node->asm_str, "unknown modifier \"%c\"", *p);
+  }
+  fprintf(output_file, "\n");
+}
+
+static void asm_push_clobbers(Node *node) {
+  for (Reg r = REG_R12; r <= REG_R15; r++)
+    if (node->clobber_mask & (1U << r))
+      push_from(regs[r][3]);
+}
+
+static void asm_pop_clobbers(Node *node) {
+  for (Reg r = REG_R15; r >= REG_R12; r--)
+    if (node->clobber_mask & (1U << r))
+      pop(regs[r][3]);
+}
+
+static char *asm_push_frame_ptr(Node *node) {
+  char *prev = lvar_ptr;
+  asm_alt_ptr.rbp = asm_alt_ptr.rbx = NULL;
+  if (node->alt_frame_ptr) {
+    asm_alt_ptr.rbp = regs[node->alt_frame_ptr][3];
+    if (!strcmp(lvar_ptr, "%rbp"))
+      lvar_ptr = asm_alt_ptr.rbp;
+    println("  movq %%rbp, %s", asm_alt_ptr.rbp);
+  }
+  if (node->alt_frame_ptr2) {
+    asm_alt_ptr.rbx = regs[node->alt_frame_ptr2][3];
+    if (!strcmp(lvar_ptr, "%rbx"))
+      lvar_ptr = asm_alt_ptr.rbx;
+    println("  movq %%rbx, %s", asm_alt_ptr.rbx);
+  }
+
+  if (node->alt_frame_ptr)
+    push_from("%rbp");
+  if (node->alt_frame_ptr2)
+    push_from("%rbx");
+  return prev;
+}
+
+static void asm_pop_frame_ptr(Node *node, char *prev) {
+  if (node->alt_frame_ptr2)
+    pop("%rbx");
+  if (node->alt_frame_ptr)
+    pop("%rbp");
+  lvar_ptr = prev;
+}
+
+static void gen_asm(Node *node) {
+  if (!node->asm_outputs && !node->asm_inputs &&
+    !node->asm_clobbers && !node->asm_labels) {
+    println("  %s", node->asm_str->str);
+    return;
+  }
+  asm_fill_ops(node);
+  asm_gen_operands();
+
+  int x87_depth = asm_x87_inputs(node);
+  asm_xmm_inputs();
+
+  asm_push_clobbers(node);
+  char *prev_lvar_ptr = asm_push_frame_ptr(node);
+
+  asm_gp_inputs();
+
+  asm_fill_ops2(node);
+  asm_body(node);
+
+  int fallthrough_label = asm_ops.cnt;
+  int meet_label = asm_ops.cnt + 1;
+  bool is_goto_with_output = node->asm_outputs && node->asm_labels;
+  if (is_goto_with_output) {
+    char *tmp_gp = regs[node->output_tmp_gp][3];
+    println("  lea %df(%%rip), %s; jmp %df", fallthrough_label, tmp_gp, meet_label);
+    for (AsmParam *ap = node->asm_labels; ap; ap = ap->next) {
+      println("  %d:", ap->label_id);
+      println("  lea %s(%%rip), %s", ap->arg->unique_label, tmp_gp);
+      println("  jmp %df", meet_label);
+    }
+    println("  %d:", meet_label);
+    println("  push %s", tmp_gp);
+  }
+
+  asm_outputs(node);
+  asm_x87_outputs(node, x87_depth);
+
+  clobber_all_regs();
+  asm_pop_frame_ptr(node, prev_lvar_ptr);
+  asm_pop_clobbers(node);
+
+  if (is_goto_with_output) {
+    println("  pop %%rax");
+    println("  jmp *%%rax");
+    println("  %d:", fallthrough_label);
+  }
+}
+
 static int get_lvar_align(Scope *scp, int align) {
   for (Obj *var = scp->locals; var; var = var->next) {
     if (var->pass_by_stack)
@@ -3076,6 +3991,10 @@ void codegen(Obj *prog, FILE *out) {
     for (int i = 0; files[i]; i++)
       println("  .file %d \"%s\"", files[i]->file_no, files[i]->name);
   }
+
+  for (; prog && prog->asm_str; prog = prog->next)
+    println("%s", prog->asm_str->str);
+
   emit_data(prog);
   emit_text(prog);
   println("  .section  .note.GNU-stack,\"\",@progbits");

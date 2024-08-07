@@ -174,9 +174,10 @@ TokenKind ident_keyword(Token *tok) {
     static char *ty_kw[] = {
       "void", "_Bool", "char", "short", "int", "long", "struct", "union",
       "typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
-      "const", "volatile", "auto", "register", "restrict", "__restrict",
-      "__restrict__", "_Noreturn", "float", "double", "inline", "__auto_type",
+      "const", "auto", "register", "restrict", "__restrict", "__restrict__",
+      "_Noreturn", "float", "double", "inline", "__auto_type",
       "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__",
+      "volatile", "__volatile", "__volatile__"
     };
     for (int i = 0; i < sizeof(ty_kw) / sizeof(*ty_kw); i++)
       hashmap_put(&map, ty_kw[i], (void *)TK_TYPEKW);

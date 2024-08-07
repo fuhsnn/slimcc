@@ -33,6 +33,7 @@ typedef struct {
   bool is_static;
   bool is_extern;
   bool is_inline;
+  bool is_register;
   bool is_tls;
   bool is_constexpr;
   bool local_only;
@@ -362,7 +363,7 @@ static Obj *new_var(char *name, Type *ty) {
   return var;
 }
 
-static Obj *new_lvar(char *name, Type *ty) {
+Obj *new_lvar(char *name, Type *ty) {
   Obj *var = new_var(name, ty);
   var->is_local = true;
   var->next = scope->locals;
@@ -425,6 +426,13 @@ static Type *find_typedef(Token *tok) {
       return sc->type_def;
   }
   return NULL;
+}
+
+static Token *str_tok(Token **rest, Token *tok) {
+  if (tok->kind != TK_STR)
+    error_tok(tok, "expected string literal");
+  *rest = tok->next;
+  return tok;
 }
 
 static void push_tag_scope(Token *tok, Type *ty) {
@@ -600,8 +608,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
+    if (consume(&tok, tok, "register") && attr) {
+      attr->is_register = true;
+      continue;
+    }
     // These keywords are recognized but ignored.
-    if (consume(&tok, tok, "_Noreturn") || consume(&tok, tok, "register"))
+    if (consume(&tok, tok, "_Noreturn"))
       continue;
 
     if (equal(tok, "__auto_type") || equal(tok, "auto")) {
@@ -625,7 +637,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
-    if (consume(&tok, tok, "volatile")) {
+    if (consume(&tok, tok, "volatile") || consume(&tok, tok, "__volatile") ||
+        consume(&tok, tok, "__volatile__")) {
       is_volatile = true;
       continue;
     }
@@ -964,7 +977,7 @@ static void pointer_qualifiers(Token **rest, Token *tok, Type *ty) {
       ty->is_atomic = true;
     else if (equal(tok, "const"))
       ty->is_const = true;
-    else if (equal(tok, "volatile"))
+    else if (equal(tok, "volatile") || equal(tok, "__volatile") || equal(tok, "__volatile__"))
       ty->is_volatile = true;
     else if (equal(tok, "restrict") || equal(tok, "__restrict") || equal(tok, "__restrict__"))
       ty->is_restrict = true;
@@ -1253,6 +1266,12 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
     if (cleanup_fn)
       defr_cleanup(var, cleanup_fn, tok);
+
+    if (attr->is_register &&
+      (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__"))) {
+      var->asm_str = str_tok(&tok, skip(tok->next, "("));
+      tok = skip(tok, ")");
+    }
 
     if (attr && attr->is_constexpr) {
       if (!equal(tok, "="))
@@ -1939,19 +1958,92 @@ static void static_assertion(Token **rest, Token *tok) {
   *rest = skip(tok, ";");
 }
 
+static AsmParam *asm_params(Token **rest, Token *tok) {
+  AsmParam head = {0};
+  AsmParam *cur = &head;
+  while (!equal(tok, ":") && !equal(tok, ")")) {
+    if (cur != &head)
+      tok = skip(tok, ",");
+    cur = cur->next = calloc(1, sizeof(AsmParam));
+
+    if (consume(&tok, tok, "[")) {
+      cur->name = tok;
+      tok = skip(tok->next, "]");
+    }
+    cur->constraint = str_tok(&tok, tok);
+    cur->arg = expr(&tok, skip(tok, "("));
+    tok = skip(tok, ")");
+  }
+  *rest = tok;
+  return head.next;
+}
+
+static Token *asm_clobbers(Token **rest, Token *tok) {
+  Token head = {0};
+  Token *cur = &head;
+  while (!equal(tok, ":") && !equal(tok, ")")) {
+    if (cur != &head)
+      tok = skip(tok, ",");
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
+  *rest = tok;
+  cur->next = NULL;
+  return head.next;
+}
+
+static AsmParam *asm_labels(Token **rest, Token *tok) {
+  AsmParam head = {0};
+  AsmParam *cur = &head;
+  while (comma_list(rest, &tok, ")", cur != &head)) {
+    Node *node = new_node(ND_GOTO, tok);
+    node->label = get_ident(tok);
+    node->goto_next = gotos;
+    gotos = node;
+
+    cur = cur->next = calloc(1, sizeof(AsmParam));
+    cur->arg = node;
+    tok = tok->next;
+  }
+  return head.next;
+}
+
 // asm-stmt = "__asm__" ("volatile" | "inline")* "(" string-literal ")"
 static Node *asm_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_ASM, tok);
   tok = tok->next;
 
-  while (equal(tok, "volatile") || equal(tok, "inline"))
-    tok = tok->next;
+  bool is_asm_goto = false;
+  for (;;) {
+    if (equal(tok, "inline") || equal(tok, "volatile") ||
+      equal(tok, "__volatile") || equal(tok, "__volatile__")) {
+      tok = tok->next;
+      continue;
+    } else if (equal(tok, "goto")) {
+      tok = tok->next;
+      is_asm_goto = true;
+      continue;
+    }
+    break;
+  }
+  node->asm_str = str_tok(&tok, skip(tok, "("));
+  if (consume(rest, tok, ")"))
+    return node;
 
-  tok = skip(tok, "(");
-  if (tok->kind != TK_STR || tok->ty->base->kind != TY_PCHAR)
-    error_tok(tok, "expected string literal");
-  node->asm_str = tok->str;
-  *rest = skip(tok->next, ")");
+  node->asm_outputs = asm_params(&tok, skip(tok, ":"));
+  if (consume(rest, tok, ")"))
+    return node;
+
+  node->asm_inputs = asm_params(&tok, skip(tok, ":"));
+  if (consume(rest, tok, ")"))
+    return node;
+
+  node->asm_clobbers = asm_clobbers(&tok, skip(tok, ":"));
+  if (!is_asm_goto) {
+    *rest = skip(tok, ")");
+    return node;
+  }
+  node->asm_labels = asm_labels(rest, skip(tok, ":"));
   return node;
 }
 
@@ -2179,8 +2271,16 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__"))
-    return asm_stmt(rest, tok);
+  if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+    Node *node = asm_stmt(&tok, tok);
+
+    enter_tmp_scope();
+    prepare_inline_asm(node);
+    leave_scope();
+
+    *rest = skip(tok, ";");
+    return node;
+  }
 
   if (equal(tok, "goto")) {
     if (equal(tok->next, "*")) {
@@ -4289,9 +4389,18 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
 Obj *parse(Token *tok) {
   globals = NULL;
 
+  Obj head = {0};
+  Obj *cur = &head;
   while (tok->kind != TK_EOF) {
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
+      continue;
+    }
+
+    if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+      cur = cur->next = calloc(1, sizeof(Obj));
+      cur->asm_str = str_tok(&tok, skip(tok->next, "("));
+      tok = skip(tok, ")");
       continue;
     }
 
@@ -4313,5 +4422,6 @@ Obj *parse(Token *tok) {
       if (var->is_referenced || !(var->is_static && var->is_inline))
         mark_fn_live(var);
 
-  return globals;
+  cur->next = globals;
+  return head.next;
 }
