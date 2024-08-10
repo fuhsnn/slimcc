@@ -966,7 +966,7 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
   if (!fp)
     error_tok(start, "%s: cannot open file: %s", path, strerror(errno));
 
-  Token head;
+  Token head = {0};
   Token *cur = &head;
   for (; !limit_seq || limit > 0; limit--) {
     unsigned char buf;
