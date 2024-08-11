@@ -824,6 +824,7 @@ int main(int argc, char **argv) {
   StringArray ld_args = {0};
   int file_count = 0;
   FileType opt_x = FILE_NONE;
+  bool run_ld = false;
 
   for (int i = 0; i < input_paths.len; i++) {
     if (!strcmp(input_paths.data[i], "-x")) {
@@ -869,6 +870,7 @@ int main(int argc, char **argv) {
     // Handle .o or .a
     if (type == FILE_OBJ || type == FILE_AR || type == FILE_DSO) {
       strarray_push(&ld_args, input);
+      run_ld = true;
       continue;
     }
 
@@ -885,6 +887,7 @@ int main(int argc, char **argv) {
       char *tmp = create_tmpfile();
       assemble(input, tmp);
       strarray_push(&ld_args, tmp);
+      run_ld = true;
       continue;
     }
 
@@ -905,6 +908,7 @@ int main(int argc, char **argv) {
       run_cc1(argc, argv, input, tmp1, "-cc1-asm-pp");
       assemble(tmp1, tmp2);
       strarray_push(&ld_args, tmp2);
+      run_ld = true;
       continue;
     }
 
@@ -936,10 +940,11 @@ int main(int argc, char **argv) {
     run_cc1(argc, argv, input, tmp1, NULL);
     assemble(tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
+    run_ld = true;
     continue;
   }
 
-  if (ld_args.len > 0)
+  if (run_ld)
     run_linker(&ld_args, opt_o ? opt_o : "a.out");
   return 0;
 }
