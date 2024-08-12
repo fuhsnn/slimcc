@@ -143,6 +143,22 @@ goto4:;
       break;
   }
 
+  for (int i = 0;; i++){
+    int vla1[argc];
+    ASSERTL(1, lv1 == vla1);
+    switch (i) {
+    case 0:
+    case 2:
+      continue;
+    case 1:
+    case 3:
+      int vla2[argc];
+      ASSERTL(1, lv2 == vla2);
+      continue;
+    }
+    break;
+  }
+
   ASSERTL(1, ({int vla1[argc]; vla1;}) == lv1);
   ASSERTL(1, ({int vla1[argc], vla2[argc]; vla2; }) == lv2);
 

@@ -103,6 +103,7 @@ static Node *current_switch;
 
 static DeferStmt *current_defr;
 static DeferStmt *brk_defr;
+static DeferStmt *cont_defr;
 static bool fn_use_vla;
 static bool dont_dealloc_vla;
 
@@ -1911,14 +1912,16 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
   brk_label = node->brk_label = new_unique_name();
   cont_label = node->cont_label = new_unique_name();
 
-  DeferStmt *defr = brk_defr;
-  brk_defr = current_defr;
+  DeferStmt *brkdefr = brk_defr;
+  DeferStmt *contdefr = cont_defr;
+  brk_defr = cont_defr = current_defr;
 
   node->then = secondary_block(rest, tok);
 
   brk_label = brk;
   cont_label = cont;
-  brk_defr = defr;
+  brk_defr = brkdefr;
+  cont_defr = contdefr;
 }
 
 // stmt = "return" expr? ";"
@@ -2146,7 +2149,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
       error_tok(tok, "stray continue");
     Node *node = new_node(ND_GOTO, tok);
     node->unique_label = cont_label;
-    node->defr_end = brk_defr;
+    node->defr_end = cont_defr;
     node->defr_start = current_defr;
     *rest = skip(tok->next, ";");
     return node;
