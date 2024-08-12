@@ -449,8 +449,10 @@ static bool equal_tykw(Token *tok, char *op) {
   return tok->kind == TK_TYPEKW && equal(tok, op);
 }
 
-static void attr_aligned(Token *tok, int *align) {
+static void attr_aligned(Token *tok, int *align, TokenKind kind) {
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
+    if (lst->kind != kind)
+      continue;
     if (equal(lst, "aligned") || equal(lst, "__aligned__")) {
       Token *tok2;
       if (consume(&tok2, lst->next, "(")) {
@@ -463,12 +465,12 @@ static void attr_aligned(Token *tok, int *align) {
   }
 }
 
-static void attr_cleanup(Token *tok, Obj **fn, bool allow_battr) {
+static void attr_cleanup(Token *tok, Obj **fn, TokenKind kind) {
   if (*fn)
     return;
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
     if (equal(lst, "cleanup") || equal(lst, "__cleanup__")) {
-      if (!allow_battr && lst->kind == TK_BATTR)
+      if (lst->kind != kind)
         continue;
       Token *tok2 = skip(lst->next, "(");
       VarScope *sc = find_var(tok2);
@@ -480,13 +482,13 @@ static void attr_cleanup(Token *tok, Obj **fn, bool allow_battr) {
   }
 }
 
-static void attr_packed(Token *tok, Type *ty, bool allow_battr) {
+static void attr_packed(Token *tok, Type *ty, TokenKind kind) {
   for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
-    if (equal(lst, "packed") || equal(lst, "__packed__")) {
-      if (!allow_battr && lst->kind == TK_BATTR)
-        continue;
-      ty->is_packed = true;
+    if (lst->kind != kind)
       continue;
+    if (equal(lst, "packed") || equal(lst, "__packed__")) {
+      ty->is_packed = true;
+      return;
     }
   }
 }
@@ -529,7 +531,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     SIGNED   = 1 << 17,
     UNSIGNED = 1 << 18,
   };
-  Token *start = tok;
+
+  if (attr) {
+    attr_aligned(tok, &attr->align, TK_BATTR);
+    attr_cleanup(tok, &attr->cleanup_fn, TK_BATTR);
+  }
+
   Type *ty = NULL;
   int counter = 0;
   bool is_atomic = false;
@@ -539,8 +546,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   bool is_auto = false;
   for (;;) {
     if (attr) {
-      attr_aligned(tok, &attr->align);
-      attr_cleanup(tok, &attr->cleanup_fn, start == tok);
+      attr_aligned(tok, &attr->align, TK_ATTR);
+      attr_cleanup(tok, &attr->cleanup_fn, TK_ATTR);
     }
     if (!is_typename(tok))
       break;
@@ -1024,11 +1031,13 @@ static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
 }
 
 static Type *declarator2(Token **rest, Token *tok, Type *basety, Token **name, int *align) {
-  attr_aligned(tok, align);
-
   Type *ty = declarator(&tok, tok, basety, name);
 
-  attr_aligned(tok, align);
+  if (*name) {
+    attr_aligned(*name, align, TK_ATTR);
+    attr_aligned((**name).next, align, TK_BATTR);
+  }
+  attr_aligned(tok, align, TK_ATTR);
   *rest = tok;
   return ty;
 }
@@ -1159,12 +1168,12 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     Token *name = NULL;
     int alt_align = attr ? attr->align : 0;
 
-    Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
-    attr_cleanup(tok, &cleanup_fn, false);
-
     Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
 
-    attr_cleanup(tok, &cleanup_fn, true);
+    Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
+    attr_cleanup(name, &cleanup_fn, TK_ATTR);
+    attr_cleanup(name->next, &cleanup_fn, TK_BATTR);
+    attr_cleanup(tok, &cleanup_fn, TK_ATTR);
 
     if (ty->kind == TY_FUNC) {
       if (!name)
@@ -3224,7 +3233,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         mem->bit_width = const_expr(&tok, tok);
         if (mem->bit_width < 0)
           error_tok(tok, "bit-field with negative width");
-        attr_aligned(tok, &mem->alt_align);
+        attr_aligned(tok, &mem->alt_align, TK_ATTR);
       }
       cur = cur->next = mem;
     }
@@ -3248,9 +3257,12 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *ty = new_type(kind, -1, 1);
 
+  attr_packed(tok, ty, TK_ATTR);
+  attr_packed(tok, ty, TK_BATTR);
+
   int alt_align = 0;
-  attr_aligned(tok, &alt_align);
-  attr_packed(tok, ty, true);
+  attr_aligned(tok, &alt_align, TK_ATTR);
+  attr_aligned(tok, &alt_align, TK_BATTR);
 
   // Read a tag.
   Token *tag = NULL;
@@ -3275,8 +3287,8 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   // Construct a struct object.
   struct_members(&tok, tok, ty);
 
-  attr_aligned(tok, &alt_align);
-  attr_packed(tok, ty, false);
+  attr_aligned(tok, &alt_align, TK_ATTR);
+  attr_packed(tok, ty, TK_ATTR);
   *rest = tok;
 
   if (kind == TY_STRUCT)

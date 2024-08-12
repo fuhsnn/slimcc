@@ -30,6 +30,19 @@ void test_decl(void) {
   A long long p77 = 777, p88 B = 888;
 }
 
+void test_decl2(void) {
+  rec_idx = 0;
+
+  A long long *p1[1];
+  long A long *p2[1];
+  long long A *p3[1];
+  long long *A p4[1];
+  long long *p5[1] A;
+
+  B long long *p6[1];
+  long long *p7 B[1];
+}
+
 void test_loop(void) {
   rec_idx = 0;
 
@@ -142,6 +155,9 @@ int main(void) {
   ASSERT(33, rec[9]);
   ASSERT(22, rec[10]);
   ASSERT(11, rec[11]);
+
+  test_decl2();
+  ASSERT(7, rec_idx);
 
   test_loop();
   ASSERT(110, rec[0]);

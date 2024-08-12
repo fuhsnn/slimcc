@@ -17,6 +17,11 @@ B1 struct { int i; } g20, g21;
 struct B1 { int i; } g22, g23;
 struct { int i; } g28, g29 B1;
 
+struct { int i; } *A1 g31;
+
+struct { int i; } g32 [1]A1;
+struct { int i; } g33 B1[1];
+
 int main(int argc, char **argv) {
   ASSERT(0, (long)&g1 & 1023);
   ASSERT(0, (long)&g3 & 1023);
@@ -27,6 +32,13 @@ int main(int argc, char **argv) {
   ASSERT(0, (long)&g21 & 1023);
   ASSERT(0, (long)&g23 & 1023);
   ASSERT(0, (long)&g29 & 1023);
+
+  ASSERT(0, (long)&g31 & 1023);
+
+  ASSERT(0, (long)&g32[0] & 1023);
+  ASSERT(0, (long)&g33[0] & 1023);
+  ASSERT(4, (long)&g32[1] & 1023);
+  ASSERT(4, (long)&g33[1] & 1023);
 
   ASSERT(0, ({ A1 struct { int i; } x, y; (long)&y & 1023; }) );
   ASSERT(0, ({ struct A1 { int i; } x, y; (long)&y & 1023; }) );
@@ -127,7 +139,9 @@ int main(int argc, char **argv) {
   ASSERT(8, ({struct { long m1:5 __attribute__((aligned(4))); } T; sizeof(T); }));
 
   ASSERT(16, ({ typedef struct { short s; long m2 : 48 __attribute__((aligned(4))); } T; sizeof(T); }));
+#ifdef NOTCLANG
   ASSERT(14, ({ typedef struct { short s; long m2 : 48 __attribute__((aligned(4))); char c; } T; offsetof(T,c); }));
+#endif
   ASSERT(8, ({ typedef struct { char m1; int : 26 __attribute__((aligned(2))); } T; sizeof(T); }));
   ASSERT(8, ({ typedef struct { char m1; int : 26 __attribute__((aligned(2))); char c; } T; offsetof(T,c); }));
 
@@ -141,7 +155,9 @@ int main(int argc, char **argv) {
   ASSERT(1024, ({ typedef struct { A1 struct { char c; } j; char m6; } T; sizeof(T); }));
   ASSERT(1024, ({ typedef struct { A1 struct { char c; } j; } T; sizeof(T); }));
 //  ASSERT(1024,    ({ typedef struct { A1 struct { char c; }; } T; sizeof(T); })); // clang behaviour
+#ifdef NOTCLANG
   ASSERT(1,    ({ typedef struct { A1 struct { char c; }; } T; sizeof(T); })); // gcc behaviour
+#endif
 
   ASSERT(3,    ({ A1 typedef struct { struct { char c; } j, k; char m6; } T; sizeof(T); }));
   ASSERT(3,    ({ typedef A1 struct { struct { char c; } j, k; char m6; } T; sizeof(T); }));
