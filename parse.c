@@ -35,6 +35,7 @@ typedef struct {
   bool is_inline;
   bool is_tls;
   bool is_constexpr;
+  bool local_only;
   Obj *cleanup_fn;
   int align;
 } VarAttr;
@@ -547,8 +548,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     // Handle storage class specifiers.
     if (equal(tok, "typedef") || equal(tok, "static") || equal(tok, "extern") ||
         equal(tok, "inline") || equal(tok, "_Thread_local") || equal(tok, "__thread") ||
-        equal_tykw(tok, "thread_local") || equal_tykw(tok, "constexpr")) {
-      if (!attr)
+        equal_tykw(tok, "thread_local")) {
+      if (!attr || attr->local_only)
         error_tok(tok, "storage class specifier is not allowed in this context");
 
       if (equal(tok, "typedef"))
@@ -559,8 +560,6 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
         attr->is_extern = true;
       else if (equal(tok, "inline"))
         attr->is_inline = true;
-      else if (equal(tok, "constexpr"))
-        attr->is_constexpr = true;
       else
         attr->is_tls = true;
 
@@ -568,6 +567,14 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
           attr->is_static + attr->is_extern + attr->is_inline + attr->is_tls > 1)
         error_tok(tok, "typedef may not be used together with static,"
                   " extern, inline, __thread or _Thread_local");
+      tok = tok->next;
+      continue;
+    }
+
+    if (equal_tykw(tok, "constexpr")) {
+      if (!attr)
+        error_tok(tok, "constexpr not allowed in this context");
+      attr->is_constexpr = true;
       tok = tok->next;
       continue;
     }
@@ -2063,8 +2070,9 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     enter_tmp_scope();
 
     if (is_typename(tok)) {
-      Type *basety = declspec(&tok, tok, NULL);
-      Node *expr = declaration(&tok, tok, basety, NULL);
+      VarAttr attr = {.local_only = true};
+      Type *basety = declspec(&tok, tok, &attr);
+      Node *expr = declaration(&tok, tok, basety, &attr);
       if (expr)
         node->init = new_unary(ND_EXPR_STMT, expr, tok);
     } else if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {

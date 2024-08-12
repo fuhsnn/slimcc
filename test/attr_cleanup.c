@@ -30,6 +30,21 @@ void test_decl(void) {
   A long long p77 = 777, p88 B = 888;
 }
 
+void test_loop(void) {
+  rec_idx = 0;
+
+  for(B long long i = 0; i < 3; i++) {
+    B long long j = 11;
+    switch (i) {
+    case 0:
+      continue;
+    case 1:
+      B long long j = 22;
+      continue;
+    }
+  }
+}
+
 void test_vla(int sz) {
   rec_idx = 0;
 
@@ -127,6 +142,13 @@ int main(void) {
   ASSERT(33, rec[9]);
   ASSERT(22, rec[10]);
   ASSERT(11, rec[11]);
+
+  test_loop();
+  ASSERT(110, rec[0]);
+  ASSERT(220, rec[1]);
+  ASSERT(110, rec[2]);
+  ASSERT(110, rec[3]);
+  ASSERT(30, rec[4]);
 
   test_vla(100);
   ASSERT(555, rec[0]);

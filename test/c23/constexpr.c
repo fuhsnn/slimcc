@@ -71,6 +71,11 @@ int main() {
     constexpr struct {  char c[23]; } s = {0};
     static_assert((s,1));
   }
+
+  for (constexpr int i = 0; i;) {
+    static_assert(i == 0);
+  }
+
   printf("OK\n");
   return 0;
 }
