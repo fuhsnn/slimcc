@@ -3816,7 +3816,7 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (equal(tok, "__builtin_expect")) {
     tok = skip(tok->next, "(");
-    Node *node = assign(&tok, tok);
+    Node *node = new_cast(assign(&tok, tok), ty_long);
     tok = skip(tok, ",");
     assign(&tok, tok);
     *rest = skip(tok, ")");

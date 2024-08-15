@@ -58,7 +58,12 @@ static void va_fn0(int cnt, ...) {
 SASSERT(__builtin_constant_p(1 ? 0 : 0));
 int g;
 SASSERT(!__builtin_constant_p(g));
-SASSERT(sizeof(__builtin_constant_p(0)) == sizeof(int));
+
+static __auto_type builtin_constant_p_test = __builtin_constant_p(0);
+SASSERT(_Generic(&builtin_constant_p_test, int *:1));
+
+static __auto_type builtin_expect_test = __builtin_expect(1.0f,1.0);
+SASSERT(_Generic(&builtin_expect_test, long *:1));
 
 int main(void) {
   ASSERT(30, va_expr_in_arg(17));
