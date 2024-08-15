@@ -189,7 +189,6 @@ struct Obj {
   Obj *param_promoted;
 
   // Global variable or function
-  bool is_function;
   bool is_definition;
   bool is_static;
   Obj *static_lvars;
@@ -210,7 +209,7 @@ struct Obj {
 
   // Static inline function
   bool is_live;
-  bool is_root;
+  bool is_referenced;
   StringArray refs;
 };
 

@@ -474,7 +474,7 @@ static void attr_cleanup(Token *tok, Obj **fn, TokenKind kind) {
         continue;
       Token *tok2 = skip(lst->next, "(");
       VarScope *sc = find_var(tok2);
-      if (!(sc && sc->var && sc->var->is_function))
+      if (!(sc && sc->var && sc->var->ty->kind == TY_FUNC))
         error_tok(tok2, "cleanup function not found");
       *fn = sc->var;
       return;
@@ -3926,11 +3926,11 @@ static Node *primary(Token **rest, Token *tok) {
     *rest = tok->next;
 
     // For "static inline" function
-    if (sc && sc->var && sc->var->is_function) {
+    if (sc && sc->var && sc->var->ty->kind == TY_FUNC) {
       if (current_fn)
         strarray_push(&current_fn->refs, sc->var->name);
       else
-        sc->var->is_root = true;
+        sc->var->is_referenced = true;
 
       char *name = sc->var->name;
       if (!strcmp(name, "alloca"))
@@ -4067,20 +4067,20 @@ static Obj *find_func(char *name) {
     sc = sc->parent;
 
   VarScope *sc2 = hashmap_get(&sc->vars, name);
-  if (sc2 && sc2->var && sc2->var->is_function)
+  if (sc2 && sc2->var && sc2->var->ty->kind == TY_FUNC)
     return sc2->var;
   return NULL;
 }
 
-static void mark_live(Obj *var) {
-  if (!var->is_function || var->is_live)
+static void mark_fn_live(Obj *var) {
+  if (var->is_live)
     return;
   var->is_live = true;
 
   for (int i = 0; i < var->refs.len; i++) {
     Obj *fn = find_func(var->refs.data[i]);
     if (fn)
-      mark_live(fn);
+      mark_fn_live(fn);
   }
 }
 
@@ -4090,13 +4090,11 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
   Obj *fn = find_func(name_str);
   if (!fn) {
     fn = new_gvar(name_str, ty);
-    fn->is_function = true;
     fn->is_static = attr->is_static || (attr->is_inline && !attr->is_extern);
-    fn->is_inline = attr->is_inline;
   } else if (!fn->is_static && attr->is_static) {
     error_tok(name, "static declaration follows a non-static declaration");
   }
-  fn->is_root = !(fn->is_static && fn->is_inline);
+  fn->is_inline |= attr->is_inline;
   return fn;
 }
 
@@ -4221,8 +4219,9 @@ Obj *parse(Token *tok) {
   }
 
   for (Obj *var = globals; var; var = var->next)
-    if (var->is_root)
-      mark_live(var);
+    if (var->ty->kind == TY_FUNC)
+      if (var->is_referenced || !(var->is_static && var->is_inline))
+        mark_fn_live(var);
 
   return globals;
 }
