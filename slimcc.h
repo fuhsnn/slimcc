@@ -110,6 +110,7 @@ struct File {
   // For #line directive
   File *display_file;
   int line_delta;
+  bool non_input;
 };
 
 // Token type
@@ -149,7 +150,7 @@ File *new_file(char *name, int file_no, char *contents);
 Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end);
-File *add_input_file(char *path, char *content);
+File *add_input_file(char *path, char *content, bool not_input);
 void convert_pp_number(Token *tok);
 TokenKind ident_keyword(Token *tok);
 

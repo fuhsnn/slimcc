@@ -1012,7 +1012,7 @@ static void read_line_marker(Token **rest, Token *tok) {
   if (tok->kind != TK_STR)
     error_tok(tok, "filename expected");
 
-  start->file->display_file = add_input_file(tok->str, NULL);
+  start->file->display_file = add_input_file(tok->str, NULL, true);
 }
 
 static void add_loc_info(Token *tok) {
