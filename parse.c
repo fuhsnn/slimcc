@@ -3809,6 +3809,15 @@ static Node *primary(Token **rest, Token *tok) {
     return atomic_op(binary, true);
   }
 
+  if (equal(tok, "__builtin_constant_p")) {
+    Node *node = new_node(ND_NUM, tok);
+    tok = skip(tok->next, "(");
+    node->val = is_const_expr(expr(&tok, tok), NULL);
+    node->ty = ty_int;
+    *rest = skip(tok, ")");
+    return node;
+  }
+
   if (equal(tok, "__builtin_offsetof")) {
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);

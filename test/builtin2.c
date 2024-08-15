@@ -21,7 +21,7 @@ struct ofs_S1 {
   } m[7][7];
   };
 };
-_Static_assert(__builtin_offsetof(struct ofs_S1, m[1][2].n.k[3]) == 76,"");
+SASSERT(__builtin_offsetof(struct ofs_S1, m[1][2].n.k[3]) == 76);
 
 int va_expr_in_arg(int i, ...) {
   __builtin_va_list ap, ap2;
@@ -54,6 +54,11 @@ static void va_fn0(int cnt, ...) {
         va_arg(ap, void(*)(void))();
     va_end(ap);
 }
+
+SASSERT(__builtin_constant_p(1 ? 0 : 0));
+int g;
+SASSERT(!__builtin_constant_p(g));
+SASSERT(sizeof(__builtin_constant_p(0)) == sizeof(int));
 
 int main(void) {
   ASSERT(30, va_expr_in_arg(17));
