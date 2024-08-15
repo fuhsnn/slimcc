@@ -3814,6 +3814,15 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
+  if (equal(tok, "__builtin_expect")) {
+    tok = skip(tok->next, "(");
+    Node *node = assign(&tok, tok);
+    tok = skip(tok, ",");
+    assign(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
   if (equal(tok, "__builtin_offsetof")) {
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);
