@@ -2371,14 +2371,10 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     int64_t rval = eval(rhs);
     if (!rval)
       return eval_error(rhs->tok, "division by zero during constant evaluation");
-    if (rval == -1 && !ty->is_unsigned) {
-      if (ty->size == 4 && lval == INT32_MIN)
-        return INT32_MIN;
-      if (ty->size == 8 && lval == INT64_MIN)
-        return INT64_MIN;
-    }
     if (ty->is_unsigned)
       return (uint64_t)lval / rval;
+    if (lval == INT64_MIN && rval == -1)
+      return INT64_MIN;
     return lval / rval;
   }
   case ND_MOD: {
@@ -2386,10 +2382,10 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     int64_t rval = eval(rhs);
     if (!rval)
       return eval_error(rhs->tok, "remainder by zero during constant evaluation");
-    if (rval == -1 && !ty->is_unsigned && ty->size == 8 && lval == INT64_MIN)
-        return 0;
     if (ty->is_unsigned)
       return (uint64_t)lval % rval;
+    if (lval == INT64_MIN && rval == -1)
+      return 0;
     return lval % rval;
   }
   case ND_POS:
