@@ -16,6 +16,7 @@ StdVer opt_std;
 
 static StringArray opt_include;
 bool opt_E;
+static bool opt_P;
 static bool opt_M;
 static bool opt_MD;
 static bool opt_MMD;
@@ -188,6 +189,11 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-E")) {
       opt_E = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-P")) {
+      opt_P = true;
       continue;
     }
 
@@ -539,7 +545,18 @@ static void print_tokens(Token *tok, char *path) {
   FILE *out = open_file(path);
 
   int line = 1;
+  File *markerfile = NULL;
+
   for (; tok->kind != TK_EOF; tok = tok->next) {
+    Token *orig = tok->origin ? tok->origin : tok;
+    if (!opt_P && markerfile != orig->file) {
+      markerfile = orig->file;
+      char *name = orig->file->name;
+      if (!strcmp(name, "-"))
+        name = "<stdin>";
+      fprintf(out, "\n# %d \"%s\"\n", orig->line_no, name);
+    }
+
     if (line > 1 && tok->at_bol)
       fprintf(out, "\n");
     if (tok->has_space && !tok->at_bol)
