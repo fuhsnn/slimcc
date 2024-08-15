@@ -476,6 +476,7 @@ static void attr_cleanup(Token *tok, Obj **fn, TokenKind kind) {
       VarScope *sc = find_var(tok2);
       if (!(sc && sc->var && sc->var->ty->kind == TY_FUNC))
         error_tok(tok2, "cleanup function not found");
+      strarray_push(&current_fn->refs, sc->var->name);
       *fn = sc->var;
       return;
     }

@@ -141,6 +141,8 @@ void stmt_expr(void) {
   ASSERT(4, i);
 }
 
+static inline void livefn(void*){}
+
 int main(void) {
   test_decl();
   ASSERT(888, rec[0]);
@@ -192,6 +194,8 @@ int main(void) {
   ASSERT(77, rec[0]);
 
   stmt_expr();
+
+  int testlive [[gnu::cleanup(livefn)]];
 
   printf("OK\n");
 }
