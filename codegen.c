@@ -863,20 +863,32 @@ static void cast(Type *from, Type *to) {
 // members in its byte range [lo, hi).
 static bool has_flonum(Type *ty, int lo, int hi, int offset) {
   if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-    for (Member *mem = ty->members; mem; mem = mem->next)
-      if (!has_flonum(mem->ty, lo, hi, offset + mem->offset))
+    for (Member *mem = ty->members; mem; mem = mem->next) {
+      int ofs = offset + mem->offset;
+      if ((ofs + mem->ty->size) <= lo)
+        continue;
+      if (hi <= ofs)
+        break;
+      if (!has_flonum(mem->ty, lo, hi, ofs))
         return false;
+    }
     return true;
   }
 
   if (ty->kind == TY_ARRAY) {
-    for (int i = 0; i < ty->array_len; i++)
-      if (!has_flonum(ty->base, lo, hi, offset + ty->base->size * i))
+    for (int i = 0; i < ty->array_len; i++) {
+      int ofs = offset + ty->base->size * i;
+      if ((ofs + ty->base->size) <= lo)
+        continue;
+      if (hi <= ofs)
+        break;
+      if (!has_flonum(ty->base, lo, hi, ofs))
         return false;
+    }
     return true;
   }
 
-  return offset < lo || hi <= offset || ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE;
+  return ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE;
 }
 
 static bool has_flonum1(Type *ty) {
@@ -1575,7 +1587,7 @@ static void gen_expr(Node *node) {
     gen_expr(node->lhs);
 
     Type *ty = node->ty->base;
-    if (ty->size <= 16) {
+    if (ty->size <= 16 && ty->kind != TY_LDOUBLE) {
       if (va_arg_need_copy(ty)) {
         // Structs with FP member are split into 8-byte chunks in the
         // reg save area, we reconstruct the layout with a local copy.
