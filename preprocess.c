@@ -1282,6 +1282,19 @@ static Token *base_file_macro(Token *start) {
   return tok;
 }
 
+static Token *stdver_macro(Token *tok) {
+  switch (opt_std) {
+  case STD_C99: tok->val = 199901L; break;
+  case STD_C11: tok->val = 201112L; break;
+  case STD_C17: tok->val = 201710L; break;
+  case STD_C23: tok->val = 202311L; break;
+  default: tok->val = 201710L;
+  }
+  tok->kind = TK_NUM;
+  tok->ty = ty_long;
+  return tok;
+}
+
 static Token *pragma_macro(Token *start) {
   Token *tok = start->next;
   Token *str;
@@ -1457,20 +1470,12 @@ void init_macros(void) {
   define_macro("linux", "1");
   define_macro("unix", "1");
 
-  switch (opt_std) {
-  case STD_C89: break;
-  case STD_C99: define_macro("__STDC_VERSION__", "199901L"); break;
-  case STD_C11: define_macro("__STDC_VERSION__", "201112L"); break;
-  case STD_C17: define_macro("__STDC_VERSION__", "201710L"); break;
-  case STD_C23: define_macro("__STDC_VERSION__", "202311L"); break;
-  default: define_macro("__STDC_VERSION__", "201710L");
-  }
-
   add_builtin("__FILE__", file_macro);
   add_builtin("__LINE__", line_macro);
   add_builtin("__COUNTER__", counter_macro);
   add_builtin("__TIMESTAMP__", timestamp_macro);
   add_builtin("__BASE_FILE__", base_file_macro);
+  add_builtin("__STDC_VERSION__", stdver_macro);
 
   add_builtin("_Pragma", pragma_macro);
 
