@@ -1171,11 +1171,6 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
 
     Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
 
-    Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
-    attr_cleanup(name, &cleanup_fn, TK_ATTR);
-    attr_cleanup(name->next, &cleanup_fn, TK_BATTR);
-    attr_cleanup(tok, &cleanup_fn, TK_ATTR);
-
     if (ty->kind == TY_FUNC) {
       if (!name)
         error_tok(tok, "function name omitted");
@@ -1186,6 +1181,11 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       error_tok(tok, "variable declared void");
     if (!name)
       error_tok(tok, "variable name omitted");
+
+    Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
+    attr_cleanup(name, &cleanup_fn, TK_ATTR);
+    attr_cleanup(name->next, &cleanup_fn, TK_BATTR);
+    attr_cleanup(tok, &cleanup_fn, TK_ATTR);
 
     // Generate code for computing a VLA size. We need to do this
     // even if ty is not VLA because ty may be a pointer to VLA
