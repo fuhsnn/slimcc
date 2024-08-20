@@ -38,11 +38,11 @@ void verror_at(char *filename, char *input, int line_no,
     end++;
 
   // Print out the line.
-  int indent = fprintf(stderr, "%s:%d: ", filename, line_no);
+  fprintf(stderr, "%s:%d: \n", filename, line_no);
   fprintf(stderr, "%.*s\n", (int)(end - line), line);
 
   // Show the error message.
-  int pos = display_width(line, loc - line) + indent;
+  int pos = display_width(line, loc - line);
 
   fprintf(stderr, "%*s", pos, ""); // print pos spaces.
   fprintf(stderr, "^ ");

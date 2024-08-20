@@ -433,6 +433,11 @@ int display_width(char *p, int len) {
   char *start = p;
   int w = 0;
   while (p - start < len) {
+    if (*p == '\t') {
+      w += 8;
+      p++;
+      continue;
+    }
     uint32_t c = decode_utf8(&p, p);
     w += char_width(c);
   }
