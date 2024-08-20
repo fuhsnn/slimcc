@@ -3641,6 +3641,8 @@ static Node *generic_selection(Token **rest, Token *tok) {
     t1 = pointer_to(t1);
   else if (is_array(t1))
     t1 = pointer_to(t1->base);
+  else
+    t1 = unqual(t1);
 
   Node *ret = NULL;
 
@@ -3658,7 +3660,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
       error_tok(tok, "association has function type");
     tok = skip(tok, ":");
     Node *node = assign(&tok, tok);
-    if (is_compatible(t1, t2))
+    if (is_compatible2(t1, t2))
       ret = node;
   }
 

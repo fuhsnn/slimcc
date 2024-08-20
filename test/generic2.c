@@ -96,6 +96,8 @@ int main(int argc, char**argv) {
   ASSERT(1, ({ const int(*fn)(void); typeof(fn()) i; _Generic(&i, int *:1);}));
   ASSERT(1, ({ void (*fn)(const int); _Generic(fn, void(*)(int): 1);}));
 
+  ASSERT(1, ({ const int i; _Generic(i, int :1, const int: 2);}));
+
   paramty(0,0,0);
   param_arrptr_ty(0,0,0);
   param_vlaptr_ty(0,0);

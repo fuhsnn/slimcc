@@ -140,7 +140,7 @@ bool is_redundant_cast(Node *expr, Type *ty) {
   return false;
 }
 
-static bool is_compatible2(Type *t1, Type *t2) {
+bool is_compatible2(Type *t1, Type *t2) {
   if (t1->is_atomic != t2->is_atomic)
     return false;
   if (t1->is_const != t2->is_const)
