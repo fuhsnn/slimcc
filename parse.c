@@ -2357,11 +2357,24 @@ static Obj *eval_var(Node *node, int64_t *ofs, bool allow_volatile) {
   return NULL;
 }
 
+static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
+  if (!opt_optimize || !var->init_data || !is_const_var(var))
+    return false;
+  for (Relocation *rel = var->rel; rel; rel = rel->next) {
+    if ((rel->offset + sizeof(void *)) <= ofs)
+      continue;
+    if ((ofs + read_sz) <= rel->offset)
+      break;
+    return false;
+  }
+  return true;
+}
+
 static char *eval_constexpr_data(Node *node) {
   int64_t ofs;
   Obj *var = eval_var(node, &ofs, false);
 
-  if (!var || !var->constexpr_data)
+  if (!var || !(var->constexpr_data || is_static_const_var(var, ofs, node->ty->size)))
     return (char *)eval_error(node->tok, "not a compile-time constant");
 
   if (ofs < 0 || (var->ty->size < (ofs + node->ty->size)))
