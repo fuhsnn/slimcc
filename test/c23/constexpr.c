@@ -7,6 +7,10 @@ constexpr long double ld = 22.0;
 constexpr long len = 17;
 long double arr0[len];
 
+union U {int i; float f;};
+constexpr union U u1 = {.i = 0x40490fda};
+constexpr union U u2 = u1;
+
 void local_adr(int recur, const int *local_p, const int *static_p) {
   if (recur >= 3)
     return;
@@ -30,6 +34,8 @@ void local_adr(int recur, const int *local_p, const int *static_p) {
 int main() {
   DASSERT(ld == f * 2);
   DASSERT(sizeof(arr0) == len * sizeof(typeof(arr0[0])));
+
+  DASSERT(u1.f == 3.1415926f);
 
   local_adr(0,NULL,NULL);
 

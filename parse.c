@@ -132,6 +132,7 @@ static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
+static Obj *eval_var(Node *node, int64_t *ofs, bool allow_volatile);
 static Node *assign(Token **rest, Token *tok);
 static Node *log_or(Token **rest, Token *tok);
 static long double eval_double(Node *node);
@@ -199,6 +200,14 @@ static Type *find_tag(Token *tok) {
       return ty;
   }
   return NULL;
+}
+
+static bool is_const_var(Obj *var) {
+  Type *ty = var->ty;
+  for (; ty && ty->kind == TY_ARRAY; ty = ty->base)
+    if (ty->is_const)
+      return true;
+  return ty->is_const;
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
@@ -584,6 +593,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       if (!attr)
         error_tok(tok, "constexpr not allowed in this context");
       attr->is_constexpr = true;
+      is_const = true;
       tok = tok->next;
       continue;
     }
@@ -1828,6 +1838,31 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   case TY_LDOUBLE:
     *(long double *)(buf + offset) = eval_double(new_cast(init->expr, ty_ldouble));
     return cur;
+  }
+
+  if (is_compatible(ty, init->expr->ty)) {
+    int64_t sofs;
+    Obj *var = eval_var(init->expr, &sofs, false);
+    if (var && var->init_data && (is_const_var(var) || var->is_compound_lit)) {
+      Relocation *srel= var->rel;
+      while (srel && srel->offset < sofs)
+        srel = srel->next;
+      for (int pos = 0; pos < ty->size && (pos + sofs) < var->ty->size;) {
+        if (srel && srel->offset == (pos + sofs)) {
+          cur = cur->next = calloc(1, sizeof(Relocation));
+          cur->offset = (pos + offset);
+          cur->label = srel->label;
+          cur->addend = srel->addend;
+
+          srel = srel->next;
+          pos += 8;
+        } else {
+          buf[(pos + offset)] = var->init_data[(pos + sofs)];
+          pos++;
+        }
+      }
+      return cur;
+    }
   }
 
   if (kind == EV_CONST) {
@@ -3712,6 +3747,7 @@ static Node *primary(Token **rest, Token *tok) {
 
     if (scope->parent == NULL) {
       Obj *var = new_anon_gvar(ty);
+      var->is_compound_lit = true;
       gvar_initializer(rest, tok, var);
       return new_var_node(var, start);
     }
@@ -3720,6 +3756,7 @@ static Node *primary(Token **rest, Token *tok) {
       sc = sc->parent;
 
     Obj *var = new_var(NULL, ty);
+    var->is_compound_lit = true;
     var->is_local = true;
     var->next = sc->locals;
     sc->locals = var;

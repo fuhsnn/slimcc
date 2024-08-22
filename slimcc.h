@@ -178,6 +178,7 @@ struct Obj {
   char *name;    // Variable name
   Type *ty;      // Type
   bool is_local; // local or global/function
+  bool is_compound_lit;
   int align;     // alignment
 
   // Local variable
