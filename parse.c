@@ -73,13 +73,14 @@ struct InitDesg {
 typedef enum {
   EV_CONST,     // constant expression
   EV_LABEL,     // relocation label
-  EV_AGG,       // "constexpr" aggregate
+  EV_AGGREGATE, // struct/union/array
 } EvalKind;
 
 typedef struct {
   EvalKind kind;
   char **label;
   Obj *var;
+  bool is_volatile;
 } EvalContext;
 
 // Likewise, global variables are accumulated to this list.
@@ -1679,7 +1680,8 @@ static Node *init_desg_expr(InitDesg *desg, Token *tok) {
 
 static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
   if (ty->kind == TY_ARRAY) {
-    assert(!init->expr);
+    if (init->expr)
+      error_tok(init->expr->tok, "array initializer must be an initializer list");
     Node *node = NULL;
     for (int i = 0; i < ty->array_len; i++) {
       InitDesg desg2 = {desg, i};
@@ -1778,43 +1780,42 @@ static long double read_double_buf(char *buf, Type *ty){
 static Relocation *
 write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int offset, EvalKind kind) {
   if (ty->kind == TY_ARRAY) {
+    if (init->expr)
+      error_tok(init->expr->tok, "array initializer must be an initializer list");
     int sz = ty->base->size;
     for (int i = 0; i < ty->array_len; i++)
       cur = write_gvar_data(cur, init->children[i], ty->base, buf, offset + sz * i, kind);
     return cur;
   }
 
-  if (ty->kind == TY_STRUCT) {
-    for (Member *mem = ty->members; mem; mem = mem->next) {
-      if (mem->is_bitfield) {
-        Node *expr = init->children[mem->idx]->expr;
-        if (!expr)
-          continue;
-        add_type(expr);
+  if (!init->expr) {
+    if (ty->kind == TY_STRUCT) {
+      for (Member *mem = ty->members; mem; mem = mem->next) {
+        if (mem->is_bitfield) {
+          Node *expr = init->children[mem->idx]->expr;
+          if (!expr)
+            continue;
+          add_type(expr);
 
-        char *loc = buf + offset + mem->offset;
-        uint64_t oldval = read_buf(loc, mem->ty->size);
-        uint64_t newval = eval(expr);
-        uint64_t mask = (1L << mem->bit_width) - 1;
-        uint64_t combined = oldval | ((newval & mask) << mem->bit_offset);
-        write_buf(loc, combined, mem->ty->size);
-      } else {
-        cur = write_gvar_data(cur, init->children[mem->idx], mem->ty, buf,
-                              offset + mem->offset, kind);
+          char *loc = buf + offset + mem->offset;
+          uint64_t oldval = read_buf(loc, mem->ty->size);
+          uint64_t newval = eval(expr);
+          uint64_t mask = (1L << mem->bit_width) - 1;
+          uint64_t combined = oldval | ((newval & mask) << mem->bit_offset);
+          write_buf(loc, combined, mem->ty->size);
+        } else {
+          cur = write_gvar_data(cur, init->children[mem->idx], mem->ty, buf, offset + mem->offset, kind);
+        }
       }
+      return cur;
+    }
+    if (ty->kind == TY_UNION) {
+      if (init->mem)
+        cur = write_gvar_data(cur, init->children[init->mem->idx], init->mem->ty, buf, offset, kind);
+      return cur;
     }
     return cur;
   }
-
-  if (ty->kind == TY_UNION) {
-    if (!init->mem)
-      return cur;
-    return write_gvar_data(cur, init->children[init->mem->idx],
-                           init->mem->ty, buf, offset, kind);
-  }
-
-  if (!init->expr)
-    return cur;
   add_type(init->expr);
 
   switch (ty->kind) {
@@ -1829,20 +1830,29 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     return cur;
   }
 
-  EvalContext ctx = {.kind = kind};
-  uint64_t val = eval2(init->expr, &ctx);
+  if (kind == EV_CONST) {
+    write_buf(buf + offset, eval(init->expr), ty->size);
+    return cur;
+  }
 
-  if (!ctx.label) {
+  int64_t val;
+  if (is_const_expr(init->expr, &val)) {
     write_buf(buf + offset, val, ty->size);
     return cur;
   }
 
-  Relocation *rel = calloc(1, sizeof(Relocation));
-  rel->offset = offset;
-  rel->label = ctx.label;
-  rel->addend = val;
-  cur->next = rel;
-  return cur->next;
+  EvalContext ctx = {.kind = EV_LABEL};
+  int64_t addend = eval2(init->expr, &ctx);
+
+  if (ctx.label) {
+    Relocation *rel = calloc(1, sizeof(Relocation));
+    rel->offset = offset;
+    rel->label = ctx.label;
+    rel->addend = addend;
+    cur->next = rel;
+    return cur->next;
+  }
+  error_tok(init->expr->tok, "invalid initializer");
 }
 
 // Initializers for global variables are evaluated at compile-time and
@@ -2297,23 +2307,35 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
   exit(1);
 }
 
-static char *eval_constexpr_agg(Node *node) {
-  EvalContext ctx = {.kind = EV_AGG};
-  int ofs = eval2(node, &ctx);
-  if (eval_recover && *eval_recover)
-    return NULL;
+static Obj *eval_var(Node *node, int64_t *ofs, bool allow_volatile) {
+  if (node->kind == ND_VAR) {
+    *ofs = 0;
+    if (allow_volatile || !node->ty->is_volatile)
+      return node->var;
+  }
+  if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
+    EvalContext ctx = {.kind = EV_AGGREGATE};
+    *ofs = eval2(node, &ctx);
+    if (ctx.var && (allow_volatile || !ctx.is_volatile))
+      return ctx.var;
+  }
+  return NULL;
+}
 
-  if (!ctx.var)
+static char *eval_constexpr_data(Node *node) {
+  int64_t ofs;
+  Obj *var = eval_var(node, &ofs, false);
+
+  if (!var || !var->constexpr_data)
     return (char *)eval_error(node->tok, "not a compile-time constant");
-  if (ofs < 0 || (ctx.var->ty->size < (ofs + node->ty->size)))
+
+  if (ofs < 0 || (var->ty->size < (ofs + node->ty->size)))
     return (char *)eval_error(node->tok, "constexpr access out of bounds");
 
-  if (ctx.var->constexpr_data)
-    return ctx.var->constexpr_data + ofs;
-  if (ctx.var->init_data)
-    return ctx.var->init_data + ofs;
+  if (var->constexpr_data)
+    return var->constexpr_data + ofs;
 
-  internal_error();
+  return var->init_data + ofs;
 }
 
 static int64_t eval_sign_extend(Type *ty, uint64_t val) {
@@ -2490,47 +2512,55 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return node->val;
   }
 
-  if (ctx->kind == EV_LABEL) {
+  if (node->kind == ND_DEREF && lhs->kind == ND_ADDR)
+    return eval2(lhs->lhs, ctx);
+  if (node->kind == ND_ADDR && lhs->kind == ND_DEREF)
+    return eval2(lhs->lhs, ctx);
+
+  if (ctx->kind == EV_AGGREGATE) {
+    ctx->is_volatile |= node->ty->is_volatile;
+
     switch (node->kind) {
-    case ND_ADDR:
     case ND_DEREF:
       return eval2(lhs, ctx);
     case ND_MEMBER:
       return eval2(lhs, ctx) + node->member->offset;
-    case ND_LABEL_VAL:
-      ctx->label = &node->unique_label;
-      return 0;
     case ND_VAR:
-      if (node->var->is_local)
-        return eval_error(node->tok, "not a compile-time constant");
-      ctx->label = &node->var->name;
-      return 0;
+      switch (ty->kind) {
+      case TY_STRUCT:
+      case TY_UNION:
+      case TY_ARRAY:
+        ctx->var = node->var;
+        return 0;
+      }
+    }
+  }
+
+  if (ctx->kind == EV_LABEL) {
+    if (!ctx->label) {
+      if (node->kind == ND_LABEL_VAL) {
+        ctx->label = &node->unique_label;
+        return 0;
+      }
+
+      int64_t ofs;
+      Obj *var = NULL;
+      if (node->kind == ND_ADDR)
+        var = eval_var(lhs, &ofs, true);
+      else if (node->ty->kind == TY_ARRAY || node->ty->kind == TY_FUNC)
+        var = eval_var(node, &ofs, true);
+
+      if (var) {
+        ctx->label = &var->name;
+        return ofs;
+      }
     }
     return eval_error(node->tok, "invalid initializer");
   }
 
-  if (ty->is_volatile)
-    return eval_error(node->tok, "volatile-qualified type");
-
-  if (ctx->kind == EV_AGG) {
-    switch (node->kind) {
-    case ND_DEREF: return eval2(lhs, ctx);
-    case ND_MEMBER: return eval2(lhs, ctx) + node->member->offset;
-    case ND_VAR:
-      if (ty->kind == TY_STRUCT || ty->kind == TY_UNION || ty->kind == TY_ARRAY) {
-        if (node->var->constexpr_data ||
-          (opt_optimize && node->var->ty->is_const && node->var->init_data)) {
-          ctx->var = node->var;
-          return 0;
-        }
-      }
-    }
-  }
   if (ctx->kind == EV_CONST && is_integer(ty)) {
-    if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
-      char *data = eval_constexpr_agg(node);
-      if (!data)
-        return 0;
+    char *data = eval_constexpr_data(node);
+    if (data) {
       int64_t val = read_buf_sign_extend(ty, data);
       if (is_bitfield(node)) {
         int unused_msb = 64 - node->member->bit_width;
@@ -2541,12 +2571,6 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return val >> unused_msb;
       }
       return val;
-    }
-    if (node->kind == ND_VAR) {
-      if (node->var->constexpr_data)
-        return read_buf_sign_extend(ty, node->var->constexpr_data);
-      if (opt_optimize && node->var->ty->is_const && node->var->init_data)
-        return read_buf_sign_extend(ty, node->var->init_data);
     }
   }
   return eval_error(node->tok, "not a compile-time constant");
@@ -2627,15 +2651,9 @@ static long double eval_double(Node *node) {
     return node->fval;
   }
 
-  if (node->kind == ND_VAR && node->var->constexpr_data)
-    return read_double_buf(node->var->constexpr_data, node->var->ty);
-
-  if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
-    char *data = eval_constexpr_agg(node);
-    if (!data)
-      return 0;
+  char *data = eval_constexpr_data(node);
+  if (data)
     return read_double_buf(data, ty);
-  }
 
   return eval_error(node->tok, "not a compile-time constant");
 }
