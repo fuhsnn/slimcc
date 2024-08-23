@@ -360,6 +360,9 @@ struct Node {
   // Numeric literal
   int64_t val;
   long double fval;
+
+  // Cast evaluation
+  bool has_no_relocation;
 };
 
 // Represents a block scope.

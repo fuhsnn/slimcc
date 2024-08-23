@@ -2546,12 +2546,29 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return (uint64_t)eval_double(lhs);
       return eval_sign_extend(ty, eval_double(lhs));
     }
-    if (ty->kind == TY_BOOL) {
-      if (lhs->kind == ND_VAR && is_array(lhs->ty))
-        return 1;
-      return !!eval2(lhs, ctx);
+    if (ty->kind == TY_BOOL && lhs->kind == ND_VAR && (is_array(lhs->ty)))
+      return true;
+
+    if (ty->size != sizeof(void *) && !lhs->has_no_relocation) {
+      bool failed = false;
+      bool *prev = eval_recover;
+      eval_recover = &failed;
+
+      EvalContext ctx2= {.kind = EV_LABEL};
+      eval2(lhs, &ctx2);
+
+      eval_recover = prev;
+      if (!failed && ctx2.label) {
+        if (ty->kind == TY_BOOL)
+          return true;
+        return eval_error(node->tok, "relocation pointer casted to different size");
+      }
+      lhs->has_no_relocation = true;
     }
+
     int64_t val = eval2(lhs, ctx);
+    if (ty->kind == TY_BOOL)
+      return !!val;
     if (is_integer(ty))
       return eval_sign_extend(ty, val);
     return val;

@@ -20,6 +20,13 @@ void array_cast_to_bool(int j) {
 }
 int extarr[55];
 
+extern int ext_var;
+extern void ext_fn(void);
+SASSERT(2 == ((_Bool)&ext_var + (_Bool)ext_fn));
+#ifdef NOTGCC
+SASSERT(3 == ((_Bool)(long long)&ext_var + (_Bool)(_Bool)ext_fn + (_Bool)(long long)(_Bool)ext_fn));
+#endif
+
 int main(void) {
   array_cast_to_bool(11);
 
