@@ -69,6 +69,11 @@ int main(void) {
   DASSERT( 16777217.0 != (float)16777217.0 );
   DASSERT( 9007199254740993.0L != (double)9007199254740993.0L || sizeof(double) == sizeof(long double) );
 
+#ifdef NOTCLANG
+  DASSERT( 127 == (unsigned char)511.0 >> 1 );
+#endif
+  DASSERT( (long long)(0.1f * 1e12f) == 99999997952LL );
+
   ASSERT(1, ({ int i = 2; char arr[ (i++,3) ]; i == sizeof arr; }) );
 
   {

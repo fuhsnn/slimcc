@@ -2539,17 +2539,17 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_LOGOR:
     return eval(lhs) || eval(rhs);
   case ND_CAST: {
+    if (is_flonum(lhs->ty)) {
+      if (ty->kind == TY_BOOL)
+        return !!eval_double(lhs);
+      if (ty->size == 8 && ty->is_unsigned)
+        return (uint64_t)eval_double(lhs);
+      return eval_sign_extend(ty, eval_double(lhs));
+    }
     if (ty->kind == TY_BOOL) {
       if (lhs->kind == ND_VAR && is_array(lhs->ty))
         return 1;
-      if (is_flonum(lhs->ty))
-        return !!eval_double(lhs);
       return !!eval2(lhs, ctx);
-    }
-    if (is_flonum(lhs->ty)) {
-      if (ty->size == 8 && ty->is_unsigned)
-        return (uint64_t)eval_double(lhs);
-      return eval_double(lhs);
     }
     int64_t val = eval2(lhs, ctx);
     if (is_integer(ty))
@@ -2658,6 +2658,36 @@ int64_t const_expr(Token **rest, Token *tok) {
   return eval(node);
 }
 
+static long double eval_fp_arith(Node *node) {
+  long double lhsv = eval_double(node->lhs);
+  long double rhsv = eval_double(node->rhs);
+
+  switch (node->ty->kind) {
+  case TY_FLOAT:
+    switch (node->kind) {
+    case ND_ADD: return (float)lhsv + (float)rhsv;
+    case ND_SUB: return (float)lhsv - (float)rhsv;
+    case ND_MUL: return (float)lhsv * (float)rhsv;
+    case ND_DIV: return (float)lhsv / (float)rhsv;
+    }
+  case TY_DOUBLE:
+    switch (node->kind) {
+    case ND_ADD: return (double)lhsv + (double)rhsv;
+    case ND_SUB: return (double)lhsv - (double)rhsv;
+    case ND_MUL: return (double)lhsv * (double)rhsv;
+    case ND_DIV: return (double)lhsv / (double)rhsv;
+    }
+  case TY_LDOUBLE:
+    switch (node->kind) {
+    case ND_ADD: return lhsv + rhsv;
+    case ND_SUB: return lhsv - rhsv;
+    case ND_MUL: return lhsv * rhsv;
+    case ND_DIV: return lhsv / rhsv;
+    }
+  }
+  internal_error();
+}
+
 static long double eval_double(Node *node) {
   if (eval_recover && *eval_recover)
     return false;
@@ -2668,13 +2698,10 @@ static long double eval_double(Node *node) {
 
   switch (node->kind) {
   case ND_ADD:
-    return eval_double(lhs) + eval_double(rhs);
   case ND_SUB:
-    return eval_double(lhs) - eval_double(rhs);
   case ND_MUL:
-    return eval_double(lhs) * eval_double(rhs);
   case ND_DIV:
-    return eval_double(lhs) / eval_double(rhs);
+    return eval_fp_arith(node);
   case ND_POS:
     return eval_double(lhs);
   case ND_NEG:
