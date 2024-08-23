@@ -41,6 +41,12 @@ int g4 = (const int[]){11,22,33,44}[2];
 
 static long long obar = 2 + (long long)"foobar";
 
+_Bool b = 2;
+_Bool ba[] = {3,3,3};
+struct {
+    _Bool b;
+} bs = {4};
+
 int main(void) {
   {
     ASSERT(7, b6_);
@@ -87,6 +93,10 @@ int main(void) {
   ASSERT(66, g3);
   ASSERT(33, g4);
 #endif
+
+  ASSERT(1, b);
+  ASSERT(1, ba[2]);
+  ASSERT(1, bs.b);
 
   ASSERT(0, strcmp("obar", (char *)obar));
 

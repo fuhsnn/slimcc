@@ -1828,18 +1828,6 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   }
   add_type(init->expr);
 
-  switch (ty->kind) {
-  case TY_FLOAT:
-    *(float *)(buf + offset) = eval_double(new_cast(init->expr, ty_float));
-    return cur;
-  case TY_DOUBLE:
-    *(double *)(buf + offset) = eval_double(new_cast(init->expr, ty_double));
-    return cur;
-  case TY_LDOUBLE:
-    *(long double *)(buf + offset) = eval_double(new_cast(init->expr, ty_ldouble));
-    return cur;
-  }
-
   if (is_compatible(ty, init->expr->ty)) {
     int64_t sofs;
     Obj *var = eval_var(init->expr, &sofs, false);
@@ -1865,19 +1853,32 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     }
   }
 
+  Node *init_expr = new_cast(init->expr, ty);
+  switch (ty->kind) {
+  case TY_FLOAT:
+    *(float *)(buf + offset) = eval_double(init_expr);
+    return cur;
+  case TY_DOUBLE:
+    *(double *)(buf + offset) = eval_double(init_expr);
+    return cur;
+  case TY_LDOUBLE:
+    *(long double *)(buf + offset) = eval_double(init_expr);
+    return cur;
+  }
+
   if (kind == EV_CONST) {
-    write_buf(buf + offset, eval(init->expr), ty->size);
+    write_buf(buf + offset, eval(init_expr), ty->size);
     return cur;
   }
 
   int64_t val;
-  if (is_const_expr(init->expr, &val)) {
+  if (is_const_expr(init_expr, &val)) {
     write_buf(buf + offset, val, ty->size);
     return cur;
   }
 
   EvalContext ctx = {.kind = EV_LABEL};
-  int64_t addend = eval2(init->expr, &ctx);
+  int64_t addend = eval2(init_expr, &ctx);
 
   if (ctx.label) {
     Relocation *rel = calloc(1, sizeof(Relocation));
