@@ -408,7 +408,7 @@ typedef enum {
 
 struct Type {
   TypeKind kind;
-  int size;           // sizeof() value
+  int64_t size;       // sizeof() value
   int align;          // alignment
   bool is_unsigned;   // unsigned or signed
   bool is_atomic;     // true if _Atomic
@@ -429,7 +429,7 @@ struct Type {
   Type *base;
 
   // Array
-  int array_len;
+  int64_t array_len;
 
   // Variable-length array
   Node *vla_len; // # of elements
@@ -500,10 +500,10 @@ Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *array_to_pointer(Type *ty);
 Type *func_type(Type *return_ty, Token *tok);
-Type *array_of(Type *base, int size);
+Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr);
 Type *enum_type(void);
-Type *new_type(TypeKind kind, int size, int align);
+Type *new_type(TypeKind kind, int64_t size, int align);
 void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);

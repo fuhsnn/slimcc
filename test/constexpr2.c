@@ -77,6 +77,11 @@ int main(void) {
   ASSERT(1, ({ int i = 2; char arr[ (i++,3) ]; i == sizeof arr; }) );
 
   {
+    char (*arr_ptr)[UINT32_MAX + 1ULL];
+    DASSERT( sizeof(*arr_ptr) == (UINT32_MAX + 1ULL));
+  }
+
+  {
     char arr[3];
     DASSERT(8 == sizeof((0 ? arr:arr)));
     DASSERT(8 == sizeof((0 ? 0:arr)));

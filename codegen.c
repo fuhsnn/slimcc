@@ -2566,7 +2566,7 @@ static void emit_data(Obj *prog) {
 
       // Common symbol
       if (opt_fcommon) {
-        println("  .comm \"%s\", %d, %d", var->name, var->ty->size, align);
+        println("  .comm \"%s\", %"PRIi64", %d", var->name, var->ty->size, align);
         continue;
       }
     }
@@ -2583,7 +2583,7 @@ static void emit_data(Obj *prog) {
         println("  .data");
 
       println("  .type \"%s\", @object", var->name);
-      println("  .size \"%s\", %d", var->name, var->ty->size);
+      println("  .size \"%s\", %"PRIi64, var->name, var->ty->size);
       println("  .align %d", align);
       println("\"%s\":", var->name);
 
@@ -2613,7 +2613,7 @@ static void emit_data(Obj *prog) {
 
     println("  .align %d", align);
     println("\"%s\":", var->name);
-    println("  .zero %d", var->ty->size);
+    println("  .zero %"PRIi64, var->ty->size);
   }
 }
 

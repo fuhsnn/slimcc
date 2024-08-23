@@ -21,7 +21,7 @@ Type *ty_float = &(Type){TY_FLOAT, 4, 4};
 Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
 Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
 
-Type *new_type(TypeKind kind, int size, int align) {
+Type *new_type(TypeKind kind, int64_t size, int32_t align) {
   Type *ty = calloc(1, sizeof(Type));
   ty->kind = kind;
   ty->size = size;
@@ -229,7 +229,7 @@ Type *func_type(Type *return_ty, Token *tok) {
   return ty;
 }
 
-Type *array_of(Type *base, int len) {
+Type *array_of(Type *base, int64_t len) {
   Type *ty = new_type(TY_ARRAY, base->size * len, base->align);
   ty->base = base;
   ty->array_len = len;
