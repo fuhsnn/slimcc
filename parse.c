@@ -2431,7 +2431,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 
   switch (node->kind) {
   case ND_ADD:
-    return eval2(lhs, ctx) + eval(rhs);
+    return eval2(lhs, ctx) + eval2(rhs, ctx);
   case ND_SUB:
     return eval2(lhs, ctx) - eval(rhs);
   case ND_MUL:

@@ -39,6 +39,8 @@ int g3 = (struct S){55,66,77}.j;
 int g4 = (const int[]){11,22,33,44}[2];
 #endif
 
+static long long obar = 2 + (long long)"foobar";
+
 int main(void) {
   {
     ASSERT(7, b6_);
@@ -85,6 +87,8 @@ int main(void) {
   ASSERT(66, g3);
   ASSERT(33, g4);
 #endif
+
+  ASSERT(0, strcmp("obar", (char *)obar));
 
   printf("OK\n");
 }
