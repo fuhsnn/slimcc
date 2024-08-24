@@ -607,29 +607,6 @@ static void store(Type *ty) {
   store2(ty, 0, reg);
 }
 
-static void cmp_zero(Type *ty) {
-  switch (ty->kind) {
-  case TY_FLOAT:
-    println("  xorps %%xmm1, %%xmm1");
-    println("  ucomiss %%xmm1, %%xmm0");
-    return;
-  case TY_DOUBLE:
-    println("  xorpd %%xmm1, %%xmm1");
-    println("  ucomisd %%xmm1, %%xmm0");
-    return;
-  case TY_LDOUBLE:
-    println("  fldz");
-    println("  fucomip");
-    println("  fstp %%st(0)");
-    return;
-  }
-
-  if (is_integer(ty) && ty->size <= 4)
-    println("  test %%eax, %%eax");
-  else
-    println("  test %%rax, %%rax");
-}
-
 static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64) {
   if (val == 0) {
     println("  xor %s, %s", gp32, gp32);
@@ -833,18 +810,25 @@ static char *cast_table[][11] = {
   {f80i8, f80i16, f80i32, f80i64, f80u8, f80u16, f80u32, f80u64, f80f32, f80f64, NULL},   // f80
 };
 
-static void cast(Type *from, Type *to) {
-  if (to->kind == TY_VOID)
-    return;
+static void gen_cmp_zero(Node *node, NodeKind kind) {
+  Node zero = {.kind = ND_NUM, .ty = node->ty, .tok = node->tok};
+  Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .ty = ty_int, .tok = node->tok};
+  gen_expr(&expr);
+  return;
+}
 
-  if (to->kind == TY_BOOL) {
-    cmp_zero(from);
-    gen_cmp_setx(ND_NE, false);
+static void gen_cast(Node *node) {
+  if (node->ty->kind == TY_BOOL) {
+    gen_cmp_zero(node->lhs, ND_NE);
     return;
   }
+  gen_expr(node->lhs);
 
-  int t1 = getTypeId(from);
-  int t2 = getTypeId(to);
+  if (node->ty->kind == TY_VOID)
+    return;
+
+  int t1 = getTypeId(node->lhs->ty);
+  int t2 = getTypeId(node->ty);
   if (cast_table[t1][t2])
     println("  %s", cast_table[t1][t2]);
 }
@@ -1364,8 +1348,7 @@ static void gen_expr(Node *node) {
     gen_expr(node->rhs);
     return;
   case ND_CAST:
-    gen_expr(node->lhs);
-    cast(node->lhs->ty, node->ty);
+    gen_cast(node);
     return;
   case ND_MEMZERO:
     gen_mem_zero(node->var->ofs, node->var->ptr, node->var->ty->size);
@@ -1503,9 +1486,9 @@ static void gen_expr(Node *node) {
     // respectively. We clear the upper bits here.
     if (is_integer(node->ty) && node->ty->size < 4) {
       if (node->ty->kind == TY_BOOL)
-        cast(ty_int, ty_uchar);
+        println("  %s", cast_table[getTypeId(ty_int)][getTypeId(ty_uchar)]);
       else
-        cast(ty_int, node->ty);
+        println("  %s", cast_table[getTypeId(ty_int)][getTypeId(node->ty)]);
     }
 
     // If the return type is a small struct, a value is returned
@@ -1804,7 +1787,7 @@ static void gen_stmt(Node *node) {
   case ND_IF: {
     int c = count();
     gen_expr(node->cond);
-    cmp_zero(node->cond->ty);
+    println("  test %%al, %%al");
     println("  je  .L.else.%d", c);
     gen_stmt(node->then);
     if (node->els)
@@ -1823,7 +1806,7 @@ static void gen_stmt(Node *node) {
     println(".L.begin.%d:", c);
     if (node->cond) {
       gen_expr(node->cond);
-      cmp_zero(node->cond->ty);
+      println("  test %%al, %%al");
       println("  je %s", node->brk_label);
     }
     gen_stmt(node->then);
@@ -1841,7 +1824,7 @@ static void gen_stmt(Node *node) {
     gen_stmt(node->then);
     println("%s:", node->cont_label);
     gen_expr(node->cond);
-    cmp_zero(node->cond->ty);
+    println("  test %%al, %%al");
     println("  jne .L.begin.%d", c);
     println("%s:", node->brk_label);
     return;
@@ -2138,8 +2121,9 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
 
 static bool gen_cmp_opt(Node *lhs, Node *rhs) {
   int sz = lhs->ty->size;
-  char *ins = sz <= 4 ? "cmpl" : "cmpq";
+
   if (is_lvar(lhs)) {
+    char *ins = (sz == 8) ? "cmpq" : (sz == 4) ? "cmpl" : (sz == 2) ? "cmpw" : "cmpb";
     if (is_imm_num(rhs)) {
       println("  %s $%"PRIi64", %d(%s)", ins, rhs->val, lhs->var->ofs, lhs->var->ptr);
       return true;
@@ -2361,9 +2345,7 @@ static bool gen_bool_opt(Node *node) {
 
   if (boolexpr) {
     if (boolexpr->kind == ND_CAST && boolexpr->ty->kind == TY_BOOL) {
-      gen_expr(boolexpr->lhs);
-      cmp_zero(boolexpr->lhs->ty);
-      gen_cmp_setx(has_not ? ND_EQ : ND_NE, false);
+      gen_cmp_zero(boolexpr->lhs, has_not ? ND_EQ : ND_NE);
       return true;
     }
     gen_expr(boolexpr);

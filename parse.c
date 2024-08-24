@@ -2024,7 +2024,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   if (equal(tok, "if")) {
     Node *node = new_node(ND_IF, tok);
     tok = skip(tok->next, "(");
-    node->cond = expr(&tok, tok);
+    node->cond = to_bool(expr(&tok, tok));
     tok = skip(tok, ")");
     node->then = secondary_block(&tok, tok);
     if (equal(tok, "else"))
@@ -2138,7 +2138,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     }
 
     if (!equal(tok, ";"))
-      node->cond = expr(&tok, tok);
+      node->cond = to_bool(expr(&tok, tok));
     tok = skip(tok, ";");
 
     if (!equal(tok, ")"))
@@ -2156,7 +2156,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   if (equal(tok, "while")) {
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
-    node->cond = expr(&tok, tok);
+    node->cond = to_bool(expr(&tok, tok));
     tok = skip(tok, ")");
 
     loop_body(rest, tok, node);
@@ -2170,7 +2170,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
 
     tok = skip(tok, "while");
     tok = skip(tok, "(");
-    node->cond = expr(&tok, tok);
+    node->cond = to_bool(expr(&tok, tok));
     tok = skip(tok, ")");
     *rest = skip(tok, ";");
     return node;
