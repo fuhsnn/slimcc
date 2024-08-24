@@ -1152,11 +1152,10 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
   return node;
 }
 
-static Node *new_vla(Node *sz, Obj *var, int align) {
+static Node *new_vla(Node *sz, Obj *var) {
   Node *node = new_unary(ND_ALLOCA, sz, sz->tok);
   node->ty = pointer_to(ty_void);
   node->var = var;
-  node->val = align;
   add_type(sz);
   return node;
 }
@@ -1234,7 +1233,9 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       // For example, `int x[n+2]` is translated to `tmp = n + 2,
       // x = alloca(tmp)`.
       Obj *var = new_lvar(get_ident(name), ty);
-      chain_expr(&expr, new_vla(new_var_node(ty->vla_size, name), var, MAX(alt_align, 16)));
+      if (alt_align)
+        var->align = alt_align;
+      chain_expr(&expr, new_vla(new_var_node(ty->vla_size, name), var));
 
       DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
       defr->vla = var;
@@ -3868,14 +3869,25 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
-    tok = skip(tok->next, "(");
-    if (!is_typename(tok))
-      error_tok(tok, "expected type name");
-    Type *ty = typename(&tok, tok);
+    Token *start = tok;
+    Type *ty;
+    if (equal(tok->next, "(") && is_typename(tok->next->next)) {
+      ty = typename(&tok, tok->next->next);
+      *rest = skip(tok, ")");
+    } else {
+      Node *node = unary(rest, tok->next);
+      switch (node->kind) {
+      case ND_MEMBER:
+        return new_ulong(MAX(node->member->ty->align, node->member->alt_align), start);
+      case ND_VAR:
+        return new_ulong(node->var->align, start);
+      }
+      add_type(node);
+      ty = node->ty;
+    }
     while (is_array(ty))
       ty = ty->base;
-    *rest = skip(tok, ")");
-    return new_ulong(ty->align, tok);
+    return new_ulong(ty->align, start);
   }
 
   if (equal(tok, "_Generic"))

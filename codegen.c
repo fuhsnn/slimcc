@@ -1177,7 +1177,7 @@ static void builtin_alloca(Node *node) {
   // Shift the temporary area by %rax.
   println("  sub %%rax, %%rsp");
   // Align frame pointer
-  int align = node->val > 16 ? node->val : 16;
+  int align = node->var ? MAX(node->var->align, 16) : 16;
   println("  and $-%d, %%rsp", align);
   if (node->var)
     println("  mov %%rsp, %d(%s)", node->var->ofs, node->var->ptr);
@@ -2503,8 +2503,13 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
     // length at least 16 bytes. We need to align such array to at least
     // 16-byte boundaries. See p.14 of
     // https://github.com/hjl-tools/x86-psABI/wiki/x86-64-psABI-draft.pdf.
-    int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
-      ? MAX(16, var->align) : var->align;
+    int align;
+    if (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
+      align = MAX(16, var->align);
+    else if (var->ty->kind == TY_VLA)
+      align = 8;
+    else
+      align = var->align;
 
     bottom += var->ty->size;
     bottom = align_to(bottom, align);
