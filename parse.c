@@ -132,7 +132,7 @@ static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
-static Obj *eval_var(Node *node, int64_t *ofs, bool allow_volatile);
+static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
 static Node *log_or(Token **rest, Token *tok);
 static long double eval_double(Node *node);
@@ -1830,7 +1830,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   add_type(init->expr);
 
   if (is_compatible(ty, init->expr->ty)) {
-    int64_t sofs;
+    int sofs;
     Obj *var = eval_var(init->expr, &sofs, false);
     if (var && var->init_data && (is_const_var(var) || var->is_compound_lit)) {
       Relocation *srel= var->rel;
@@ -2344,16 +2344,16 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
   exit(1);
 }
 
-static Obj *eval_var(Node *node, int64_t *ofs, bool allow_volatile) {
+static Obj *eval_var(Node *node, int *ofs, bool let_volatile) {
   if (node->kind == ND_VAR) {
     *ofs = 0;
-    if (allow_volatile || !node->ty->is_volatile)
+    if (let_volatile || !node->ty->is_volatile)
       return node->var;
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     EvalContext ctx = {.kind = EV_AGGREGATE};
     *ofs = eval2(node, &ctx);
-    if (ctx.var && (allow_volatile || !ctx.is_volatile))
+    if (ctx.var && (let_volatile || !ctx.is_volatile))
       return ctx.var;
   }
   return NULL;
@@ -2373,7 +2373,7 @@ static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
 }
 
 static char *eval_constexpr_data(Node *node) {
-  int64_t ofs;
+  int ofs;
   Obj *var = eval_var(node, &ofs, false);
 
   if (!var || !(var->constexpr_data || is_static_const_var(var, ofs, node->ty->size)))
@@ -2551,7 +2551,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     if (ty->kind == TY_BOOL && lhs->kind == ND_VAR && (is_array(lhs->ty)))
       return true;
 
-    if (ty->size != sizeof(void *) && !lhs->has_no_relocation) {
+    if (ty->size != sizeof(void *) && !lhs->has_no_ptr) {
       bool failed = false;
       bool *prev = eval_recover;
       eval_recover = &failed;
@@ -2563,9 +2563,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       if (!failed && ctx2.label) {
         if (ty->kind == TY_BOOL)
           return true;
-        return eval_error(node->tok, "relocation pointer casted to different size");
+        return eval_error(node->tok, "pointer cast to different size");
       }
-      lhs->has_no_relocation = true;
+      lhs->has_no_ptr = true;
     }
 
     int64_t val = eval2(lhs, ctx);
@@ -2610,7 +2610,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return 0;
       }
 
-      int64_t ofs;
+      int ofs;
       Obj *var = NULL;
       if (node->kind == ND_ADDR)
         var = eval_var(lhs, &ofs, true);
@@ -2677,32 +2677,11 @@ int64_t const_expr(Token **rest, Token *tok) {
   return eval(node);
 }
 
-static long double eval_fp_arith(Node *node) {
-  long double lhsv = eval_double(node->lhs);
-  long double rhsv = eval_double(node->rhs);
-
-  switch (node->ty->kind) {
-  case TY_FLOAT:
-    switch (node->kind) {
-    case ND_ADD: return (float)lhsv + (float)rhsv;
-    case ND_SUB: return (float)lhsv - (float)rhsv;
-    case ND_MUL: return (float)lhsv * (float)rhsv;
-    case ND_DIV: return (float)lhsv / (float)rhsv;
-    }
-  case TY_DOUBLE:
-    switch (node->kind) {
-    case ND_ADD: return (double)lhsv + (double)rhsv;
-    case ND_SUB: return (double)lhsv - (double)rhsv;
-    case ND_MUL: return (double)lhsv * (double)rhsv;
-    case ND_DIV: return (double)lhsv / (double)rhsv;
-    }
-  case TY_LDOUBLE:
-    switch (node->kind) {
-    case ND_ADD: return lhsv + rhsv;
-    case ND_SUB: return lhsv - rhsv;
-    case ND_MUL: return lhsv * rhsv;
-    case ND_DIV: return lhsv / rhsv;
-    }
+static long double eval_fp_cast(long double fval, Type *ty) {
+  switch (ty->kind) {
+  case TY_FLOAT: return (float)fval;
+  case TY_DOUBLE: return (double)fval;
+  case TY_LDOUBLE: return fval;
   }
   internal_error();
 }
@@ -2716,11 +2695,10 @@ static long double eval_double(Node *node) {
   Node *rhs = node->rhs;
 
   switch (node->kind) {
-  case ND_ADD:
-  case ND_SUB:
-  case ND_MUL:
-  case ND_DIV:
-    return eval_fp_arith(node);
+  case ND_ADD: return eval_fp_cast(eval_double(lhs) + eval_double(rhs), ty);
+  case ND_SUB: return eval_fp_cast(eval_double(lhs) - eval_double(rhs), ty);
+  case ND_MUL: return eval_fp_cast(eval_double(lhs) * eval_double(rhs), ty);
+  case ND_DIV: return eval_fp_cast(eval_double(lhs) / eval_double(rhs), ty);
   case ND_POS:
     return eval_double(lhs);
   case ND_NEG:
@@ -2731,13 +2709,8 @@ static long double eval_double(Node *node) {
     eval_void(lhs);
     return eval_double(rhs);
   case ND_CAST:
-    if (is_flonum(lhs->ty)) {
-      if (ty->size == 4)
-        return (float)eval_double(lhs);
-      if (ty->size == 8)
-        return (double)eval_double(lhs);
-      return eval_double(lhs);
-    }
+    if (is_flonum(lhs->ty))
+      return eval_fp_cast(eval_double(lhs), ty);
     if (lhs->ty->size == 8 && lhs->ty->is_unsigned)
       return (uint64_t)eval(lhs);
     return eval(lhs);

@@ -362,7 +362,7 @@ struct Node {
   long double fval;
 
   // Cast evaluation
-  bool has_no_relocation;
+  bool has_no_ptr;
 };
 
 // Represents a block scope.
