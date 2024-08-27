@@ -80,6 +80,8 @@ typedef struct {
   EvalKind kind;
   char **label;
   Obj *var;
+  int deref_cnt;
+  bool is_atomic;
   bool is_volatile;
 } EvalContext;
 
@@ -2344,19 +2346,40 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
   exit(1);
 }
 
-static Obj *eval_var(Node *node, int *ofs, bool let_volatile) {
+static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volatile, bool let_atomic) {
   if (node->kind == ND_VAR) {
-    *ofs = 0;
-    if (let_volatile || !node->ty->is_volatile)
+   if ((let_volatile || !node->ty->is_volatile) &&
+      (let_atomic || !node->ty->is_atomic)) {
+      *ofs = 0;
       return node->var;
+    }
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
+    bool failed = false;
+    bool *prev = eval_recover;
+    eval_recover = &failed;
+
     EvalContext ctx = {.kind = EV_AGGREGATE};
-    *ofs = eval2(node, &ctx);
-    if (ctx.var && (let_volatile || !ctx.is_volatile))
+    int64_t offset = eval2(node, &ctx);
+
+    eval_recover = prev;
+    if (!failed && ctx.var &&
+      (let_subarray || !ctx.deref_cnt) &&
+      (let_volatile || !ctx.is_volatile) &&
+      (let_atomic || !ctx.is_atomic)) {
+      *ofs = offset;
       return ctx.var;
+    }
   }
   return NULL;
+}
+
+static Obj *eval_var(Node *node, int *ofs, bool let_volatile) {
+  return eval_var_ofs(node, ofs, true, let_volatile, true);
+}
+
+Obj *eval_var_opt(Node *node, int *ofs, bool let_atomic) {
+  return eval_var_ofs(node, ofs, false, true, let_atomic);
 }
 
 static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
@@ -2585,18 +2608,26 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval2(lhs->lhs, ctx);
 
   if (ctx->kind == EV_AGGREGATE) {
+    ctx->is_atomic |= node->ty->is_atomic;
     ctx->is_volatile |= node->ty->is_volatile;
 
     switch (node->kind) {
     case ND_DEREF:
+      ctx->deref_cnt++;
       return eval2(lhs, ctx);
     case ND_MEMBER:
+      if (node->member->ty->kind == TY_ARRAY)
+        ctx->deref_cnt--;
       return eval2(lhs, ctx) + node->member->offset;
     case ND_VAR:
       switch (ty->kind) {
       case TY_STRUCT:
       case TY_UNION:
+        ctx->var = node->var;
+        return 0;
       case TY_ARRAY:
+        for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base)
+          ctx->deref_cnt--;
         ctx->var = node->var;
         return 0;
       }

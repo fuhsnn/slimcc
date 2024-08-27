@@ -510,6 +510,7 @@ Type *new_type(TypeKind kind, int64_t size, int align);
 void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);
+Obj *eval_var_opt(Node *node, int *ofs, bool let_atomic);
 
 //
 // codegen.c

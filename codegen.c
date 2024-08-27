@@ -117,6 +117,27 @@ static bool is_lvar(Node *node) {
   return node->kind == ND_VAR && node->var->is_local;
 }
 
+static bool is_memop(Node *node, char *ofs, char **ptr, bool allow_atomic) {
+  if (is_bitfield(node))
+    return false;
+
+  int offset;
+  Obj *var = eval_var_opt(node, &offset, allow_atomic);
+  if (var) {
+    if (var->is_local && var->ty->kind != TY_VLA) {
+      snprintf(ofs, 64, "%d", offset + var->ofs);
+      *ptr = var->ptr;
+      return true;
+    }
+    if (!opt_fpic && !var->is_tls) {
+      snprintf(ofs, 64, "%d+\"%s\"", offset, var->name);
+      *ptr = "%rip";
+      return true;
+    }
+  }
+  return false;
+}
+
 bool is_trivial_arg(Node *arg) {
   if (!opt_optimize)
     return false;
@@ -301,22 +322,28 @@ static void pop_copy(int sz, char *sptr) {
 // When we load a char or a short value to a register, we always
 // extend them to the size of int, so we can assume the lower half of
 // a register always contains a valid value.
-static void load_extend_int(Type *ty, int ofs, char *ptr, char *reg) {
+static void load_extend_int2(Type *ty, char *ofs, char *ptr, char *reg) {
   char *insn = ty->is_unsigned ? "movz" : "movs";
   switch (ty->size) {
-  case 1: println("  %sbl %d(%s), %s", insn, ofs, ptr, reg); return;
-  case 2: println("  %swl %d(%s), %s", insn, ofs, ptr, reg); return;
-  case 4: println("  movl %d(%s), %s", ofs, ptr, reg); return;
-  case 8: println("  mov %d(%s), %s", ofs, ptr, reg); return;
+  case 1: println("  %sbl %s(%s), %s", insn, ofs, ptr, reg); return;
+  case 2: println("  %swl %s(%s), %s", insn, ofs, ptr, reg); return;
+  case 4: println("  movl %s(%s), %s", ofs, ptr, reg); return;
+  case 8: println("  mov %s(%s), %s", ofs, ptr, reg); return;
   }
   internal_error();
 }
 
-static void load_extend_int64(Node *node, char *reg) {
-  switch (node->ty->size) {
-  case 4: println("  movslq %d(%s), %s", node->var->ofs, node->var->ptr, reg); return;
-  case 2: println("  movswq %d(%s), %s", node->var->ofs, node->var->ptr, reg); return;
-  case 1: println("  movsbq %d(%s), %s", node->var->ofs, node->var->ptr, reg); return;
+static void load_extend_int(Type *ty, int ofs, char *ptr, char *reg) {
+  char ofs_buf[64];
+  snprintf(ofs_buf, 64, "%d", ofs);
+  load_extend_int2(ty, ofs_buf, ptr, reg);
+}
+
+static void load_extend_int64(Type *ty, char *ofs, char *ptr, char *reg) {
+  switch (ty->size) {
+  case 4: println("  movslq %s(%s), %s", ofs, ptr, reg); return;
+  case 2: println("  movswq %s(%s), %s", ofs, ptr, reg); return;
+  case 1: println("  movsbq %s(%s), %s", ofs, ptr, reg); return;
   }
   internal_error();
 }
@@ -355,6 +382,22 @@ static char *regop_ax(Type *ty) {
   case 8: return "%rax";
   }
   internal_error();
+}
+
+static void gen_mem_copy2(int sofs, char *sptr, char *dofs, char *dptr, int sz) {
+  for (int i = 0; i < sz;) {
+    int rem = sz - i;
+    if (rem >= 16) {
+      println("  movups %d(%s), %%xmm0", i + sofs, sptr);
+      println("  movups %%xmm0, %d+%s(%s)", i, dofs, dptr);
+      i += 16;
+      continue;
+    }
+    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
+    println("  mov %d(%s), %s", i + sofs, sptr, reg_dx(p2));
+    println("  mov %s, %d+%s(%s)", reg_dx(p2), i, dofs, dptr);
+    i += p2;
+  }
 }
 
 static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
@@ -539,20 +582,25 @@ static void gen_addr(Node *node) {
   error_tok(node->tok, "not an lvalue");
 }
 
-static void load2(Type *ty, int sofs, char *sptr) {
+static void load3(Type *ty, char *sofs, char *sptr) {
   switch (ty->kind) {
   case TY_FLOAT:
-    println("  movss %d(%s), %%xmm0", sofs, sptr);
+    println("  movss %s(%s), %%xmm0", sofs, sptr);
     return;
   case TY_DOUBLE:
-    println("  movsd %d(%s), %%xmm0", sofs, sptr);
+    println("  movsd %s(%s), %%xmm0", sofs, sptr);
     return;
   case TY_LDOUBLE:
-    println("  fninit; fldt %d(%s)", sofs, sptr);
+    println("  fninit; fldt %s(%s)", sofs, sptr);
     return;
   }
+  load_extend_int2(ty, sofs, sptr, regop_ax(ty));
+}
 
-  load_extend_int(ty, sofs, sptr, regop_ax(ty));
+static void load2(Type *ty, int sofs, char *sptr) {
+  char ofs_buf[64];
+  snprintf(ofs_buf, 64, "%d", sofs);
+  load3(ty, ofs_buf, sptr);
 }
 
 // Load a value from where %rax is pointing to.
@@ -579,26 +627,32 @@ static void load(Type *ty) {
   internal_error();
 }
 
-static void store2(Type *ty, int dofs, char *dptr) {
+static void store3(Type *ty, char *dofs, char *dptr) {
   switch (ty->kind) {
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
-    gen_mem_copy(0, "%rax", dofs, dptr, ty->size);
+    gen_mem_copy2(0, "%rax", dofs, dptr, ty->size);
     return;
   case TY_FLOAT:
-    println("  movss %%xmm0, %d(%s)", dofs, dptr);
+    println("  movss %%xmm0, %s(%s)", dofs, dptr);
     return;
   case TY_DOUBLE:
-    println("  movsd %%xmm0, %d(%s)", dofs, dptr);
+    println("  movsd %%xmm0, %s(%s)", dofs, dptr);
     return;
   case TY_LDOUBLE:
-    println("  fstpt %d(%s)", dofs, dptr);
-    println("  fninit; fldt %d(%s)", dofs, dptr);
+    println("  fstpt %s(%s)", dofs, dptr);
+    println("  fninit; fldt %s(%s)", dofs, dptr);
     return;
   }
 
-  println("  mov %s, %d(%s)", reg_ax(ty->size), dofs, dptr);
+  println("  mov %s, %s(%s)", reg_ax(ty->size), dofs, dptr);
+}
+
+static void store2(Type *ty, int dofs, char *dptr) {
+  char ofs_buf[64];
+  snprintf(ofs_buf, 64, "%d", dofs);
+  store3(ty, ofs_buf, dptr);
 }
 
 // Store %rax to an address that the stack top is pointing to.
@@ -2121,15 +2175,17 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
 
 static bool gen_cmp_opt(Node *lhs, Node *rhs) {
   int sz = lhs->ty->size;
+  char *var_ptr;
+  char var_ofs[64];
 
-  if (is_lvar(lhs)) {
+  if (is_memop(lhs, var_ofs, &var_ptr, false)) {
     char *ins = (sz == 8) ? "cmpq" : (sz == 4) ? "cmpl" : (sz == 2) ? "cmpw" : "cmpb";
     if (is_imm_num(rhs)) {
-      println("  %s $%"PRIi64", %d(%s)", ins, rhs->val, lhs->var->ofs, lhs->var->ptr);
+      println("  %s $%"PRIi64", %s(%s)", ins, rhs->val, var_ofs, var_ptr);
       return true;
     }
     gen_expr(rhs);
-    println("  %s %s, %d(%s)", ins, reg_ax(sz), lhs->var->ofs, lhs->var->ptr);
+    println("  %s %s, %s(%s)", ins, reg_ax(sz), var_ofs, var_ptr);
     return true;
   }
   if (rhs->kind == ND_NUM) {
@@ -2144,29 +2200,33 @@ static bool lvar_rhs_arith_opt(NodeKind kind, Node *lhs, Node *rhs) {
   char *ax = reg_ax(rhs->ty->size);
   char *dx = reg_dx(rhs->ty->size);
 
-  if (is_int_to_int_cast(rhs) && is_lvar(rhs->lhs)) {
-    if (rhs->ty->size > rhs->lhs->ty->size) {
+  char *var_ptr;
+  char var_ofs[64];
+
+  if (is_int_to_int_cast(rhs)) {
+    if (is_memop(rhs->lhs, var_ofs, &var_ptr, true) &&
+      (rhs->ty->size > rhs->lhs->ty->size)) {
       gen_expr(lhs);
 
-      Node *lhs = rhs->lhs;
-      if (!lhs->ty->is_unsigned && rhs->ty->size == 8)
-        load_extend_int64(lhs, "%rdx");
+      if (!rhs->lhs->ty->is_unsigned && rhs->ty->size == 8)
+        load_extend_int64(rhs->lhs->ty, var_ofs, var_ptr, "%rdx");
       else
-        load_extend_int(lhs->ty, lhs->var->ofs, lhs->var->ptr, "%edx");
+        load_extend_int2(rhs->lhs->ty, var_ofs, var_ptr, "%edx");
 
       println("  %s %s, %s", arith_ins(kind), dx, ax);
       return true;
     }
-    if (rhs->ty->size <= rhs->lhs->ty->size) {
+    if (is_memop(rhs->lhs, var_ofs, &var_ptr, false) &&
+      (rhs->ty->size <= rhs->lhs->ty->size)) {
       gen_expr(lhs);
-      println("  %s %d(%s), %s", arith_ins(kind), rhs->lhs->var->ofs, rhs->lhs->var->ptr, ax);
+      println("  %s %s(%s), %s", arith_ins(kind), var_ofs, var_ptr, ax);
       return true;
     }
   }
 
-  if (is_lvar(rhs)) {
+  if (is_memop(rhs, var_ofs, &var_ptr, false)) {
     gen_expr(lhs);
-    println("  %s %d(%s), %s", arith_ins(kind), rhs->var->ofs, rhs->var->ptr, ax);
+    println("  %s %s(%s), %s", arith_ins(kind), var_ofs, var_ptr, ax);
     return true;
   }
   return false;
@@ -2237,7 +2297,7 @@ static bool gen_gp_opt(Node *node) {
   return false;
 }
 
-static int64_t gen_deref_opt(Node *node, Type *load_ty, int64_t *ofs) {
+static void gen_deref_opt(Node *node, int64_t *ofs) {
   for (;; node = node->lhs) {
     if (node->kind == ND_CAST && node->ty->base)
       continue;
@@ -2256,31 +2316,22 @@ static int64_t gen_deref_opt(Node *node, Type *load_ty, int64_t *ofs) {
     break;
   }
   if (is_lvar(node) && node->var->ty->kind == TY_ARRAY) {
-    if (load_ty) {
-      load2(load_ty, *ofs + node->var->ofs, node->var->ptr);
-      return true;
-    }
     println("  lea %"PRIi64"(%s), %%rax", *ofs + node->var->ofs, node->var->ptr);
     *ofs = 0;
-    return false;
+    return;
   }
   gen_expr(node);
-  return false;
 }
 
-static int gen_member_opt(Node *node, Type *load_ty, int64_t *ofs) {
+static void gen_member_opt(Node *node, int64_t *ofs) {
   while (node->kind == ND_MEMBER) {
     *ofs += node->member->offset;
     node = node->lhs;
   }
   if (is_lvar(node)) {
-    if (load_ty) {
-      load2(load_ty, *ofs + node->var->ofs, node->var->ptr);
-      return true;
-    }
     println("  lea %"PRIi64"(%s), %%rax", *ofs + node->var->ofs, node->var->ptr);
     *ofs = 0;
-    return false;
+    return;
   }
   switch (node->kind) {
   case ND_FUNCALL:
@@ -2289,10 +2340,9 @@ static int gen_member_opt(Node *node, Type *load_ty, int64_t *ofs) {
   case ND_STMT_EXPR:
   case ND_VA_ARG:
     gen_expr(node);
-    return false;
+    return;
   }
   gen_addr(node);
-  return false;
 }
 
 static bool gen_inv_cmp(Node *node) {
@@ -2362,14 +2412,17 @@ static bool gen_expr_opt(Node *node) {
   Node *lhs = node->lhs;
   Node *rhs = node->rhs;
 
-  if (is_lvar(node) && (is_scalar(ty))) {
-    load2(ty, node->var->ofs, node->var->ptr);
+  char *var_ptr;
+  char var_ofs[64];
+
+  if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
+    load3(ty, var_ofs, var_ptr);
     return true;
   }
 
-  if (kind == ND_ASSIGN && is_lvar(lhs)) {
+  if (kind == ND_ASSIGN && is_memop(lhs, var_ofs, &var_ptr, false)) {
     gen_expr(rhs);
-    store2(lhs->var->ty, lhs->var->ofs, lhs->var->ptr);
+    store3(lhs->ty, var_ofs, var_ptr);
     return true;
   }
 
@@ -2393,10 +2446,7 @@ static bool gen_expr_opt(Node *node) {
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
-    Type *load_ty = is_scalar(ty) ? ty : NULL;
-
-    if (gen_deref_opt(node->lhs, load_ty, &ofs))
-      return true;
+    gen_deref_opt(node->lhs, &ofs);
 
     if (is_scalar(ty)) {
       load2(ty, ofs, "%rax");
@@ -2408,10 +2458,7 @@ static bool gen_expr_opt(Node *node) {
 
   if (kind == ND_MEMBER) {
     int64_t ofs = 0;
-    Type *load_ty = is_scalar(ty) && !is_bitfield(node) ? ty : NULL;
-
-    if (gen_member_opt(node, load_ty, &ofs))
-      return true;
+    gen_member_opt(node, &ofs);
 
     if (is_scalar(ty)) {
       load2(ty, ofs, "%rax");
@@ -2430,16 +2477,16 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
-  if (is_int_to_int_cast(node) && is_lvar(lhs)) {
+  if (is_int_to_int_cast(node) && is_memop(lhs, var_ofs, &var_ptr, true)) {
     if (ty->size > lhs->ty->size) {
       if (!lhs->ty->is_unsigned && node->ty->size == 8)
-        load_extend_int64(lhs, "%rax");
+        load_extend_int64(lhs->ty, var_ofs, var_ptr, "%rax");
       else
-        load_extend_int(lhs->ty, lhs->var->ofs, lhs->var->ptr, "%eax");
+        load_extend_int2(lhs->ty, var_ofs, var_ptr, "%eax");
       return true;
     }
     if (ty->size < lhs->ty->size && ty->kind != TY_BOOL) {
-      load_extend_int(ty, lhs->var->ofs, lhs->var->ptr, "%eax");
+      load_extend_int2(ty, var_ofs, var_ptr, "%eax");
       return true;
     }
   }
@@ -2465,14 +2512,14 @@ static bool gen_addr_opt(Node *node) {
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
-    gen_deref_opt(node->lhs, NULL, &ofs);
+    gen_deref_opt(node->lhs, &ofs);
     imm_add("%rax", "%rdx", ofs);
     return true;
   }
 
   if (kind == ND_MEMBER) {
     int64_t ofs = 0;
-    gen_member_opt(node, NULL, &ofs);
+    gen_member_opt(node, &ofs);
     imm_add("%rax", "%rdx", ofs);
     return true;
   }
