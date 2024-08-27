@@ -52,6 +52,7 @@ static void store_gp2(char **reg, int sz, int ofs, char *ptr);
 
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
+static void gen_void_expr(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 
@@ -559,7 +560,7 @@ static void gen_addr(Node *node) {
     return;
   case ND_CHAIN:
   case ND_COMMA:
-    gen_expr(node->lhs);
+    gen_void_expr(node->lhs);
     gen_addr(node->rhs);
     return;
   case ND_MEMBER:
@@ -1263,7 +1264,7 @@ static void gen_defr(Node *node) {
       continue;
     }
     if (defr->kind == DF_CLEANUP_FN) {
-      gen_expr(defr->cleanup_fn);
+      gen_void_expr(defr->cleanup_fn);
       defr = defr->next;
       continue;
     }
@@ -1388,8 +1389,12 @@ static void gen_expr(Node *node) {
     store(node->ty);
     return;
   case ND_STMT_EXPR:
-    for (Node *n = node->body; n; n = n->next)
-      gen_stmt(n);
+    for (Node *n = node->body; n; n = n->next) {
+      if (!n->next && n->kind == ND_EXPR_STMT)
+        gen_expr(n->lhs);
+      else
+        gen_stmt(n);
+    }
     if (has_defr(node)) {
       push_by_ty(node->ty);
       gen_defr(node);
@@ -1398,7 +1403,7 @@ static void gen_expr(Node *node) {
     return;
   case ND_CHAIN:
   case ND_COMMA:
-    gen_expr(node->lhs);
+    gen_void_expr(node->lhs);
     gen_expr(node->rhs);
     return;
   case ND_CAST:
@@ -1477,7 +1482,7 @@ static void gen_expr(Node *node) {
 
     for (Obj *var = node->args; var; var = var->param_next)
       if (!is_trivial_arg(var->param_arg))
-        gen_expr(var->param_arg);
+        gen_void_expr(var->param_arg);
 
     // If the return type is a large struct/union, the caller passes
     // a pointer to a buffer as if it were the first argument.
@@ -1866,7 +1871,7 @@ static void gen_stmt(Node *node) {
     gen_stmt(node->then);
     println("%s:", node->cont_label);
     if (node->inc)
-      gen_expr(node->inc);
+      gen_void_expr(node->inc);
     println("  jmp .L.begin.%d", c);
     println("%s:", node->brk_label);
     gen_defr(node);
@@ -1979,7 +1984,7 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_EXPR_STMT:
-    gen_expr(node->lhs);
+    gen_void_expr(node->lhs);
     return;
   case ND_ASM:
     println("  %s", node->asm_str);
@@ -1987,6 +1992,49 @@ static void gen_stmt(Node *node) {
   }
 
   error_tok(node->tok, "invalid statement");
+}
+
+static void gen_void_expr(Node *node) {
+  switch (node->kind) {
+  case ND_NULL_EXPR:
+  case ND_LABEL_VAL:
+  case ND_VAR:
+  case ND_NUM:
+    return;
+  case ND_POS:
+  case ND_NEG:
+  case ND_MEMBER:
+  case ND_ADDR:
+  case ND_DEREF:
+  case ND_NOT:
+  case ND_BITNOT:
+  case ND_CAST:
+    gen_void_expr(node->lhs);
+    return;
+  case ND_ADD:
+  case ND_SUB:
+  case ND_MUL:
+  case ND_DIV:
+  case ND_MOD:
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR:
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+  case ND_CHAIN:
+  case ND_COMMA:
+    gen_void_expr(node->lhs);
+    gen_void_expr(node->rhs);
+    return;
+  }
+  gen_expr(node);
 }
 
 static char *arith_ins(NodeKind kind) {
