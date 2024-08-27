@@ -155,7 +155,7 @@ static Member *get_struct_member(Type *ty, Token *tok);
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind);
 static Type *struct_decl(Type *ty, int alt_align);
 static Type *union_decl(Type *ty, int alt_align);
-static Node *postfix(Token **rest, Token *tok);
+static Node *postfix(Node *node, Token **rest, Token *tok);
 static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
@@ -3302,7 +3302,8 @@ static Node *unary(Token **rest, Token *tok) {
     return node;
   }
 
-  return postfix(rest, tok);
+  Node *node = primary(&tok, tok);
+  return postfix(node, rest, tok);
 }
 
 // struct-members = (declspec declarator (","  declarator)* ";")*
@@ -3609,9 +3610,7 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
 //              | "->" ident
 //              | "++"
 //              | "--"
-static Node *postfix(Token **rest, Token *tok) {
-  Node *node = primary(&tok, tok);
-
+static Node *postfix(Node *node, Token **rest, Token *tok) {
   for (;;) {
     if (equal(tok, "(")) {
       node = funcall(&tok, tok->next, node);
@@ -3955,39 +3954,23 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "__builtin_offsetof")) {
+    Token *start = tok;
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);
-    tok = skip(tok, ",");
+    Node *var_node = new_var_node(&(Obj){.ty = ty}, start);
 
-    Node *node = NULL;
-    int offset = 0;
-    do {
-      Member *mem;
-      do {
-        mem = struct_designator(&tok, tok, ty);
-        offset += mem->offset;
-        ty = mem->ty;
-      } while (!mem->name);
-
-      for (; ty->base && consume(&tok, tok, "["); tok = skip(tok, "]")) {
-        ty = ty->base;
-        Node *expr = conditional(&tok, tok);
-        int64_t val;
-        if (is_const_expr(expr, &val)) {
-          offset += ty->size * val;
-          continue;
-        }
-        if (!node)
-          node = new_binary(ND_MUL, expr, new_long(ty->size, tok), tok);
-        else
-          node = new_binary(ND_ADD, node, new_binary(ND_MUL, expr, new_long(ty->size, tok), tok), tok);
-      }
-    } while (consume(&tok, tok, "."));
-
+    Token dot = {.kind = TK_PUNCT, .loc = ".", .len = 1, .next = skip(tok, ",")};
+    Node *node = postfix(var_node, &tok, &dot);
     *rest = skip(tok, ")");
-    if (!node)
+
+    int offset;
+    if (eval_var_ofs(node, &offset, true, true, true))
       return new_ulong(offset, tok);
-    return new_binary(ND_ADD, node, new_ulong(offset, tok), tok);
+
+    var_node->kind = ND_DEREF;
+    var_node->lhs = new_cast(new_long(0, tok), pointer_to(ty));
+    var_node->var = NULL;
+    return new_cast(new_unary(ND_ADDR, node, tok), ty_ulong);
   }
 
   if (equal(tok, "__builtin_types_compatible_p")) {
