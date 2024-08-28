@@ -297,6 +297,8 @@ typedef enum {
   ND_VA_ARG,    // "va_arg"
   ND_CHAIN,     // ND_COMMA without array-to-pointer conversion
   ND_ALLOCA,
+  ND_ARITH_ASSIGN,
+  ND_POST_INCDEC
 } NodeKind;
 
 // AST node type
@@ -363,6 +365,9 @@ struct Node {
 
   // Cast evaluation
   bool has_no_ptr;
+
+  // Arithmetic Assignment
+  NodeKind arith_kind;
 };
 
 // Represents a block scope.

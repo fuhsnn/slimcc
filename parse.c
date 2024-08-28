@@ -2822,61 +2822,16 @@ static Node *atomic_op(Node *binary, bool return_old) {
   return node;
 }
 
-// Convert op= operators to expressions containing an assignment.
-//
-// In general, `A op= C` is converted to ``tmp = &A, *tmp = *tmp op B`.
-// However, if a given expression is of form `A.x op= C`, the input is
-// converted to `tmp = &A, (*tmp).x = (*tmp).x op C` to handle assignments
-// to bitfields.
 static Node *to_assign(Node *binary) {
   add_type(binary->lhs);
-  add_type(binary->rhs);
-  Token *tok = binary->tok;
 
-  // If A is an atomic type, Convert `A op= B` to atomic_op_fetch(&A, B)
   if (binary->lhs->ty->is_atomic)
     return atomic_op(binary, false);
 
-  // Convert `A.x op= C` to `tmp = &A, (*tmp).x = (*tmp).x op C`.
-  if (is_bitfield(binary->lhs)) {
-    Obj *var = new_lvar(NULL, pointer_to(binary->lhs->lhs->ty));
-
-    Node *expr1 = new_binary(ND_ASSIGN, new_var_node(var, tok),
-                             new_unary(ND_ADDR, binary->lhs->lhs, tok), tok);
-
-    Node *expr2 = new_unary(ND_MEMBER,
-                            new_unary(ND_DEREF, new_var_node(var, tok), tok),
-                            tok);
-    expr2->member = binary->lhs->member;
-
-    Node *expr3 = new_unary(ND_MEMBER,
-                            new_unary(ND_DEREF, new_var_node(var, tok), tok),
-                            tok);
-    expr3->member = binary->lhs->member;
-
-    Node *expr4 = new_binary(ND_ASSIGN, expr2,
-                             new_binary(binary->kind, expr3, binary->rhs, tok),
-                             tok);
-
-    return new_binary(ND_CHAIN, expr1, expr4, tok);
-  }
-
-  // Convert `A op= B` to ``tmp = &A, *tmp = *tmp op B`.
-  Obj *var = new_lvar(NULL, pointer_to(binary->lhs->ty));
-
-  Node *expr1 = new_binary(ND_ASSIGN, new_var_node(var, tok),
-                           new_unary(ND_ADDR, binary->lhs, tok), tok);
-
-  Node *expr2 =
-    new_binary(ND_ASSIGN,
-               new_unary(ND_DEREF, new_var_node(var, tok), tok),
-               new_binary(binary->kind,
-                          new_unary(ND_DEREF, new_var_node(var, tok), tok),
-                          binary->rhs,
-                          tok),
-               tok);
-
-  return new_binary(ND_CHAIN, expr1, expr2, tok);
+  binary->arith_kind = binary->kind;
+  binary->kind = ND_ARITH_ASSIGN;
+  binary->ty = binary->lhs->ty;
+  return binary;
 }
 
 // assign    = conditional (assign-op assign)?
@@ -3559,9 +3514,11 @@ static Node *struct_ref(Node *node, Token *tok) {
   return node;
 }
 
-// Convert A++ to `(ptr = &A, tmp = *ptr, *ptr += 1, tmp)`
 static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   add_type(node);
+
+  if (node->ty->is_atomic)
+    return atomic_op(new_add(node, new_num(addend, tok), tok), true);
 
   if (opt_optimize && node->ty->kind != TY_BOOL && !is_bitfield(node) && !is_flonum(node->ty)) {
     Type *ty = node->ty;
@@ -3571,34 +3528,10 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
     return new_cast(node, ty);
   }
 
-  enter_tmp_scope();
-
-  Node *ref;
-  Node *expr = NULL;
-
-  if (is_bitfield(node)) {
-    Obj *ptr = new_lvar(NULL, pointer_to(node->lhs->ty));
-
-    ref = new_unary(ND_MEMBER, new_unary(ND_DEREF, new_var_node(ptr, tok), tok), tok);
-    ref->member = node->member;
-
-    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(ptr, tok),
-                                 new_unary(ND_ADDR, node->lhs, tok), tok));
-  } else {
-    Obj *ptr = new_lvar(NULL, pointer_to(node->ty));
-
-    ref = new_unary(ND_DEREF, new_var_node(ptr, tok), tok);
-
-    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(ptr, tok),
-                                 new_unary(ND_ADDR, node, tok), tok));
-  }
-  Obj *tmp = new_lvar(NULL, node->ty);
-
-  chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(tmp, tok), ref, tok));
-  chain_expr(&expr, to_assign(new_add(ref, new_num(addend, tok), tok)));
-  chain_expr(&expr, new_var_node(tmp, tok));
-  leave_scope();
-  return expr;
+  node = new_add(node, new_num(addend, tok), tok);
+  node->kind = ND_POST_INCDEC;
+  node->ty = node->lhs->ty;
+  return node;
 }
 
 // postfix = ident "(" func-args ")" postfix-tail*

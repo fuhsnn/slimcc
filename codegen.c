@@ -1348,6 +1348,13 @@ static void print_loc(Token *tok) {
   line_no = tok->display_line_no;
 }
 
+static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
+  Node null = {.kind = ND_NULL_EXPR, .ty = ty, .tok = rhs->tok};
+  Node expr = {.kind = kind, .lhs = &null, .rhs = rhs,.tok = rhs->tok};
+  add_type(&expr);
+  gen_expr(new_cast(&expr, ty));
+}
+
 // Generate code for a given node.
 static void gen_expr(Node *node) {
   if (opt_g)
@@ -1412,6 +1419,23 @@ static void gen_expr(Node *node) {
     push();
     gen_expr(node->rhs);
     store(node->lhs);
+    return;
+  case ND_ARITH_ASSIGN:
+    gen_addr(node->lhs);
+    push();
+    load(node->lhs, 0);
+    gen_expr_null_lhs(node->arith_kind, node->lhs->ty, node->rhs);
+    store(node->lhs);
+    return;
+  case ND_POST_INCDEC:
+    gen_addr(node->lhs);
+    println("  movq %%rax, %%rcx");
+    load(node->lhs, 0);
+    push_by_ty(node->lhs->ty);
+    push_from("%rcx");
+    gen_expr_null_lhs(ND_ADD, node->lhs->ty, node->rhs);
+    store(node->lhs);
+    pop_by_ty(node->lhs->ty);
     return;
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next) {
