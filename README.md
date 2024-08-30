@@ -1,9 +1,10 @@
-This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with [fixes](https://github.com/fuhsnn/slimcc/issues?q=is%3Aissue+is%3Aclosed+label%3Aupstream) and improvements, including:
+This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with [fixes](https://github.com/fuhsnn/slimcc/issues?q=is%3Aissue+is%3Aclosed+label%3Aupstream-chibicc) and improvements, including:
  - C99 features: VLA parameters, VLA de-allocation, K&R old-style funtions.
  - C11 features: `_Static_assert()`, over-aligned locals, `_Generic` with qualifiers.
  - C23 features: `constexpr`, `#embed`, `auto` type-inferrence, etc.
+ - C2Y/TS features: `defer`(through `_Defer`)
  - GNU features: `cleanup`
- - Basic optimizations.
+ - Basic optimizations: const folding, reg-alloc for temporaries, instruction selection.
 
 If you're just looking for "chibicc-with-only-fixes-to-build-stuff" checkout [widcc](https://github.com/fuhsnn/widcc).
 
@@ -25,7 +26,9 @@ make test-stage2 -j
 Run it in base directory like `CC=~/slimcc/slimcc`.
 
 # What can it build?
-I regularly keep up with latest versions of Curl, Git, Python, PostgreSQL, Sqlite, Vim etc.
+`slimcc` should be able to compile most C89 to C11 projects not entagled with compiler-specific or optional features. 
+
+Real world projects including Curl, Git, PHP, Perl, Python, PostgreSQL, SQLite, Vim are successfully built and regularly tested with.
 
 Check out [widcc's list](https://github.com/fuhsnn/widcc?tab=readme-ov-file#building-real-world-projects) for detailed build scripts.
 
@@ -42,7 +45,7 @@ Compare size of chibicc binary built with several compilers:
       text       data        bss      total filename
     112363      43987        616     156966 gcc_O0_build
     113867      43156        504     157527 clang_O0_build
-    131947      31913        456     164316 slimcc_build
+    127515      31913        448     159876 slimcc_build
     144896      29536        440     174872 tcc_build
     263659      41163        456     305278 chibicc_build
 ```
