@@ -2238,6 +2238,13 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
+  if (equal(tok, "_Defer")) {
+    DeferStmt *defr = new_defr(DF_DEFER_STMT);
+    defr->stmt = secondary_block(rest, tok->next);
+    add_type(defr->stmt);
+    return new_node(ND_NULL_STMT, tok);
+  }
+
   if (equal(tok, "{"))
     return compound_stmt(rest, tok->next, ND_BLOCK);
 

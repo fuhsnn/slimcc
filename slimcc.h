@@ -228,6 +228,7 @@ struct Relocation {
 typedef enum {
   DF_VLA_DEALLOC,
   DF_CLEANUP_FN,
+  DF_DEFER_STMT,
 } DeferKind;
 
 typedef struct DeferStmt DeferStmt;
@@ -236,6 +237,7 @@ struct DeferStmt {
   DeferStmt *next;
   Obj *vla;
   Node *cleanup_fn;
+  Node *stmt;
 };
 
 // AST node
