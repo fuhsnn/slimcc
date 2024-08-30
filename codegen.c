@@ -48,6 +48,8 @@ struct {
   int depth;
 } static tmp_stack;
 
+static void load2(Type *ty, int sofs, char *sptr);
+static void store2(Type *ty, int dofs, char *dptr);
 static void store_gp2(char **reg, int sz, int ofs, char *ptr);
 
 static void gen_expr(Node *node);
@@ -152,6 +154,16 @@ static bool is_int_to_int_cast(Node *node) {
 
 static bool has_defr(Node *node) {
   return node->defr_start != node->defr_end;
+}
+
+static Type *bitwidth_to_ty(int width, bool is_unsigned) {
+  switch (width) {
+  case 64: return is_unsigned ? ty_ullong : ty_llong;
+  case 32: return is_unsigned ? ty_uint : ty_int;
+  case 16: return is_unsigned ? ty_ushort : ty_short;
+  case 8: return is_unsigned ? ty_uchar : ty_char;
+  }
+  return NULL;
 }
 
 static void clobber_all_regs(void) {
@@ -453,28 +465,66 @@ static void gen_cmp_setx(NodeKind kind, bool is_unsigned) {
   println("  movzbl %%al, %%eax");
 }
 
-static void gen_bit_extract(Type *ty, int bit_width, int bit_offset) {
-  if (bit_offset == 0 && bit_width == ty->size * 8)
+static void gen_bitfield_load(Node *node, int ofs) {
+  Member *mem = node->member;
+  Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
+  if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
+    load2(alt_ty, ofs + mem->bit_offset / 8, "%rax");
     return;
+  }
+  load2(mem->ty, ofs, "%rax");
 
-  char *ax;
-  int reg_width;
+  char *ax = regop_ax(mem->ty);
+  if (mem->ty->is_unsigned) {
+    if (mem->bit_offset)
+      println("  shr $%d, %s", mem->bit_offset, ax);
+    imm_and(ax, "%rdx", (1LL << mem->bit_width) - 1);
+    return;
+  }
+  int shft = (mem->ty->size == 8) ? 64 : 32 - mem->bit_width;
+  println("  shl $%d, %s", shft - mem->bit_offset, ax);
+  println("  sar $%d, %s", shft, ax);
+  return;
+}
 
-  if (ty->size == 8)
-    ax = "%rax", reg_width = 64;
-  else
-    ax = "%eax", reg_width = 32;
-
-  if (bit_offset == 0 && ty->is_unsigned) {
-    imm_and(ax, "%rdx", (1LL << bit_width) - 1);
+static void gen_bitfield_store(Node *node) {
+  Member *mem = node->member;
+  Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
+  if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
+    char *reg = pop_inreg(tmpreg64[0]);
+    store2(alt_ty, mem->bit_offset / 8, reg);
     return;
   }
 
-  println("  shl $%d, %s", reg_width - bit_width - bit_offset, ax);
-  if (ty->is_unsigned)
-    println("  shr $%d, %s", reg_width - bit_width, ax);
+  char *ax, *dx, *cx;
+  if (mem->ty->size == 8)
+    ax = "%rax", cx = "%rcx", dx = "%rdx";
   else
-    println("  sar $%d, %s", reg_width - bit_width, ax);
+    ax = "%eax", cx = "%ecx", dx = "%edx";
+
+  println("  mov %s, %s", ax, cx);
+  imm_and(cx, dx, (1LL << mem->bit_width) - 1);
+
+  char *ptr = pop_inreg(tmpreg64[0]);
+  load2(mem->ty, 0, ptr);
+
+  imm_and(ax, dx, ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset));
+
+  if (mem->bit_offset) {
+    println("  mov %s, %s", cx, dx);
+    println("  shl $%d, %s", mem->bit_offset, dx);
+    println("  or %s, %s", dx, ax);
+  } else {
+    println("  or %s, %s", cx, ax);
+  }
+  store2(mem->ty, 0, ptr);
+
+  println("  mov %s, %s", cx, ax);
+  if (!mem->ty->is_unsigned) {
+    int shft = (mem->ty->size == 8) ? 64 : 32 - mem->bit_width;
+    println("  shl $%d, %s", shft, ax);
+    println("  sar $%d, %s", shft, ax);
+  }
 }
 
 // Compute the absolute address of a given node.
@@ -604,14 +654,16 @@ static void load2(Type *ty, int sofs, char *sptr) {
   load3(ty, ofs_buf, sptr);
 }
 
-// Load a value from where %rax is pointing to.
-static void load(Type *ty) {
-  if (is_scalar(ty)) {
-    load2(ty, 0, "%rax");
+static void load(Node *node, int ofs) {
+  if (is_bitfield(node)) {
+    gen_bitfield_load(node, ofs);
     return;
   }
-
-  switch (ty->kind) {
+  if (is_scalar(node->ty)) {
+    load2(node->ty, ofs, "%rax");
+    return;
+  }
+  switch (node->ty->kind) {
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
@@ -656,10 +708,13 @@ static void store2(Type *ty, int dofs, char *dptr) {
   store3(ty, ofs_buf, dptr);
 }
 
-// Store %rax to an address that the stack top is pointing to.
-static void store(Type *ty) {
+static void store(Node *node) {
+  if (is_bitfield(node)) {
+    gen_bitfield_store(node);
+    return;
+  }
   char *reg = pop_inreg(tmpreg64[0]);
-  store2(ty, 0, reg);
+  store2(node->ty, 0, reg);
 }
 
 static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64) {
@@ -1329,20 +1384,16 @@ static void gen_expr(Node *node) {
     return;
   case ND_VAR:
     gen_addr(node);
-    load(node->ty);
+    load(node, 0);
     return;
   case ND_MEMBER: {
     gen_addr(node);
-    load(node->ty);
-
-    Member *mem = node->member;
-    if (mem->is_bitfield)
-      gen_bit_extract(mem->ty, mem->bit_width, mem->bit_offset);
+    load(node, 0);
     return;
   }
   case ND_DEREF:
     gen_expr(node->lhs);
-    load(node->ty);
+    load(node, 0);
     return;
   case ND_ADDR:
     gen_addr(node->lhs);
@@ -1351,42 +1402,7 @@ static void gen_expr(Node *node) {
     gen_addr(node->lhs);
     push();
     gen_expr(node->rhs);
-
-    if (is_bitfield(node->lhs)) {
-      // If the lhs is a bitfield, we need to read the current value
-      // from memory and merge it with a new value.
-      Member *mem = node->lhs->member;
-      if (mem->bit_offset == 0 && mem->bit_width == mem->ty->size * 8) {
-        store(mem->ty);
-        return;
-      }
-
-      char *ax, *dx, *cx;
-      if (mem->ty->size == 8)
-        ax = "%rax", cx = "%rcx", dx = "%rdx";
-      else
-        ax = "%eax", cx = "%ecx", dx = "%edx";
-
-      imm_and(ax, dx, (1LL << mem->bit_width) - 1);
-      println("  mov %s, %s", ax, cx);
-
-      char *ptr = pop_inreg(tmpreg64[0]);
-      load2(mem->ty, 0, ptr);
-
-      imm_and(ax, dx, ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset));
-
-      println("  mov %s, %s", cx, dx);
-      if (mem->bit_offset)
-        println("  shl $%d, %s", mem->bit_offset, dx);
-      println("  or %s, %s", dx, ax);
-      store2(mem->ty, 0, ptr);
-
-      println("  mov %s, %s", cx, ax);
-      if (!mem->ty->is_unsigned)
-        gen_bit_extract(mem->ty, mem->bit_width, 0);
-      return;
-    }
-    store(node->ty);
+    store(node->lhs);
     return;
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next) {
@@ -2509,11 +2525,7 @@ static bool gen_expr_opt(Node *node) {
     gen_member_opt(node, &ofs);
 
     if (is_scalar(ty)) {
-      load2(ty, ofs, "%rax");
-
-      Member *mem = node->member;
-      if (mem->is_bitfield)
-        gen_bit_extract(mem->ty, mem->bit_width, mem->bit_offset);
+      load(node, ofs);
       return true;
     }
     imm_add("%rax", "%rdx", ofs);
