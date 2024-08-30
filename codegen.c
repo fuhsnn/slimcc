@@ -39,6 +39,7 @@ typedef struct {
   int fp_depth;
   int st_depth;
   int st_ofs;
+  char *push_reg;
   long loc;
 } Slot;
 
@@ -178,17 +179,16 @@ static void clobber_gp(int i) {
   }
 }
 
-static void push_tmpstack(SlotKind kind) {
+static Slot *push_tmpstack(SlotKind kind) {
   if (tmp_stack.depth == tmp_stack.capacity) {
     tmp_stack.capacity += 4;
     tmp_stack.data = realloc(tmp_stack.data, sizeof(Slot) * tmp_stack.capacity);
   }
 
   long loc = resrvln();
-  Slot sl = {.kind = kind, .loc = loc};
-  tmp_stack.data[tmp_stack.depth] = sl;
-  tmp_stack.depth++;
-  return;
+  Slot *sl = &tmp_stack.data[tmp_stack.depth++];
+  *sl = (Slot){.kind = kind, .loc = loc};
+  return sl;
 }
 
 static Slot *pop_tmpstack(int sz) {
@@ -224,19 +224,28 @@ static void push(void) {
   push_tmpstack(SL_GP);
 }
 
+static void push_from(char *reg) {
+  Slot *sl = push_tmpstack(SL_GP);
+  sl->push_reg = reg;
+}
+
 static char *pop_gp(bool is_r64, char *dest_reg, bool must_be_dest) {
-  char *ax = is_r64 ? "%rax" : "%eax";
   Slot *sl = pop_tmpstack(1);
+  char *push_reg;
+  if (sl->push_reg)
+    push_reg = sl->push_reg;
+  else
+    push_reg = is_r64 ? "%rax" : "%eax";
 
   if (sl->kind == SL_GP) {
     char *pop_reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
-    insrtln("  mov %s, %s", sl->loc, ax, pop_reg);
+    insrtln("  mov %s, %s", sl->loc, push_reg, pop_reg);
     if (!must_be_dest)
       return pop_reg;
     println("  mov %s, %s", pop_reg, dest_reg);
     return dest_reg;
   }
-  insrtln("  mov %s, %d(%s)", sl->loc, ax, sl->st_ofs, lvar_ptr);
+  insrtln("  mov %s, %d(%s)", sl->loc, push_reg, sl->st_ofs, lvar_ptr);
   println("  mov %d(%s), %s", sl->st_ofs, lvar_ptr, dest_reg);
   return dest_reg;
 }
@@ -1523,8 +1532,7 @@ static void gen_expr(Node *node) {
 
     if (arg_stk_size) {
       if (arg_stk_align > 16) {
-        println("  mov %%rsp, %%rax");
-        push();
+        push_from("%rsp");
         println("  sub $%d, %%rsp", arg_stk_size);
         println("  and $-%d, %%rsp", arg_stk_align);
       } else {
