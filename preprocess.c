@@ -474,29 +474,25 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
 }
 
 static MacroArg *
-read_macro_args(Token **rest, Token *tok, MacroParam *params, char *va_args_name) {
-  pop_macro_lock(tok->next);
-  pop_macro_lock(tok->next->next);
-  tok = tok->next->next;
-
+read_macro_args(Token **rest, Token *tok, Macro *m) {
   MacroArg head = {0};
   MacroArg *cur = &head;
 
-  for (MacroParam *pp = params; pp; pp = pp->next) {
+  for (MacroParam *pp = m->params; pp; pp = pp->next) {
     if (cur != &head)
       tok = skip(tok, ",");
     cur = cur->next = read_macro_arg_one(&tok, tok, false);
     cur->name = pp->name;
   }
 
-  if (va_args_name) {
+  if (m->va_args_name) {
     Token *start = tok;
-    if (!equal(tok, ")") && params)
+    if (!equal(tok, ")") && m->params)
       tok = skip(tok, ",");
 
     MacroArg *arg = read_macro_arg_one(&tok, tok, true);
     arg->omit_comma = equal(start, ")");
-    arg->name = va_args_name;
+    arg->name = m->va_args_name;
     arg->is_va_args = true;
     cur->next = arg;
   }
@@ -789,7 +785,9 @@ static bool expand_macro(Token **rest, Token *tok) {
     stop_tok = tok->next;
     *rest = insert_objlike(m->body, stop_tok, tok);
   } else {
-    MacroArg *args = read_macro_args(&stop_tok, tok, m->params, m->va_args_name);
+    pop_macro_lock(tok->next);
+    pop_macro_lock(tok->next->next);
+    MacroArg *args = read_macro_args(&stop_tok, tok->next->next, m);
     Token *body = subst(m->body, args);
     *rest = insert_funclike(body, stop_tok, tok);
   }
