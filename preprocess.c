@@ -71,7 +71,7 @@ static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
 static Token *directives(Token **cur, Token *start);
-static Token *subst(Token *tok, MacroArg *args);
+static Token *subst(Token *tok, MacroArg *args, Macro *macro);
 static long is_supported_attr(Token **vendor, Token *tok);
 
 static bool is_hash(Token *tok) {
@@ -276,6 +276,14 @@ static Token *split_bracket(Token **rest, Token *tok) {
   *rest = tok->next;
   cur->next = to_eof(tok);
   return head.next;
+}
+
+static Token *find_last_tok(Token *tok) {
+  if (tok->kind == TK_EOF)
+    internal_error();
+  while (tok->next->kind != TK_EOF)
+    tok = tok->next;
+  return tok;
 }
 
 static Token *new_num_token(int val, Token *tmpl) {
@@ -524,7 +532,14 @@ static Token *expand_arg(MacroArg *arg) {
   return arg->expanded = head.next;
 }
 
-static MacroArg *find_arg(Token **rest, Token *tok, MacroArg *args) {
+static MacroArg *find_va_arg(MacroArg *args) {
+  for (MacroArg *ap = args; ap; ap = ap->next)
+    if (ap->is_va_args)
+      return ap;
+  return NULL;
+}
+
+static MacroArg *find_arg(Token **rest, Token *tok, MacroArg *args, Macro *m) {
   for (MacroArg *ap = args; ap; ap = ap->next) {
     if (equal(tok, ap->name)) {
       if (rest)
@@ -538,13 +553,9 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroArg *args) {
   if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
     MacroArg *arg = read_macro_arg_one(&tok, tok->next->next, true);
 
-    MacroArg *va = NULL;
-    for (MacroArg *ap = args; ap; ap = ap->next)
-      if (ap->is_va_args)
-        va = ap;
-
-    if (va && expand_arg(va)->kind != TK_EOF)
-      arg->tok = subst(arg->tok, args);
+    MacroArg *vaarg = find_va_arg(args);
+    if (vaarg && expand_arg(vaarg)->kind != TK_EOF)
+      arg->tok = subst(arg->tok, args, m);
     else
       arg->tok = new_eof(tok);
 
@@ -613,7 +624,7 @@ static Token *paste(Token *lhs, Token *rhs) {
 }
 
 // Replace func-like macro parameters with given arguments.
-static Token *subst(Token *tok, MacroArg *args) {
+static Token *subst(Token *tok, MacroArg *args, Macro *m) {
   Token head = {0};
   Token *cur = &head;
 
@@ -622,7 +633,7 @@ static Token *subst(Token *tok, MacroArg *args) {
 
     // "#" followed by a parameter is replaced with stringized actuals.
     if (equal(tok, "#")) {
-      MacroArg *arg = find_arg(&tok, tok->next, args);
+      MacroArg *arg = find_arg(&tok, tok->next, args, m);
       if (!arg)
         error_tok(tok->next, "'#' is not followed by a macro parameter");
       cur = cur->next = stringize(start, arg->tok);
@@ -634,7 +645,7 @@ static Token *subst(Token *tok, MacroArg *args) {
     // to an empty token list. Otherwise, it's expanded to `,` and
     // __VA_ARGS__.
     if (equal(tok, ",") && equal(tok->next, "##")) {
-      MacroArg *arg = find_arg(NULL, tok->next->next, args);
+      MacroArg *arg = find_arg(NULL, tok->next->next, args, m);
       if (arg && arg->is_va_args) {
         if (arg->omit_comma) {
           tok = tok->next->next->next;
@@ -658,7 +669,7 @@ static Token *subst(Token *tok, MacroArg *args) {
         continue;
       }
 
-      MacroArg *arg = find_arg(&tok, tok->next, args);
+      MacroArg *arg = find_arg(&tok, tok->next, args, m);
       if (arg) {
         if (arg->tok->kind == TK_EOF)
           continue;
@@ -675,7 +686,7 @@ static Token *subst(Token *tok, MacroArg *args) {
       continue;
     }
 
-    MacroArg *arg = find_arg(&tok, tok, args);
+    MacroArg *arg = find_arg(&tok, tok, args, m);
     if (arg) {
       Token *t;
       if (equal(tok, "##"))
@@ -694,6 +705,37 @@ static Token *subst(Token *tok, MacroArg *args) {
       continue;
     }
 
+    if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
+      Macro *tail_m;
+      Token *rparen;
+      if (equal(tok, ")")) {
+        tail_m = m;
+        rparen = tok;
+        tok = tok->next;
+      } else {
+        tail_m = find_macro(tok);
+        rparen = tok->next;
+        tok = skip(tok->next, ")");
+      }
+      if (!(tail_m && tail_m->params))
+        error_tok(start, "expected function-like macro with at least one named parameter");
+
+      MacroArg *vaarg = find_va_arg(args);
+      if (!vaarg || expand_arg(vaarg)->kind == TK_EOF) {
+        cur = cur->next = new_pmark(tok);
+        continue;
+      }
+      Token *tail_arg_tok = copy_line(&(Token *){0}, vaarg->expanded);
+      find_last_tok(tail_arg_tok)->next = rparen;
+
+      MacroArg *tail_args = read_macro_args(&(Token *){0}, tail_arg_tok, tail_m);
+      for (MacroArg *ap = tail_args; ap; ap = ap->next)
+        ap->expanded = ap->tok;
+
+      cur->next = subst(tail_m->body, tail_args, tail_m);
+      cur = find_last_tok(cur);
+      continue;
+    }
     // Handle a non-parameter token.
     cur = cur->next = copy_token(tok);
     tok = tok->next;
@@ -788,7 +830,7 @@ static bool expand_macro(Token **rest, Token *tok) {
     pop_macro_lock(tok->next);
     pop_macro_lock(tok->next->next);
     MacroArg *args = read_macro_args(&stop_tok, tok->next->next, m);
-    Token *body = subst(m->body, args);
+    Token *body = subst(m->body, args, m);
     *rest = insert_funclike(body, stop_tok, tok);
   }
 
