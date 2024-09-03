@@ -505,12 +505,14 @@ void convert_pp_number(Token *tok) {
 
   Type *ty;
   if (*end == 'f' || *end == 'F') {
+    val = (float)val;
     ty = ty_float;
     end++;
   } else if (*end == 'l' || *end == 'L') {
     ty = ty_ldouble;
     end++;
   } else {
+    val = (double)val;
     ty = ty_double;
   }
 

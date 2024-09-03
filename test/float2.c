@@ -6,7 +6,14 @@
 #define FASSERT EASSERT
 #endif
 
+long double g0 = 343.4314;
+
 int main(void) {
+  long double l0 = 343.4314;
+  long double l1 = 343.4314L;
+
+  ASSERT(0, g0 == l1);
+  ASSERT(0, l0 == l1);
 
   FASSERT(0, 0.0/0.0 == 0.0/0.0);
   FASSERT(1, 0.0/0.0 != 0.0/0.0);
