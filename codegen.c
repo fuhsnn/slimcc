@@ -2516,6 +2516,19 @@ static bool gen_expr_opt(Node *node) {
   char *var_ptr;
   char var_ofs[64];
 
+  {
+    int64_t ival;
+    if (is_gp_ty(ty) && is_const_expr(node, &ival)) {
+      load_val(ty, ival);
+      return true;
+    }
+    long double fval;
+    if (is_flonum(ty) && is_const_double(node, &fval)) {
+      load_fval(ty, fval);
+      return true;
+    }
+  }
+
   if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
     load3(ty, var_ofs, var_ptr);
     return true;
@@ -2569,11 +2582,6 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
-  if (node->kind == ND_CAST && node->ty->base && is_imm_num(node->lhs) && !node->lhs->val) {
-    println("  xor %%eax, %%eax");
-    return true;
-  }
-
   if (is_int_to_int_cast(node) && is_memop(lhs, var_ofs, &var_ptr, true)) {
     if (ty->size > lhs->ty->size) {
       if (!lhs->ty->is_unsigned && node->ty->size == 8)
@@ -2588,19 +2596,6 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (kind != ND_NUM) {
-    int64_t ival;
-    if (is_integer(ty) && is_const_expr(node, &ival)) {
-      load_val(ty, ival);
-      return true;
-    }
-
-    long double fval;
-    if (is_flonum(ty) && is_const_double(node, &fval)) {
-      load_fval(ty, fval);
-      return true;
-    }
-  }
   return false;
 }
 
