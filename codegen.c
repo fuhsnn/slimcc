@@ -731,11 +731,18 @@ static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64) {
     println("  xor %s, %s", gp32, gp32);
     return;
   }
-  if (ty->size <= 4 ? in_imm_range(val) : (uint64_t)val <= UINT32_MAX) {
+  if (val == (uint32_t)val) {
     println("  movl $%"PRIi64", %s", val, gp32);
     return;
   }
-  println("  mov $%"PRIi64", %s", val, gp64);
+  if (val == (int32_t)val) {
+    if (ty->size == 8)
+      println("  movq $%"PRIi64", %s", val, gp64);
+    else
+      println("  movl $%"PRIi64", %s", val, gp32);
+    return;
+  }
+  println("  movabsq $%"PRIi64", %s", val, gp64);
 }
 
 static void load_val(Type *ty, int64_t val) {
