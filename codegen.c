@@ -114,10 +114,6 @@ static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
 
-static bool is_imm_num(Node *node) {
-  return node->kind == ND_NUM && is_integer(node->ty) && in_imm_range(node->val);
-}
-
 static bool is_lvar(Node *node) {
   return node->kind == ND_VAR && node->var->is_local;
 }
@@ -956,7 +952,8 @@ static char *cast_table[][11] = {
 
 static void gen_cmp_zero(Node *node, NodeKind kind) {
   Node zero = {.kind = ND_NUM, .ty = node->ty, .tok = node->tok};
-  Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .ty = ty_int, .tok = node->tok};
+  Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .tok = node->tok};
+  add_type(&expr);
   gen_expr(&expr);
   return;
 }
@@ -2402,23 +2399,23 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
 }
 
 static bool gen_cmp_opt(Node *lhs, Node *rhs) {
-  int sz = lhs->ty->size;
-  char *var_ptr;
-  char var_ofs[64];
-
-  if (is_memop(lhs, var_ofs, &var_ptr, false)) {
-    char *ins = (sz == 8) ? "cmpq" : (sz == 4) ? "cmpl" : (sz == 2) ? "cmpw" : "cmpb";
-    if (is_imm_num(rhs)) {
-      println("  %s $%"PRIi64", %s(%s)", ins, rhs->val, var_ofs, var_ptr);
+  char var_ofs[64], *var_ptr;
+  int64_t val;
+  if (is_const_expr(rhs, &val)) {
+    if (is_memop(lhs, var_ofs, &var_ptr, false)) {
+      char memop[80];
+      snprintf(memop, 80, "%s(%s)", var_ofs, var_ptr);
+      imm_tmpl(lhs->ty->size == 8 ? "cmpq" : "cmpl", memop, limit_imm(val, lhs->ty->size));
       return true;
     }
-    gen_expr(rhs);
-    println("  %s %s, %s(%s)", ins, reg_ax(sz), var_ofs, var_ptr);
+    gen_expr(lhs);
+    imm_cmp(regop_ax(lhs->ty), "%rdx", limit_imm(val, lhs->ty->size));
     return true;
   }
-  if (rhs->kind == ND_NUM) {
-    gen_expr(lhs);
-    imm_cmp(reg_ax(sz), reg_dx(sz), rhs->val);
+
+  if (is_memop(lhs, var_ofs, &var_ptr, false)) {
+    gen_expr(rhs);
+    println("  cmp %s, %s(%s)", regop_ax(lhs->ty), var_ofs, var_ptr);
     return true;
   }
   return false;
