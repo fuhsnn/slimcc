@@ -2146,6 +2146,12 @@ static void gen_void_arith_assign(Node *node) {
 }
 
 static void gen_void_assign(Node *node) {
+  if (is_gp_ty(node->lhs->ty) && !is_bitfield(node->lhs) && !node->lhs->ty->is_atomic &&
+    is_const_expr(node->rhs, NULL)) {
+    memop_arith(node->lhs, node->rhs, "mov");
+    return;
+  }
+
   char sofs[64], *sptr;
   if (is_memop(node->rhs, sofs, &sptr, true)) {
     char dofs[64], *dptr;
