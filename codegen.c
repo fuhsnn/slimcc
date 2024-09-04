@@ -167,6 +167,12 @@ static Type *bitwidth_to_ty(int width, bool is_unsigned) {
   return NULL;
 }
 
+static int write_size(Node *node)  {
+  if (node->ty->kind == TY_LDOUBLE)
+    return 10;
+  return node->ty->size;
+}
+
 static void clobber_all_regs(void) {
   for (int i = 0; i < tmp_stack.depth; i++)
     tmp_stack.data[i].kind = SL_ST;
@@ -2046,6 +2052,22 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
+static void gen_void_assign(Node *node) {
+  char sofs[64], *sptr;
+  if (is_memop(node->rhs, sofs, &sptr, true)) {
+    char dofs[64], *dptr;
+    if (is_memop(node->lhs, dofs, &dptr, false)) {
+      gen_mem_copy2(sofs, sptr, dofs, dptr, write_size(node->lhs));
+      return;
+    } else if (!is_bitfield(node->lhs) && !node->lhs->ty->is_atomic) {
+      gen_addr(node->lhs);
+      gen_mem_copy2(sofs, sptr, "0", "%rax", write_size(node->lhs));
+      return;
+    }
+  }
+  gen_expr(node);
+}
+
 static void gen_void_expr(Node *node) {
   switch (node->kind) {
   case ND_NULL_EXPR:
@@ -2084,6 +2106,9 @@ static void gen_void_expr(Node *node) {
   case ND_COMMA:
     gen_void_expr(node->lhs);
     gen_void_expr(node->rhs);
+    return;
+  case ND_ASSIGN:
+    gen_void_assign(node);
     return;
   }
   gen_expr(node);
