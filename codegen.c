@@ -406,36 +406,28 @@ static char *regop_ax(Type *ty) {
   internal_error();
 }
 
-static void gen_mem_copy2(int sofs, char *sptr, char *dofs, char *dptr, int sz) {
+static void gen_mem_copy2(char *sofs, char *sptr, char *dofs, char *dptr, int sz) {
   for (int i = 0; i < sz;) {
     int rem = sz - i;
     if (rem >= 16) {
-      println("  movups %d(%s), %%xmm0", i + sofs, sptr);
+      println("  movups %d+%s(%s), %%xmm0", i, sofs, sptr);
       println("  movups %%xmm0, %d+%s(%s)", i, dofs, dptr);
       i += 16;
       continue;
     }
     int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
-    println("  mov %d(%s), %s", i + sofs, sptr, reg_dx(p2));
+    println("  mov %d+%s(%s), %s", i, sofs, sptr, reg_dx(p2));
     println("  mov %s, %d+%s(%s)", reg_dx(p2), i, dofs, dptr);
     i += p2;
   }
 }
 
 static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
-  for (int i = 0; i < sz;) {
-    int rem = sz - i;
-    if (rem >= 16) {
-      println("  movups %d(%s), %%xmm0", i + sofs, sptr);
-      println("  movups %%xmm0, %d(%s)", i + dofs, dptr);
-      i += 16;
-      continue;
-    }
-    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
-    println("  mov %d(%s), %s", i + sofs, sptr, reg_dx(p2));
-    println("  mov %s, %d(%s)", reg_dx(p2), i + dofs, dptr);
-    i += p2;
-  }
+  char sofs_buf[64];
+  snprintf(sofs_buf, 64, "%d", sofs);
+  char dofs_buf[64];
+  snprintf(dofs_buf, 64, "%d", dofs);
+  gen_mem_copy2(sofs_buf, sptr, dofs_buf, dptr, sz);
 }
 
 static void gen_mem_zero(int dofs, char *dptr, int sz) {
@@ -694,7 +686,7 @@ static void store3(Type *ty, char *dofs, char *dptr) {
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
-    gen_mem_copy2(0, "%rax", dofs, dptr, ty->size);
+    gen_mem_copy2("0", "%rax", dofs, dptr, ty->size);
     return;
   case TY_FLOAT:
     println("  movss %%xmm0, %s(%s)", dofs, dptr);
