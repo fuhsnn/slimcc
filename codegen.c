@@ -63,6 +63,7 @@ static void imm_add(char *op, char *tmp, int64_t val);
 static void imm_sub(char *op, char *tmp, int64_t val);
 static void imm_and(char *op, char *tmp, int64_t val);
 static void imm_cmp(char *op, char *tmp, int64_t val);
+static char *arith_ins(NodeKind kind);
 
 FMTCHK(1,2)
 static void println(char *fmt, ...) {
@@ -171,6 +172,25 @@ static int write_size(Node *node)  {
   if (node->ty->kind == TY_LDOUBLE)
     return 10;
   return node->ty->size;
+}
+
+static int64_t limit_imm(int64_t val, int sz) {
+  switch (sz) {
+  case 4: return (int32_t)val;
+  case 2: return (int16_t)val;
+  case 1: return (int8_t)val;
+  }
+  return val;
+}
+
+static char *size_suffix(int sz)  {
+  switch (sz) {
+  case 8: return "q";
+  case 4: return "l";
+  case 2: return "w";
+  case 1: return "b";
+  }
+  internal_error();
 }
 
 static void clobber_all_regs(void) {
@@ -2052,6 +2072,79 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
+static void imm_tmpl(char *ins, char *op, int64_t val) {
+  if (val == (int32_t)val) {
+    println("  %s $%"PRIi64", %s", ins, val, op);
+    return;
+  }
+  if (val == (uint32_t)val)
+    println("  movl $%"PRIi64", %%edx", val);
+  else
+    println("  movabsq $%"PRIi64", %%rdx", val);
+  println("  %s %%rdx, %s", ins, op);
+  return;
+}
+
+static void memop_arith(Node *lhs, Node *rhs, char *ins) {
+  char ins_sz[64];
+  snprintf(ins_sz, 64, "%s%s", ins, size_suffix(lhs->ty->size));
+
+  int64_t rval;
+  char var_ofs[64], *var_ptr;
+  if (is_const_expr(rhs, &rval)) {
+    if (is_memop(lhs, var_ofs, &var_ptr, false)) {
+      char memop[80];
+      snprintf(memop, 80, "%s(%s)", var_ofs, var_ptr);
+      imm_tmpl(ins_sz, memop, limit_imm(rval, lhs->ty->size));
+      return;
+    }
+    gen_addr(lhs);
+    imm_tmpl(ins_sz, "(%rax)", limit_imm(rval, lhs->ty->size));
+    return;
+  }
+
+  if (is_memop(lhs, var_ofs, &var_ptr, false)) {
+    gen_expr(rhs);
+    println("  %s %s, %s(%s)", ins_sz, reg_ax(lhs->ty->size), var_ofs, var_ptr);
+    return;
+  }
+  gen_addr(lhs);
+  push();
+  gen_expr(rhs);
+  char *ptr = pop_inreg(tmpreg64[0]);
+  println("  %s %s, (%s)", ins_sz, reg_ax(lhs->ty->size), ptr);
+}
+
+static void gen_void_arith_assign(Node *node) {
+  if (node->kind == ND_POST_INCDEC) {
+    node->kind = ND_ARITH_ASSIGN;
+    node->arith_kind = ND_ADD;
+  }
+
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+  add_type(rhs);
+
+  if (opt_optimize && is_gp_ty(lhs->ty) && !is_bitfield(lhs) &&
+    lhs->ty->kind != TY_BOOL && is_integer(rhs->ty)) {
+    Node null = {.kind = ND_NULL_EXPR, .ty = lhs->ty, .tok = rhs->tok};
+    Node expr = {.kind = node->arith_kind, .lhs = &null, .rhs = rhs, .tok = rhs->tok};
+    add_type(&expr);
+
+    switch (node->arith_kind) {
+    case ND_ADD:
+    case ND_SUB:
+    case ND_BITAND:
+    case ND_BITOR:
+    case ND_BITXOR:
+      memop_arith(lhs, expr.rhs, arith_ins(node->arith_kind));
+      return;
+    }
+  }
+
+  gen_expr(node);
+}
+
 static void gen_void_assign(Node *node) {
   char sofs[64], *sptr;
   if (is_memop(node->rhs, sofs, &sptr, true)) {
@@ -2109,6 +2202,10 @@ static void gen_void_expr(Node *node) {
     return;
   case ND_ASSIGN:
     gen_void_assign(node);
+    return;
+  case ND_ARITH_ASSIGN:
+  case ND_POST_INCDEC:
+    gen_void_arith_assign(node);
     return;
   }
   gen_expr(node);
