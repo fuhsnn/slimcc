@@ -24,6 +24,7 @@ static int vla_base_ofs;
 static int rtn_ptr_ofs;
 static int lvar_stk_sz;
 static int peak_stk_usage;
+static char *rtn_label;
 
 bool dont_reuse_stack;
 
@@ -1382,6 +1383,31 @@ static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
   gen_expr(new_cast(&expr, ty));
 }
 
+static void gen_label_ph(char *label_str, bool is_main_epilogue) {
+  if (!label_str) {
+    if (is_main_epilogue)
+      println("  xor %%eax, %%eax");
+    return;
+  }
+  static char *buf;
+  static size_t buf_n;
+  int len = strlen(label_str);
+  fseek(output_file, -(len + 7), SEEK_CUR);
+  if (getline(&buf, &buf_n, output_file) != (len + 7) ||
+    strncmp(buf, "  jmp ", 6) || strncmp(&buf[6], label_str, len)) {
+    fseek(output_file, (len + 7), SEEK_CUR);
+    if (is_main_epilogue)
+      println("  xor %%eax, %%eax");
+  }
+  println("%s:", label_str);
+}
+
+static void gen_return_jmp(void) {
+  if (!rtn_label)
+    rtn_label = new_unique_name();
+  println("  jmp %s", rtn_label);
+}
+
 // Generate code for a given node.
 static void gen_expr(Node *node) {
   if (opt_g)
@@ -1994,7 +2020,7 @@ static void gen_stmt(Node *node) {
 
     println("  jmp %s", node->brk_label);
     gen_stmt(node->then);
-    println("%s:", node->brk_label);
+    gen_label_ph(node->brk_label, false);
     return;
   }
   case ND_CASE:
@@ -2024,7 +2050,7 @@ static void gen_stmt(Node *node) {
     if (!node->lhs) {
       if (has_defr(node))
         gen_defr(node);
-      println("  jmp 9f");
+      gen_return_jmp();
       return;
     }
     gen_expr(node->lhs);
@@ -2038,7 +2064,7 @@ static void gen_stmt(Node *node) {
           pop_copy(ty->size, "%rax");
         }
         copy_struct_reg();
-        println("  jmp 9f");
+        gen_return_jmp();
         return;
       }
       copy_struct_mem();
@@ -2047,7 +2073,7 @@ static void gen_stmt(Node *node) {
         gen_defr(node);
         pop("%rax");
       }
-      println("  jmp 9f");
+      gen_return_jmp();
       return;
     }
     if (has_defr(node)) {
@@ -2055,7 +2081,7 @@ static void gen_stmt(Node *node) {
       gen_defr(node);
       pop_by_ty(ty);
     }
-    println("  jmp 9f");
+    gen_return_jmp();
     return;
   }
   case ND_EXPR_STMT:
@@ -2932,6 +2958,7 @@ static void emit_text(Obj *prog) {
     int lvar_align = get_lvar_align(fn->ty->scopes, 16);
     lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
     current_fn = fn;
+    rtn_label = NULL;
 
     // Prologue
     println("  push %%rbp");
@@ -3031,15 +3058,8 @@ static void emit_text(Obj *prog) {
     if (peak_stk_usage)
       insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
 
-    // [https://www.sigbus.info/n1570#5.1.2.2.3p1] The C spec defines
-    // a special rule for the main function. Reaching the end of the
-    // main function is equivalent to returning 0, even though the
-    // behavior is undefined for the other functions.
-    if (strcmp(fn->name, "main") == 0)
-      println("  xor %%eax, %%eax");
-
     // Epilogue
-    println("9:");
+    gen_label_ph(rtn_label, !strcmp(fn->name, "main"));
     if (lvar_align > 16)
       println("  mov -8(%%rbp), %%rbx");
     println("  leave");

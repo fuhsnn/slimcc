@@ -377,7 +377,7 @@ static Obj *new_gvar(char *name, Type *ty) {
   return var;
 }
 
-static char *new_unique_name(void) {
+char *new_unique_name(void) {
   static int id = 0;
   return format(".L..%d", id++);
 }
