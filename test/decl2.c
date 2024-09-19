@@ -100,6 +100,9 @@ int main(void) {
 
   ASSERT(0, strcmp("obar", (char *)obar));
 
+  ASSERT(0, ({ struct S {}; sizeof(struct S);}));
+  ASSERT(0, ({ union U {}; sizeof(union U);}));
+
   printf("OK\n");
 }
 

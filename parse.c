@@ -3436,6 +3436,7 @@ static Type *struct_decl(Type *ty, int alt_align) {
   }
   cur->next = NULL;
   ty->members = head.next;
+  ty->size = MAX(ty->size, 0);
 
   if (alt_align)
     ty->align = alt_align;
@@ -3465,6 +3466,7 @@ static Type *union_decl(Type *ty, int alt_align) {
   }
   cur->next = NULL;
   ty->members = head.next;
+  ty->size = MAX(ty->size, 0);
 
   if (alt_align)
     ty->align = alt_align;
