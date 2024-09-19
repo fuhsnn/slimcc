@@ -3044,6 +3044,7 @@ static void emit_text(Obj *prog) {
       println("  mov -8(%%rbp), %%rbx");
     println("  leave");
     println("  ret");
+    println("  .size \"%s\", .-\"%s\"", fn->name, fn->name);
   }
 }
 
