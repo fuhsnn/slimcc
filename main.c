@@ -500,10 +500,11 @@ static char *create_tmpfile(void) {
 static void run_subprocess(char **argv) {
   // If -### is given, dump the subprocess's command line.
   if (opt_hash_hash_hash) {
-    fprintf(stderr, "%s", argv[0]);
+    fprintf(stderr, "\"%s\"", argv[0]);
     for (int i = 1; argv[i]; i++)
-      fprintf(stderr, " %s", argv[i]);
+      fprintf(stderr, " \"%s\"", argv[i]);
     fprintf(stderr, "\n");
+    return;
   }
 
   if (fork() == 0) {
