@@ -2355,6 +2355,30 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
   exit(1);
 }
 
+static bool eval_ctx(Node *node, EvalContext *ctx, int64_t *val) {
+  bool failed = false;
+  bool *prev = eval_recover;
+  eval_recover = &failed;
+
+  int64_t v = eval2(node, ctx);
+  if (val)
+    *val = v;
+  eval_recover = prev;
+  return !failed;
+}
+
+static bool eval_non_var_ofs(Node *node, int *ofs) {
+  if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
+    int64_t offset;
+    EvalContext ctx = {.kind = EV_AGGREGATE};
+    if (eval_ctx(node, &ctx, &offset) && !ctx.var) {
+      *ofs = offset;
+      return true;
+    }
+  }
+  return false;
+}
+
 static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volatile, bool let_atomic) {
   if (node->kind == ND_VAR) {
    if ((let_volatile || !node->ty->is_volatile) &&
@@ -2364,15 +2388,9 @@ static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volat
     }
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
-    bool failed = false;
-    bool *prev = eval_recover;
-    eval_recover = &failed;
-
+    int64_t offset;
     EvalContext ctx = {.kind = EV_AGGREGATE};
-    int64_t offset = eval2(node, &ctx);
-
-    eval_recover = prev;
-    if (!failed && ctx.var &&
+    if (eval_ctx(node, &ctx, &offset) && ctx.var &&
       (let_subarray || !ctx.deref_cnt) &&
       (let_volatile || !ctx.is_volatile) &&
       (let_atomic || !ctx.is_atomic)) {
@@ -2584,15 +2602,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return true;
 
     if (ty->size != sizeof(void *) && !lhs->has_no_ptr) {
-      bool failed = false;
-      bool *prev = eval_recover;
-      eval_recover = &failed;
-
       EvalContext ctx2= {.kind = EV_LABEL};
-      eval2(lhs, &ctx2);
-
-      eval_recover = prev;
-      if (!failed && ctx2.label) {
+      if (eval_ctx(lhs, &ctx2, NULL) && ctx2.label) {
         if (ty->kind == TY_BOOL)
           return true;
         return eval_error(node->tok, "pointer cast to different size");
@@ -2606,6 +2617,12 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     if (is_integer(ty))
       return eval_sign_extend(ty, val);
     return val;
+  }
+  case ND_ADDR: {
+    int ofs;
+    if (eval_non_var_ofs(lhs, &ofs))
+      return ofs;
+    break;
   }
   case ND_NUM:
     return node->val;

@@ -98,7 +98,10 @@ int main(void) {
     DASSERT(8 == sizeof((0,arr)));
     DASSERT(3 == sizeof( (typeof(arr)){0} ));
   }
-
+  {
+    struct S { struct { char c, c2; } s[13]; };
+    DASSERT(13 == (intptr_t)&((struct S*)0)->s[6].c2);
+  }
   printf("OK\n");
   return 0;
 }
