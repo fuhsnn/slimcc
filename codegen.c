@@ -504,7 +504,7 @@ static void gen_bitfield_load(Node *node, int ofs) {
     imm_and(ax, "%rdx", (1LL << mem->bit_width) - 1);
     return;
   }
-  int shft = (mem->ty->size == 8) ? 64 : 32 - mem->bit_width;
+  int shft = ((mem->ty->size == 8) ? 64 : 32) - mem->bit_width;
   println("  shl $%d, %s", shft - mem->bit_offset, ax);
   println("  sar $%d, %s", shft, ax);
   return;
@@ -544,7 +544,7 @@ static void gen_bitfield_store(Node *node) {
 
   println("  mov %s, %s", cx, ax);
   if (!mem->ty->is_unsigned) {
-    int shft = (mem->ty->size == 8) ? 64 : 32 - mem->bit_width;
+    int shft = ((mem->ty->size == 8) ? 64 : 32) - mem->bit_width;
     println("  shl $%d, %s", shft, ax);
     println("  sar $%d, %s", shft, ax);
   }

@@ -105,6 +105,17 @@ int large_field(void) {
   ASSERT(1, ({ struct { unsigned long long i: 56; } s = {.i = 0xFFFFFFFFFFFFFFFF }; s.i == 0xFFFFFFFFFFFFFF; }) );
 }
 
+void signed_large_field(void) {
+  struct {
+    long long i:4, j:33, k:27;
+  } s;
+  s.k = -1234;
+  s.i = -1;
+  char buf[32];
+  snprintf(buf, 32, "%d, %lld, %d", s.i, s.j = -54321, s.k);
+  ASSERT(0, strcmp("-1, -54321, -1234", buf));
+}
+
 struct {
     int b :3;
     int i, j;
@@ -136,6 +147,7 @@ int main(void) {
   union_init();
   assign_expr();
   large_field();
+  signed_large_field();
   uninit_global();
   operand_promotion();
 
