@@ -2708,11 +2708,14 @@ static bool gen_expr_opt(Node *node) {
 
   if (is_int_to_int_cast(node) && is_memop(lhs, var_ofs, &var_ptr, true)) {
     if (ty->size > lhs->ty->size) {
-      if (!lhs->ty->is_unsigned && node->ty->size == 8)
+      if (!lhs->ty->is_unsigned && ty->size == 8) {
         load_extend_int64(lhs->ty, var_ofs, var_ptr, "%rax");
-      else
+        return true;
+      }
+      if (!(ty->is_unsigned && !lhs->ty->is_unsigned && ty->size == 2)) {
         load_extend_int2(lhs->ty, var_ofs, var_ptr, "%eax");
-      return true;
+        return true;
+      }
     }
     if (ty->size < lhs->ty->size && ty->kind != TY_BOOL) {
       load_extend_int2(ty, var_ofs, var_ptr, "%eax");
