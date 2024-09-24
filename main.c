@@ -27,6 +27,8 @@ static bool opt_cc1;
 static bool opt_hash_hash_hash;
 static bool opt_static;
 static bool opt_shared;
+static bool opt_nostdinc;
+static bool opt_nostdlib;
 static char *opt_MF;
 static char *opt_MT;
 static char *opt_o;
@@ -58,6 +60,9 @@ static bool take_arg(char *arg) {
 }
 
 static void add_default_include_paths(char *argv0) {
+  if (opt_nostdinc)
+    return;
+
   // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
   strarray_push(&std_include_paths, format("%s/include", dirname(strdup(argv0))));
@@ -433,6 +438,16 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (!strcmp(argv[i], "-nostdinc")) {
+      opt_nostdinc = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-nostdlib")) {
+      opt_nostdlib = true;
+      continue;
+    }
+
     // These options are ignored for now.
     if (!strncmp(argv[i], "-W", 2) ||
         !strncmp(argv[i], "-std=", 5) ||
@@ -761,6 +776,23 @@ static void run_linker(StringArray *inputs, char *output) {
   strarray_push(&arr, output);
   strarray_push(&arr, "-m");
   strarray_push(&arr, "elf_x86_64");
+
+  if (opt_nostdlib) {
+    if (!opt_static) {
+      strarray_push(&arr, "-dynamic-linker");
+      strarray_push(&arr, "/lib64/ld-linux-x86-64.so.2");
+    }
+    for (int i = 0; i < ld_extra_args.len; i++)
+      strarray_push(&arr, ld_extra_args.data[i]);
+
+    for (int i = 0; i < inputs->len; i++)
+      strarray_push(&arr, inputs->data[i]);
+
+    strarray_push(&arr, NULL);
+
+    run_subprocess(arr.data);
+    return;
+  }
 
   char *libpath = find_libpath();
   char *gcc_libpath = find_gcc_libpath();
