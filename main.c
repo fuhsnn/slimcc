@@ -12,6 +12,7 @@ bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;
 bool opt_cc1_asm_pp;
+char *opt_visibility;
 StdVer opt_std;
 
 static StringArray opt_include;
@@ -435,6 +436,11 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-fdata-sections")) {
       opt_data_sections = true;
+      continue;
+    }
+
+    if (!strncmp(argv[i], "-fvisibility=", 13)) {
+      opt_visibility = strdup(&argv[i][13]);
       continue;
     }
 

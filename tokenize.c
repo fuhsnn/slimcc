@@ -86,6 +86,12 @@ bool equal(Token *tok, char *op) {
   return strlen(op) == tok->len && !memcmp(tok->loc, op, tok->len);
 }
 
+bool equal_ext(Token *tok, char *op) {
+  char buf[64];
+  snprintf(buf, 64, "__%s__", op);
+  return equal(tok, op) || equal(tok, buf);
+}
+
 // Ensure that the current token is `op`.
 Token *skip(Token *tok, char *op) {
   if (!equal(tok, op))

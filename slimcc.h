@@ -144,6 +144,7 @@ void error_tok(Token *tok, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
 void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
+bool equal_ext(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);
 File **get_input_files(void);
@@ -196,7 +197,10 @@ struct Obj {
   // Global variable or function
   bool is_definition;
   bool is_static;
+  bool is_weak;
   Obj *static_lvars;
+  Token *alias_name;
+  Token *visibility;
 
   // Global variable
   bool is_tentative;
@@ -610,6 +614,7 @@ extern bool opt_optimize;
 extern bool opt_g;
 extern bool opt_func_sections;
 extern bool opt_data_sections;
+extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern char *base_file;
 extern StdVer opt_std;

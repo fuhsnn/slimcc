@@ -3735,21 +3735,36 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   return max_depth;
 }
 
+static void emit_symbol(Obj *var) {
+  if (var->is_static)
+    println("  .local \"%s\"", var->name);
+  else if (var->is_weak)
+    println("  .weak \"%s\"", var->name);
+  else
+    println("  .globl \"%s\"", var->name);
+
+  if (var->alias_name)
+    println("  .set \"%s\", %.*s", var->name, var->alias_name->len, var->alias_name->loc);
+
+  char *vis_mode = var->visibility ? var->visibility->str : opt_visibility;
+  if (vis_mode && (!strcmp(vis_mode, "hidden") ||
+    !strcmp(vis_mode, "internal") || !strcmp(vis_mode, "protected")))
+    println("  .%s \"%s\"", vis_mode, var->name);
+}
+
 static void emit_data(Obj *prog) {
   for (Obj *var = prog; var; var = var->next) {
-    if (!var->is_definition)
+    if (!var->is_definition) {
+      if (var->is_weak || var->alias_name || var->visibility)
+        emit_symbol(var);
       continue;
-
+    }
     if (var->ty->kind == TY_FUNC) {
       if (var->is_live)
         emit_data(var->static_lvars);
       continue;
     }
-
-    if (var->is_static)
-      println("  .local \"%s\"", var->name);
-    else
-      println("  .globl \"%s\"", var->name);
+    emit_symbol(var);
 
     int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
       ? MAX(16, var->align) : var->align;
@@ -3759,7 +3774,7 @@ static void emit_data(Obj *prog) {
         var->ty->size = var->ty->base->size;
 
       // Common symbol
-      if (opt_fcommon) {
+      if (!var->is_weak && opt_fcommon) {
         println("  .comm \"%s\", %"PRIi64", %d", var->name, var->ty->size, align);
         continue;
       }
@@ -3854,10 +3869,8 @@ static void emit_text(Obj *prog) {
     if (!fn->is_live)
       continue;
 
-    if (fn->is_static)
-      println("  .local \"%s\"", fn->name);
-    else
-      println("  .globl \"%s\"", fn->name);
+    emit_symbol(fn);
+
     if (opt_func_sections)
       println("  .section .text.\"%s\",\"ax\",@progbits", fn->name);
     else

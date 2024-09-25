@@ -36,8 +36,11 @@ typedef struct {
   bool is_register;
   bool is_tls;
   bool is_constexpr;
+  bool is_weak;
   bool local_only;
   Obj *cleanup_fn;
+  Token *alias;
+  Token *visibility;
   int align;
 } VarAttr;
 
@@ -469,13 +472,13 @@ static bool equal_tykw(Token *tok, char *op) {
   return tok->kind == TK_TYPEKW && equal(tok, op);
 }
 
-static void attr_aligned(Token *tok, int *align, TokenKind kind) {
-  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
-    if (lst->kind != kind)
+static void attr_aligned(Token *loc, int *align, TokenKind kind) {
+  for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
+    if (tok->kind != kind)
       continue;
-    if (equal(lst, "aligned") || equal(lst, "__aligned__")) {
+    if (equal_ext(tok, "aligned")) {
       Token *tok2;
-      if (consume(&tok2, lst->next, "(")) {
+      if (consume(&tok2, tok->next, "(")) {
         int align2 = const_expr(&tok2, tok2);
         *align = MAX(*align, align2);
         continue;
@@ -485,17 +488,16 @@ static void attr_aligned(Token *tok, int *align, TokenKind kind) {
   }
 }
 
-static void attr_cleanup(Token *tok, Obj **fn, TokenKind kind) {
+static void attr_cleanup(Token *loc, Obj **fn, TokenKind kind) {
   if (*fn)
     return;
-  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
-    if (equal(lst, "cleanup") || equal(lst, "__cleanup__")) {
-      if (lst->kind != kind)
-        continue;
-      Token *tok2 = skip(lst->next, "(");
-      VarScope *sc = find_var(tok2);
+  for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
+    if (tok->kind != kind)
+      continue;
+    if (equal_ext(tok, "cleanup")) {
+      VarScope *sc = find_var(skip(tok->next, "("));
       if (!(sc && sc->var && sc->var->ty->kind == TY_FUNC))
-        error_tok(tok2, "cleanup function not found");
+        error_tok(tok, "cleanup function not found");
       strarray_push(&current_fn->refs, sc->var->name);
       *fn = sc->var;
       return;
@@ -503,15 +505,65 @@ static void attr_cleanup(Token *tok, Obj **fn, TokenKind kind) {
   }
 }
 
-static void attr_packed(Token *tok, Type *ty, TokenKind kind) {
-  for (Token *lst = tok->attr_next; lst; lst = lst->attr_next) {
-    if (lst->kind != kind)
-      continue;
-    if (equal(lst, "packed") || equal(lst, "__packed__")) {
-      ty->is_packed = true;
+static void bool_attr(char *name, Token *loc, bool *b, TokenKind kind) {
+  for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
+    if (tok->kind == kind && equal_ext(tok, name)) {
+      *b = true;
       return;
     }
   }
+}
+
+static void attr_packed(Token *loc, bool *b, TokenKind kind) {
+  bool_attr("packed", loc, b, kind);
+}
+
+static void attr_weak(Token *loc, bool *b, TokenKind kind) {
+  bool_attr("weak", loc, b, kind);
+}
+
+static void str_attr(char *name, Token *loc, Token **t, TokenKind kind) {
+  for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
+    if (tok->kind == kind && equal_ext(tok, name)) {
+      *t = str_tok(&(Token *){0}, skip(tok->next, "("));
+      return;
+    }
+  }
+}
+
+static void attr_alias(Token *loc, Token **str_tok, TokenKind kind) {
+  if (!*str_tok)
+    str_attr("alias", loc, str_tok, kind);
+}
+
+static void attr_visibility(Token *loc, Token **str_tok, TokenKind kind) {
+  if (!*str_tok)
+    str_attr("visibility", loc, str_tok, kind);
+}
+
+static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
+  attr_alias(tok, &attr->alias, kind);
+  attr_aligned(tok, &attr->align, kind);
+  attr_cleanup(tok, &attr->cleanup_fn, kind);
+  attr_visibility(tok, &attr->visibility, kind);
+  attr_weak(tok, &attr->is_weak, kind);
+}
+
+static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
+  var->alias_name = attr->alias;
+  attr_alias(name, &var->alias_name, TK_ATTR);
+  attr_alias(name->next, &var->alias_name, TK_BATTR);
+  attr_alias(tok, &var->alias_name, TK_ATTR);
+
+  var->visibility = attr->visibility;
+  attr_visibility(name, &var->visibility, TK_ATTR);
+  attr_visibility(name->next, &var->visibility, TK_BATTR);
+  attr_visibility(tok, &var->visibility, TK_ATTR);
+
+  var->is_weak = attr->is_weak;
+  attr_weak(name, &var->is_weak, TK_ATTR);
+  attr_weak(name->next, &var->is_weak, TK_BATTR);
+  attr_weak(tok, &var->is_weak, TK_ATTR);
 }
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
@@ -553,10 +605,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     UNSIGNED = 1 << 18,
   };
 
-  if (attr) {
-    attr_aligned(tok, &attr->align, TK_BATTR);
-    attr_cleanup(tok, &attr->cleanup_fn, TK_BATTR);
-  }
+  if (attr)
+    tyspec_attr(tok, attr, TK_BATTR);
 
   Type *ty = NULL;
   int counter = 0;
@@ -566,10 +616,9 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   bool is_volatile = false;
   bool is_auto = false;
   for (;;) {
-    if (attr) {
-      attr_aligned(tok, &attr->align, TK_ATTR);
-      attr_cleanup(tok, &attr->cleanup_fn, TK_ATTR);
-    }
+    if (attr)
+      tyspec_attr(tok, attr, TK_ATTR);
+
     if (!is_typename(tok))
       break;
 
@@ -1199,7 +1248,8 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
     if (ty->kind == TY_FUNC) {
       if (!name)
         error_tok(tok, "function name omitted");
-      func_prototype(ty, attr, name);
+      Obj *fn = func_prototype(ty, attr, name);
+      symbol_attr(fn, attr, name, tok);
       continue;
     }
     if (ty->kind == TY_VOID)
@@ -1853,7 +1903,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   if (is_compatible(ty, init->expr->ty)) {
     int sofs;
     Obj *var = eval_var(init->expr, &sofs, false);
-    if (var && var->init_data && (is_const_var(var) || var->is_compound_lit)) {
+    if (var && var->init_data && !var->is_weak && (is_const_var(var) || var->is_compound_lit)) {
       Relocation *srel= var->rel;
       while (srel && srel->offset < sofs)
         srel = srel->next;
@@ -2510,7 +2560,7 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_atomic) {
 }
 
 static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
-  if (!opt_optimize || !var->init_data || !is_const_var(var))
+  if (!opt_optimize || !var->init_data || var->is_weak || !is_const_var(var))
     return false;
   for (Relocation *rel = var->rel; rel; rel = rel->next) {
     if ((rel->offset + sizeof(void *)) <= ofs)
@@ -2698,13 +2748,14 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return (uint64_t)eval_double(lhs);
       return eval_sign_extend(ty, eval_double(lhs));
     }
-    if (ty->kind == TY_BOOL && lhs->kind == ND_VAR && (is_array(lhs->ty)))
+    if (ty->kind == TY_BOOL && lhs->kind == ND_VAR &&
+      !lhs->var->is_weak && (is_array(lhs->ty)))
       return true;
 
     if (ty->size != sizeof(void *) && !lhs->has_no_ptr) {
       EvalContext ctx2= {.kind = EV_LABEL};
       if (eval_ctx(lhs, &ctx2, NULL) && ctx2.label) {
-        if (ty->kind == TY_BOOL)
+        if (ty->kind == TY_BOOL && !ctx2.var->is_weak)
           return true;
         return eval_error(node->tok, "pointer cast to different size");
       }
@@ -2775,6 +2826,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         var = eval_var(node, &ofs, true);
 
       if (var) {
+        ctx->var = var;
         ctx->label = &var->name;
         return ofs;
       }
@@ -3452,8 +3504,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *ty = new_type(kind, -1, 1);
 
-  attr_packed(tok, ty, TK_ATTR);
-  attr_packed(tok, ty, TK_BATTR);
+  attr_packed(tok, &ty->is_packed, TK_ATTR);
+  attr_packed(tok, &ty->is_packed, TK_BATTR);
 
   int alt_align = 0;
   attr_aligned(tok, &alt_align, TK_ATTR);
@@ -3483,7 +3535,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   struct_members(&tok, tok, ty);
 
   attr_aligned(tok, &alt_align, TK_ATTR);
-  attr_packed(tok, ty, TK_ATTR);
+  attr_packed(tok, &ty->is_packed, TK_ATTR);
   *rest = tok;
 
   if (kind == TY_STRUCT)
@@ -4288,9 +4340,7 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
   return fn;
 }
 
-static void func_definition(Token **rest, Token *tok, Type *ty, VarAttr *attr, Token *name) {
-  Obj *fn = func_prototype(ty, attr, name);
-
+static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   if (fn->is_definition)
     error_tok(tok, "redefinition of %s", fn->name);
   fn->is_definition = true;
@@ -4337,10 +4387,13 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
       if (equal(tok, "{")) {
         if (!first || scope->parent)
           error_tok(tok, "function definition is not allowed here");
-        func_definition(&tok, tok, ty, attr, name);
+        Obj *fn = func_prototype(ty, attr, name);
+        symbol_attr(fn, attr, name, tok);
+        func_definition(&tok, tok, fn, ty);
         return tok;
       }
-      func_prototype(ty, attr, name);
+      Obj *fn = func_prototype(ty, attr, name);
+      symbol_attr(fn, attr, name, tok);
       continue;
     }
 
@@ -4354,6 +4407,8 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     VarScope *sc = find_var(name);
     Obj *var;
     if (sc && sc->var) {
+      symbol_attr(sc->var, attr, name, tok);
+
       if (!is_definition)
         continue;
       if (sc->var->is_definition && !sc->var->is_tentative)
@@ -4363,6 +4418,7 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
       var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
+      symbol_attr(var, attr, name, tok);
     }
     var->is_definition = is_definition;
     var->is_static = attr->is_static;

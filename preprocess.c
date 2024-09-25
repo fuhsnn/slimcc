@@ -72,7 +72,7 @@ static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroArg *args, Macro *macro);
-static long is_supported_attr(Token **vendor, Token *tok);
+static bool is_supported_attr(Token **vendor, Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -1402,7 +1402,7 @@ static Token *has_embed_macro(Token *start) {
 static Token *has_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  long val = is_supported_attr(NULL, tok);
+  bool val = is_supported_attr(NULL, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1419,7 +1419,7 @@ static Token *has_c_attribute_macro(Token *start) {
     vendor = tok;
     tok = skip(tok->next->next, ":");
   }
-  long val = is_supported_attr(&vendor, tok);
+  bool val = is_supported_attr(&vendor, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1598,22 +1598,18 @@ static void join_adjacent_string_literals(Token *tok) {
   tok->next = end;
 }
 
-static long is_supported_attr(Token **vendor, Token *tok) {
+static bool is_supported_attr(Token **vendor, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
-  bool gnu_if_vendored = !vendor || (vendor && *vendor && equal(*vendor, "gnu"));
+  bool gnu_if_vendored = !vendor || (*vendor && equal(*vendor, "gnu"));
 
-  if ((equal(tok, "aligned") || equal(tok, "__aligned__")) && gnu_if_vendored)
-    return 1;
-
-  if ((equal(tok, "cleanup") || equal(tok, "__cleanup__")) && gnu_if_vendored)
-    return 1;
-
-  if ((equal(tok, "packed") || equal(tok, "__packed__")) && gnu_if_vendored)
-    return 1;
-
-  return 0;
+  if (gnu_if_vendored) {
+    if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
+      equal_ext(tok, "packed") || equal_ext(tok, "visibility") || equal_ext(tok, "weak"))
+      return true;
+  }
+  return false;
 }
 
 static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
