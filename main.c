@@ -39,6 +39,7 @@ static char *output_file;
 
 static StringArray input_paths;
 static StringArray tmpfiles;
+static StringArray as_args;
 
 static void usage(int status) {
   fprintf(stderr, "slimcc [ -o <path> ] <file>\n");
@@ -246,6 +247,16 @@ static void parse_args(int argc, char **argv) {
 
     if (!strncmp(argv[i], "-l", 2) || !strncmp(argv[i], "-Wl,", 4)) {
       strarray_push(&input_paths, argv[i]);
+      continue;
+    }
+
+    if (!strncmp(argv[i], "-Wa,", 4)) {
+      char *s = strdup(&argv[i][4]);
+      char *arg = strtok(s, ",");
+      while (arg) {
+        strarray_push(&as_args, arg);
+        arg = strtok(NULL, ",");
+      }
       continue;
     }
 
@@ -696,9 +707,19 @@ static void cc1(void) {
 }
 
 static void assemble(char *input, char *output) {
-  char *cmd[] = {"as", input, "-o", output, NULL};
-  // char *cmd[] = {"clang", "-c", "-xassembler", input, "-o", output, NULL};
-  run_subprocess(cmd);
+  StringArray arr = {0};
+
+  strarray_push(&arr, "as");
+  strarray_push(&arr, input);
+  strarray_push(&arr, "-o");
+  strarray_push(&arr, output);
+
+  for (int i = 0; i < as_args.len; i++)
+    strarray_push(&arr, as_args.data[i]);
+
+  strarray_push(&arr, NULL);
+
+  run_subprocess(arr.data);
 }
 
 static char *find_file(char *pattern) {
