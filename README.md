@@ -2,8 +2,8 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
  - C99 features: VLA parameters, VLA de-allocation, K&R old-style funtions.
  - C11 features: `_Static_assert()`, over-aligned locals, `_Generic` with qualifiers.
  - C23 features: `constexpr`, `#embed`, `auto` type-inferrence, etc.
- - C2Y/TS features: `defer`(through `_Defer`)
- - GNU features: `cleanup`
+ - C2Y/TS features: `defer`(as `_Defer`), `__VA_TAIL__`
+ - GNU features: inline asm, `cleanup`
  - Basic optimizations: const folding, reg-alloc for temporaries, instruction selection.
 
 If you're just looking for "chibicc-with-only-fixes-to-build-stuff" checkout [widcc](https://github.com/fuhsnn/widcc).
@@ -43,16 +43,15 @@ Some optimizations can be made with this by pattern-matching to smarter alternat
 Compare size of chibicc binary built with several compilers:
 ```
       text       data        bss      total filename
-    112363      43987        616     156966 gcc_O0_build
-    113867      43156        504     157527 clang_O0_build
-    127515      31913        448     159876 slimcc_build
+    101611      27677        616     129904 gcc_O0_build
+    109243      26622        544     136409 clang_O0_build
+    124667      31913        448     157028 slimcc_build
     144896      29536        440     174872 tcc_build
     263659      41163        456     305278 chibicc_build
+*gcc/clang with -O0 -fno-stack-protector -fno-asynchronous-unwind-tables -fno-pic -no-pie
 ```
-In general, code size is on par with TinyCC but execute 30% slower. Much work to be done!
 
 # Porting
 musl linux and BSDs should be doable. Check hard-coded paths in `main.c`, and pre-defined macros in `preprocessor.c`.
-The biggest obstacle would be GNU inline assembly in some headers. Which is not supported yet.
 
 The [`widcc`](https://github.com/fuhsnn/widcc) branch is a less noisy codebase than `slimcc` that should be more appealing for developers to hack on.
