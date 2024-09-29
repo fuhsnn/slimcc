@@ -141,6 +141,8 @@ static void gen_stmt(Node *node);
 static void gen_void_expr(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
+static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
+static Node *bool_expr_opt(Node *node, bool *flip);
 
 static void imm_add(char *op, char *tmp, int64_t val);
 static void imm_sub(char *op, char *tmp, int64_t val);
@@ -561,18 +563,47 @@ static void gen_mem_zero(int dofs, char *dptr, int sz) {
   }
 }
 
-static void gen_cmp_setx(NodeKind kind, bool is_unsigned) {
-  char *ins;
-  switch (kind) {
-  case ND_EQ: ins = "sete"; break;
-  case ND_NE: ins = "setne"; break;
-  case ND_LT: ins = is_unsigned ? "setb" : "setl"; break;
-  case ND_LE: ins = is_unsigned ? "setbe" : "setle"; break;
-  case ND_GT: ins = is_unsigned ? "seta" : "setg"; break;
-  case ND_GE: ins = is_unsigned ? "setae" : "setge"; break;
-  default: internal_error();
+static bool is_cmp(Node *node) {
+  switch (node->kind) {
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+    return true;
   }
-  println("  %s %%al", ins);
+  return false;
+}
+
+static void flip_cmp(NodeKind *kind, bool flip) {
+  if (!flip)
+    return;
+  switch (*kind) {
+  case ND_EQ: *kind = ND_NE; return;
+  case ND_NE: *kind = ND_EQ; return;
+  case ND_LT: *kind = ND_GE; return;
+  case ND_LE: *kind = ND_GT; return;
+  case ND_GT: *kind = ND_LE; return;
+  case ND_GE: *kind = ND_LT; return;
+  }
+  internal_error();
+}
+
+static char *cmp_cc(NodeKind kind, bool is_unsigned) {
+  switch (kind) {
+  case ND_EQ: return "e";
+  case ND_NE: return "ne";
+  case ND_LT: return is_unsigned ? "b" : "l";
+  case ND_LE: return is_unsigned ? "be" : "le";
+  case ND_GT: return is_unsigned ? "a" : "g";
+  case ND_GE: return is_unsigned ? "ae" : "ge";
+  }
+  internal_error();
+}
+
+static void gen_cmp_setcc(NodeKind kind, bool is_unsigned) {
+  println("  set%s %%al", cmp_cc(kind, is_unsigned));
   println("  movzbl %%al, %%eax");
 }
 
@@ -1495,6 +1526,72 @@ static void gen_return_jmp(void) {
   println("  jmp %s", rtn_label);
 }
 
+static char *gen_cond_opt(Node *node, bool need_result, bool jump_cond) {
+  if (!node)
+    return NULL;
+
+  bool flip = false;
+  if (opt_optimize) {
+    Node *expr = bool_expr_opt(node, &flip);
+    if (expr)
+      node = expr;
+
+    int64_t val;
+    if (is_const_expr(node, &val)) {
+      val = !!val ^ flip;
+      if (val != jump_cond)
+        return NULL;
+      if (need_result)
+        load_val(ty_int, val);
+      return "mp";
+    }
+
+    if (is_cmp(node) && is_gp_ty(node->lhs->ty)) {
+      NodeKind kind = node->kind;
+      flip_cmp(&kind, flip);
+      if (!gen_cmp_opt_gp(node, &kind)) {
+        gen_expr(node->lhs);
+        push();
+        gen_expr(node->rhs);
+
+        bool is_r64 = node->lhs->ty->size == 8;
+        char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
+        println("  cmp %s, %s", regop_ax(node->lhs->ty), op);
+      }
+      if (need_result)
+        gen_cmp_setcc(kind, node->lhs->ty->is_unsigned);
+      flip_cmp(&kind, !jump_cond);
+      return cmp_cc(kind, node->lhs->ty->is_unsigned);
+    }
+
+    if (node->kind == ND_CAST && node->ty->kind == TY_BOOL) {
+      Node zero = {.kind = ND_NUM, .ty = node->lhs->ty, .tok = node->tok};
+      Node expr = {.kind = flip ? ND_EQ : ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
+      add_type(&expr);
+      return gen_cond_opt(&expr, need_result, jump_cond);
+    }
+  }
+  gen_expr(node);
+
+  if (!need_result) {
+    println("  test %%al, %%al");
+    return (jump_cond ^ flip) ? "ne" : "e";
+  }
+  if (flip)
+    println("  xor $1, %%al");
+  else
+    println("  test %%al, %%al");
+  return jump_cond ? "ne" : "e";
+}
+
+static char *gen_cond(Node *node, bool jump_cond) {
+  return gen_cond_opt(node, false, jump_cond);
+}
+
+static char *gen_logical_cond(Node *node, bool jump_cond) {
+  return gen_cond_opt(node, true, jump_cond);
+}
+
 // Generate code for a given node.
 static void gen_expr(Node *node) {
   if (opt_g)
@@ -1603,9 +1700,9 @@ static void gen_expr(Node *node) {
     return;
   case ND_COND: {
     int c = count();
-    gen_expr(node->cond);
-    println("  test %%al, %%al");
-    println("  je .L.else.%d", c);
+    char *ins = gen_cond(node->cond, false);
+    if (ins)
+      println("  j%s .L.else.%d", ins, c);
     gen_expr(node->then);
     println("  jmp .L.end.%d", c);
     println(".L.else.%d:", c);
@@ -1623,18 +1720,18 @@ static void gen_expr(Node *node) {
     return;
   case ND_LOGAND: {
     int c = count();
-    gen_expr(node->lhs);
-    println("  test %%al, %%al");
-    println("  je .L.false.%d", c);
+    char *ins = gen_logical_cond(node->lhs, false);
+    if (ins)
+      println("  j%s .L.false.%d", ins, c);
     gen_expr(node->rhs);
     println(".L.false.%d:", c);
     return;
   }
   case ND_LOGOR: {
     int c = count();
-    gen_expr(node->lhs);
-    println("  test %%al, %%al");
-    println("  jne .L.true.%d", c);
+    char *ins = gen_logical_cond(node->lhs, true);
+    if (ins)
+      println("  j%s .L.true.%d", ins, c);
     gen_expr(node->rhs);
     println(".L.true.%d:", c);
     return;
@@ -2017,7 +2114,7 @@ static void gen_expr(Node *node) {
   case ND_GT:
   case ND_GE:
     println("  cmp %s, %s", ax, op);
-    gen_cmp_setx(node->kind, node->lhs->ty->is_unsigned);
+    gen_cmp_setcc(node->kind, node->lhs->ty->is_unsigned);
     return;
   }
 
@@ -2033,17 +2130,18 @@ static void gen_stmt(Node *node) {
     return;
   case ND_IF: {
     int c = count();
-    gen_expr(node->cond);
-    println("  test %%al, %%al");
-    println("  je  .L.else.%d", c);
+    char *ins = gen_cond(node->cond, false);
+    if (ins)
+      println("  j%s .L.else.%d", ins, c);
     gen_stmt(node->then);
-    if (node->els)
-      println("  jmp .L.end.%d", c);
-    println(".L.else.%d:", c);
-    if (node->els) {
-      gen_stmt(node->els);
-      println(".L.end.%d:", c);
+    if (!node->els) {
+      println(".L.else.%d:", c);
+      return;
     }
+    println("  jmp .L.end.%d", c);
+    println(".L.else.%d:", c);
+    gen_stmt(node->els);
+    println(".L.end.%d:", c);
     return;
   }
   case ND_FOR: {
@@ -2051,11 +2149,9 @@ static void gen_stmt(Node *node) {
     if (node->init)
       gen_stmt(node->init);
     println(".L.begin.%d:", c);
-    if (node->cond) {
-      gen_expr(node->cond);
-      println("  test %%al, %%al");
-      println("  je %s", node->brk_label);
-    }
+    char *ins = gen_cond(node->cond, false);
+    if (ins)
+      println("  j%s %s", ins, node->brk_label);
     gen_stmt(node->then);
     println("%s:", node->cont_label);
     if (node->inc)
@@ -2070,9 +2166,9 @@ static void gen_stmt(Node *node) {
     println(".L.begin.%d:", c);
     gen_stmt(node->then);
     println("%s:", node->cont_label);
-    gen_expr(node->cond);
-    println("  test %%al, %%al");
-    println("  jne .L.begin.%d", c);
+    char *ins = gen_cond(node->cond, true);
+    if (ins)
+      println("  j%s .L.begin.%d", ins, c);
     println("%s:", node->brk_label);
     return;
   }
@@ -2472,7 +2568,7 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
 
     if (kind == ND_DIV) {
       println("  cmp $-1, %s", ax);
-      gen_cmp_setx(ND_EQ, false);
+      gen_cmp_setcc(ND_EQ, false);
       return true;
     }
 
@@ -2511,7 +2607,7 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
   return false;
 }
 
-static bool gen_cmp_opt(Node *lhs, Node *rhs) {
+static bool gen_cmp_opt_gp2(Node *lhs, Node *rhs) {
   char var_ofs[64], *var_ptr;
   int64_t val;
   if (is_const_expr(rhs, &val)) {
@@ -2529,6 +2625,21 @@ static bool gen_cmp_opt(Node *lhs, Node *rhs) {
   if (is_memop(lhs, var_ofs, &var_ptr, false)) {
     gen_expr(rhs);
     println("  cmp %s, %s(%s)", regop_ax(lhs->ty), var_ofs, var_ptr);
+    return true;
+  }
+  return false;
+}
+
+static bool gen_cmp_opt_gp(Node *node, NodeKind *kind) {
+  if (gen_cmp_opt_gp2(node->lhs, node->rhs))
+    return true;
+  if (gen_cmp_opt_gp2(node->rhs, node->lhs)) {
+    switch (*kind) {
+    case ND_LT: *kind = ND_GT; break;
+    case ND_LE: *kind = ND_GE; break;
+    case ND_GT: *kind = ND_LT; break;
+    case ND_GE: *kind = ND_LE; break;
+    }
     return true;
   }
   return false;
@@ -2609,28 +2720,12 @@ static bool gen_gp_opt(Node *node) {
     if (rhs->kind == ND_NUM)
       return divmod_opt(kind, ty, lhs, rhs->val);
     return false;
-  case ND_EQ:
-  case ND_NE:
-  case ND_LT:
-  case ND_LE:
-  case ND_GT:
-  case ND_GE:
-    if (!is_gp_ty(lhs->ty))
-      return false;
-    if (gen_cmp_opt(lhs, rhs)) {
-      gen_cmp_setx(kind, lhs->ty->is_unsigned);
-      return true;
-    }
-    if (gen_cmp_opt(rhs, lhs)) {
-      switch (kind) {
-      case ND_LT: kind = ND_GT; break;
-      case ND_LE: kind = ND_GE; break;
-      case ND_GT: kind = ND_LT; break;
-      case ND_GE: kind = ND_LE; break;
-      }
-      gen_cmp_setx(kind, lhs->ty->is_unsigned);
-      return true;
-    }
+  }
+
+  if (is_cmp(node) && is_gp_ty(node->lhs->ty) &&
+    gen_cmp_opt_gp(node, &kind)) {
+    gen_cmp_setcc(kind, lhs->ty->is_unsigned);
+    return true;
   }
   return false;
 }
@@ -2683,31 +2778,16 @@ static void gen_member_opt(Node *node, int64_t *ofs) {
   gen_addr(node);
 }
 
-static bool gen_inv_cmp(Node *node) {
-  if (!is_gp_ty(node->lhs->ty))
-    return false;
-
-  switch (node->kind) {
-  case ND_EQ: node->kind = ND_NE; break;
-  case ND_NE: node->kind = ND_EQ; break;
-  case ND_LT: node->kind = ND_GE; break;
-  case ND_LE: node->kind = ND_GT; break;
-  case ND_GT: node->kind = ND_LE; break;
-  case ND_GE: node->kind = ND_LT; break;
-  default: internal_error();
-  }
-  gen_expr(node);
-  return true;
-}
-
-static bool gen_bool_opt(Node *node) {
+static Node *bool_expr_opt(Node *node, bool *flip) {
   Node *boolexpr = NULL;
   bool has_not = false;
+  bool boolexpr_has_not;
 
-  for (;; node = node->lhs) {
+  for (;;) {
     switch (node->kind) {
     case ND_NOT:
       has_not = !has_not;
+      node = node->lhs;
       continue;
     case ND_EQ:
     case ND_NE:
@@ -2715,31 +2795,49 @@ static bool gen_bool_opt(Node *node) {
     case ND_LE:
     case ND_GT:
     case ND_GE:
-      if (has_not && gen_inv_cmp(node))
-        return true;
     case ND_LOGOR:
     case ND_LOGAND:
+      *flip = has_not;
+      return node;
+    }
+    if (node->ty->kind == TY_BOOL) {
+      boolexpr = node;
+      boolexpr_has_not = has_not;
+    }
+    if (!(node->kind == ND_CAST && is_gp_ty(node->ty)))
+      break;
+    node = node->lhs;
+  }
+  if (boolexpr) {
+    *flip = boolexpr_has_not;
+    return boolexpr;
+  }
+  return NULL;
+}
+
+static bool gen_bool_opt(Node *node) {
+  bool flip;
+  Node *expr = bool_expr_opt(node, &flip);
+  if (expr) {
+    if (expr->kind == ND_CAST && expr->ty->kind == TY_BOOL) {
+      gen_cmp_zero(expr->lhs, flip ? ND_EQ : ND_NE);
+      return true;
+    }
+    if (expr != node) {
+      node = expr;
+      if (is_cmp(node)) {
+        NodeKind kind = node->kind;
+        flip_cmp(&kind, flip);
+        Node n = *node;
+        n.kind = kind;
+        gen_expr(&n);
+        return true;
+      }
       gen_expr(node);
-      if (has_not)
+      if (flip)
         println("  xor $1, %%al");
       return true;
     }
-    if (node->ty->kind == TY_BOOL)
-      boolexpr = node;
-    if (node->kind == ND_CAST && is_scalar(node->ty))
-      continue;
-    break;
-  }
-
-  if (boolexpr) {
-    if (boolexpr->kind == ND_CAST && boolexpr->ty->kind == TY_BOOL) {
-      gen_cmp_zero(boolexpr->lhs, has_not ? ND_EQ : ND_NE);
-      return true;
-    }
-    gen_expr(boolexpr);
-    if (has_not)
-      println("  xor $1, %%al");
-    return true;
   }
   return false;
 }
@@ -2777,6 +2875,9 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
+  if (gen_bool_opt(node))
+    return true;
+
   if (is_gp_ty(ty) && gen_gp_opt(node))
     return true;
 
@@ -2787,13 +2888,6 @@ static bool gen_expr_opt(Node *node) {
       gen_expr(node->els);
     return true;
   }
-
-  if (kind == ND_CAST && ty->kind == TY_BOOL)
-    if (gen_bool_opt(lhs))
-      return true;
-
-  if (kind == ND_NOT && gen_bool_opt(node))
-    return true;
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
