@@ -2489,9 +2489,9 @@ static void imm_cmp(char *op, char *tmp, int64_t val) {
   println("  cmp %s, %s", tmp, op);
 }
 
-static void imm_arith(NodeKind kind, Type *ty, int64_t val) {
-  char *ax = reg_ax(ty->size);
-  char *dx = reg_dx(ty->size);
+static void imm_arith(NodeKind kind, int sz, int64_t val) {
+  char *ax = reg_ax(sz);
+  char *dx = reg_dx(sz);
 
   switch (kind) {
   case ND_ADD: imm_add(ax, dx, val); return;
@@ -2532,7 +2532,7 @@ static void imm_arith(NodeKind kind, Type *ty, int64_t val) {
   }
 
   if (kind == ND_MUL && is_pow_of_two(val)) {
-    for (int i = 1; i < ty->size * 8; i++) {
+    for (int i = 1; i < sz * 8; i++) {
       if (1LL << i == val) {
         println("  shl $%d, %s", i, ax);
         return;
@@ -2645,48 +2645,92 @@ static bool gen_cmp_opt_gp(Node *node, NodeKind *kind) {
   return false;
 }
 
-static bool lvar_rhs_arith_opt(NodeKind kind, Node *lhs, Node *rhs) {
-  char *ax = reg_ax(rhs->ty->size);
-  char *dx = reg_dx(rhs->ty->size);
+static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int ctrl, bool swap) {
+  int64_t val;
+  char ofs[64], *ptr;
+  char *ax = reg_ax(sz);
 
-  char *var_ptr;
-  char var_ofs[64];
-
-  if (is_int_to_int_cast(rhs)) {
-    if (is_memop(rhs->lhs, var_ofs, &var_ptr, true) &&
-      (rhs->ty->size > rhs->lhs->ty->size)) {
+  switch (abs(ctrl)) {
+  case 1:
+    if (is_const_expr(rhs, &val)) {
+      gen_expr(lhs);
+      imm_arith(kind, sz, limit_imm(val, sz));
+      return true;
+    }
+    break;
+  case 2:
+    if (is_memop(rhs, ofs, &ptr, true)) {
+      gen_expr(lhs);
+      println("  %s %s(%s), %s", arith_ins(kind), ofs, ptr, ax);
+      return true;
+    }
+    break;
+  case 3:
+    if (is_int_to_int_cast(rhs) && is_memop(rhs->lhs, ofs, &ptr, true) &&
+      sz <= rhs->lhs->ty->size) {
+      gen_expr(lhs);
+      println("  %s %s(%s), %s", arith_ins(kind), ofs, ptr, ax);
+      return true;
+    }
+    break;
+  case 4:
+    if (is_int_to_int_cast(rhs) && is_memop(rhs->lhs, ofs, &ptr, true) &&
+      sz > rhs->lhs->ty->size) {
       gen_expr(lhs);
 
-      if (!rhs->lhs->ty->is_unsigned && rhs->ty->size == 8)
-        load_extend_int64(rhs->lhs->ty, var_ofs, var_ptr, "%rdx");
+      if (!rhs->lhs->ty->is_unsigned && sz == 8)
+        load_extend_int64(rhs->lhs->ty, ofs, ptr, "%rdx");
       else
-        load_extend_int2(rhs->lhs->ty, var_ofs, var_ptr, "%edx");
+        load_extend_int2(rhs->lhs->ty, ofs, ptr, "%edx");
 
-      println("  %s %s, %s", arith_ins(kind), dx, ax);
+      println("  %s %s, %s", arith_ins(kind), reg_dx(sz), ax);
       return true;
     }
-    if (is_memop(rhs->lhs, var_ofs, &var_ptr, false) &&
-      (rhs->ty->size <= rhs->lhs->ty->size)) {
-      gen_expr(lhs);
-      println("  %s %s(%s), %s", arith_ins(kind), var_ofs, var_ptr, ax);
-      return true;
-    }
+    break;
   }
-
-  if (is_memop(rhs, var_ofs, &var_ptr, false)) {
-    gen_expr(lhs);
-    println("  %s %s(%s), %s", arith_ins(kind), var_ofs, var_ptr, ax);
+  if (swap && gen_arith_opt_gp2(kind, sz, rhs, lhs, -ctrl, false))
     return true;
+
+  if (ctrl > 0 && ctrl < 4 && gen_arith_opt_gp2(kind, sz, lhs, rhs, ctrl + 1, swap))
+    return true;
+
+  return false;
+}
+
+static bool gen_arith_opt_gp(Node *node, int sz) {
+  switch (node->kind) {
+  case ND_ADD:
+  case ND_MUL:
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+    if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, 1, true))
+      return true;
+  case ND_SUB:
+    if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, 1, false))
+      return true;
   }
   return false;
 }
 
-static bool lvar_rhs_shift_opt(NodeKind kind, Node *node, Type *ty) {
-  char *ax = reg_ax(ty->size);
+static bool gen_shift_opt_gp(Node *node) {
+  char *ax = reg_ax(node->ty->size);
+  int64_t val;
+  char ofs[64], *ptr;
 
-  println("  mov %d(%s), %%cl", node->var->ofs, node->var->ptr);
-  println("  %s %%cl, %s", arith_ins(kind), ax);
-  return true;
+  if (is_const_expr(node->rhs, &val)) {
+    gen_expr(node->lhs);
+    imm_arith(node->kind, node->ty->size, val);
+    return true;
+  }
+  if (is_memop(node->rhs, ofs, &ptr, true)) {
+    gen_expr(node->lhs);
+
+    println("  movb %s(%s), %%cl", ofs, ptr);
+    println("  %s %%cl, %s", arith_ins(node->kind), ax);
+    return true;
+  }
+  return false;
 }
 
 static bool gen_gp_opt(Node *node) {
@@ -2696,31 +2740,18 @@ static bool gen_gp_opt(Node *node) {
   Type *ty = node->ty;
 
   switch (kind) {
-  case ND_ADD:
-  case ND_MUL:
-  case ND_BITAND:
-  case ND_BITOR:
-  case ND_BITXOR:
-    if (lhs->kind == ND_NUM)
-      return gen_expr(rhs), imm_arith(kind, ty, lhs->val), true;
-  case ND_SUB:
-    if (rhs->kind == ND_NUM)
-      return gen_expr(lhs), imm_arith(kind, ty, rhs->val), true;
-    return lvar_rhs_arith_opt(kind, lhs, rhs);
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
-    if (rhs->kind == ND_NUM)
-      return gen_expr(lhs), imm_arith(kind, ty, rhs->val), true;
-    if (is_lvar(rhs))
-      return gen_expr(lhs), lvar_rhs_shift_opt(kind, rhs, ty), true;
-    return false;
+    return gen_shift_opt_gp(node);
   case ND_DIV:
   case ND_MOD:
     if (rhs->kind == ND_NUM)
       return divmod_opt(kind, ty, lhs, rhs->val);
     return false;
   }
+  if (gen_arith_opt_gp(node, node->ty->size))
+    return true;
 
   if (is_cmp(node) && is_gp_ty(node->lhs->ty) && gen_cmp_opt_gp(node, &kind)) {
     gen_cmp_setcc(kind, lhs->ty->is_unsigned);
@@ -2876,6 +2907,10 @@ static bool gen_expr_opt(Node *node) {
 
   if (is_gp_ty(ty) && gen_gp_opt(node))
     return true;
+
+  if (is_int_to_int_cast(node) && ty->size == 4 && lhs->ty->size == 8)
+    if (gen_arith_opt_gp(lhs, ty->size))
+      return true;
 
   if (kind == ND_COND && node->cond->kind == ND_NUM) {
     if (node->cond->val)
