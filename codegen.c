@@ -2722,8 +2722,7 @@ static bool gen_gp_opt(Node *node) {
     return false;
   }
 
-  if (is_cmp(node) && is_gp_ty(node->lhs->ty) &&
-    gen_cmp_opt_gp(node, &kind)) {
+  if (is_cmp(node) && is_gp_ty(node->lhs->ty) && gen_cmp_opt_gp(node, &kind)) {
     gen_cmp_setcc(kind, lhs->ty->is_unsigned);
     return true;
   }
@@ -2824,16 +2823,13 @@ static bool gen_bool_opt(Node *node) {
       return true;
     }
     if (expr != node) {
-      node = expr;
-      if (is_cmp(node)) {
-        NodeKind kind = node->kind;
-        flip_cmp(&kind, flip);
-        Node n = *node;
-        n.kind = kind;
+      if (is_cmp(expr)) {
+        Node n = *expr;
+        flip_cmp(&n.kind, flip);
         gen_expr(&n);
         return true;
       }
-      gen_expr(node);
+      gen_expr(expr);
       if (flip)
         println("  xor $1, %%al");
       return true;
