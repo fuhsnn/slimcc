@@ -3,7 +3,7 @@
 
 union {char a; int b;} g11[2] = {{1}, {3}};
 union {int a[2];} g12[2] = {{{1, 2}}};
-int *g28 = &g11[1].a;
+int *g28 = (int*)&g11[1].a;
 union { struct { int a[3]; } a; } g30 = {{{1,2,3}}};
 int *g31=g30.a.a;
 union {int a[2];} g40[2] = {{1, 2}, 3, 4};

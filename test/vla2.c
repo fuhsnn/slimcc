@@ -31,7 +31,7 @@ void fn(int32_t x){
 }
 
 int fn2(int32_t i) {
-  static (*p)[i];
+  static int32_t (*p)[i];
   return sizeof *p;
 }
 

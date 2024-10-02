@@ -34,11 +34,11 @@ void n3199_ex4(void) {
   char buf[64] = "c";
   {
     defer {
-      sprintf(buf, "%s meow", buf);
+      snprintf(buf, 64, "%s meow", strdup(buf));
     }
     if (1)
-      defer sprintf(buf, "%sat", buf);
-    sprintf(buf, "%s says", buf);
+      defer snprintf(buf, 64, "%sat", strdup(buf));
+    snprintf(buf, 64, "%s says", strdup(buf));
   }
   ASSERT(0, strcmp(buf, "cat says meow"));
 }

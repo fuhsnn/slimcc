@@ -17,10 +17,10 @@ int main() {
   ASSERT(1, ({ (int[2]){1,2}[0]; }));
   ASSERT(2, ({ (int[2]){1,2}[1]; }));
 
-  ASSERT(1, ({ (int*){&arr}[0]; }));
+  ASSERT(1, ({ (int*){(void*)&arr}[0]; }));
   ASSERT(3, ({ (int*){&arr[1]}[1]; }));
 
-  ASSERT(4, ({ (int(*)[2]){&arr}[1][1]; }));
+  ASSERT(4, ({ (int(*)[2]){(void*)&arr}[1][1]; }));
 
   ASSERT(0, ({ (struct s){.j=2}.i; }));
   ASSERT(2, ({ (struct s){.j=2}.j; }));
