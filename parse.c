@@ -85,6 +85,7 @@ typedef struct {
   char **label;
   Obj *var;
   int deref_cnt;
+  bool is_pending_deref;
   bool is_atomic;
   bool is_volatile;
 } EvalContext;
@@ -2532,8 +2533,8 @@ static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
 }
 
 static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volatile, bool let_atomic) {
-  if (node->kind == ND_VAR) {
-   if ((let_volatile || !node->ty->is_volatile) &&
+  if (node->kind == ND_VAR && node->ty->kind != TY_VLA) {
+    if ((let_volatile || !node->ty->is_volatile) &&
       (let_atomic || !node->ty->is_atomic)) {
       *ofs = 0;
       return node->var;
@@ -2542,10 +2543,10 @@ static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volat
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     int64_t offset;
     EvalContext ctx = {.kind = EV_AGGREGATE};
-    if (eval_ctx(node, &ctx, &offset) && ctx.var &&
-      (let_subarray || !ctx.deref_cnt) &&
-      (let_volatile || !ctx.is_volatile) &&
-      (let_atomic || !ctx.is_atomic)) {
+    if (eval_ctx(node, &ctx, &offset) && ctx.var && !ctx.is_pending_deref &&
+      (!ctx.deref_cnt || (let_subarray && ctx.deref_cnt < 0)) &&
+      (!ctx.is_volatile || let_volatile) &&
+      (!ctx.is_atomic || let_atomic)) {
       *ofs = offset;
       return ctx.var;
     }
@@ -2557,8 +2558,8 @@ static Obj *eval_var(Node *node, int *ofs, bool let_volatile) {
   return eval_var_ofs(node, ofs, true, let_volatile, true);
 }
 
-Obj *eval_var_opt(Node *node, int *ofs, bool let_atomic) {
-  return eval_var_ofs(node, ofs, false, true, let_atomic);
+Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic) {
+  return eval_var_ofs(node, ofs, let_subarray, true, let_atomic);
 }
 
 static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
@@ -2790,23 +2791,36 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     ctx->is_atomic |= node->ty->is_atomic;
     ctx->is_volatile |= node->ty->is_volatile;
 
+    if (node->kind == ND_DEREF) {
+      switch (node->lhs->kind) {
+      case ND_MEMBER:
+      case ND_CAST:
+      case ND_ADD:
+      case ND_SUB:
+        if (!ctx->is_pending_deref || node->ty->kind == TY_ARRAY) {
+          ctx->is_pending_deref = true;
+          ctx->deref_cnt++;
+          return eval2(lhs, ctx);
+        }
+      }
+    }
+
     switch (node->kind) {
-    case ND_DEREF:
-      ctx->deref_cnt++;
-      return eval2(lhs, ctx);
     case ND_MEMBER:
-      if (node->member->ty->kind == TY_ARRAY)
+      for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base) {
+        ctx->is_pending_deref = false;
         ctx->deref_cnt--;
+      }
       return eval2(lhs, ctx) + node->member->offset;
     case ND_VAR:
       switch (ty->kind) {
+      case TY_ARRAY:
+        for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base) {
+          ctx->is_pending_deref = false;
+          ctx->deref_cnt--;
+        }
       case TY_STRUCT:
       case TY_UNION:
-        ctx->var = node->var;
-        return 0;
-      case TY_ARRAY:
-        for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base)
-          ctx->deref_cnt--;
         ctx->var = node->var;
         return 0;
       }

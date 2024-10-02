@@ -142,6 +142,7 @@ static void gen_void_expr(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
+static bool gen_load_opt_gp(Node *node, bool test, char *reg32, char *reg64);
 static Node *bool_expr_opt(Node *node, bool *flip);
 
 static void imm_add(char *op, char *tmp, int64_t val);
@@ -203,25 +204,51 @@ static bool is_lvar(Node *node) {
   return node->kind == ND_VAR && node->var->is_local;
 }
 
-static bool is_memop(Node *node, char *ofs, char **ptr, bool allow_atomic) {
-  if (is_bitfield(node))
-    return false;
+static Node *skip_gp_cast(Node *node) {
+  while (node->kind == ND_CAST && node->ty->size == node->lhs->ty->size &&
+    node->ty->kind != TY_BOOL && is_gp_ty(node->ty) && is_gp_ty(node->lhs->ty))
+    node = node->lhs;
 
+  return node;
+}
+
+static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, bool let_atomic) {
   int offset;
-  Obj *var = eval_var_opt(node, &offset, allow_atomic);
+  Obj *var = eval_var_opt(node, &offset, let_subarray, let_atomic);
   if (var) {
-    if (var->is_local && var->ty->kind != TY_VLA) {
+    if (var->is_local) {
       snprintf(ofs, 64, "%d", offset + var->ofs);
       *ptr = var->ptr;
       return true;
-    }
-    if (!opt_fpic && !var->is_tls) {
+    } else if (!var->is_tls && (!opt_fpic || var->is_static)) {
       snprintf(ofs, 64, "%d+\"%s\"", offset, var->name);
       *ptr = "%rip";
       return true;
     }
   }
   return false;
+}
+
+static bool is_memop_ptr(Node *node, char *ofs, char **ptr) {
+  node = skip_gp_cast(node);
+
+  if (node->kind == ND_ADDR)
+    return eval_memop(node->lhs, ofs, ptr, true, true);
+
+  if (node->kind == ND_CAST && node->ty->kind == TY_PTR)
+    node = node->lhs;
+  if (node->ty->kind == TY_ARRAY || node->ty->kind == TY_FUNC)
+    return eval_memop(node, ofs, ptr, true, true);
+
+  return false;
+}
+
+static bool is_memop(Node *node, char *ofs, char **ptr, bool let_atomic) {
+  node = skip_gp_cast(node);
+
+  if (is_bitfield(node))
+    return false;
+  return eval_memop(node, ofs, ptr, false, let_atomic);
 }
 
 static bool has_memop(Node *node) {
@@ -2376,6 +2403,20 @@ static void gen_void_assign(Node *node) {
       return;
     }
   }
+
+  if (!opt_fpic && is_memop_ptr(rhs, sofs, &sptr) && !strcmp(sptr, "%rip")) {
+    char dofs[64], *dptr;
+    if (is_memop(lhs, dofs, &dptr, false)) {
+      println("  movq $%s, %s(%s)", sofs, dofs, dptr);
+      return;
+    }
+    if (!is_bitfield(lhs) && !lhs->ty->is_atomic) {
+      gen_addr(lhs);
+      println("  movq $%s, (%%rax)", sofs);
+      return;
+    }
+  }
+
   gen_expr(node);
 }
 
@@ -2766,6 +2807,42 @@ static bool gen_gp_opt(Node *node) {
   return false;
 }
 
+static bool gen_load_opt_gp(Node *node, bool test, char *reg32, char *reg64) {
+  char ofs[64], *ptr;
+  Node *lhs = node->lhs;
+  Type *ty = node->ty;
+
+  if (is_memop_ptr(node, ofs, &ptr)) {
+    if (!test) {
+      if (!strcmp(ptr, "%rip") && !opt_fpic)
+        println("  movl $%s, %s", ofs, reg32);
+      else
+        println("  lea %s(%s), %s", ofs, ptr, reg64);
+    }
+    return true;
+  }
+
+  if (is_int_to_int_cast(node) && is_memop(lhs, ofs, &ptr, true)) {
+    if (ty->size > lhs->ty->size) {
+      if (!lhs->ty->is_unsigned && ty->size == 8) {
+        if (!test)
+          load_extend_int64(lhs->ty, ofs, ptr, reg64);
+        return true;
+      }
+      if (!(ty->size == 2 && ty->is_unsigned && !lhs->ty->is_unsigned)) {
+        if (!test)
+          load_extend_int2(lhs->ty, ofs, ptr, reg32);
+        return true;
+      }
+    } else if (ty->kind != TY_BOOL) {
+      if (!test)
+        load_extend_int2(ty, ofs, ptr, ty->size == 8 ? reg64 : reg32);
+      return true;
+    }
+  }
+  return false;
+}
+
 static void gen_deref_opt(Node *node, int64_t *ofs) {
   for (;; node = node->lhs) {
     if (node->kind == ND_CAST && node->ty->base)
@@ -2784,11 +2861,7 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
     }
     break;
   }
-  if (is_lvar(node) && node->var->ty->kind == TY_ARRAY) {
-    println("  lea %"PRIi64"(%s), %%rax", *ofs + node->var->ofs, node->var->ptr);
-    *ofs = 0;
-    return;
-  }
+
   gen_expr(node);
 }
 
@@ -2797,11 +2870,7 @@ static void gen_member_opt(Node *node, int64_t *ofs) {
     *ofs += node->member->offset;
     node = node->lhs;
   }
-  if (is_lvar(node)) {
-    println("  lea %"PRIi64"(%s), %%rax", *ofs + node->var->ofs, node->var->ptr);
-    *ofs = 0;
-    return;
-  }
+
   switch (node->kind) {
   case ND_FUNCALL:
   case ND_ASSIGN:
@@ -2897,6 +2966,9 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
+  if (gen_load_opt_gp(node, false, "%eax", "%rax"))
+    return true;
+
   if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
     load3(ty, var_ofs, var_ptr);
     return true;
@@ -2926,6 +2998,17 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
+  if (ty->kind == TY_ARRAY || ty->kind == TY_STRUCT || ty->kind == TY_UNION ||
+    is_bitfield(node)) {
+    Node addr_node = {.kind = ND_ADDR, .lhs = node, .tok = node->tok};
+    if (is_memop_ptr(&addr_node, var_ofs, &var_ptr)) {
+      println("  lea %s(%s), %%rax", var_ofs, var_ptr);
+      if (is_bitfield(node))
+        load(node, 0);
+      return true;
+    }
+  }
+
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
     gen_deref_opt(node->lhs, &ofs);
@@ -2950,28 +3033,20 @@ static bool gen_expr_opt(Node *node) {
     return true;
   }
 
-  if (is_int_to_int_cast(node) && is_memop(lhs, var_ofs, &var_ptr, true)) {
-    if (ty->size > lhs->ty->size) {
-      if (!lhs->ty->is_unsigned && ty->size == 8) {
-        load_extend_int64(lhs->ty, var_ofs, var_ptr, "%rax");
-        return true;
-      }
-      if (!(ty->is_unsigned && !lhs->ty->is_unsigned && ty->size == 2)) {
-        load_extend_int2(lhs->ty, var_ofs, var_ptr, "%eax");
-        return true;
-      }
-    }
-    if (ty->size < lhs->ty->size && ty->kind != TY_BOOL) {
-      load_extend_int2(ty, var_ofs, var_ptr, "%eax");
-      return true;
-    }
-  }
-
   return false;
 }
 
 static bool gen_addr_opt(Node *node) {
   NodeKind kind = node->kind;
+
+  {
+    char ofs[64], *ptr;
+    Node addr_node = {.kind = ND_ADDR, .lhs = node, .tok = node->tok};
+    if (is_memop_ptr(&addr_node, ofs, &ptr)) {
+      println("  lea %s(%s), %%rax", ofs, ptr);
+      return true;
+    }
+  }
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
