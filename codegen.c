@@ -2352,21 +2352,27 @@ static void gen_void_arith_assign(Node *node) {
 }
 
 static void gen_void_assign(Node *node) {
-  if (is_gp_ty(node->lhs->ty) && !is_bitfield(node->lhs) && !node->lhs->ty->is_atomic &&
-    is_const_expr(node->rhs, NULL)) {
-    memop_arith(node->lhs, node->rhs, "mov");
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
+  if (is_gp_ty(lhs->ty) && !is_bitfield(lhs) && !lhs->ty->is_atomic &&
+    is_const_expr(rhs, NULL)) {
+    memop_arith(lhs, rhs, "mov");
     return;
   }
 
   char sofs[64], *sptr;
-  if (is_memop(node->rhs, sofs, &sptr, true)) {
+  if (is_memop(rhs, sofs, &sptr, true) ||
+    (is_int_to_int_cast(rhs) && lhs->ty->size <= rhs->lhs->ty->size &&
+    lhs->ty->kind != TY_BOOL && is_memop(rhs->lhs, sofs, &sptr, true))) {
     char dofs[64], *dptr;
-    if (is_memop(node->lhs, dofs, &dptr, false)) {
-      gen_mem_copy2(sofs, sptr, dofs, dptr, write_size(node->lhs));
+    if (is_memop(lhs, dofs, &dptr, false)) {
+      gen_mem_copy2(sofs, sptr, dofs, dptr, write_size(lhs));
       return;
-    } else if (!is_bitfield(node->lhs) && !node->lhs->ty->is_atomic) {
-      gen_addr(node->lhs);
-      gen_mem_copy2(sofs, sptr, "0", "%rax", write_size(node->lhs));
+    }
+    if (!is_bitfield(lhs) && !lhs->ty->is_atomic) {
+      gen_addr(lhs);
+      gen_mem_copy2(sofs, sptr, "0", "%rax", write_size(lhs));
       return;
     }
   }
