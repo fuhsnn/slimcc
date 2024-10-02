@@ -271,6 +271,7 @@ static Node *new_var_node(Obj *var, Token *tok) {
 
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
+  ty = unqual(ty);
 
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .lhs = expr, .ty = ty};
   if (opt_optimize) {
@@ -282,17 +283,21 @@ Node *new_cast(Node *expr, Type *ty) {
       expr->ty = ty;
       return expr;
     }
-    if (expr->ty == ty && !is_bitfield(expr))
+    if (expr->ty == ty)
       return expr;
 
+    if (expr->ty->origin && expr->ty->origin == ty) {
+      expr->ty = ty;
+      return expr;
+    }
+
     if (is_redundant_cast(expr, ty)) {
-      expr->ty = unqual(ty);
+      expr->ty = ty;
       return expr;
     }
   }
   Node *node = malloc(sizeof(Node));
   *node = tmp_node;
-  node->ty = unqual(ty);
   return node;
 }
 
