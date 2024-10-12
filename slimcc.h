@@ -191,7 +191,7 @@ struct Obj {
   Obj *param_next;
   bool pass_by_stack;
   int stack_offset;
-  Node *param_arg;
+  Node *arg_expr;
   Obj *param_promoted;
 
   // Global variable or function
@@ -576,10 +576,10 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic);
 //
 
 void codegen(Obj *prog, FILE *out);
+void prepare_funcall(Node *node, Scope *scope);
 void prepare_inline_asm(Node *node);
 int align_to(int n, int align);
 bool va_arg_need_copy(Type *ty);
-bool is_trivial_arg(Node *node);
 extern bool dont_reuse_stack;
 
 //

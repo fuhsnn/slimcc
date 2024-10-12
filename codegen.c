@@ -200,10 +200,6 @@ static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
 
-static bool is_lvar(Node *node) {
-  return node->kind == ND_VAR && node->var->is_local;
-}
-
 static Node *skip_gp_cast(Node *node) {
   while (node->kind == ND_CAST && node->ty->size == node->lhs->ty->size &&
     node->ty->kind != TY_BOOL && is_gp_ty(node->ty) && is_gp_ty(node->lhs->ty))
@@ -254,13 +250,6 @@ static bool is_memop(Node *node, char *ofs, char **ptr, bool let_atomic) {
 static bool has_memop(Node *node) {
   char ofs[64], *ptr;
   return is_memop(node, ofs, &ptr, true);
-}
-
-bool is_trivial_arg(Node *arg) {
-  if (!opt_optimize)
-    return false;
-  return is_lvar(arg) || (arg->kind == ND_ADDR && is_lvar(arg->lhs)) ||
-    (arg->kind == ND_NUM && arg->ty->kind != TY_LDOUBLE) || is_nullptr(arg);
 }
 
 static bool is_int_to_int_cast(Node *node) {
@@ -483,7 +472,7 @@ static void pop_copy(int sz, char *sptr) {
 // When we load a char or a short value to a register, we always
 // extend them to the size of int, so we can assume the lower half of
 // a register always contains a valid value.
-static void load_extend_int2(Type *ty, char *ofs, char *ptr, char *reg) {
+static void load_extend_int(Type *ty, char *ofs, char *ptr, char *reg) {
   char *insn = ty->is_unsigned ? "movz" : "movs";
   switch (ty->size) {
   case 1: println("  %sbl %s(%s), %s", insn, ofs, ptr, reg); return;
@@ -492,12 +481,6 @@ static void load_extend_int2(Type *ty, char *ofs, char *ptr, char *reg) {
   case 8: println("  mov %s(%s), %s", ofs, ptr, reg); return;
   }
   internal_error();
-}
-
-static void load_extend_int(Type *ty, int ofs, char *ptr, char *reg) {
-  char ofs_buf[64];
-  snprintf(ofs_buf, 64, "%d", ofs);
-  load_extend_int2(ty, ofs_buf, ptr, reg);
 }
 
 static void load_extend_int64(Type *ty, char *ofs, char *ptr, char *reg) {
@@ -814,7 +797,7 @@ static void load3(Type *ty, char *sofs, char *sptr) {
     println("  fninit; fldt %s(%s)", sofs, sptr);
     return;
   }
-  load_extend_int2(ty, sofs, sptr, regop_ax(ty));
+  load_extend_int(ty, sofs, sptr, regop_ax(ty));
 }
 
 static void load2(Type *ty, int sofs, char *sptr) {
@@ -1228,145 +1211,113 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
   return stack;
 }
 
-// Load function call arguments. Arguments are already evaluated and
-// stored to the stack as local variables. What we need to do in this
-// function is to load them to registers or push them to the stack as
-// specified by the x86-64 psABI. Here is what the spec says:
-//
-// - Up to 6 arguments of integral type are passed using RDI, RSI,
-//   RDX, RCX, R8 and R9.
-//
-// - Up to 8 arguments of floating-point type are passed using XMM0 to
-//   XMM7.
-//
-// - If all registers of an appropriate type are already used, push an
-//   argument to the stack in the right-to-left order.
-//
-// - Each argument passed on the stack takes 8 bytes, and the end of
-//   the argument area must be aligned to a 16 byte boundary.
-//
-// - If a function is variadic, set the number of floating-point type
-//   arguments to RAX.
-static void place_stack_args(Node *node) {
+static void funcall_stk_args(Node *node) {
   for (Obj *var = node->args; var; var = var->param_next) {
-    if (!var->pass_by_stack)
-      continue;
-
-    Node *arg = var->param_arg;
-    if (is_trivial_arg(arg)) {
-      if (arg->kind == ND_NUM || is_nullptr(arg)) {
-        if (is_flonum(arg->ty))
-          load_fval(arg->ty, arg->fval);
-        else
-          load_val(arg->ty, arg->val);
-        store2(arg->ty, var->stack_offset, "%rsp");
-        continue;
-      }
-      if (arg->kind == ND_ADDR && is_lvar(arg->lhs)) {
-        gen_addr(arg->lhs);
-        store2(arg->ty, var->stack_offset, "%rsp");
-        continue;
-      }
-      if (!is_lvar(arg))
-        internal_error();
+    if (var->ptr) {
+      Node var_node = {.kind = ND_VAR, .var = var, .tok = var->arg_expr->tok};
+      Node assign_node = {
+        .kind = ND_ASSIGN, .lhs = &var_node, .rhs = var->arg_expr, .tok = var->arg_expr->tok};
+      add_type(&assign_node);
+      gen_void_expr(&assign_node);
     }
-
-    int ofs;
-    char *ptr;
-    if (is_lvar(arg)) {
-      ofs = arg->var->ofs;
-      ptr = arg->var->ptr;
-    } else {
-      ofs = var->ofs;
-      ptr = var->ptr;
-    }
-
-    switch (var->ty->kind) {
-    case TY_STRUCT:
-    case TY_UNION:
-    case TY_FLOAT:
-    case TY_DOUBLE:
-    case TY_LDOUBLE:
-      gen_mem_copy(ofs, ptr,
-                   var->stack_offset, "%rsp",
-                   var->ty->size);
-      continue;
-    }
-
-    load_extend_int(var->ty, ofs, ptr, regop_ax(var->ty));
-    println("  mov %%rax, %d(%%rsp)", var->stack_offset);
   }
 }
 
-static void place_reg_args(Node *node, bool rtn_by_stk) {
+static void funcall_reg_args2(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
+  switch (ty->kind) {
+  case TY_STRUCT:
+  case TY_UNION:
+    if (has_flonum1(ty))
+      println("  movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+    else
+      println("  mov %s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
+
+    if (ty->size > 8) {
+      if (has_flonum2(ty))
+        println("  movsd 8+%s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+      else
+        println("  mov 8+%s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
+    }
+    return;
+  case TY_FLOAT:
+    println("  movss %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+    return;
+  case TY_DOUBLE:
+    println("  movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+    return;
+  }
+
+  if (ty->size <= 4)
+    load_extend_int(ty, ofs, ptr, argreg32[(*gp)++]);
+  else
+    load_extend_int(ty, ofs, ptr, argreg64[(*gp)++]);
+}
+
+static bool is_trivial_arg(Node *node, bool test, int *gp, int *fp) {
+  Type *ty = node->ty;
+
+  int64_t val;
+  if (is_gp_ty(ty) && is_const_expr(node, &val)) {
+    if (!test)
+      load_val2(ty, val, argreg32[*gp], argreg64[*gp]);
+    (*gp)++;
+    return true;
+  }
+
+  long double fval;
+  if (is_flonum(ty) && is_const_double(node, &fval)) {
+    if (!test)
+      load_fval2(ty, fval, (*fp)++);
+    return true;
+  }
+
+  if (gen_load_opt_gp(node, test, argreg32[*gp], argreg64[*gp])) {
+    (*gp)++;
+    return true;
+  }
+
+  char ofs[64], *ptr;
+  if (is_memop(node, ofs, &ptr, true)) {
+    if (!test)
+      funcall_reg_args2(node->ty, ofs, ptr, gp, fp);
+    return true;
+  }
+
+  return false;
+}
+
+static void funcall_reg_args(Node *node) {
   int gp = 0, fp = 0;
-  // If the return type is a large struct/union, the caller passes
-  // a pointer to a buffer as if it were the first argument.
+  bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
   if (rtn_by_stk)
     println("  lea %d(%s), %s", node->ret_buffer->ofs, node->ret_buffer->ptr, argreg64[gp++]);
 
   for (Obj *var = node->args; var; var = var->param_next) {
     if (var->pass_by_stack)
       continue;
-
-    Node *arg = var->param_arg;
-    if (is_trivial_arg(arg)) {
-      if (arg->kind == ND_NUM || is_nullptr(arg)) {
-        if (is_flonum(arg->ty))
-          load_fval2(arg->ty, arg->fval, fp++);
-        else
-          load_val2(arg->ty, arg->val, argreg32[gp], argreg64[gp]), gp++;
-        continue;
-      }
-      if (arg->kind == ND_ADDR && is_lvar(arg->lhs)) {
-        Obj *var2 = arg->lhs->var;
-        if (var2->ty->kind == TY_VLA)
-          println("  mov %d(%s), %s", var2->ofs, var2->ptr, argreg64[gp++]);
-        else
-          println("  lea %d(%s), %s", var2->ofs, var2->ptr, argreg64[gp++]);
-        continue;
-      }
-      if (!is_lvar(arg))
-        internal_error();
-    }
-
-    int ofs;
-    char *ptr;
-    if (is_lvar(arg)) {
-      ofs = arg->var->ofs;
-      ptr = arg->var->ptr;
-    } else {
-      ofs = var->ofs;
-      ptr = var->ptr;
-    }
-
-    switch (var->ty->kind) {
-    case TY_STRUCT:
-    case TY_UNION:
-      if (has_flonum1(var->ty))
-        println("  movsd %d(%s), %%xmm%d", ofs, ptr, fp++);
-      else
-        println("  mov %d(%s), %s",  ofs, ptr, argreg64[gp++]);
-
-      if (var->ty->size > 8) {
-        if (has_flonum2(var->ty))
-          println("  movsd %d(%s), %%xmm%d", 8 + ofs, ptr, fp++);
-        else
-          println("  mov %d(%s), %s",  8 + ofs, ptr, argreg64[gp++]);
-      }
+    if (is_trivial_arg(var->arg_expr, false, &gp, &fp))
       continue;
-    case TY_FLOAT:
-      println("  movss %d(%s), %%xmm%d", ofs, ptr, fp++);
-      continue;
-    case TY_DOUBLE:
-      println("  movsd %d(%s), %%xmm%d", ofs, ptr, fp++);
+    char ofs[64];
+    snprintf(ofs, 64, "%d", var->ofs);
+    funcall_reg_args2(var->ty, ofs, var->ptr, &gp, &fp);
+  }
+}
+
+void prepare_funcall(Node *node, Scope *scope) {
+  bool rtn_by_stk = node->ty->size > 16;
+  calling_convention(node->args, &(int){rtn_by_stk}, &(int){0}, NULL);
+
+  for (Obj *var = node->args; var; var = var->param_next) {
+    var->is_local = true;
+    if (var->pass_by_stack) {
+      var->ofs = var->stack_offset;
+      var->ptr = "%rsp";
       continue;
     }
-
-    if (var->ty->size <= 4)
-      load_extend_int(var->ty, ofs, ptr, argreg32[gp++]);
-    else
-      load_extend_int(var->ty, ofs, ptr, argreg64[gp++]);
+    if (is_trivial_arg(var->arg_expr, true, &(int){0}, &(int){0}))
+      continue;
+    var->next = scope->locals;
+    scope->locals = var;
   }
 }
 
@@ -1782,10 +1733,21 @@ static void gen_expr(Node *node) {
     return;
   case ND_FUNCALL: {
     if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
-      gen_expr(node->args->param_arg);
+      gen_expr(node->args->arg_expr);
       builtin_alloca(node);
       return;
     }
+
+    // If the return type is a large struct/union, the caller passes
+    // a pointer to a buffer as if it were the first argument.
+    bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
+    int gp_count = rtn_by_stk;
+    int fp_count = 0;
+    int arg_stk_align;
+    int arg_stk_size = calling_convention(node->args, &gp_count, &fp_count, &arg_stk_align);
+    if (arg_stk_size)
+      if (arg_stk_align > 16)
+        push_from("%rsp");
 
     bool use_fn_ptr = !(node->lhs->kind == ND_VAR && node->lhs->var->ty->kind == TY_FUNC);
     if (use_fn_ptr) {
@@ -1793,34 +1755,8 @@ static void gen_expr(Node *node) {
       push();
     }
 
-    for (Obj *var = node->args; var; var = var->param_next)
-      if (!is_trivial_arg(var->param_arg))
-        gen_void_expr(var->param_arg);
-
-    // If the return type is a large struct/union, the caller passes
-    // a pointer to a buffer as if it were the first argument.
-    bool rtn_by_stk= node->ret_buffer && node->ty->size > 16;
-    int gp_count = rtn_by_stk;
-    int fp_count = 0;
-    int arg_stk_align;
-    int arg_stk_size = calling_convention(node->args, &gp_count, &fp_count, &arg_stk_align);
-
-    char *fn_ptr_reg;
-    if (use_fn_ptr) {
-      switch (gp_count) {
-      case 6: clobber_gp(4); break;  // %r9
-      case 5: clobber_gp(3); break;  // %r8
-      case 4:
-      case 3:
-      case 2: clobber_gp(2); break;  // %rsi
-      case 1: clobber_gp(1); break;  // %rdi
-      }
-      fn_ptr_reg = pop_inreg("%r10");
-    }
-
     if (arg_stk_size) {
       if (arg_stk_align > 16) {
-        push_from("%rsp");
         println("  sub $%d, %%rsp", arg_stk_size);
         println("  and $-%d, %%rsp", arg_stk_align);
       } else {
@@ -1828,10 +1764,8 @@ static void gen_expr(Node *node) {
       }
     }
 
-    clobber_all_regs();
-
-    place_stack_args(node);
-    place_reg_args(node, rtn_by_stk);
+    funcall_stk_args(node);
+    funcall_reg_args(node);
 
     if (node->lhs->ty->is_variadic) {
       if (fp_count)
@@ -1840,10 +1774,18 @@ static void gen_expr(Node *node) {
         println("  xor %%al, %%al");
     }
 
-    if (use_fn_ptr)
-      println("  call *%s", fn_ptr_reg);
-    else
+    if (use_fn_ptr) {
+      switch (gp_count) {
+      case 0: break;
+      case 1: clobber_gp(1); break;  // %rdi
+      default: clobber_gp(4); break;
+      }
+      println("  call *%s", pop_inreg("%r10"));
+    } else {
       println("  call \"%s\"%s", node->lhs->var->name, opt_fpic ? "@PLT" : "");
+    }
+
+    clobber_all_regs();
 
     if (arg_stk_size) {
       if (arg_stk_align > 16)
@@ -2728,7 +2670,7 @@ static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int c
       if (!rhs->lhs->ty->is_unsigned && sz == 8)
         load_extend_int64(rhs->lhs->ty, ofs, ptr, "%rdx");
       else
-        load_extend_int2(rhs->lhs->ty, ofs, ptr, "%edx");
+        load_extend_int(rhs->lhs->ty, ofs, ptr, "%edx");
 
       println("  %s %s, %s", arith_ins(kind), reg_dx(sz), ax);
       return true;
@@ -2831,12 +2773,12 @@ static bool gen_load_opt_gp(Node *node, bool test, char *reg32, char *reg64) {
       }
       if (!(ty->size == 2 && ty->is_unsigned && !lhs->ty->is_unsigned)) {
         if (!test)
-          load_extend_int2(lhs->ty, ofs, ptr, reg32);
+          load_extend_int(lhs->ty, ofs, ptr, reg32);
         return true;
       }
     } else if (ty->kind != TY_BOOL) {
       if (!test)
-        load_extend_int2(ty, ofs, ptr, ty->size == 8 ? reg64 : reg32);
+        load_extend_int(ty, ofs, ptr, ty->size == 8 ? reg64 : reg32);
       return true;
     }
   }

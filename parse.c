@@ -168,7 +168,6 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
-static Obj *build_fn_param(Node *arg, Token *tok);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -1234,7 +1233,13 @@ static void defr_cleanup(Obj *var, Obj *fn, Token *tok) {
   Node *n = new_unary(ND_FUNCALL, new_var_node(fn, tok), tok);
   n->lhs->ty = fn->ty;
   n->ty = ty_void;
-  n->args = build_fn_param(new_unary(ND_ADDR, new_var_node(var, tok), tok), tok);
+
+  Node *arg = new_unary(ND_ADDR, new_var_node(var, tok), tok);
+  add_type(arg);
+
+  n->args = new_var(NULL, arg->ty);
+  n->args->arg_expr = arg;
+  prepare_funcall(n, scope);
 
   DeferStmt *defr2 = new_defr(DF_CLEANUP_FN);
   defr2->cleanup_fn = n;
@@ -3797,21 +3802,6 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
   }
 }
 
-static Obj *build_fn_param(Node *arg, Token *tok) {
-  add_type(arg);
-
-  Obj *var;
-  if (is_trivial_arg(arg)) {
-    var = new_var(NULL, arg->ty);
-    var->param_arg = arg;
-  } else {
-    var = new_lvar(NULL, arg->ty);
-    var->param_arg = new_binary(ND_ASSIGN, new_var_node(var, tok), arg, tok);
-    add_type(var->param_arg);
-  }
-  return var;
-}
-
 // funcall = (assign ("," assign)*)? ")"
 static Node *funcall(Token **rest, Token *tok, Node *fn) {
   add_type(fn);
@@ -3830,37 +3820,39 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
-    add_type(arg);
-
     if (param) {
-      if (param->ty->kind != TY_STRUCT && param->ty->kind != TY_UNION &&
-        !(arg->ty->kind == TY_PTR && param->ty->kind == TY_PTR) &&
-        !(arg->ty->kind == param->ty->kind && arg->ty->is_unsigned == param->ty->is_unsigned))
-        arg = new_cast(arg, param->ty);
+      Node ty_node = {.kind = ND_NULL_EXPR, .ty = param->ty};
+      Node assign_node = {.kind = ND_ASSIGN, .lhs = &ty_node, .rhs = arg};
+      add_type(&assign_node);
+      arg = assign_node.rhs;
 
       param = param->param_next;
     } else {
       if (!ty->is_variadic && !ty->is_oldstyle)
         error_tok(tok, "too many arguments");
 
-      if (arg->ty->kind == TY_FLOAT)
+      add_type(arg);
+      if (is_integer(arg->ty) && arg->ty->size < 4)
+        arg = new_cast(arg, ty_int);
+      else if (arg->ty->kind == TY_FLOAT)
         arg = new_cast(arg, ty_double);
       else if (is_array(arg->ty))
         arg = new_cast(arg, pointer_to(arg->ty->base));
       else if (arg->ty->kind == TY_FUNC)
         arg = new_cast(arg, pointer_to(arg->ty));
     }
-
-    cur = cur->param_next = build_fn_param(arg, tok);
+    cur = cur->param_next = new_var(NULL, arg->ty);
+    cur->arg_expr = arg;
   }
   if (param)
     error_tok(tok, "too few arguments");
 
-  leave_scope();
-
   Node *node = new_unary(ND_FUNCALL, fn, tok);
   node->ty = ty->return_ty;
   node->args = head.param_next;
+
+  prepare_funcall(node, scope);
+  leave_scope();
 
   // If a function returns a struct, it is caller's responsibility
   // to allocate a space for the return value.

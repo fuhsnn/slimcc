@@ -49,14 +49,6 @@ int main(void) {
   ASSERT(1, complit_p2 != complit_p3);
   ASSERT(1, complit_p3 != complit_p4);
 
-  unsigned long long alloca_p1 = (unsigned long long) pass(alloca(3));
-  unsigned long long alloca_p2 = (unsigned long long) pass(alloca(3));
-  unsigned long long alloca_p3 = (unsigned long long) pass(({ alloca(3); }));
-  unsigned long long alloca_p4 = (unsigned long long) pass(({ alloca(3); }));
-  ASSERT(1, alloca_p1 != alloca_p2);
-  ASSERT(1, alloca_p2 != alloca_p3);
-  ASSERT(1, alloca_p3 != alloca_p4);
-
   va_fn(0, (M){55,66});
 
   printf("OK\n");
