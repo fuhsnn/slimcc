@@ -6,6 +6,9 @@
 #define GP_SLOTS 6
 #define FP_SLOTS 6
 
+#define STRBUF_SZ 80
+#define STRBUF_SZ2 96
+
 typedef enum {
   REG_NULL = 0,
   REG_AX,
@@ -213,11 +216,11 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, boo
   Obj *var = eval_var_opt(node, &offset, let_subarray, let_atomic);
   if (var) {
     if (var->is_local) {
-      snprintf(ofs, 64, "%d", offset + var->ofs);
+      snprintf(ofs, STRBUF_SZ, "%d", offset + var->ofs);
       *ptr = var->ptr;
       return true;
     } else if (!var->is_tls && (!opt_fpic || var->is_static)) {
-      snprintf(ofs, 64, "%d+\"%s\"", offset, var->name);
+      snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, var->name);
       *ptr = "%rip";
       return true;
     }
@@ -248,7 +251,7 @@ static bool is_memop(Node *node, char *ofs, char **ptr, bool let_atomic) {
 }
 
 static bool has_memop(Node *node) {
-  char ofs[64], *ptr;
+  char ofs[STRBUF_SZ], *ptr;
   return is_memop(node, ofs, &ptr, true);
 }
 
@@ -545,10 +548,10 @@ static void gen_mem_copy2(char *sofs, char *sptr, char *dofs, char *dptr, int sz
 }
 
 static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
-  char sofs_buf[64];
-  snprintf(sofs_buf, 64, "%d", sofs);
-  char dofs_buf[64];
-  snprintf(dofs_buf, 64, "%d", dofs);
+  char sofs_buf[STRBUF_SZ];
+  snprintf(sofs_buf, STRBUF_SZ, "%d", sofs);
+  char dofs_buf[STRBUF_SZ];
+  snprintf(dofs_buf, STRBUF_SZ, "%d", dofs);
   gen_mem_copy2(sofs_buf, sptr, dofs_buf, dptr, sz);
 }
 
@@ -801,8 +804,8 @@ static void load3(Type *ty, char *sofs, char *sptr) {
 }
 
 static void load2(Type *ty, int sofs, char *sptr) {
-  char ofs_buf[64];
-  snprintf(ofs_buf, 64, "%d", sofs);
+  char ofs_buf[STRBUF_SZ];
+  snprintf(ofs_buf, STRBUF_SZ, "%d", sofs);
   load3(ty, ofs_buf, sptr);
 }
 
@@ -855,8 +858,8 @@ static void store3(Type *ty, char *dofs, char *dptr) {
 }
 
 static void store2(Type *ty, int dofs, char *dptr) {
-  char ofs_buf[64];
-  snprintf(ofs_buf, 64, "%d", dofs);
+  char ofs_buf[STRBUF_SZ];
+  snprintf(ofs_buf, STRBUF_SZ, "%d", dofs);
   store3(ty, ofs_buf, dptr);
 }
 
@@ -1276,7 +1279,7 @@ static bool is_trivial_arg(Node *node, bool test, int *gp, int *fp) {
     return true;
   }
 
-  char ofs[64], *ptr;
+  char ofs[STRBUF_SZ], *ptr;
   if (is_memop(node, ofs, &ptr, true)) {
     if (!test)
       funcall_reg_args2(node->ty, ofs, ptr, gp, fp);
@@ -1297,8 +1300,8 @@ static void funcall_reg_args(Node *node) {
       continue;
     if (is_trivial_arg(var->arg_expr, false, &gp, &fp))
       continue;
-    char ofs[64];
-    snprintf(ofs, 64, "%d", var->ofs);
+    char ofs[STRBUF_SZ];
+    snprintf(ofs, STRBUF_SZ, "%d", var->ofs);
     funcall_reg_args2(var->ty, ofs, var->ptr, &gp, &fp);
   }
 }
@@ -2261,15 +2264,15 @@ static void imm_tmpl(char *ins, char *op, int64_t val) {
 }
 
 static void memop_arith(Node *lhs, Node *rhs, char *ins) {
-  char ins_sz[64];
-  snprintf(ins_sz, 64, "%s%s", ins, size_suffix(lhs->ty->size));
+  char ins_sz[STRBUF_SZ];
+  snprintf(ins_sz, STRBUF_SZ, "%s%s", ins, size_suffix(lhs->ty->size));
 
   int64_t rval;
-  char var_ofs[64], *var_ptr;
+  char ofs[STRBUF_SZ], *ptr;
   if (is_const_expr(rhs, &rval)) {
-    if (is_memop(lhs, var_ofs, &var_ptr, false)) {
-      char memop[80];
-      snprintf(memop, 80, "%s(%s)", var_ofs, var_ptr);
+    if (is_memop(lhs, ofs, &ptr, false)) {
+      char memop[STRBUF_SZ2];
+      snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
       imm_tmpl(ins_sz, memop, limit_imm(rval, lhs->ty->size));
       return;
     }
@@ -2278,16 +2281,17 @@ static void memop_arith(Node *lhs, Node *rhs, char *ins) {
     return;
   }
 
-  if (is_memop(lhs, var_ofs, &var_ptr, false)) {
+  if (is_memop(lhs, ofs, &ptr, false)) {
     gen_expr(rhs);
-    println("  %s %s, %s(%s)", ins_sz, reg_ax(lhs->ty->size), var_ofs, var_ptr);
+    println("  %s %s, %s(%s)", ins_sz, reg_ax(lhs->ty->size), ofs, ptr);
     return;
   }
+
   gen_addr(lhs);
   push();
   gen_expr(rhs);
-  char *ptr = pop_inreg(tmpreg64[0]);
-  println("  %s %s, (%s)", ins_sz, reg_ax(lhs->ty->size), ptr);
+  char *dptr = pop_inreg(tmpreg64[0]);
+  println("  %s %s, (%s)", ins_sz, reg_ax(lhs->ty->size), dptr);
 }
 
 static void gen_void_arith_assign(Node *node) {
@@ -2330,11 +2334,11 @@ static void gen_void_assign(Node *node) {
     return;
   }
 
-  char sofs[64], *sptr;
+  char sofs[STRBUF_SZ], *sptr;
   if (is_memop(rhs, sofs, &sptr, true) ||
     (is_int_to_int_cast(rhs) && lhs->ty->size <= rhs->lhs->ty->size &&
     lhs->ty->kind != TY_BOOL && is_memop(rhs->lhs, sofs, &sptr, true))) {
-    char dofs[64], *dptr;
+    char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       gen_mem_copy2(sofs, sptr, dofs, dptr, write_size(lhs));
       return;
@@ -2347,7 +2351,7 @@ static void gen_void_assign(Node *node) {
   }
 
   if (!opt_fpic && is_memop_ptr(rhs, sofs, &sptr) && !strcmp(sptr, "%rip")) {
-    char dofs[64], *dptr;
+    char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       println("  movq $%s, %s(%s)", sofs, dofs, dptr);
       return;
@@ -2597,12 +2601,12 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
 }
 
 static bool gen_cmp_opt_gp2(Node *lhs, Node *rhs) {
-  char var_ofs[64], *var_ptr;
+  char ofs[STRBUF_SZ], *ptr;
   int64_t val;
   if (is_const_expr(rhs, &val)) {
-    if (is_memop(lhs, var_ofs, &var_ptr, false)) {
-      char memop[80];
-      snprintf(memop, 80, "%s(%s)", var_ofs, var_ptr);
+    if (is_memop(lhs, ofs, &ptr, false)) {
+      char memop[STRBUF_SZ2];
+      snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
       imm_tmpl(lhs->ty->size == 8 ? "cmpq" : "cmpl", memop, limit_imm(val, lhs->ty->size));
       return true;
     }
@@ -2611,9 +2615,9 @@ static bool gen_cmp_opt_gp2(Node *lhs, Node *rhs) {
     return true;
   }
 
-  if (is_memop(lhs, var_ofs, &var_ptr, false)) {
+  if (is_memop(lhs, ofs, &ptr, false)) {
     gen_expr(rhs);
-    println("  cmp %s, %s(%s)", regop_ax(lhs->ty), var_ofs, var_ptr);
+    println("  cmp %s, %s(%s)", regop_ax(lhs->ty), ofs, ptr);
     return true;
   }
   return false;
@@ -2636,7 +2640,7 @@ static bool gen_cmp_opt_gp(Node *node, NodeKind *kind) {
 
 static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int ctrl, bool swap) {
   int64_t val;
-  char ofs[64], *ptr;
+  char ofs[STRBUF_SZ], *ptr;
   char *ax = reg_ax(sz);
 
   switch (abs(ctrl)) {
@@ -2705,7 +2709,7 @@ static bool gen_arith_opt_gp(Node *node, int sz) {
 static bool gen_shift_opt_gp(Node *node) {
   char *ax = reg_ax(node->ty->size);
   int64_t val;
-  char ofs[64], *ptr;
+  char ofs[STRBUF_SZ], *ptr;
 
   if (is_const_expr(node->rhs, &val)) {
     gen_expr(node->lhs);
@@ -2750,7 +2754,7 @@ static bool gen_gp_opt(Node *node) {
 }
 
 static bool gen_load_opt_gp(Node *node, bool test, char *reg32, char *reg64) {
-  char ofs[64], *ptr;
+  char ofs[STRBUF_SZ], *ptr;
   Node *lhs = node->lhs;
   Type *ty = node->ty;
 
@@ -2893,7 +2897,7 @@ static bool gen_expr_opt(Node *node) {
   Node *rhs = node->rhs;
 
   char *var_ptr;
-  char var_ofs[64];
+  char var_ofs[STRBUF_SZ];
 
   {
     int64_t ival;
@@ -2942,6 +2946,7 @@ static bool gen_expr_opt(Node *node) {
 
   if (ty->kind == TY_ARRAY || ty->kind == TY_STRUCT || ty->kind == TY_UNION ||
     is_bitfield(node)) {
+    char var_ofs[STRBUF_SZ], *var_ptr;
     Node addr_node = {.kind = ND_ADDR, .lhs = node, .tok = node->tok};
     if (is_memop_ptr(&addr_node, var_ofs, &var_ptr)) {
       println("  lea %s(%s), %%rax", var_ofs, var_ptr);
@@ -2982,7 +2987,7 @@ static bool gen_addr_opt(Node *node) {
   NodeKind kind = node->kind;
 
   {
-    char ofs[64], *ptr;
+    char ofs[STRBUF_SZ], *ptr;
     Node addr_node = {.kind = ND_ADDR, .lhs = node, .tok = node->tok};
     if (is_memop_ptr(&addr_node, ofs, &ptr)) {
       println("  lea %s(%s), %%rax", ofs, ptr);
@@ -3428,13 +3433,13 @@ static void asm_gen_ptr(AsmParam *ap, char *ofs, char **ptr, Reg tmpreg) {
     return;
   }
   if (ap->ptr) {
-    snprintf(ofs, 64, "0");
+    snprintf(ofs, STRBUF_SZ, "0");
     *ptr = regs[tmpreg][3];
     println("  movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), *ptr);
     return;
   }
   if (ap->var) {
-    snprintf(ofs, 64, "%d", ap->var->ofs);
+    snprintf(ofs, STRBUF_SZ, "%d", ap->var->ofs);
     *ptr = alt_ptr(ap->var->ptr);
     return;
   }
@@ -3442,7 +3447,7 @@ static void asm_gen_ptr(AsmParam *ap, char *ofs, char **ptr, Reg tmpreg) {
 }
 
 static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
-  char ofs[64], *ptr = NULL;
+  char ofs[STRBUF_SZ], *ptr = NULL;
   asm_gen_ptr(ap, ofs, &ptr, tmpreg);
 
   if (is_gp_reg(ap->reg)) {
@@ -3470,7 +3475,7 @@ static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
 }
 
 static void asm_reg_output(AsmParam *ap, Reg tmpreg) {
-  char ofs[64], *ptr = NULL;
+  char ofs[STRBUF_SZ], *ptr = NULL;
   asm_gen_ptr(ap, ofs, &ptr, tmpreg);
 
   if (is_gp_reg(ap->reg)) {
@@ -3605,7 +3610,7 @@ static void asm_outputs(Node *node) {
       continue;
     }
     if (ap->kind == ASMOP_FLAG) {
-      char ofs[64], *ptr;
+      char ofs[STRBUF_SZ], *ptr;
       asm_gen_ptr(ap, ofs, &ptr, freereg);
       if (ap->arg->ty->size != 1)
         println("  mov%s $0, %s(%s)", size_suffix(ap->arg->ty->size), ofs, ptr);
@@ -3693,7 +3698,7 @@ static void asm_body(Node *node) {
           fprintf(output_file, "%s\"%s\"", punct, ap->arg->var->name);
           continue;
         }
-        char ofs[64], *ptr;
+        char ofs[STRBUF_SZ], *ptr;
         if (ap->arg->kind == ND_ADDR &&
           is_memop(ap->arg->lhs, ofs, &ptr, true) && !strcmp(ptr, "%rip")) {
           fprintf(output_file, "%s%s", punct, ofs);
@@ -3702,7 +3707,7 @@ static void asm_body(Node *node) {
         break;
       }
       case ASMOP_MEM: {
-        char ofs[64], *ptr;
+        char ofs[STRBUF_SZ], *ptr;
         if (is_memop(ap->arg, ofs, &ptr, true)) {
           fprintf(output_file, "%s(%s)", ofs, alt_ptr(ptr));
           continue;
