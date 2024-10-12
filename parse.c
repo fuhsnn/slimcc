@@ -2522,14 +2522,11 @@ static bool eval_ctx(Node *node, EvalContext *ctx, int64_t *val) {
   return !failed;
 }
 
-static bool eval_non_var_ofs(Node *node, int *ofs) {
+static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
-    int64_t offset;
     EvalContext ctx = {.kind = EV_AGGREGATE};
-    if (eval_ctx(node, &ctx, &offset) && !ctx.var) {
-      *ofs = offset;
+    if (eval_ctx(node, &ctx, ofs) && !ctx.var)
       return true;
-    }
   }
   return false;
 }
@@ -2775,7 +2772,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return val;
   }
   case ND_ADDR: {
-    int ofs;
+    int64_t ofs;
     if (eval_non_var_ofs(lhs, &ofs))
       return ofs;
     break;
@@ -4072,22 +4069,18 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "__builtin_offsetof")) {
-    Token *start = tok;
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);
-    Node *var_node = new_var_node(&(Obj){.ty = ty}, start);
-
-    Token dot = {.kind = TK_PUNCT, .loc = ".", .len = 1, .next = skip(tok, ",")};
-    Node *node = postfix(var_node, &tok, &dot);
+    Node *node = new_unary(ND_DEREF, new_cast(new_long(0, tok), pointer_to(ty)), tok);
+    tok = skip(tok, ",");
+    Token dot = {.kind = TK_PUNCT, .loc = ".", .len = 1, .next = tok};
+    node = postfix(node, &tok, &dot);
+    add_type(node);
     *rest = skip(tok, ")");
 
-    int offset;
-    if (eval_var_ofs(node, &offset, true, true, true))
-      return new_ulong(offset, tok);
-
-    var_node->kind = ND_DEREF;
-    var_node->lhs = new_cast(new_long(0, tok), pointer_to(ty));
-    var_node->var = NULL;
+    int64_t ofs;
+    if (eval_non_var_ofs(node, &ofs))
+      return new_ulong(ofs, tok);
     return new_cast(new_unary(ND_ADDR, node, tok), ty_ulong);
   }
 
