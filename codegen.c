@@ -3903,7 +3903,7 @@ static void emit_symbol(Obj *var) {
 static void emit_data(Obj *prog) {
   for (Obj *var = prog; var; var = var->next) {
     if (!var->is_definition) {
-      if (var->is_weak || var->alias_name || var->visibility)
+      if (var->is_weak || var->alias_name)
         emit_symbol(var);
       continue;
     }
