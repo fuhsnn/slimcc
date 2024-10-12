@@ -90,6 +90,8 @@ bool is_bitfield(Node *node) {
 static bool is_bitfield2(Node *node, int *width) {
   switch (node->kind) {
   case ND_ASSIGN:
+  case ND_ARITH_ASSIGN:
+  case ND_POST_INCDEC:
     return is_bitfield2(node->lhs, width);
   case ND_CHAIN:
   case ND_COMMA:

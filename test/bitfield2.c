@@ -131,6 +131,8 @@ static int operand_promotion(void) {
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(0, s.i) < 0; }) );
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~({s.i;}) < 0; }) );
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(s.i = 0) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(s.i += 0) < 0; }) );
+  ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(s.i++) < 0; }) );
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(1 ? s.i : s.i) < 0; }) );
 
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(0, (1 ? s.i : s.i)) < 0; }) );
