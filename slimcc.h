@@ -564,7 +564,6 @@ Type *array_to_pointer(Type *ty);
 Type *func_type(Type *return_ty, Token *tok);
 Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr);
-Type *enum_type(void);
 Type *new_type(TypeKind kind, int64_t size, int align);
 void add_type(Node *node);
 Type *unqual(Type *ty);

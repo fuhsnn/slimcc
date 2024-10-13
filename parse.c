@@ -24,7 +24,7 @@ typedef struct {
   Obj *var;
   Type *type_def;
   Type *enum_ty;
-  int enum_val;
+  int64_t enum_val;
 } VarScope;
 
 // Variable attributes such as typedef or extern.
@@ -168,6 +168,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
+static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -206,6 +207,12 @@ static Type *find_tag(Token *tok) {
       return ty;
   }
   return NULL;
+}
+
+static bool in_ty_range(int64_t val, Type *ty) {
+  Node num = {.kind = ND_NUM, .ty = ty_llong, .val = val};
+  Node cast = {.kind = ND_CAST, .ty = ty, .lhs = &num};
+  return eval(&cast) == val;
 }
 
 static bool is_const_var(Obj *var) {
@@ -1133,47 +1140,81 @@ static bool is_end(Token *tok) {
   return equal(tok, "}") || (equal(tok, ",") && equal(tok->next, "}"));
 }
 
-// enum-specifier = ident? "{" enum-list? "}"
-//                | ident ("{" enum-list? "}")?
-//
-// enum-list      = ident ("=" num)? ("," ident ("=" num)?)* ","?
 static Type *enum_specifier(Token **rest, Token *tok) {
-  Type *ty = enum_type();
-
-  // Read a struct tag.
+  // Read a tag.
   Token *tag = NULL;
   if (tok->kind == TK_IDENT) {
     tag = tok;
     tok = tok->next;
   }
 
+  Type *ty = NULL;
+  if (consume(&tok, tok, ":"))
+    ty = unqual(typename(&tok, tok));
+
   if (tag && !equal(tok, "{")) {
-    Type *ty = find_tag(tag);
-    if (!ty)
-      error_tok(tag, "unknown enum type");
-    if (ty->kind != TY_ENUM)
-      error_tok(tag, "not an enum tag");
     *rest = tok;
+    Type *ty2 = find_tag(tag);
+    if (ty2) {
+      if (ty2->kind == TY_STRUCT || ty2->kind == TY_UNION)
+        error_tok(tag, "not an enum tag");
+      return ty2;
+    }
+    if (!ty)
+      ty = new_type(TY_ENUM, -1, 1);
+    push_tag_scope(tag, ty);
     return ty;
   }
-
   tok = skip(tok, "{");
 
+  if (tag) {
+    Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
+    if (ty2) {
+      if (ty2->kind == TY_STRUCT || ty2->kind == TY_UNION)
+        error_tok(tag, "not an enum tag");
+      if ((!ty && ty2->kind != TY_ENUM) ||
+        (ty && (ty->kind != ty2->kind || ty->is_unsigned != ty2->is_unsigned)))
+        error_tok(tag, "enum redeclared with incompatible type");
+      ty = ty2;
+    }
+  }
+  if (!ty)
+    ty = new_type(TY_ENUM, -1, 1);
+
   // Read an enum-list.
-  int val = 0;
-  bool first = true;
-  for (; comma_list(rest, &tok, "}", !first); first = false) {
+  bool has_ty = ty->kind != TY_ENUM;
+  int64_t val = 0;
+  for (bool first = true; comma_list(rest, &tok, "}", !first); first = false) {
     char *name = get_ident(tok);
     tok = tok->next;
 
-    if (equal(tok, "="))
-      val = const_expr(&tok, tok->next);
+    Type *val_ty = NULL;
+    if (consume(&tok, tok, "="))
+      val = const_expr2(&tok, tok, &val_ty);
+
+    if (has_ty) {
+      if (!in_ty_range(val, ty))
+        error_tok(tok, "enum value out of type range");
+    } else if (ty->kind == TY_ENUM || !in_ty_range(val, ty)) {
+      Type *new_ty;
+      if (val_ty && !val_ty->is_unsigned && val < 0)
+        new_ty = (val_ty->size <= ty_int->size) ? ty_int : unqual(val_ty);
+      else
+        new_ty = in_ty_range(val, ty_uint) ? ty_uint : ty_ullong;
+
+      for (Type *t = ty; t; t = t->decl_next) {
+        t->kind = new_ty->kind;
+        t->is_unsigned = new_ty->is_unsigned;
+        t->size = new_ty->size;
+        t->align = MAX(t->align, new_ty->align);
+        t->origin = new_ty;
+      }
+    }
 
     VarScope *sc = push_scope(name);
     sc->enum_ty = ty;
     sc->enum_val = val++;
   }
-
   if (tag)
     push_tag_scope(tag, ty);
   return ty;
@@ -2427,7 +2468,13 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
       continue;
     }
 
-    if (is_typename(tok) && !equal(tok->next, ":")) {
+    if (!is_typename(tok) || (tok->kind == TK_IDENT && equal(tok->next, ":"))) {
+      cur = cur->next = stmt(&tok, tok, false);
+      add_type(cur);
+      continue;
+    }
+
+    {
       VarAttr attr = {0};
       Type *basety = declspec(&tok, tok, &attr);
 
@@ -2450,10 +2497,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
         cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
         add_type(cur);
       }
-      continue;
     }
-    cur = cur->next = stmt(&tok, tok, false);
-    add_type(cur);
   }
 
   node->defr_start = current_defr;
@@ -2899,12 +2943,18 @@ bool is_const_double(Node *node, long double *fval) {
   return !failed;
 }
 
-int64_t const_expr(Token **rest, Token *tok) {
+static int64_t const_expr2(Token **rest, Token *tok, Type **ty) {
   Node *node = conditional(rest, tok);
   add_type(node);
   if (!is_integer(node->ty))
     error_tok(tok, "constant expression not integer");
+  if (ty)
+    *ty = node->ty;
   return eval(node);
+}
+
+int64_t const_expr(Token **rest, Token *tok) {
+  return const_expr2(rest, tok, NULL);
 }
 
 static long double eval_fp_cast(long double fval, Type *ty) {
@@ -4190,8 +4240,11 @@ static Node *primary(Token **rest, Token *tok) {
     if (sc) {
       if (sc->var)
         return new_var_node(sc->var, tok);
-      if (sc->enum_ty)
-        return new_num(sc->enum_val, tok);
+      if (sc->enum_ty) {
+        Node *n = new_num(sc->enum_val, tok);
+        n->ty = sc->enum_ty;
+        return n;
+      }
     }
 
     // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is

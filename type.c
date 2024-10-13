@@ -67,7 +67,7 @@ Type *new_qualified_type(Type *ty) {
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
   return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||
-         k == TY_INT  || k == TY_LONG || k == TY_LONGLONG || k == TY_ENUM;
+         k == TY_INT  || k == TY_LONG || k == TY_LONGLONG;
 }
 
 bool is_flonum(Type *ty) {
@@ -245,13 +245,8 @@ Type *vla_of(Type *base, Node *len) {
   return ty;
 }
 
-Type *enum_type(void) {
-  return new_type(TY_ENUM, 4, 4);
-}
-
 int int_rank(Type *t) {
   switch (t->kind) {
-    case TY_ENUM:
     case TY_BOOL:
     case TY_CHAR:
     case TY_SHORT:
