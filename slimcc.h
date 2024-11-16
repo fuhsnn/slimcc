@@ -601,8 +601,11 @@ extern bool dont_reuse_stack;
 
 int encode_utf8(char *buf, uint32_t c);
 uint32_t decode_utf8(char **new_pos, char *p);
-bool is_ident1(uint32_t c);
-bool is_ident2(uint32_t c);
+#define is_ident1(c) ((c < 0x80) ? is_ident1_ascii(c) : is_ident1_non_ascii(c))
+#define is_ident1_ascii(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$')
+#define is_ident2_ascii(c) (is_ident1_ascii(c) || (c >= '0' && c <= '9'))
+bool is_ident1_non_ascii(uint32_t c);
+bool is_ident2_non_ascii(uint32_t c);
 int display_width(char *p, int len);
 
 //
