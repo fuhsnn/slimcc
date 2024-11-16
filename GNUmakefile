@@ -33,7 +33,7 @@ test-all: test test-stage2
 # Stage 2
 
 stage2/slimcc: $(OBJS:%=stage2/%)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	./slimcc -o $@ $^ $(LDFLAGS)
 
 stage2/%.o: slimcc %.c
 	mkdir -p stage2/test
