@@ -888,28 +888,25 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
   // Pattern 3: #include FOO
   // In this case FOO must be macro-expanded to either
   // a single string token or a sequence of "<" ... ">".
-  if (tok->kind == TK_IDENT)
+  bool is_expanded = false;
+  if (tok->kind == TK_IDENT) {
     tok = preprocess2(tok);
+    is_expanded = true;
+  }
 
-  // Pattern 1: #include "foo.h"
+  char *filename = NULL;
   if (tok->kind == TK_STR) {
+    // Pattern 1: #include "foo.h"
     // A double-quoted filename for #include is a special kind of
     // token, and we don't want to interpret any escape sequences in it.
     // For example, "\f" in "C:\foo" is not a formfeed character but
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
+    filename = strndup(tok->loc + 1, tok->len - 2);
     *is_dquote = true;
-    if (rest)
-      *rest = tok->next;
-    else
-      skip_line(tok->next);
-    return strndup(tok->loc + 1, tok->len - 2);
-  }
-
-  // Pattern 2: #include <foo.h>
-  if (equal(tok, "<")) {
-    // Reconstruct a filename from a sequence of tokens between
-    // "<" and ">".
+  } else if (equal(tok, "<")) {
+    // Pattern 2: #include <foo.h>
+    // Reconstruct a filename from between "<" and ">".
     Token *start = tok;
 
     // Find closing ">".
@@ -917,14 +914,20 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
       if (tok->kind == TK_EOF)
         error_tok(tok, "expected '>'");
 
+    if (!is_expanded && start->file == tok->file && start->loc < tok->loc)
+      filename = strndup(start->loc + 1, tok->loc - start->loc - 1);
+    else
+      filename = join_tokens(start->next, tok);
     *is_dquote = false;
+  }
+
+  if (filename && *filename != '\0') {
     if (rest)
       *rest = tok->next;
     else
       skip_line(tok->next);
-    return join_tokens(start->next, tok);
+    return filename;
   }
-
   error_tok(tok, "expected a filename");
 }
 
