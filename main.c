@@ -17,6 +17,7 @@ StdVer opt_std;
 
 static StringArray opt_include;
 bool opt_E;
+bool opt_enable_universal_char;
 static bool opt_P;
 static bool opt_M;
 static bool opt_MD;
@@ -413,6 +414,11 @@ static void parse_args(int argc, char **argv) {
       if (*argv[++i] != 'c')
         error("unknown c standard");
       set_std(strtoul(argv[i] + 1, NULL, 10));
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-fenable-universal-char")) {
+      opt_enable_universal_char = true;
       continue;
     }
 

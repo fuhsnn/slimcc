@@ -874,7 +874,9 @@ Token *tokenize_file(char *path, Token **end) {
 
   canonicalize_newline(p);
   remove_backslash_newline(p);
-  convert_universal_chars(p);
+
+  if (opt_enable_universal_char)
+    convert_universal_chars(p);
 
   return tokenize(add_input_file(path, p, false), end);
 }
