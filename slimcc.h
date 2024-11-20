@@ -22,6 +22,12 @@
 #define MAX(x, y) ((x) < (y) ? (y) : (x))
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
+#define Ucast(c) (unsigned int)(unsigned char)(c)
+#define Inrange(c, x, y) ((Ucast(c) - Ucast(x)) <= (Ucast(y) - Ucast(x)))
+#define Isdigit(c) Inrange(c, '0', '9')
+#define Isalnum(c) (Inrange((c) | 0x20, 'a', 'z') || Isdigit(c))
+#define Isxdigit(c) (Isdigit(c) || Inrange((c) | 0x20, 'a', 'f'))
+
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
 #define NORETURN __attribute__((noreturn))
