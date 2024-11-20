@@ -885,7 +885,7 @@ static FileType get_file_type(char *filename) {
   char *p = strstr(filename, ".so.");
   if (p) {
     p += 3;
-    while (isdigit(*p) || (*p == '.' && isdigit(p[1])))
+    while (Isdigit(*p) || (*p == '.' && Isdigit(p[1])))
       p++;
     if (!*p)
       return FILE_DSO;

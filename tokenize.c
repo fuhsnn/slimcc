@@ -225,11 +225,11 @@ static int read_escaped_char(char **new_pos, char *p) {
   if (*p == 'x') {
     // Read a hexadecimal number.
     p++;
-    if (!isxdigit(*p))
+    if (!Isxdigit(*p))
       error_at(p, "invalid hex escape sequence");
 
     int c = 0;
-    for (; isxdigit(*p); p++)
+    for (; Isxdigit(*p); p++)
       c = ((unsigned)c << 4) + from_hex(*p);
     *new_pos = p;
     return c;
@@ -381,7 +381,7 @@ static Token *new_pp_number(char *start, char *p) {
     if (*p == '.') {
       p++;
       continue;
-    } else if (*p == '\'' && isalnum(p[1])) {
+    } else if (*p == '\'' && Isalnum(p[1])) {
       p += 2;
       continue;
     } else if (p[0] && p[1] && strchr("eEpP", p[0]) && strchr("+-", p[1])) {
@@ -402,7 +402,7 @@ static bool convert_pp_int(Token *tok, char *loc, int len) {
 
   // Read a binary, octal, decimal or hexadecimal number.
   int base = 10;
-  if (!strncasecmp(p, "0x", 2) && isxdigit(p[2])) {
+  if (!strncasecmp(p, "0x", 2) && Isxdigit(p[2])) {
     p += 2;
     base = 16;
   } else if (!strncasecmp(p, "0b", 2) && (p[2] == '0' || p[2] == '1')) {
@@ -577,7 +577,7 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // Skip whitespace characters.
-    if (isspace(*p)) {
+    if (*p == ' ' || *p == '\t' || *p =='\v' || *p == '\f') {
       p++;
       has_space = true;
       continue;
@@ -604,7 +604,7 @@ Token *tokenize(File *file, Token **end) {
 
     // Numeric literal
     char *p2 = (*p == '.') ? p + 1 : p;
-    if (isdigit(*p2)) {
+    if (Isdigit(*p2)) {
       cur = cur->next = new_pp_number(p, p2 + 1);
       p += cur->len;
       continue;
@@ -801,7 +801,7 @@ static void remove_backslash_newline(char *p) {
 static uint32_t read_universal_char(char *p, int len) {
   uint32_t c = 0;
   for (int i = 0; i < len; i++) {
-    if (!isxdigit(p[i]))
+    if (!Isxdigit(p[i]))
       return 0;
     c = (c << 4) | from_hex(p[i]);
   }
