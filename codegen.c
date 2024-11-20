@@ -3202,7 +3202,7 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       case 't': fixed_reg(&reg, REG_X87_ST0, tok); continue;
       case 'u': fixed_reg(&reg, REG_X87_ST1, tok); continue;
       }
-      if (*p >= '0' && *p <= '9') {
+      if (Isdigit(*p)) {
         match_idx = strtoul(p, &p, 10);
         continue;
       }
@@ -3640,7 +3640,7 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
         if (named_op(p, op->name->len, op->name->loc, rest))
           return op;
     }
-  } else if (*p >= '0' && *p <= '9') {
+  } else if (Isdigit(*p)) {
     unsigned long idx = strtoul(p, rest, 10);
     if (idx < asm_ops.cnt)
       return asm_ops.data[idx];
@@ -3662,7 +3662,7 @@ static void asm_body(Node *node) {
       p++;
       continue;
     }
-    if (*p == 'l' && (p[1] == '[' || (p[1] >= '0' && p[1] <= '9'))) {
+    if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
       AsmParam *ap = find_op(p + 1, &p, node->asm_str, true);
       if (!ap->arg->unique_label)
         error_tok(ap->arg->tok, "not a label");
@@ -3685,7 +3685,7 @@ static void asm_body(Node *node) {
       mod = *p;
       p++;
     }
-    if (*p == '[' || (*p >= '0' && *p <= '9')) {
+    if (*p == '[' || Isdigit(*p)) {
       AsmParam *ap = find_op(p, &p, node->asm_str, false);
       char *punct = (mod == 'c') ? "" : "$";
 
