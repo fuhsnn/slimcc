@@ -143,9 +143,9 @@ static int read_ident(char *start) {
 }
 
 static int from_hex(char c) {
-  if ('0' <= c && c <= '9')
+  if (Inrange(c, '0', '9'))
     return c - '0';
-  if ('a' <= c && c <= 'f')
+  if (Inrange(c, 'a', 'f'))
     return c - 'a' + 10;
   return c - 'A' + 10;
 }
@@ -210,12 +210,12 @@ TokenKind ident_keyword(Token *tok) {
 }
 
 static int read_escaped_char(char **new_pos, char *p) {
-  if ('0' <= *p && *p <= '7') {
+  if (Inrange(*p, '0', '7')) {
     // Read an octal number.
     int c = *p++ - '0';
-    if ('0' <= *p && *p <= '7') {
+    if (Inrange(*p, '0', '7')) {
       c = (c << 3) + (*p++ - '0');
-      if ('0' <= *p && *p <= '7')
+      if (Inrange(*p, '0', '7'))
         c = (c << 3) + (*p++ - '0');
     }
     *new_pos = p;
