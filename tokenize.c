@@ -578,7 +578,7 @@ Token *tokenize(File *file, Token **end) {
 
     // Skip whitespace characters.
     if (*p == ' ' || *p == '\t' || *p =='\v' || *p == '\f') {
-      p++;
+      for (char c = *p; *(++p) == c;);
       has_space = true;
       continue;
     }
