@@ -152,17 +152,49 @@ static int from_hex(char c) {
 
 // Read a punctuator token from p and returns its length.
 static int read_punct(char *p) {
-  static char *kw[] = {
-    "<<=", ">>=", "...", "==", "!=", "<=", ">=", "->", "+=",
-    "-=", "*=", "/=", "++", "--", "%=", "&=", "|=", "^=", "&&",
-    "||", "<<", ">>", "##",
-  };
+  bool is_repeat = p[1] == *p;
+  bool is_assign = p[1] == '=';
 
-  for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
-    if (startswith(p, kw[i]))
-      return strlen(kw[i]);
-
-  return ispunct(*p) ? 1 : 0;
+  switch (*p) {
+  case '-':
+    if (p[1] == '>')
+      return 2;
+  case '&':
+  case '+':
+  case '=':
+  case '|':
+    return (is_repeat | is_assign) + 1;
+  case '<':
+  case '>':
+    if (is_repeat)
+      return (p[2] == '=') + 2;
+  case '!':
+  case '%':
+  case '*':
+  case '/':
+  case '^':
+    return is_assign + 1;
+  case '#':
+    return is_repeat + 1;
+  case '.':
+    return (is_repeat && p[2] == *p) ? 3 : 1;
+  case '(':
+  case ')':
+  case ',':
+  case ':':
+  case ';':
+  case '?':
+  case '@':
+  case '[':
+  case '\\':
+  case ']':
+  case '`':
+  case '{':
+  case '}':
+  case '~':
+    return 1;
+  }
+  return 0;
 }
 
 TokenKind ident_keyword(Token *tok) {
@@ -610,6 +642,14 @@ Token *tokenize(File *file, Token **end) {
       continue;
     }
 
+    // Punctuators
+    int punct_len = read_punct(p);
+    if (punct_len) {
+      cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
+      p += cur->len;
+      continue;
+    }
+
     // String literal
     if (*p == '"') {
       cur = cur->next = read_string_literal(p, p);
@@ -679,14 +719,6 @@ Token *tokenize(File *file, Token **end) {
     int ident_len = read_ident(p);
     if (ident_len) {
       cur = cur->next = new_token(TK_IDENT, p, p + ident_len);
-      p += cur->len;
-      continue;
-    }
-
-    // Punctuators
-    int punct_len = read_punct(p);
-    if (punct_len) {
-      cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
       p += cur->len;
       continue;
     }
