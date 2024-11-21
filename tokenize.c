@@ -127,18 +127,23 @@ static bool startswith(char *p, char *q) {
 
 // Read an identifier and returns the length of it.
 // If p does not point to a valid identifier, 0 is returned.
-static int read_ident(char *start) {
-  char *p = start;
-  uint32_t c = decode_utf8(&p, p);
-  if (!is_ident1(c))
-    return 0;
+static int read_ident(char *p) {
+  char *start = p;
 
-  for (;;) {
-    char *q;
-    c = decode_utf8(&q, p);
-    if (!is_ident2(c))
-      return p - start;
-    p = q;
+  for (bool is_first = true;; is_first = false) {
+    if (Isalnum(*p) || *p == '_' || *p == '$') {
+      p++;
+      continue;
+    }
+    if ((unsigned char)*p >= 128) {
+      char *pos;
+      uint32_t c = decode_utf8(&pos, p);
+      if (is_first ? is_ident1(c) : is_ident2(c)) {
+        p = pos;
+        continue;
+      }
+    }
+    return p - start;
   }
 }
 
@@ -420,10 +425,16 @@ static Token *new_pp_number(char *start, char *p) {
       p += 2;
       continue;
     }
-    char *pos;
-    if (is_ident2(decode_utf8(&pos, p))) {
-      p = pos;
+    if (Isalnum(*p) || *p == '_' || *p == '$') {
+      p++;
       continue;
+    }
+    if ((unsigned char)*p >= 128) {
+      char *pos;
+      if (is_ident2(decode_utf8(&pos, p))) {
+        p = pos;
+        continue;
+      }
     }
     return new_token(TK_PP_NUM, start, p);
   }
