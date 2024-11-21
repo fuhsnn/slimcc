@@ -20,13 +20,13 @@
 typedef struct MacroParam MacroParam;
 struct MacroParam {
   MacroParam *next;
-  char *name;
+  Token *name;
 };
 
 typedef struct MacroArg MacroArg;
 struct MacroArg {
   MacroArg *next;
-  char *name;
+  Token *name;
   bool is_va_args;
   bool omit_comma;
   Token *tok;
@@ -42,7 +42,7 @@ struct Macro {
   Token *stop_tok;
   Macro *locked_next;
   MacroParam *params;
-  char *va_args_name;
+  Token *va_args_name;
   Token *body;
   macro_handler_fn *handler;
 };
@@ -384,7 +384,7 @@ static Macro *add_macro(char *name, bool is_objlike, Token *body) {
   return m;
 }
 
-static MacroParam *read_macro_params(Token **rest, Token *tok, char **va_args_name) {
+static MacroParam *read_macro_params(Token **rest, Token *tok, Token **va_args_name) {
   MacroParam head = {0};
   MacroParam *cur = &head;
 
@@ -393,7 +393,8 @@ static MacroParam *read_macro_params(Token **rest, Token *tok, char **va_args_na
       tok = skip(tok, ",");
 
     if (equal(tok, "...")) {
-      *va_args_name = "__VA_ARGS__";
+      static Token va_args = {.loc = "__VA_ARGS__", .len = 11};
+      *va_args_name = &va_args;
       *rest = skip(tok->next, ")");
       return head.next;
     }
@@ -402,13 +403,13 @@ static MacroParam *read_macro_params(Token **rest, Token *tok, char **va_args_na
       error_tok(tok, "expected an identifier");
 
     if (equal(tok->next, "...")) {
-      *va_args_name = strndup(tok->loc, tok->len);
+      *va_args_name = tok;
       *rest = skip(tok->next->next, ")");
       return head.next;
     }
 
     MacroParam *m = calloc(1, sizeof(MacroParam));
-    m->name = strndup(tok->loc, tok->len);
+    m->name = tok;
     cur = cur->next = m;
     tok = tok->next;
   }
@@ -425,7 +426,7 @@ static void read_macro_definition(Token **rest, Token *tok) {
 
   if (!tok->has_space && equal(tok, "(")) {
     // Function-like macro
-    char *va_args_name = NULL;
+    Token *va_args_name = NULL;
     MacroParam *params = read_macro_params(&tok, tok->next, &va_args_name);
 
     Macro *m = add_macro(name, false, split_line(rest, tok));
@@ -541,7 +542,7 @@ static MacroArg *find_va_arg(MacroArg *args) {
 
 static MacroArg *find_arg(Token **rest, Token *tok, MacroArg *args, Macro *m) {
   for (MacroArg *ap = args; ap; ap = ap->next) {
-    if (equal(tok, ap->name)) {
+    if (tok->len == ap->name->len && !memcmp(tok->loc, ap->name->loc, tok->len)) {
       if (rest)
         *rest = tok->next;
       return ap;
