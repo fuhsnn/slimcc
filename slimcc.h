@@ -1,6 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
-#include <ctype.h>
 #include <errno.h>
 #include <glob.h>
 #include <inttypes.h>
