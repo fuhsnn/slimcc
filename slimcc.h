@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -26,6 +25,7 @@
 #define Isdigit(c) Inrange(c, '0', '9')
 #define Isalnum(c) (Inrange((c) | 0x20, 'a', 'z') || Isdigit(c))
 #define Isxdigit(c) (Isdigit(c) || Inrange((c) | 0x20, 'a', 'f'))
+#define Casecmp(c, a) (((c) | 0x20) == a)
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
