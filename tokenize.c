@@ -124,10 +124,6 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
   return tok;
 }
 
-static bool startswith(char *p, char *q) {
-  return strncmp(p, q, strlen(q)) == 0;
-}
-
 // Read an identifier and returns the length of it.
 // If p does not point to a valid identifier, 0 is returned.
 static int read_ident(char *p) {
@@ -448,45 +444,38 @@ static bool convert_pp_int(Token *tok, char *loc, int len) {
 
   // Read a binary, octal, decimal or hexadecimal number.
   int base = 10;
-  if (!strncasecmp(p, "0x", 2) && Isxdigit(p[2])) {
-    p += 2;
-    base = 16;
-  } else if (!strncasecmp(p, "0b", 2) && (p[2] == '0' || p[2] == '1')) {
-    p += 2;
-    base = 2;
-  } else if (*p == '0') {
-    base = 8;
+  if (*p == '0') {
+    if (Casecmp(p[1], 'x') && Isxdigit(p[2])) {
+      p += 2;
+      base = 16;
+    } else if (Casecmp(p[1], 'b') && (p[2] == '0' || p[2] == '1')) {
+      p += 2;
+      base = 2;
+    } else {
+      base = 8;
+    }
   }
 
   int64_t val = strtoul(p, &p, base);
 
   // Read U, L or LL suffixes.
-  bool ll = false;
-  bool l = false;
   bool u = false;
-
-  if (startswith(p, "LLU") || startswith(p, "LLu") ||
-      startswith(p, "llU") || startswith(p, "llu") ||
-      startswith(p, "ULL") || startswith(p, "Ull") ||
-      startswith(p, "uLL") || startswith(p, "ull")) {
-    p += 3;
-    ll = u = true;
-  } else if (!strncasecmp(p, "lu", 2) || !strncasecmp(p, "ul", 2)) {
-    p += 2;
-    l = u = true;
-  } else if (startswith(p, "LL") || startswith(p, "ll")) {
-    p += 2;
-    ll = true;
-  } else if (*p == 'L' || *p == 'l') {
-    p++;
-    l = true;
-  } else if (*p == 'U' || *p == 'u') {
-    p++;
+  int l_cnt = 0;
+  if (Casecmp(*p, 'u')) {
+    if (Casecmp(p[1], 'l'))
+      l_cnt = 1 + (p[1] == p[2]);
     u = true;
+  } else if (Casecmp(*p, 'l')) {
+    l_cnt = 1 + (*p == p[1]);
+    u = Casecmp(p[l_cnt], 'u');
   }
+  p += l_cnt + u;
 
   if (p != loc + len)
     return false;
+
+  bool ll = l_cnt == 2;
+  bool l = l_cnt == 1;
 
   // Infer a type.
   Type *ty;
