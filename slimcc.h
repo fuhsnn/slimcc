@@ -30,12 +30,16 @@
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
 #define NORETURN __attribute__((noreturn))
+#define PACKED __attribute__((packed))
 #elif defined(__has_attribute)
 #if __has_attribute(format)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
 #endif
 #if __has_attribute(noreturn)
 #define NORETURN __attribute__((noreturn))
+#endif
+#if __has_attribute(packed)
+#define PACKED __attribute__((packed))
 #endif
 #endif
 
@@ -44,6 +48,9 @@
 #endif
 #ifndef NORETURN
 #define NORETURN
+#endif
+#ifndef PACKED
+#define PACKED
 #endif
 
 typedef struct Type Type;
@@ -141,7 +148,7 @@ struct Token {
   Token *origin;    // If this is expanded from a macro, the original token
   char *guard_file; // The path of a potentially include-guarded file
   Token *attr_next;
-};
+} PACKED;
 
 void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
 void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
