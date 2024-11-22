@@ -2,7 +2,7 @@
 
 #include "slimcc.h"
 
-// Initial hash bucket size
+// Initial hash bucket size; must be power of 2
 #define INIT_SIZE 16
 
 // Rehash if the usage exceeds 70%.
@@ -41,6 +41,7 @@ static void rehash(HashMap *map) {
   HashMap map2 = {0};
   map2.buckets = calloc(cap, sizeof(HashEntry));
   map2.capacity = cap;
+  map2.mask = cap - 1;
 
   for (int i = 0; i < map->capacity; i++) {
     HashEntry *ent = &map->buckets[i];
@@ -64,7 +65,7 @@ static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
   uint64_t hash = fnv_hash(key, keylen);
 
   for (int i = 0; i < map->capacity; i++) {
-    HashEntry *ent = &map->buckets[(hash + i) % map->capacity];
+    HashEntry *ent = &map->buckets[(hash + i) & map->mask];
     if (match(ent, key, keylen))
       return ent;
     if (ent->key == NULL)
@@ -77,6 +78,7 @@ static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
   if (!map->buckets) {
     map->buckets = calloc(INIT_SIZE, sizeof(HashEntry));
     map->capacity = INIT_SIZE;
+    map->mask = INIT_SIZE - 1;
   } else if ((map->used * 100) / map->capacity >= HIGH_WATERMARK) {
     rehash(map);
   }
@@ -84,7 +86,7 @@ static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
   uint64_t hash = fnv_hash(key, keylen);
 
   for (int i = 0; i < map->capacity; i++) {
-    HashEntry *ent = &map->buckets[(hash + i) % map->capacity];
+    HashEntry *ent = &map->buckets[(hash + i) & map->mask];
 
     if (match(ent, key, keylen))
       return ent;

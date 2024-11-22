@@ -65,6 +65,7 @@ typedef struct {
   HashEntry *buckets;
   int capacity;
   int used;
+  int mask;
 } HashMap;
 
 void *hashmap_get(HashMap *map, char *key);
