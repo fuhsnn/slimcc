@@ -12,6 +12,9 @@ static bool at_bol;
 // True if the current position follows a space character
 static bool has_space;
 
+#define startswith2(p, x, y) ((*(p) == x) && ((p)[1] == y))
+#define startswith3(p, x, y, z) ((*(p) == x) && ((p)[1] == y) && ((p)[2] == z))
+
 // Reports an error and exit.
 void error(char *fmt, ...) {
   va_list ap;
@@ -627,7 +630,7 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // Skip line comments.
-    if (startswith(p, "//")) {
+    if (startswith2(p, '/', '/')) {
       p += 2;
       while (*p != '\n')
         p++;
@@ -636,7 +639,7 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // Skip block comments.
-    if (startswith(p, "/*")) {
+    if (startswith2(p, '/', '*')) {
       char *q = strstr(p + 2, "*/");
       if (!q)
         error_at(p, "unclosed block comment");
@@ -669,28 +672,28 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // UTF-8 string literal
-    if (startswith(p, "u8\"")) {
+    if (startswith3(p, 'u', '8', '\"')) {
       cur = cur->next = read_string_literal(p, p + 2);
       p += cur->len;
       continue;
     }
 
     // UTF-16 string literal
-    if (startswith(p, "u\"")) {
+    if (startswith2(p, 'u', '\"')) {
       cur = cur->next = read_utf16_string_literal(p, p + 1);
       p += cur->len;
       continue;
     }
 
     // Wide string literal
-    if (startswith(p, "L\"")) {
+    if (startswith2(p, 'L', '\"')) {
       cur = cur->next = read_utf32_string_literal(p, p + 1, ty_int);
       p += cur->len;
       continue;
     }
 
     // UTF-32 string literal
-    if (startswith(p, "U\"")) {
+    if (startswith2(p, 'U', '\"')) {
       cur = cur->next = read_utf32_string_literal(p, p + 1, ty_uint);
       p += cur->len;
       continue;
@@ -705,7 +708,7 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // UTF-16 character literal
-    if (startswith(p, "u'")) {
+    if (startswith2(p, 'u', '\'')) {
       cur = cur->next = read_char_literal(p, p + 1, ty_ushort);
       cur->val &= 0xffff;
       p += cur->len;
@@ -713,14 +716,14 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // Wide character literal
-    if (startswith(p, "L'")) {
+    if (startswith2(p, 'L', '\'')) {
       cur = cur->next = read_char_literal(p, p + 1, ty_int);
       p += cur->len;
       continue;
     }
 
     // UTF-32 character literal
-    if (startswith(p, "U'")) {
+    if (startswith2(p, 'U', '\'')) {
       cur = cur->next = read_char_literal(p, p + 1, ty_uint);
       p += cur->len;
       continue;
@@ -856,28 +859,24 @@ static void convert_universal_chars(char *p) {
   char *q = p;
 
   while (*p) {
-    if (startswith(p, "\\u")) {
+    if (startswith2(p, '\\', 'u')) {
       uint32_t c = read_universal_char(p + 2, 4);
       if (c) {
         p += 6;
         q += encode_utf8(q, c);
-      } else {
-        *q++ = *p++;
+        continue;
       }
-    } else if (startswith(p, "\\U")) {
+    } else if (startswith2(p, '\\', 'U')) {
       uint32_t c = read_universal_char(p + 2, 8);
       if (c) {
         p += 10;
         q += encode_utf8(q, c);
-      } else {
-        *q++ = *p++;
+        continue;
       }
-    } else if (p[0] == '\\') {
-      *q++ = *p++;
-      *q++ = *p++;
-    } else {
+    } else if (*p == '\\') {
       *q++ = *p++;
     }
+    *q++ = *p++;
   }
 
   *q = '\0';
