@@ -789,48 +789,45 @@ File *new_file(char *name, int file_no, char *contents) {
 
 // Replaces \r or \r\n with \n.
 static void canonicalize_newline(char *p) {
-  int i = 0, j = 0;
+  char *first = strchr(p, '\r');
+  if (first) {
+    char *q = p = first;
 
-  while (p[i]) {
-    if (p[i] == '\r' && p[i + 1] == '\n') {
-      i += 2;
-      p[j++] = '\n';
-    } else if (p[i] == '\r') {
-      i++;
-      p[j++] = '\n';
-    } else {
-      p[j++] = p[i++];
+    while (*p) {
+      if (*p == '\r') {
+        *q++ = '\n';
+        p += (p[1] == '\n') + 1;
+        continue;
+      }
+      *q++ = *p++;
     }
-  }
 
-  p[j] = '\0';
+    *q = '\0';
+  }
 }
 
 // Removes backslashes followed by a newline.
 static void remove_backslash_newline(char *p) {
-  int i = 0, j = 0;
+  char *first = strchr(p, '\\');
+  if (first) {
+    char *q = p = first;
+    int n = 0;
 
-  // We want to keep the number of newline characters so that
-  // the logical line number matches the physical one.
-  // This counter maintain the number of newlines we have removed.
-  int n = 0;
-
-  while (p[i]) {
-    if (p[i] == '\\' && p[i + 1] == '\n') {
-      i += 2;
-      n++;
-    } else if (p[i] == '\n') {
-      p[j++] = p[i++];
-      for (; n > 0; n--)
-        p[j++] = '\n';
-    } else {
-      p[j++] = p[i++];
+    while (*p) {
+      if (*p == '\\' && p[1] == '\n') {
+        p += 2;
+        n++;
+        continue;
+      }
+      if (*p == '\n') {
+        for (; n > 0; n--)
+          *q++ = '\n';
+      }
+      *q++ = *p++;
     }
-  }
 
-  for (; n > 0; n--)
-    p[j++] = '\n';
-  p[j] = '\0';
+    *q = '\0';
+  }
 }
 
 static uint32_t read_universal_char(char *p, int len) {
