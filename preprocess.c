@@ -1077,7 +1077,7 @@ static Token *preprocess2(Token *tok) {
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
     // If it is a macro, expand it.
-    if (expand_macro(&tok, tok))
+    if (tok->kind == TK_IDENT && expand_macro(&tok, tok))
       continue;
 
     if (is_hash(tok) && !locked_macros) {
