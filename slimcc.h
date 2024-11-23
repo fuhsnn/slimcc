@@ -118,12 +118,13 @@ typedef struct File File;
 struct File {
   char *name;
   int file_no;
+  int incl_no;
   char *contents;
 
   // For #line directive
   File *display_file;
   int line_delta;
-  bool non_input;
+  bool is_input;
 };
 
 // Token type
@@ -163,8 +164,8 @@ File **get_input_files(void);
 File *new_file(char *name, int file_no, char *contents);
 Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
-Token *tokenize_file(char *filename, Token **end);
-File *add_input_file(char *path, char *content, bool not_input);
+Token *tokenize_file(char *filename, Token **end, int *incl_no);
+File *add_input_file(char *path, char *content, int *incl_no);
 void convert_pp_number(Token *tok);
 TokenKind ident_keyword(Token *tok);
 

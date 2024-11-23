@@ -61,6 +61,19 @@ static bool take_arg(char *arg) {
   return false;
 }
 
+static void add_include_path(char *p) {
+  char *str = strdup(p);
+
+  for (int i = strlen(str) - 1; i >= 0 && str[i] == '/';)
+    str[i--] = '\0';
+
+  for (int i = 0; i < include_paths.len; i++) {
+    if (!strcmp(include_paths.data[i], str))
+      return;
+  }
+  strarray_push(&include_paths, str);
+}
+
 static void add_default_include_paths(char *argv0) {
   if (opt_nostdinc)
     return;
@@ -206,12 +219,12 @@ static void parse_args(int argc, char **argv) {
     }
 
     if (!strcmp(argv[i], "-I")) {
-      strarray_push(&include_paths, argv[++i]);
+      add_include_path(argv[++i]);
       continue;
     }
 
     if (!strncmp(argv[i], "-I", 2)) {
-      strarray_push(&include_paths, argv[i] + 2);
+      add_include_path(argv[i] + 2);
       continue;
     }
 
@@ -489,7 +502,7 @@ static void parse_args(int argc, char **argv) {
   }
 
   for (int i = 0; i < idirafter.len; i++)
-    strarray_push(&include_paths, idirafter.data[i]);
+    add_include_path(idirafter.data[i]);
 
   if (input_paths.len == 0)
     error("no input files");
@@ -641,7 +654,7 @@ static void print_dependencies(void) {
 
   for (int i = 0; files[i]; i++) {
     char *name = files[i]->name;
-    if ((opt_MMD && in_std_include_path(name)) || files[i]->non_input)
+    if ((opt_MMD && in_std_include_path(name)) || !files[i]->is_input)
       continue;
     fprintf(out, " \\\n  %s", name);
   }
@@ -651,7 +664,7 @@ static void print_dependencies(void) {
   if (opt_MP) {
     for (int i = 1; files[i]; i++) {
       char *name = files[i]->name;
-      if ((opt_MMD && in_std_include_path(name)) || files[i]->non_input)
+      if ((opt_MMD && in_std_include_path(name)) || !files[i]->is_input)
         continue;
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
@@ -659,7 +672,8 @@ static void print_dependencies(void) {
 }
 
 static Token *must_tokenize_file(char *path, Token **end) {
-  Token *tok = tokenize_file(path, end);
+  int incl_no = -1;
+  Token *tok = tokenize_file(path, end, &incl_no);
   if (!tok)
     error("%s: %s", path, strerror(errno));
   return tok;
@@ -677,7 +691,7 @@ static void cc1(void) {
     "  unsigned int fp_offset;"
     "  void *overflow_arg_area;"
     "  void *reg_save_area;"
-    "} __builtin_va_list[1];", true), &end);
+    "} __builtin_va_list[1];", NULL), &end);
     cur = end;
   }
 

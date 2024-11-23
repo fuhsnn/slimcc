@@ -866,7 +866,7 @@ static void convert_universal_chars(char *p) {
   *q = '\0';
 }
 
-File *add_input_file(char *path, char *contents, bool not_input) {
+File *add_input_file(char *path, char *contents, int *incl_no) {
   static HashMap input_files_map;
 
   File *file = hashmap_get(&input_files_map, path);
@@ -875,7 +875,10 @@ File *add_input_file(char *path, char *contents, bool not_input) {
 
   static int file_no;
   file = new_file(path, file_no + 1, contents);
-  file->non_input = not_input;
+  if (incl_no) {
+    file->is_input = true;
+    file->incl_no = *incl_no;
+  }
 
   input_files = realloc(input_files, sizeof(File *) * (file_no + 2));
   input_files[file_no] = file;
@@ -886,7 +889,7 @@ File *add_input_file(char *path, char *contents, bool not_input) {
   return file;
 }
 
-Token *tokenize_file(char *path, Token **end) {
+Token *tokenize_file(char *path, Token **end, int *incl_no) {
   char *p = read_file(path);
   if (!p)
     return NULL;
@@ -904,5 +907,5 @@ Token *tokenize_file(char *path, Token **end) {
   if (opt_enable_universal_char)
     convert_universal_chars(p);
 
-  return tokenize(add_input_file(path, p, false), end);
+  return tokenize(add_input_file(path, p, incl_no), end);
 }
