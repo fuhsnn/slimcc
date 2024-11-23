@@ -421,6 +421,10 @@ static MacroParam *read_macro_params(Token **rest, Token *tok, Token **va_args_n
 static void read_macro_definition(Token **rest, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "macro name must be an identifier");
+
+  if (equal(tok, "defined"))
+    error_tok(tok, "cannot be used as a macro name");
+
   char *name = strndup(tok->loc, tok->len);
   tok = tok->next;
 
