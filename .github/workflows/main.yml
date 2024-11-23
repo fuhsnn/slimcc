@@ -1,0 +1,37 @@
+name: Github Actions
+
+on: [push, pull_request]
+
+jobs:
+  host-x86:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install prerequisite
+        run: |
+          sudo apt-get update -q -y
+          sudo apt-get install -q -y file
+          sudo apt-get install -q -y build-essential
+      - name: Build stage 1 artifact
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          make clean
+          make slimcc
+        shell: bash
+      - name: Test stage 1
+        run: |
+          make test || exit 1
+        shell: bash
+      - name: Build stage 2 artifact
+        run: |
+          make stage2/slimcc
+        shell: bash
+      - name: Test stage 2
+        run: |
+          make test-stage2 || exit 1
+        shell: bash
