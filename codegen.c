@@ -145,7 +145,8 @@ static void gen_void_expr(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
-static bool gen_load_opt_gp(Node *node, bool test, char *reg32, char *reg64);
+static bool has_load_opt_gp(Node *node);
+static bool gen_load_opt_gp(Node *node, char *reg32, char *reg64);
 static Node *bool_expr_opt(Node *node, bool *flip);
 
 static void imm_add(char *op, char *tmp, int64_t val);
@@ -1261,9 +1262,10 @@ static bool is_trivial_arg(Node *node, bool test, int *gp, int *fp) {
 
   int64_t val;
   if (is_gp_ty(ty) && is_const_expr(node, &val)) {
-    if (!test)
+    if (!test) {
       load_val2(ty, val, argreg32[*gp], argreg64[*gp]);
-    (*gp)++;
+      (*gp)++;
+    }
     return true;
   }
 
@@ -1274,8 +1276,11 @@ static bool is_trivial_arg(Node *node, bool test, int *gp, int *fp) {
     return true;
   }
 
-  if (gen_load_opt_gp(node, test, argreg32[*gp], argreg64[*gp])) {
-    (*gp)++;
+  if (has_load_opt_gp(node)) {
+    if (!test) {
+      gen_load_opt_gp(node, argreg32[*gp], argreg64[*gp]);
+      (*gp)++;
+    }
     return true;
   }
 
@@ -2753,36 +2758,52 @@ static bool gen_gp_opt(Node *node) {
   return false;
 }
 
-static bool gen_load_opt_gp(Node *node, bool test, char *reg32, char *reg64) {
+static bool gen_load_opt_gp(Node *node, char *reg32, char *reg64) {
   char ofs[STRBUF_SZ], *ptr;
   Node *lhs = node->lhs;
   Type *ty = node->ty;
 
   if (is_memop_ptr(node, ofs, &ptr)) {
-    if (!test) {
-      if (!strcmp(ptr, "%rip") && !opt_fpic)
-        println("  movl $%s, %s", ofs, reg32);
-      else
-        println("  lea %s(%s), %s", ofs, ptr, reg64);
-    }
+    if (!strcmp(ptr, "%rip") && !opt_fpic)
+      println("  movl $%s, %s", ofs, reg32);
+    else
+      println("  lea %s(%s), %s", ofs, ptr, reg64);
     return true;
   }
 
   if (is_int_to_int_cast(node) && is_memop(lhs, ofs, &ptr, true)) {
     if (ty->size > lhs->ty->size) {
       if (!lhs->ty->is_unsigned && ty->size == 8) {
-        if (!test)
-          load_extend_int64(lhs->ty, ofs, ptr, reg64);
+        load_extend_int64(lhs->ty, ofs, ptr, reg64);
         return true;
       }
       if (!(ty->size == 2 && ty->is_unsigned && !lhs->ty->is_unsigned)) {
-        if (!test)
-          load_extend_int(lhs->ty, ofs, ptr, reg32);
+        load_extend_int(lhs->ty, ofs, ptr, reg32);
         return true;
       }
     } else if (ty->kind != TY_BOOL) {
-      if (!test)
-        load_extend_int(ty, ofs, ptr, ty->size == 8 ? reg64 : reg32);
+      load_extend_int(ty, ofs, ptr, ty->size == 8 ? reg64 : reg32);
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool has_load_opt_gp(Node *node) {
+  char ofs[STRBUF_SZ], *ptr;
+  Node *lhs = node->lhs;
+  Type *ty = node->ty;
+
+  if (is_memop_ptr(node, ofs, &ptr))
+    return true;
+
+  if (is_int_to_int_cast(node) && is_memop(lhs, ofs, &ptr, true)) {
+    if (ty->size > lhs->ty->size) {
+      if (!lhs->ty->is_unsigned && ty->size == 8)
+        return true;
+      if (!(ty->size == 2 && ty->is_unsigned && !lhs->ty->is_unsigned))
+        return true;
+    } else if (ty->kind != TY_BOOL) {
       return true;
     }
   }
@@ -2912,7 +2933,7 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (gen_load_opt_gp(node, false, "%eax", "%rax"))
+  if (gen_load_opt_gp(node, "%eax", "%rax"))
     return true;
 
   if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
