@@ -893,7 +893,7 @@ static FileType get_file_type(char *filename) {
   if (endswith(filename, ".S"))
     return FILE_PP_ASM;
 
-  if (opt_E && !strcmp(filename, "-"))
+  if (opt_E && (!strcmp(filename, "-") || endswith(filename, ".h")))
     return FILE_C;
 
   char *p = strstr(filename, ".so.");
