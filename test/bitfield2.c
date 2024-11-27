@@ -128,6 +128,7 @@ int uninit_global(void) {
 
 static int operand_promotion(void) {
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; s.i > -1; }) );
+  ASSERT(0, ({ struct { unsigned i:8; } s = {0}; ((unsigned)s.i - 1) < 0; }) );
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(0, s.i) < 0; }) );
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~({s.i;}) < 0; }) );
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(s.i = 0) < 0; }) );

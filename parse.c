@@ -290,12 +290,15 @@ Node *new_cast(Node *expr, Type *ty) {
       expr->ty = ty;
       return expr;
     }
-    if (expr->ty == ty)
-      return expr;
 
-    if (expr->ty->origin && expr->ty->origin == ty) {
-      expr->ty = ty;
-      return expr;
+    if (!is_bitfield(expr)) {
+      if (expr->ty == ty)
+        return expr;
+
+      if (expr->ty->origin && expr->ty->origin == ty) {
+        expr->ty = ty;
+        return expr;
+      }
     }
 
     if (is_redundant_cast(expr, ty)) {
