@@ -3187,7 +3187,7 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       ap->flag = strdup(&p[4]);
       continue;
     }
-    for (; *p != '\0'; p++) {
+    for (; *p; p++) {
       switch (*p) {
       case '=':
       case '+': continue;
@@ -3224,7 +3224,9 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       case 'u': fixed_reg(&reg, REG_X87_ST1, tok); continue;
       }
       if (Isdigit(*p)) {
-        match_idx = strtoul(p, &p, 10);
+        char *pos;
+        match_idx = strtoul(p, &pos, 10);
+        p = pos - 1;
         continue;
       }
       error_tok(ap->constraint, "unknown constraint \"%c\"", *p);
