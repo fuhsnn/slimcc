@@ -490,6 +490,7 @@ struct Type {
   bool is_const;
   bool is_volatile;
   bool is_restrict;
+  bool is_unspec_enum;
   Type *origin;       // for type compatibility check
   Type *decl_next;    // forward declarations
 

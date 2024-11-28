@@ -1143,6 +1143,17 @@ static bool is_end(Token *tok) {
   return equal(tok, "}") || (equal(tok, ",") && equal(tok->next, "}"));
 }
 
+static void update_enum_ty(Type *decl_ty, Type *ty, bool is_unspec) {
+  for (Type *ty2 = decl_ty; ty2; ty2 = ty2->decl_next) {
+    ty2->kind = ty->kind;
+    ty2->is_unsigned = ty->is_unsigned;
+    ty2->size = ty->size;
+    ty2->align = MAX(ty2->align, ty->align);
+    ty2->origin = ty;
+    ty2->is_unspec_enum = is_unspec;
+  }
+}
+
 static Type *enum_specifier(Token **rest, Token *tok) {
   // Read a tag.
   Token *tag = NULL;
@@ -1184,33 +1195,40 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   if (!ty)
     ty = new_type(TY_ENUM, -1, 1);
 
-  // Read an enum-list.
-  bool has_ty = ty->kind != TY_ENUM;
+  bool has_type = (ty->kind != TY_ENUM);
+  Type *base_ty;
+  if (has_type) {
+    base_ty = ty;
+  } else {
+    base_ty = ty_int;
+    update_enum_ty(ty, ty_uint, true);
+  }
+
   int64_t val = 0;
-  for (bool first = true; comma_list(rest, &tok, "}", !first); first = false) {
+  bool been_negative = false;
+  bool been_unsigned = false;
+
+  bool first = true;
+  for (; comma_list(rest, &tok, "}", !first); first = false) {
     char *name = get_ident(tok);
     tok = tok->next;
 
-    Type *val_ty = NULL;
-    if (consume(&tok, tok, "="))
+    if (consume(&tok, tok, "=")) {
+      Type *val_ty = NULL;
       val = const_expr2(&tok, tok, &val_ty);
+      if (!val_ty->is_unsigned && val < 0)
+        been_negative = true;
+    }
 
-    if (has_ty) {
-      if (!in_ty_range(val, ty))
+    if (!in_ty_range(val, base_ty)) {
+      if (has_type)
         error_tok(tok, "enum value out of type range");
-    } else if (ty->kind == TY_ENUM || !in_ty_range(val, ty)) {
-      Type *new_ty;
-      if (val_ty && !val_ty->is_unsigned && val < 0)
-        new_ty = (val_ty->size <= ty_int->size) ? ty_int : unqual(val_ty);
-      else
-        new_ty = in_ty_range(val, ty_uint) ? ty_uint : ty_ullong;
 
-      for (Type *t = ty; t; t = t->decl_next) {
-        t->kind = new_ty->kind;
-        t->is_unsigned = new_ty->is_unsigned;
-        t->size = new_ty->size;
-        t->align = MAX(t->align, new_ty->align);
-        t->origin = new_ty;
+      if (been_negative) {
+        base_ty = (in_ty_range(val, ty_int) && !been_unsigned) ? ty_int : ty_long;
+      } else {
+        base_ty = in_ty_range(val, ty_uint) ? ty_uint : ty_ulong;
+        been_unsigned = true;
       }
     }
 
@@ -1218,6 +1236,17 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     sc->enum_ty = ty;
     sc->enum_val = val++;
   }
+
+  if (first)
+    error_tok(tok, "empty enum specifier");
+
+  if (base_ty->kind == TY_INT && !been_negative && !been_unsigned)
+    update_enum_ty(ty, ty_uint, true);
+  else if (been_negative && been_unsigned)
+    update_enum_ty(ty, ty_long, false);
+  else
+    update_enum_ty(ty, base_ty, false);
+
   if (tag)
     push_tag_scope(tag, ty);
   return ty;
@@ -4245,7 +4274,7 @@ static Node *primary(Token **rest, Token *tok) {
         return new_var_node(sc->var, tok);
       if (sc->enum_ty) {
         Node *n = new_num(sc->enum_val, tok);
-        n->ty = sc->enum_ty;
+        n->ty = (sc->enum_ty->is_unspec_enum) ? ty_int : sc->enum_ty;
         return n;
       }
     }
