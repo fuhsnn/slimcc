@@ -833,6 +833,9 @@ static void run_linker(StringArray *inputs, char *output) {
     strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath));
   }
 
+  for (int i = 0; i < ld_extra_args.len; i++)
+    strarray_push(&arr, ld_extra_args.data[i]);
+
   strarray_push(&arr, format("-L%s", gcc_libpath));
   strarray_push(&arr, "-L/usr/lib/x86_64-linux-gnu");
   strarray_push(&arr, "-L/usr/lib64");
@@ -847,9 +850,6 @@ static void run_linker(StringArray *inputs, char *output) {
     strarray_push(&arr, "-dynamic-linker");
     strarray_push(&arr, "/lib64/ld-linux-x86-64.so.2");
   }
-
-  for (int i = 0; i < ld_extra_args.len; i++)
-    strarray_push(&arr, ld_extra_args.data[i]);
 
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);
