@@ -4,7 +4,27 @@
 #define DECIMAL_DIG 21
 #define FLT_EVAL_METHOD 0 // C11 5.2.4.2.2p9
 #define FLT_RADIX 2
-#define FLT_ROUNDS 1      // C11 5.2.4.2.2p8: to nearest
+
+#if defined(__has_include)
+#if __has_include(<fenv.h>)
+#include <fenv.h>
+#define FLT_ROUNDS                         \
+  ({                                       \
+    int val = -1;                          \
+    switch (fegetround()) {                \
+      case FE_TOWARDZERO: val = 0; break;  \
+      case FE_TONEAREST: val = 1; break;   \
+      case FE_UPWARD: val = 2; break;      \
+      case FE_DOWNWARD: val = 3; break;    \
+    };                                     \
+    val;                                   \
+  })
+#endif
+#endif
+
+#ifndef FLT_ROUND
+#define FLT_ROUND 1
+#endif
 
 #define FLT_DIG 6
 #define FLT_EPSILON 0x1p-23
