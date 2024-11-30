@@ -484,14 +484,6 @@ static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comm
   return true;
 }
 
-static bool equal_kw(Token *tok, char *op) {
-  return tok->kind == TK_KEYWORD && equal(tok, op);
-}
-
-static bool equal_tykw(Token *tok, char *op) {
-  return tok->kind == TK_TYPEKW && equal(tok, op);
-}
-
 static void attr_aligned(Token *loc, int *align, TokenKind kind) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind != kind)
@@ -654,19 +646,19 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       break;
 
     // Handle storage class specifiers.
-    if (equal(tok, "typedef") || equal(tok, "static") || equal(tok, "extern") ||
-        equal(tok, "inline") || equal(tok, "_Thread_local") || equal(tok, "__thread") ||
-        equal_tykw(tok, "thread_local")) {
+    if (equal_kind(tok, TK_TYPEDEF) || equal_kind(tok, TK_STATIC) || equal_kind(tok, TK_EXTERN) ||
+        equal_kind(tok, TK_INLINE) || equal_kind(tok, TK__THREAD_LOCAL) || equal_kind(tok, TK___THREAD) ||
+        equal_kind(tok, TK_THREAD_LOCAL)) {
       if (!attr || attr->local_only)
         error_tok(tok, "storage class specifier is not allowed in this context");
 
-      if (equal(tok, "typedef"))
+      if (equal_kind(tok, TK_TYPEDEF))
         attr->is_typedef = true;
-      else if (equal(tok, "static"))
+      else if (equal_kind(tok, TK_STATIC))
         attr->is_static = true;
-      else if (equal(tok, "extern"))
+      else if (equal_kind(tok, TK_EXTERN))
         attr->is_extern = true;
-      else if (equal(tok, "inline"))
+      else if (equal_kind(tok, TK_INLINE))
         attr->is_inline = true;
       else
         attr->is_tls = true;
@@ -679,7 +671,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
-    if (equal_tykw(tok, "constexpr")) {
+    if (equal_kind(tok, TK_CONSTEXPR)) {
       if (!attr)
         error_tok(tok, "constexpr not allowed in this context");
       attr->is_constexpr = true;
@@ -696,8 +688,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     if (consume(&tok, tok, "_Noreturn"))
       continue;
 
-    if (equal(tok, "__auto_type") || equal(tok, "auto")) {
-      if (equal(tok, "__auto_type") || opt_std >= STD_C23)
+    if (equal_kind(tok, TK___AUTO_TYPE) || equal_kind(tok, TK_AUTO)) {
+      if (equal_kind(tok, TK___AUTO_TYPE) || opt_std >= STD_C23)
         is_auto = true;
       tok = tok->next;
       continue;
@@ -729,7 +721,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
-    if (equal(tok, "_Alignas") || equal_tykw(tok, "alignas")) {
+    if (equal_kind(tok, TK__ALIGNAS) || equal_kind(tok, TK_ALIGNAS)) {
       if (!attr)
         error_tok(tok, "_Alignas is not allowed in this context");
       tok = skip(tok->next, "(");
@@ -753,19 +745,19 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       continue;
     }
 
-    if (equal(tok, "struct") || equal(tok, "union") || equal(tok, "enum") ||
-        equal(tok, "__typeof") || equal(tok, "__typeof__") ||
-        equal_tykw(tok, "typeof") || equal_tykw(tok, "typeof_unqual")) {
+    if (equal_kind(tok, TK_STRUCT) || equal_kind(tok, TK_UNION) || equal_kind(tok, TK_ENUM) ||
+        equal_kind(tok, TK___TYPEOF) || equal_kind(tok, TK___TYPEOF__) ||
+        equal_kind(tok, TK_TYPEOF) || equal_kind(tok, TK_TYPEOF_UNQUAL)) {
       if (counter)
         error_tok(tok, "invalid type");
 
-      if (equal(tok, "struct"))
+      if (equal_kind(tok, TK_STRUCT))
         ty = struct_union_decl(&tok, tok->next, TY_STRUCT);
-      else if (equal(tok, "union"))
+      else if (equal_kind(tok, TK_UNION))
         ty = struct_union_decl(&tok, tok->next, TY_UNION);
-      else if (equal(tok, "enum"))
+      else if (equal_kind(tok, TK_ENUM))
         ty = enum_specifier(&tok, tok->next);
-      else if (equal(tok, "typeof_unqual"))
+      else if (equal_kind(tok, TK_TYPEOF_UNQUAL))
         ty = unqual(typeof_specifier(&tok, tok->next));
       else
         ty = typeof_specifier(&tok, tok->next);
@@ -775,25 +767,25 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     }
 
     // Handle built-in types.
-    if (equal(tok, "void"))
+    if (equal_kind(tok, TK_VOID))
       counter += VOID;
-    else if (equal(tok, "_Bool") || equal_tykw(tok, "bool"))
+    else if (equal_kind(tok, TK__BOOL) || equal_kind(tok, TK_BOOL))
       counter += BOOL;
-    else if (equal(tok, "char"))
+    else if (equal_kind(tok, TK_CHAR))
       counter += CHAR;
-    else if (equal(tok, "short"))
+    else if (equal_kind(tok, TK_SHORT))
       counter += SHORT;
-    else if (equal(tok, "int"))
+    else if (equal_kind(tok, TK_INT))
       counter += INT;
-    else if (equal(tok, "long"))
+    else if (equal_kind(tok, TK_LONG))
       counter += LONG;
-    else if (equal(tok, "float"))
+    else if (equal_kind(tok, TK_FLOAT))
       counter += FLOAT;
-    else if (equal(tok, "double"))
+    else if (equal_kind(tok, TK_DOUBLE))
       counter += DOUBLE;
-    else if (equal(tok, "signed"))
+    else if (equal_kind(tok, TK_SIGNED))
       counter |= SIGNED;
-    else if (equal(tok, "unsigned"))
+    else if (equal_kind(tok, TK_UNSIGNED))
       counter |= UNSIGNED;
     else
       internal_error();
@@ -967,7 +959,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     fn_ty->is_variadic = true;
     return fn_ty;
   }
-  if (equal(tok, "void") && consume(rest, tok->next, ")"))
+  if (equal_kind(tok, TK_VOID) && consume(rest, tok->next, ")"))
     return fn_ty;
 
   if (consume(rest, tok, ")")) {
@@ -1053,13 +1045,13 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
 
 static void pointer_qualifiers(Token **rest, Token *tok, Type *ty) {
   for (;; tok = tok->next) {
-    if (equal(tok, "_Atomic"))
+    if (equal_kind(tok, TK__ATOMIC))
       ty->is_atomic = true;
-    else if (equal(tok, "const"))
+    else if (equal_kind(tok, TK_CONST))
       ty->is_const = true;
-    else if (equal(tok, "volatile") || equal(tok, "__volatile") || equal(tok, "__volatile__"))
+    else if (equal_kind(tok, TK_VOLATILE) || equal_kind(tok, TK___VOLATILE) || equal_kind(tok, TK___VOLATILE__))
       ty->is_volatile = true;
-    else if (equal(tok, "restrict") || equal(tok, "__restrict") || equal(tok, "__restrict__"))
+    else if (equal_kind(tok, TK_RESTRICT) || equal_kind(tok, TK___RESTRICT) || equal_kind(tok, TK___RESTRICT__))
       ty->is_restrict = true;
     else
       break;
@@ -1075,7 +1067,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
     return func_params(rest, tok->next, ty);
 
   if (consume(&tok, tok, "[")) {
-    if (tok->kind == TK_TYPEKW) {
+    if (is_tykw(tok->kind)) {
       Token *start = tok;
       pointer_qualifiers(&tok, tok, &(Type){0});
       consume(&tok, tok, "static");
@@ -1422,7 +1414,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       defr_cleanup(var, cleanup_fn, tok);
 
     if (attr->is_register &&
-      (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__"))) {
+      (equal_kind(tok, TK_ASM) || equal_kind(tok, TK__ASM) || equal_kind(tok, TK___ASM__))) {
       var->asm_str = str_tok(&tok, skip(tok->next, "("));
       tok = skip(tok, ")");
     }
@@ -2093,7 +2085,7 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
 
 // Returns true if a given token represents a type.
 static bool is_typename(Token *tok) {
-  return tok->kind == TK_TYPEKW || find_typedef(tok);
+  return is_tykw(tok->kind) || find_typedef(tok);
 }
 
 static void static_assertion(Token **rest, Token *tok) {
@@ -2168,11 +2160,11 @@ static Node *asm_stmt(Token **rest, Token *tok) {
 
   bool is_asm_goto = false;
   for (;;) {
-    if (equal(tok, "inline") || equal(tok, "volatile") ||
-      equal(tok, "__volatile") || equal(tok, "__volatile__")) {
+    if (equal_kind(tok, TK_INLINE) || equal_kind(tok, TK_VOLATILE) ||
+      equal_kind(tok, TK___VOLATILE) || equal_kind(tok, TK___VOLATILE__)) {
       tok = tok->next;
       continue;
-    } else if (equal(tok, "goto")) {
+    } else if (equal_kind(tok, TK_GOTO)) {
       tok = tok->next;
       is_asm_goto = true;
       continue;
@@ -2251,7 +2243,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 //      | "{" compound-stmt
 //      | expr-stmt
 static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
-  if (equal(tok, "return")) {
+  if (equal_kind(tok, TK_RETURN)) {
     Node *node = new_node(ND_RETURN, tok);
     node->defr_start = current_defr;
     if (consume(rest, tok->next, ";"))
@@ -2269,19 +2261,19 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "if")) {
+  if (equal_kind(tok, TK_IF)) {
     Node *node = new_node(ND_IF, tok);
     tok = skip(tok->next, "(");
     node->cond = to_bool(expr(&tok, tok));
     tok = skip(tok, ")");
     node->then = secondary_block(&tok, tok);
-    if (equal(tok, "else"))
+    if (equal_kind(tok, TK_ELSE))
       node->els = secondary_block(&tok, tok->next);
     *rest = tok;
     return node;
   }
 
-  if (equal(tok, "switch")) {
+  if (equal_kind(tok, TK_SWITCH)) {
     Node *node = new_node(ND_SWITCH, tok);
     tok = skip(tok->next, "(");
     node->cond = expr(&tok, tok);
@@ -2307,7 +2299,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "case")) {
+  if (equal_kind(tok, TK_CASE)) {
     if (!current_switch)
       error_tok(tok, "stray case");
     if (current_defr != brk_defr)
@@ -2348,7 +2340,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "default")) {
+  if (equal_kind(tok, TK_DEFAULT)) {
     if (!current_switch)
       error_tok(tok, "stray default");
     if (current_defr != brk_defr)
@@ -2366,7 +2358,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "for")) {
+  if (equal_kind(tok, TK_FOR)) {
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
 
@@ -2379,7 +2371,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
       Node *expr = declaration(&tok, tok, basety, &attr);
       if (expr)
         node->init = new_unary(ND_EXPR_STMT, expr, tok);
-    } else if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
+    } else if (equal_kind(tok, TK__STATIC_ASSERT) || equal_kind(tok, TK_STATIC_ASSERT)) {
       static_assertion(&tok, tok->next);
     } else {
       node->init = expr_stmt(&tok, tok);
@@ -2401,7 +2393,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "while")) {
+  if (equal_kind(tok, TK_WHILE)) {
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
     node->cond = to_bool(expr(&tok, tok));
@@ -2411,7 +2403,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "do")) {
+  if (equal_kind(tok, TK_DO)) {
     Node *node = new_node(ND_DO, tok);
 
     loop_body(&tok, tok->next, node);
@@ -2424,7 +2416,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+  if (equal_kind(tok, TK_ASM) || equal_kind(tok, TK__ASM) || equal_kind(tok, TK___ASM__)) {
     Node *node = asm_stmt(&tok, tok);
 
     enter_tmp_scope();
@@ -2435,7 +2427,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "goto")) {
+  if (equal_kind(tok, TK_GOTO)) {
     if (equal(tok->next, "*")) {
       // [GNU] `goto *ptr` jumps to the address specified by `ptr`.
       Node *node = new_node(ND_GOTO_EXPR, tok);
@@ -2453,7 +2445,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "break")) {
+  if (equal_kind(tok, TK_BREAK)) {
     if (!brk_label)
       error_tok(tok, "stray break");
     Node *node = new_node(ND_GOTO, tok);
@@ -2464,7 +2456,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "continue")) {
+  if (equal_kind(tok, TK_CONTINUE)) {
     if (!cont_label)
       error_tok(tok, "stray continue");
     Node *node = new_node(ND_GOTO, tok);
@@ -2491,7 +2483,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (equal(tok, "_Defer")) {
+  if (equal_kind(tok, TK__DEFER)) {
     DeferStmt *defr = new_defr(DF_DEFER_STMT);
     defr->stmt = secondary_block(rest, tok->next);
     add_type(defr->stmt);
@@ -2514,7 +2506,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   enter_scope();
 
   while (!equal(tok, "}")) {
-    if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
+    if (equal_kind(tok, TK__STATIC_ASSERT) || equal_kind(tok, TK_STATIC_ASSERT)) {
       static_assertion(&tok, tok->next);
       continue;
     }
@@ -3555,7 +3547,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
 
   while (!equal(tok, "}")) {
-    if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
+    if (equal_kind(tok, TK__STATIC_ASSERT) || equal_kind(tok, TK_STATIC_ASSERT)) {
       static_assertion(&tok, tok->next);
       continue;
     }
@@ -3972,7 +3964,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Node *ret = NULL;
 
   while (comma_list(rest, &tok, ")", true)) {
-    if (equal(tok, "default")) {
+    if (equal_kind(tok, TK_DEFAULT)) {
       tok = skip(tok->next, ":");
       Node *node = assign(&tok, tok);
       if (!ret)
@@ -4053,7 +4045,7 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
-  if (equal(tok, "sizeof")) {
+  if (equal_kind(tok, TK_SIZEOF)) {
     Type *ty;
     if (equal(tok->next, "(") && is_typename(tok->next->next)) {
       ty = typename(&tok, tok->next->next);
@@ -4081,7 +4073,7 @@ static Node *primary(Token **rest, Token *tok) {
     return new_ulong(ty->size, start);
   }
 
-  if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
+  if (equal_kind(tok, TK__ALIGNOF) || equal_kind(tok, TK_ALIGNOF)) {
     Token *start = tok;
     Type *ty;
     if (equal(tok->next, "(") && is_typename(tok->next->next)) {
@@ -4319,12 +4311,12 @@ static Node *primary(Token **rest, Token *tok) {
     return n;
   }
 
-  if (equal_kw(tok, "false")) {
+  if (equal_kind(tok, TK_FALSE)) {
     *rest = tok->next;
     return new_boolean(0, tok);
   }
 
-  if (equal_kw(tok, "true")) {
+  if (equal_kind(tok, TK_TRUE)) {
     *rest = tok->next;
     return new_boolean(1, tok);
   }
@@ -4544,12 +4536,12 @@ Obj *parse(Token *tok) {
   Obj head = {0};
   Obj *cur = &head;
   while (tok->kind != TK_EOF) {
-    if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
+    if (equal_kind(tok, TK__STATIC_ASSERT) || equal_kind(tok, TK_STATIC_ASSERT)) {
       static_assertion(&tok, tok->next);
       continue;
     }
 
-    if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+    if (equal_kind(tok, TK_ASM) || equal_kind(tok, TK__ASM) || equal_kind(tok, TK___ASM__)) {
       cur = cur->next = calloc(1, sizeof(Obj));
       cur->asm_str = str_tok(&tok, skip(tok->next, "("));
       tok = skip(tok, ")");
