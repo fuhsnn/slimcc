@@ -4537,7 +4537,7 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     }
     if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
-    else if (is_definition && !attr->is_tls)
+    else if (is_definition)
       var->is_tentative = true;
   }
   return tok;

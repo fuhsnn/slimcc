@@ -3945,7 +3945,7 @@ static void emit_data(Obj *prog) {
     int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
       ? MAX(16, var->align) : var->align;
 
-    if (var->is_tentative) {
+    if (var->is_tentative && !var->is_tls) {
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty->size = var->ty->base->size;
 

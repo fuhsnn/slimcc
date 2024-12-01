@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <pthread.h>
 
+static _Thread_local int tentative;
+static _Thread_local int tentative = 3;
+
 void *thread_main(void *unused) {
 
   static _Thread_local int v1;
