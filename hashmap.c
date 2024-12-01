@@ -64,7 +64,7 @@ static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
   uint64_t hash = fnv_hash(key, keylen);
 
   for (int i = 0; i < map->capacity; i++) {
-    HashEntry *ent = &map->buckets[(hash + i) % map->capacity];
+    HashEntry *ent = &map->buckets[(hash + i) & (map->capacity - 1)];
     if (match(ent, key, keylen))
       return ent;
     if (ent->key == NULL)
@@ -84,7 +84,7 @@ static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
   uint64_t hash = fnv_hash(key, keylen);
 
   for (int i = 0; i < map->capacity; i++) {
-    HashEntry *ent = &map->buckets[(hash + i) % map->capacity];
+    HashEntry *ent = &map->buckets[(hash + i) & (map->capacity - 1)];
 
     if (match(ent, key, keylen))
       return ent;
