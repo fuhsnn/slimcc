@@ -6,8 +6,8 @@
 #define GP_SLOTS 6
 #define FP_SLOTS 6
 
-#define STRBUF_SZ 128
-#define STRBUF_SZ2 160
+#define STRBUF_SZ 192
+#define STRBUF_SZ2 208
 
 typedef enum {
   REG_NULL = 0,
