@@ -13,6 +13,15 @@ struct s {
   int i,j,k;
 } s0 = {1,2,3};
 
+int static_local() {
+  struct S {
+    int i;
+    int *p;
+  };
+  static struct S s = {(int){1}, (int*){&arr[1]}};
+  return s.p[s.i];
+}
+
 int main() {
   ASSERT(1, ({ (int[2]){1,2}[0]; }));
   ASSERT(2, ({ (int[2]){1,2}[1]; }));
@@ -35,6 +44,8 @@ int main() {
   ASSERT(10, ({ (int(*)(int,int)){sum}(7,3); }));
 
   ASSERT(3, ({ (int*(*)(int)){&getarr}(1)[1]; }));
+
+  ASSERT(3, static_local());
 
   printf("OK\n");
   return 0;

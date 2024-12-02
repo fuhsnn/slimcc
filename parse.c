@@ -115,7 +115,7 @@ static DeferStmt *brk_defr;
 static DeferStmt *cont_defr;
 static bool fn_use_vla;
 static bool dont_dealloc_vla;
-
+static bool is_global_init_context;
 static bool *eval_recover;
 
 static bool is_typename(Token *tok);
@@ -188,6 +188,10 @@ static void enter_tmp_scope(void) {
 
 static void leave_scope(void) {
   scope = scope->parent;
+}
+
+static bool is_constant_context() {
+  return scope->parent == NULL || is_global_init_context;
 }
 
 // Find a variable by name.
@@ -1030,8 +1034,8 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   if (ty->kind != TY_VLA && is_const_expr(expr, &array_len))
     return array_of(ty, array_len);
 
-  if (scope->parent == NULL)
-    error_tok(tok, "variably-modified type at file scope");
+  if (is_constant_context())
+    error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr);
 }
 
@@ -1368,8 +1372,12 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
         constexpr_initializer(&tok, tok->next, var, var);
         continue;
       }
-      if (equal(tok, "="))
+      if (equal(tok, "=")) {
+        bool ctx = is_global_init_context;
+        is_global_init_context = true;
         gvar_initializer(&tok, tok->next, var);
+        is_global_init_context = ctx;
+      }
       continue;
     }
 
@@ -4015,7 +4023,7 @@ static Node *primary(Token **rest, Token *tok) {
       error_tok(tok, "compound literals cannot be VLA");
     tok = skip(tok, ")");
 
-    if (scope->parent == NULL) {
+    if (is_constant_context()) {
       Obj *var = new_anon_gvar(ty);
       var->is_compound_lit = true;
       gvar_initializer(rest, tok, var);
@@ -4037,8 +4045,8 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "(") && equal(tok->next, "{")) {
-    if (scope->parent == NULL)
-      error_tok(tok, "statement expresssion at file scope");
+    if (is_constant_context())
+      error_tok(tok, "statement expresssion in constant context");
 
     Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
     *rest = skip(tok, ")");
