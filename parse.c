@@ -2872,6 +2872,11 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     ctx->is_atomic |= node->ty->is_atomic;
     ctx->is_volatile |= node->ty->is_volatile;
 
+    if (ctx->is_pending_deref && node->kind == ND_ADDR) {
+      ctx->is_pending_deref = false;
+      return eval2(lhs, ctx);
+    }
+
     if (node->kind == ND_DEREF) {
       switch (node->lhs->kind) {
       case ND_MEMBER:

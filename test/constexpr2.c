@@ -27,6 +27,20 @@ SASSERT(2 == ((_Bool)&ext_var + (_Bool)ext_fn));
 SASSERT(3 == ((_Bool)(long long)&ext_var + (_Bool)(_Bool)ext_fn + (_Bool)(long long)(_Bool)ext_fn));
 #endif
 
+struct S2 {
+  int i,j;
+};
+struct S3 {
+  char c;
+  struct S2 arr[2];
+};
+struct S3 s3 = { .arr = {3, 7, 9, 11} };
+struct S2 *s2p = {(struct S2 *)((struct S2 const *)&(((struct S3 const *)&s3))->arr + 1)};
+
+int static_ref_excess_cast() {
+  return s2p->j;
+}
+
 int main(void) {
   array_cast_to_bool(11);
 
@@ -102,6 +116,9 @@ int main(void) {
     struct S { struct { char c, c2; } s[13]; };
     DASSERT(13 == (intptr_t)&((struct S*)0)->s[6].c2);
   }
+
+  ASSERT(11, static_ref_excess_cast());
+
   printf("OK\n");
   return 0;
 }
