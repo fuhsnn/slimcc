@@ -207,7 +207,7 @@ test_sqlite() {
 }
 
 test_tinycc() {
- git_fetch https://repo.or.cz/tinycc.git 085e029f08c9b0b57632703df565efdbe2cd0c7f tinycc
+ git_fetch https://github.com/TinyCC/tinycc 729918ef35dede267926bc517826e3fe280d84b0 tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
