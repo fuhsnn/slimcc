@@ -99,7 +99,6 @@ jobs:
           - thirdparty: build_musl
           - thirdparty: build_nano
           - thirdparty: build_sdl
-      matrix:
         compiler: [gcc, clang]
     steps:
       - name: Download debian asan artifact
