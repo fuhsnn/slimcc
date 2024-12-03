@@ -649,6 +649,8 @@ static void gen_bitfield_store(Node *node) {
   if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
     char *reg = pop_inreg(tmpreg64[0]);
     store2(alt_ty, mem->bit_offset / 8, reg);
+    if (mem->bit_width < 32)
+      imm_and("%eax", NULL, (1L << mem->bit_width) - 1);
     return;
   }
 

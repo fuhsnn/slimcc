@@ -144,6 +144,16 @@ static int operand_promotion(void) {
   ASSERT(1, ({ struct { unsigned i:8; } s = {0}; ~(1 ? (s.i = 0) : ({(0,s.i);})) < 0; }) );
 }
 
+static void aligned_store(void) {
+  uint32_t v = 0x10100;
+  struct {
+    unsigned u : 16, u2 : 15;
+  } s = {0};
+  ASSERT(1, ((s.u = v) == 0x100));
+  ASSERT(1, (s.u == 0x100));
+  ASSERT(1, (s.u2 == 0));
+}
+
 int main(void) {
   bitextract();
   struct_init();
@@ -153,6 +163,7 @@ int main(void) {
   signed_large_field();
   uninit_global();
   operand_promotion();
+  aligned_store();
 
   printf("OK\n");
 
