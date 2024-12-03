@@ -1,0 +1,23 @@
+name: weekly-csmith
+
+on: [workflow_dispatch]
+#  schedule:
+#    - cron: '05 05 * * 2'
+
+jobs:
+  run_csmith:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Get deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang csmith libcsmith-dev
+      - name: Build
+        run: clang -Wno-switch *.c -O3 -flto=auto -march=native -fsanitize=address -o slimcc_asan
+      - name: Run csmith
+        run: |
+          export ASAN_OPTIONS=detect_leaks=0
+          mkdir csmith_run && cd "$_"
+          bash ../scripts/run_csmith.bash $PWD/../slimcc_asan
