@@ -35,12 +35,6 @@ jobs:
         run: |
           make test-stage2 || exit 1
         shell: bash
-      - run: mv slimcc slimcc-${{ matrix.compiler }}
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: slimcc-${{ matrix.compiler }}
-          path: slimcc-${{ matrix.compiler }}
 
   docker:
     runs-on: ubuntu-latest
@@ -71,7 +65,6 @@ jobs:
     needs: [docker, host-x86-build]
     strategy:
       matrix:
-        compiler: [gcc, clang]
         thirdparty:
           - test_cello
           - test_curl
@@ -107,20 +100,10 @@ jobs:
           name: debian_asan
           path: /tmp
 
-      - name: Download pre-built slimcc
-        uses: actions/download-artifact@v4
-        with:
-          name: slimcc-${{ matrix.compiler }}
-      - run: |
-          chmod +x slimcc-${{ matrix.compiler }}
-
       - name: Load image
         run: docker load --input /tmp/debian_asan.tar
 
-
       - name: Run test
-        env:
-          CC: slimcc-${{ matrix.compiler }}
         run: >
           sudo docker run debian_asan
           su non-root -c
