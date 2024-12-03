@@ -2680,18 +2680,16 @@ static char *eval_constexpr_data(Node *node) {
   return var->init_data + ofs;
 }
 
-static int64_t eval_sign_extend(Type *ty, uint64_t val) {
+static int64_t eval_sign_extend(Type *ty, int64_t val) {
+  if (ty->size == 8 || !is_integer(ty))
+    return val;
+
   switch (ty->size) {
   case 1: return ty->is_unsigned ? (uint8_t)val : (int64_t)(int8_t)val;
   case 2: return ty->is_unsigned ? (uint16_t)val : (int64_t)(int16_t)val;
   case 4: return ty->is_unsigned ? (uint32_t)val : (int64_t)(int32_t)val;
-  case 8: return val;
   }
   internal_error();
-}
-
-static int64_t read_buf_sign_extend(Type *ty, char *data) {
-  return eval_sign_extend(ty, read_buf(data, ty->size));
 }
 
 static void eval_void(Node *node) {
@@ -2725,11 +2723,11 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 
   switch (node->kind) {
   case ND_ADD:
-    return eval2(lhs, ctx) + eval2(rhs, ctx);
+    return eval_sign_extend(ty, eval2(lhs, ctx) + eval2(rhs, ctx));
   case ND_SUB:
-    return eval2(lhs, ctx) - eval(rhs);
+    return eval_sign_extend(ty, eval2(lhs, ctx) - eval(rhs));
   case ND_MUL:
-    return eval(lhs) * eval(rhs);
+    return eval_sign_extend(ty, eval(lhs) * eval(rhs));
   case ND_DIV: {
     int64_t lval = eval(lhs);
     int64_t rval = eval(rhs);
@@ -2755,12 +2753,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_POS:
     return eval(lhs);
   case ND_NEG:
-    if (ty->size == 4) {
-      if (ty->is_unsigned)
-        return (uint32_t)-eval(lhs);
-      return (int32_t)-eval(lhs);
-    }
-    return -eval(lhs);
+    return eval_sign_extend(ty, -eval(lhs));
   case ND_BITAND:
     return eval(lhs) & eval(rhs);
   case ND_BITOR:
@@ -2768,12 +2761,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_BITXOR:
     return eval(lhs) ^ eval(rhs);
   case ND_SHL:
-    if (ty->size == 4) {
-      if (ty->is_unsigned)
-        return (uint32_t)eval(lhs) << eval(rhs);
-      return (int32_t)eval(lhs) << eval(rhs);
-    }
-    return eval(lhs) << eval(rhs);
+    return eval_sign_extend(ty, eval(lhs) << eval(rhs));
   case ND_SHR:
     if (ty->size == 4)
       return (uint32_t)eval(lhs) >> eval(rhs);
@@ -2822,12 +2810,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_NOT:
     return !eval(lhs);
   case ND_BITNOT:
-    if (ty->size == 4) {
-      if (ty->is_unsigned)
-        return (uint32_t)~eval(lhs);
-      return (int32_t)~eval(lhs);
-    }
-    return ~eval(lhs);
+    return eval_sign_extend(ty, ~eval(lhs));
   case ND_LOGAND:
     return eval(lhs) && eval(rhs);
   case ND_LOGOR:
@@ -2947,7 +2930,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   if (ctx->kind == EV_CONST && is_integer(ty)) {
     char *data = eval_constexpr_data(node);
     if (data) {
-      int64_t val = read_buf_sign_extend(ty, data);
+      int64_t val = eval_sign_extend(ty, read_buf(data, ty->size));
       if (is_bitfield(node)) {
         int unused_msb = 64 - node->member->bit_width;
         val <<= (unused_msb - node->member->bit_offset);
