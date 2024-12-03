@@ -71,35 +71,35 @@ jobs:
     needs: [docker, host-x86-build]
     strategy:
       matrix:
-        include:
-          - thirdparty: test_cello
-          - thirdparty: test_curl
-          - thirdparty: test_doom
-          - thirdparty: test_git
-          - thirdparty: test_libpng
-          - thirdparty: test_libuev
-          - thirdparty: test_lua
-          - thirdparty: test_metalang99
-          - thirdparty: test_oniguruma_jq
-          - thirdparty: test_openssh
-          - thirdparty: test_openssl
-          - thirdparty: test_perl
-          - thirdparty: test_php
-          - thirdparty: test_postgres
-          - thirdparty: test_python
-          - thirdparty: test_qbe_hare
-          - thirdparty: test_sqlite
-          - thirdparty: test_tinycc
-          - thirdparty: test_toxcore
-          - thirdparty: test_toybox
-          - thirdparty: test_vim
-          - thirdparty: test_zlib
-          - thirdparty: test_zstd
-          - thirdparty: build_gcc
-          - thirdparty: build_musl
-          - thirdparty: build_nano
-          - thirdparty: build_sdl
         compiler: [gcc, clang]
+        thirdparty:
+          - test_cello
+          - test_curl
+          - test_doom
+          - test_git
+          - test_libpng
+          - test_libuev
+          - test_lua
+          - test_metalang99
+          - test_oniguruma_jq
+          - test_openssh
+          - test_openssl
+          - test_perl
+          - test_php
+          - test_postgres
+          - test_python
+          - test_qbe_hare
+          - test_sqlite
+          - test_tinycc
+          - test_toxcore
+          - test_toybox
+          - test_vim
+          - test_zlib
+          - test_zstd
+          - build_gcc
+          - build_musl
+          - build_nano
+          - build_sdl
     steps:
       - name: Download debian asan artifact
         uses: actions/download-artifact@v4
