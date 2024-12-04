@@ -455,6 +455,7 @@ int64_t const_expr(Token **rest, Token *tok);
 Obj *parse(Token *tok);
 Token *skip_paren(Token *tok);
 Obj *new_lvar(char *name, Type *ty);
+bool is_const_var(Obj *var);
 
 //
 // type.c

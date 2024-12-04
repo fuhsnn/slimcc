@@ -219,7 +219,7 @@ static bool in_ty_range(int64_t val, Type *ty) {
   return eval(&cast) == val;
 }
 
-static bool is_const_var(Obj *var) {
+bool is_const_var(Obj *var) {
   Type *ty = var->ty;
   for (; ty && ty->kind == TY_ARRAY; ty = ty->base)
     if (ty->is_const)

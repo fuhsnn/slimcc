@@ -155,6 +155,9 @@ static void imm_and(char *op, char *tmp, int64_t val);
 static void imm_cmp(char *op, char *tmp, int64_t val);
 static char *arith_ins(NodeKind kind);
 
+#define Printstr(str) fprintf(output_file, str)
+#define Printstrf(fmt, ...) fprintf(output_file, fmt, __VA_ARGS__)
+
 FMTCHK(1,2)
 static void println(char *fmt, ...) {
   va_list ap;
@@ -3957,50 +3960,50 @@ static void emit_data(Obj *prog) {
         continue;
       }
     }
+    bool use_rodata = !opt_fpic && is_const_var(var);
 
-    // .data or .tdata
-    if (var->init_data) {
-      if (var->is_tls && opt_data_sections)
-        println("  .section .tdata.\"%s\",\"awT\",@progbits", var->name);
-      else if (var->is_tls)
-        println("  .section .tdata,\"awT\",@progbits");
-      else if (opt_data_sections)
-        println("  .section .data.\"%s\",\"aw\",@progbits", var->name);
-      else
-        println("  .data");
-
-      println("  .type \"%s\", @object", var->name);
-      println("  .size \"%s\", %"PRIi64, var->name, var->ty->size);
-      println("  .align %d", align);
-      println("\"%s\":", var->name);
-
-      Relocation *rel = var->rel;
-      int pos = 0;
-      while (pos < var->ty->size) {
-        if (rel && rel->offset == pos) {
-          println("  .quad \"%s\"%+ld", *rel->label, rel->addend);
-          rel = rel->next;
-          pos += 8;
-        } else {
-          println("  .byte %d", var->init_data[pos++]);
-        }
-      }
-      continue;
-    }
-
-    // .bss or .tbss
-    if (var->is_tls && opt_data_sections)
-      println("  .section .tbss.\"%s\",\"awT\",@nobits", var->name);
-    else if (var->is_tls)
-      println("  .section .tbss,\"awT\",@nobits");
-    else if (opt_data_sections)
-      println("  .section .bss.\"%s\",\"aw\",@nobits", var->name);
+    if (var->is_tls)
+      Printstrf("  .section .%s", var->init_data ? "tdata" : "tbss");
+    else if (use_rodata)
+      Printstr("  .section .rodata");
     else
-      println("  .bss");
+      Printstrf("  .section .%s", var->init_data ? "data" : "bss");
 
+    if (opt_data_sections)
+      Printstrf(".\"%s\"", var->name);
+
+    if (var->is_tls)
+      Printstr(",\"awT\"");
+    else if (use_rodata)
+      Printstr(",\"a\"");
+    else
+      Printstr(",\"aw\"");
+
+    if (!var->init_data && !use_rodata)
+      println(",@nobits");
+    else
+      println(",@progbits");
+
+    println("  .size \"%s\", %"PRIi64, var->name, var->ty->size);
     println("  .align %d", align);
     println("\"%s\":", var->name);
-    println("  .zero %"PRIi64, var->ty->size);
+
+    if (!var->init_data) {
+      println("  .zero %"PRIi64, var->ty->size);
+      continue;
+    }
+    Relocation *rel = var->rel;
+    int pos = 0;
+    while (pos < var->ty->size) {
+      if (rel && rel->offset == pos) {
+        println("  .quad \"%s\"%+ld", *rel->label, rel->addend);
+        rel = rel->next;
+        pos += 8;
+      } else {
+        println("  .byte %d", var->init_data[pos++]);
+      }
+    }
+    continue;
   }
 }
 
