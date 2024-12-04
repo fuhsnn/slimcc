@@ -153,7 +153,7 @@ test_perl() {
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
    -Alibpth="/usr/local/lib /lib /usr/lib /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu"
- make test
+ make test -j4
 }
 
 test_php() {
@@ -178,13 +178,13 @@ test_postgres() {
 }
 
 test_python() {
- github_tar python cpython v3.13.0
+ github_tar python cpython v3.13.1
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
+ replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
  ./configure && make
 
+ rm Lib/test/test_ctypes/test_dlerror.py #https://github.com/python/cpython/issues/127626
  skip_tests=(
-  test_external_inspection # https://github.com/fuhsnn/slimcc/issues/105
-
   # don't work in CI https://github.com/python/cpython/blob/6d3b5206cfaf5a85c128b671b1d9527ed553c930/.github/workflows/build.yml#L408
   test_asyncio test_socket
  )
