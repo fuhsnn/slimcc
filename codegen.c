@@ -142,6 +142,7 @@ static void gen_asm(Node *node);
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static void gen_void_expr(Node *node);
+static void gen_void_assign(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
@@ -1686,8 +1687,10 @@ static void gen_expr(Node *node) {
   case ND_CAST:
     gen_cast(node);
     return;
-  case ND_MEMZERO:
+  case ND_INIT_AGG:
     gen_mem_zero(node->var->ofs, node->var->ptr, node->var->ty->size);
+    for (Node *n = node->lhs; n; n = n->next)
+      gen_void_assign(n);
     return;
   case ND_COND: {
     int c = count();

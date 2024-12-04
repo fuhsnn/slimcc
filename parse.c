@@ -1864,40 +1864,37 @@ static Node *init_desg_expr(InitDesg *desg, Token *tok) {
   return new_unary(ND_DEREF, new_add(lhs, rhs, tok), tok);
 }
 
-static Node *create_lvar_init(Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
+static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
   if (ty->kind == TY_ARRAY) {
     if (init->expr)
       error_tok(init->expr->tok, "array initializer must be an initializer list");
-    Node *node = NULL;
     for (int i = 0; i < ty->array_len; i++) {
       InitDesg desg2 = {desg, i};
-      chain_expr(&node, create_lvar_init(init->children[i], ty->base, &desg2, tok));
+      expr = create_lvar_init(expr, init->children[i], ty->base, &desg2, tok);
     }
-    return node;
+    return expr;
   }
 
   if (init->expr) {
-    Node *lhs = init_desg_expr(desg, tok);
-    return new_binary(ND_ASSIGN, lhs, init->expr, tok);
+    Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), init->expr, tok);
+    add_type(n);
+    return expr->next = n;
   }
 
   if (ty->kind == TY_STRUCT) {
-    Node *node = NULL;
     for (Member *mem = ty->members; mem; mem = mem->next) {
       InitDesg desg2 = {desg, 0, mem};
-      chain_expr(&node, create_lvar_init(init->children[mem->idx], mem->ty, &desg2, tok));
+      expr = create_lvar_init(expr, init->children[mem->idx], mem->ty, &desg2, tok);
     }
-    return node;
+    return expr;
   }
 
-  if (ty->kind == TY_UNION) {
-    if (!init->mem)
-      return NULL;
+  if (ty->kind == TY_UNION && init->mem) {
     InitDesg desg2 = {desg, 0, init->mem};
-    return create_lvar_init(init->children[init->mem->idx], init->mem->ty, &desg2, tok);
+    return create_lvar_init(expr, init->children[init->mem->idx], init->mem->ty, &desg2, tok);
   }
 
-  return NULL;
+  return expr;
 }
 
 // A variable definition with an initializer is a shorthand notation
@@ -1914,17 +1911,19 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer *init = initializer(rest, tok, var->ty, &var->ty);
   InitDesg desg = {NULL, 0, NULL, var};
 
-  Node *expr = create_lvar_init(init, var->ty, &desg, tok);
+  Node head = {0};
+  create_lvar_init(&head, init, var->ty, &desg, tok);
   if (opt_optimize && init->expr)
-    return expr;
+    return head.next;
 
   // If a partial initializer list is given, the standard requires
   // that unspecified elements are set to 0. Here, we simply
   // zero-initialize the entire memory region of a variable before
   // initializing it with user-supplied values.
-  Node *node = new_node(ND_MEMZERO, tok);
+  Node *node = new_node(ND_INIT_AGG, tok);
   node->var = var;
-  chain_expr(&node, expr);
+  node->lhs = head.next;
+  node->ty = ty_void;
   return node;
 }
 
