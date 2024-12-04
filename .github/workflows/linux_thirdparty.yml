@@ -3,6 +3,39 @@ name: build-test-thirdparty
 on: [push, pull_request]
 
 jobs:
+  host-x86-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install prerequisite
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: file build-essential clang
+          version: 1.0
+      - name: Build stage 1 artifact
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          make clean
+          make slimcc
+        shell: bash
+      - name: Test stage 1
+        run: |
+          make test || exit 1
+        shell: bash
+      - name: Build stage 2 artifact
+        run: |
+          make stage2/slimcc
+        shell: bash
+      - name: Test stage 2
+        run: |
+          make test-stage2 || exit 1
+        shell: bash
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -29,39 +62,39 @@ jobs:
 
   thirdparty-tests:
     runs-on: ubuntu-latest
-    needs: docker
+    needs: [docker, host-x86-build]
     strategy:
       matrix:
-        include:
-          - thirdparty: test_cello
-          - thirdparty: test_curl
-          - thirdparty: test_doom
-          - thirdparty: test_git
-          - thirdparty: test_libpng
-          - thirdparty: test_libuev
-          - thirdparty: test_lua
-          - thirdparty: test_metalang99
-          - thirdparty: test_oniguruma_jq
-          - thirdparty: test_openssh
-          - thirdparty: test_openssl
-          - thirdparty: test_perl
-          - thirdparty: test_php
-          - thirdparty: test_postgres
-          - thirdparty: test_python
-          - thirdparty: test_qbe_hare
-          - thirdparty: test_sqlite
-          - thirdparty: test_tinycc
-          - thirdparty: test_toxcore
-          - thirdparty: test_toybox
-          - thirdparty: test_vim
-          - thirdparty: test_zlib
-          - thirdparty: test_zstd
-          - thirdparty: build_gcc
-          - thirdparty: build_musl
-          - thirdparty: build_nano
-          - thirdparty: build_sdl
+        thirdparty:
+          - test_cello
+          - test_curl
+          - test_doom
+          - test_git
+          - test_libpng
+          - test_libuev
+          - test_lua
+          - test_metalang99
+          - test_oniguruma_jq
+          - test_openssh
+          - test_openssl
+          - test_perl
+          - test_php
+          - test_postgres
+          - test_python
+          - test_qbe_hare
+          - test_sqlite
+          - test_tinycc
+          - test_toxcore
+          - test_toybox
+          - test_vim
+          - test_zlib
+          - test_zstd
+          - build_gcc
+          - build_musl
+          - build_nano
+          - build_sdl
     steps:
-      - name: Download artifact
+      - name: Download debian asan artifact
         uses: actions/download-artifact@v4
         with:
           name: debian_asan
