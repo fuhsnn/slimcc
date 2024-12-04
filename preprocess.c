@@ -1621,7 +1621,8 @@ static bool is_supported_attr(Token **vendor, Token *tok) {
 
   if (gnu_if_vendored) {
     if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
-      equal_ext(tok, "packed") || equal_ext(tok, "visibility") || equal_ext(tok, "weak"))
+      equal_ext(tok, "packed") || equal_ext(tok, "section") || equal_ext(tok, "visibility") ||
+      equal_ext(tok, "weak"))
       return true;
   }
   return false;

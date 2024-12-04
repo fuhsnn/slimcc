@@ -40,6 +40,7 @@ typedef struct {
   bool local_only;
   Obj *cleanup_fn;
   Token *alias;
+  Token *section;
   Token *visibility;
   int align;
 } VarAttr;
@@ -555,6 +556,11 @@ static void attr_alias(Token *loc, Token **str_tok, TokenKind kind) {
     str_attr("alias", loc, str_tok, kind);
 }
 
+static void attr_section(Token *loc, Token **str_tok, TokenKind kind) {
+  if (!*str_tok)
+    str_attr("section", loc, str_tok, kind);
+}
+
 static void attr_visibility(Token *loc, Token **str_tok, TokenKind kind) {
   if (!*str_tok)
     str_attr("visibility", loc, str_tok, kind);
@@ -564,6 +570,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_alias(tok, &attr->alias, kind);
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, &attr->cleanup_fn, kind);
+  attr_section(tok, &attr->section, kind);
   attr_visibility(tok, &attr->visibility, kind);
   attr_weak(tok, &attr->is_weak, kind);
 }
@@ -573,6 +580,11 @@ static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
   attr_alias(name, &var->alias_name, TK_ATTR);
   attr_alias(name->next, &var->alias_name, TK_BATTR);
   attr_alias(tok, &var->alias_name, TK_ATTR);
+
+  var->section_name = attr->section;
+  attr_section(name, &var->section_name, TK_ATTR);
+  attr_section(name->next, &var->section_name, TK_BATTR);
+  attr_section(tok, &var->section_name, TK_ATTR);
 
   var->visibility = attr->visibility;
   attr_visibility(name, &var->visibility, TK_ATTR);

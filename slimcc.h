@@ -218,6 +218,7 @@ struct Obj {
   // Global variable
   bool is_tentative;
   bool is_tls;
+  Token *section_name;
   char *init_data;
   Relocation *rel;
 

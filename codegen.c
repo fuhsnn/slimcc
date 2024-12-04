@@ -3950,7 +3950,7 @@ static void emit_data(Obj *prog) {
     int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
       ? MAX(16, var->align) : var->align;
 
-    if (var->is_tentative && !var->is_tls) {
+    if (var->is_tentative && !var->is_tls && !var->section_name) {
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty->size = var->ty->base->size;
 
@@ -3962,7 +3962,9 @@ static void emit_data(Obj *prog) {
     }
     bool use_rodata = !opt_fpic && is_const_var(var);
 
-    if (var->is_tls)
+    if (var->section_name)
+      Printstrf("  .section \"%s\"", var->section_name->str);
+    else if (var->is_tls)
       Printstrf("  .section .%s", var->init_data ? "tdata" : "tbss");
     else if (use_rodata)
       Printstr("  .section .rodata");
