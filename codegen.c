@@ -3793,7 +3793,7 @@ static void asm_pop_clobbers(Node *node) {
 
 static char *asm_push_frame_ptr(Node *node) {
   char *prev = lvar_ptr;
-  asm_alt_ptr.rbp = asm_alt_ptr.rbx = NULL;
+
   if (node->alt_frame_ptr) {
     asm_alt_ptr.rbp = regs[node->alt_frame_ptr][3];
     if (!strcmp(lvar_ptr, "%rbp"))
@@ -3828,6 +3828,7 @@ static void gen_asm(Node *node) {
     println("  %s", node->asm_str->str);
     return;
   }
+  asm_alt_ptr.rbp = asm_alt_ptr.rbx = NULL;
   asm_fill_ops(node);
   asm_gen_operands();
 
