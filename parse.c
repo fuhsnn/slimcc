@@ -4447,6 +4447,8 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fn->is_definition = true;
   fn->ty = ty;
 
+  fn->output = prepare_funcgen();
+
   current_fn = fn;
   current_defr = NULL;
   fn_use_vla = dont_dealloc_vla = false;
@@ -4472,6 +4474,9 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   leave_scope();
   resolve_goto_labels();
   current_fn = NULL;
+
+  emit_text(fn);
+  end_funcgen();
 }
 
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {

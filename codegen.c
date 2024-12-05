@@ -3937,79 +3937,66 @@ static void emit_symbol(Obj *var) {
     println("  .%s \"%s\"", vis_mode, var->name);
 }
 
-static void emit_data(Obj *prog) {
-  for (Obj *var = prog; var; var = var->next) {
-    if (!var->is_definition) {
-      if (var->is_weak || var->alias_name)
-        emit_symbol(var);
-      continue;
+static void emit_data(Obj *var) {
+  emit_symbol(var);
+
+  int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
+    ? MAX(16, var->align) : var->align;
+
+  if (var->is_tentative && !var->is_tls && !var->section_name) {
+    if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
+      var->ty->size = var->ty->base->size;
+
+    // Common symbol
+    if (!var->is_weak && opt_fcommon) {
+      println("  .comm \"%s\", %"PRIi64", %d", var->name, var->ty->size, align);
+      return;
     }
-    if (var->ty->kind == TY_FUNC) {
-      if (var->is_live)
-        emit_data(var->static_lvars);
-      continue;
+  }
+  bool use_rodata = !opt_fpic && is_const_var(var);
+
+  if (var->section_name)
+    Printstrf("  .section \"%s\"", var->section_name->str);
+  else if (var->is_tls)
+    Printstrf("  .section .%s", var->init_data ? "tdata" : "tbss");
+  else if (use_rodata)
+    Printstr("  .section .rodata");
+  else
+    Printstrf("  .section .%s", var->init_data ? "data" : "bss");
+
+  if (opt_data_sections)
+    Printstrf(".\"%s\"", var->name);
+
+  if (var->is_tls)
+    Printstr(",\"awT\"");
+  else if (use_rodata)
+    Printstr(",\"a\"");
+  else
+    Printstr(",\"aw\"");
+
+  if (!var->init_data && !use_rodata)
+    println(",@nobits");
+  else
+    println(",@progbits");
+
+  println("  .size \"%s\", %"PRIi64, var->name, var->ty->size);
+  println("  .align %d", align);
+  println("\"%s\":", var->name);
+
+  if (!var->init_data) {
+    println("  .zero %"PRIi64, var->ty->size);
+    return;
+  }
+  Relocation *rel = var->rel;
+  int pos = 0;
+  while (pos < var->ty->size) {
+    if (rel && rel->offset == pos) {
+      println("  .quad \"%s\"%+ld", *rel->label, rel->addend);
+      rel = rel->next;
+      pos += 8;
+    } else {
+      println("  .byte %d", var->init_data[pos++]);
     }
-    emit_symbol(var);
-
-    int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
-      ? MAX(16, var->align) : var->align;
-
-    if (var->is_tentative && !var->is_tls && !var->section_name) {
-      if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
-        var->ty->size = var->ty->base->size;
-
-      // Common symbol
-      if (!var->is_weak && opt_fcommon) {
-        println("  .comm \"%s\", %"PRIi64", %d", var->name, var->ty->size, align);
-        continue;
-      }
-    }
-    bool use_rodata = !opt_fpic && is_const_var(var);
-
-    if (var->section_name)
-      Printstrf("  .section \"%s\"", var->section_name->str);
-    else if (var->is_tls)
-      Printstrf("  .section .%s", var->init_data ? "tdata" : "tbss");
-    else if (use_rodata)
-      Printstr("  .section .rodata");
-    else
-      Printstrf("  .section .%s", var->init_data ? "data" : "bss");
-
-    if (opt_data_sections)
-      Printstrf(".\"%s\"", var->name);
-
-    if (var->is_tls)
-      Printstr(",\"awT\"");
-    else if (use_rodata)
-      Printstr(",\"a\"");
-    else
-      Printstr(",\"aw\"");
-
-    if (!var->init_data && !use_rodata)
-      println(",@nobits");
-    else
-      println(",@progbits");
-
-    println("  .size \"%s\", %"PRIi64, var->name, var->ty->size);
-    println("  .align %d", align);
-    println("\"%s\":", var->name);
-
-    if (!var->init_data) {
-      println("  .zero %"PRIi64, var->ty->size);
-      continue;
-    }
-    Relocation *rel = var->rel;
-    int pos = 0;
-    while (pos < var->ty->size) {
-      if (rel && rel->offset == pos) {
-        println("  .quad \"%s\"%+ld", *rel->label, rel->addend);
-        rel = rel->next;
-        pos += 8;
-      } else {
-        println("  .byte %d", var->init_data[pos++]);
-      }
-    }
-    continue;
   }
 }
 
@@ -4046,141 +4033,150 @@ static void store_gp(int r, int sz, int ofs, char *ptr) {
   store_gp2((char *[]){argreg8[r], argreg16[r], argreg32[r], argreg64[r]}, sz, ofs, ptr);
 }
 
-static void emit_text(Obj *prog) {
-  for (Obj *fn = prog; fn; fn = fn->next) {
-    if (fn->ty->kind != TY_FUNC || !fn->is_definition)
-      continue;
+void emit_text(Obj *fn) {
+  for (Obj *var = fn->static_lvars; var; var = var->next)
+    emit_data(var);
 
-    // No code is emitted for "static inline" functions
-    // if no one is referencing them.
-    if (!fn->is_live)
-      continue;
+  emit_symbol(fn);
 
-    emit_symbol(fn);
+  if (opt_func_sections)
+    println("  .section .text.\"%s\",\"ax\",@progbits", fn->name);
+  else
+    println("  .text");
+  println("  .type \"%s\", @function", fn->name);
+  println("\"%s\":", fn->name);
 
-    if (opt_func_sections)
-      println("  .section .text.\"%s\",\"ax\",@progbits", fn->name);
-    else
-      println("  .text");
-    println("  .type \"%s\", @function", fn->name);
-    println("\"%s\":", fn->name);
+  bool rtn_by_stk = fn->ty->return_ty->size > 16;
+  int gp_count = rtn_by_stk;
+  int fp_count = 0;
+  int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
 
-    bool rtn_by_stk = fn->ty->return_ty->size > 16;
-    int gp_count = rtn_by_stk;
-    int fp_count = 0;
-    int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
+  int lvar_align = get_lvar_align(fn->ty->scopes, 16);
+  lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
+  current_fn = fn;
+  rtn_label = NULL;
 
-    int lvar_align = get_lvar_align(fn->ty->scopes, 16);
-    lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
-    current_fn = fn;
-    rtn_label = NULL;
-
-    // Prologue
-    println("  push %%rbp");
-    println("  mov %%rsp, %%rbp");
-    if (lvar_align > 16) {
-      println("  push %%rbx");
-      println("  and $-%d, %%rsp", lvar_align);
-      println("  mov %%rsp, %%rbx");
-    }
-
-    long stack_alloc_loc = resrvln();
-
-    lvar_stk_sz = 0;
-
-    // Save arg registers if function is variadic
-    if (fn->ty->is_variadic) {
-      va_gp_start = gp_count * 8;
-      va_fp_start = fp_count * 16 + 48;
-      va_st_start = arg_stk_size + 16;
-      lvar_stk_sz += 176;
-
-      switch (gp_count) {
-      case 0: println("  movq %%rdi, -176(%s)", lvar_ptr);
-      case 1: println("  movq %%rsi, -168(%s)", lvar_ptr);
-      case 2: println("  movq %%rdx, -160(%s)", lvar_ptr);
-      case 3: println("  movq %%rcx, -152(%s)", lvar_ptr);
-      case 4: println("  movq %%r8, -144(%s)", lvar_ptr);
-      case 5: println("  movq %%r9, -136(%s)", lvar_ptr);
-      }
-      if (fp_count < 8) {
-        println("  test %%al, %%al");
-        println("  je 1f");
-        switch (fp_count) {
-        case 0: println("  movaps %%xmm0, -128(%s)", lvar_ptr);
-        case 1: println("  movaps %%xmm1, -112(%s)", lvar_ptr);
-        case 2: println("  movaps %%xmm2, -96(%s)", lvar_ptr);
-        case 3: println("  movaps %%xmm3, -80(%s)", lvar_ptr);
-        case 4: println("  movaps %%xmm4, -64(%s)", lvar_ptr);
-        case 5: println("  movaps %%xmm5, -48(%s)", lvar_ptr);
-        case 6: println("  movaps %%xmm6, -32(%s)", lvar_ptr);
-        case 7: println("  movaps %%xmm7, -16(%s)", lvar_ptr);
-        }
-        println("1:");
-      }
-    }
-
-    if (fn->dealloc_vla) {
-      vla_base_ofs = lvar_stk_sz += 8;
-      println("  mov %%rsp, -%d(%s)", vla_base_ofs, lvar_ptr);
-    }
-
-    if (rtn_by_stk) {
-      rtn_ptr_ofs = lvar_stk_sz += 8;
-      println("  mov %s, -%d(%s)", argreg64[0], rtn_ptr_ofs, lvar_ptr);
-    }
-
-    lvar_stk_sz = assign_lvar_offsets(fn->ty->scopes, lvar_stk_sz);
-    peak_stk_usage = lvar_stk_sz = align_to(lvar_stk_sz, 8);
-
-    // Save passed-by-register arguments to the stack
-    int gp = rtn_by_stk, fp = 0;
-    for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
-      if (var->pass_by_stack)
-        continue;
-
-      Type *ty = var->ty;
-
-      switch (ty->kind) {
-      case TY_STRUCT:
-      case TY_UNION:
-        assert(ty->size <= 16);
-        if (has_flonum1(ty))
-          store_fp(fp++, MIN(8, ty->size), var->ofs, var->ptr);
-        else
-          store_gp(gp++, MIN(8, ty->size), var->ofs, var->ptr);
-
-        if (ty->size > 8) {
-          if (has_flonum2(ty))
-            store_fp(fp++, ty->size - 8, var->ofs + 8, var->ptr);
-          else
-            store_gp(gp++, ty->size - 8, var->ofs + 8, var->ptr);
-        }
-        break;
-      case TY_FLOAT:
-      case TY_DOUBLE:
-        store_fp(fp++, ty->size, var->ofs, var->ptr);
-        break;
-      default:
-        store_gp(gp++, ty->size, var->ofs, var->ptr);
-      }
-    }
-
-    // Emit code
-    gen_stmt(fn->body);
-    assert(tmp_stack.depth == 0);
-
-    if (peak_stk_usage)
-      insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
-
-    // Epilogue
-    gen_label_ph(rtn_label, !strcmp(fn->name, "main"));
-    if (lvar_align > 16)
-      println("  mov -8(%%rbp), %%rbx");
-    println("  leave");
-    println("  ret");
-    println("  .size \"%s\", .-\"%s\"", fn->name, fn->name);
+  // Prologue
+  println("  push %%rbp");
+  println("  mov %%rsp, %%rbp");
+  if (lvar_align > 16) {
+    println("  push %%rbx");
+    println("  and $-%d, %%rsp", lvar_align);
+    println("  mov %%rsp, %%rbx");
   }
+
+  long stack_alloc_loc = resrvln();
+
+  lvar_stk_sz = 0;
+
+  // Save arg registers if function is variadic
+  if (fn->ty->is_variadic) {
+    va_gp_start = gp_count * 8;
+    va_fp_start = fp_count * 16 + 48;
+    va_st_start = arg_stk_size + 16;
+    lvar_stk_sz += 176;
+
+    switch (gp_count) {
+    case 0: println("  movq %%rdi, -176(%s)", lvar_ptr);
+    case 1: println("  movq %%rsi, -168(%s)", lvar_ptr);
+    case 2: println("  movq %%rdx, -160(%s)", lvar_ptr);
+    case 3: println("  movq %%rcx, -152(%s)", lvar_ptr);
+    case 4: println("  movq %%r8, -144(%s)", lvar_ptr);
+    case 5: println("  movq %%r9, -136(%s)", lvar_ptr);
+    }
+    if (fp_count < 8) {
+      println("  test %%al, %%al");
+      println("  je 1f");
+      switch (fp_count) {
+      case 0: println("  movaps %%xmm0, -128(%s)", lvar_ptr);
+      case 1: println("  movaps %%xmm1, -112(%s)", lvar_ptr);
+      case 2: println("  movaps %%xmm2, -96(%s)", lvar_ptr);
+      case 3: println("  movaps %%xmm3, -80(%s)", lvar_ptr);
+      case 4: println("  movaps %%xmm4, -64(%s)", lvar_ptr);
+      case 5: println("  movaps %%xmm5, -48(%s)", lvar_ptr);
+      case 6: println("  movaps %%xmm6, -32(%s)", lvar_ptr);
+      case 7: println("  movaps %%xmm7, -16(%s)", lvar_ptr);
+      }
+      println("1:");
+    }
+  }
+
+  if (fn->dealloc_vla) {
+    vla_base_ofs = lvar_stk_sz += 8;
+    println("  mov %%rsp, -%d(%s)", vla_base_ofs, lvar_ptr);
+  }
+
+  if (rtn_by_stk) {
+    rtn_ptr_ofs = lvar_stk_sz += 8;
+    println("  mov %s, -%d(%s)", argreg64[0], rtn_ptr_ofs, lvar_ptr);
+  }
+
+  lvar_stk_sz = assign_lvar_offsets(fn->ty->scopes, lvar_stk_sz);
+  peak_stk_usage = lvar_stk_sz = align_to(lvar_stk_sz, 8);
+
+  // Save passed-by-register arguments to the stack
+  int gp = rtn_by_stk, fp = 0;
+  for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
+    if (var->pass_by_stack)
+      continue;
+
+    Type *ty = var->ty;
+
+    switch (ty->kind) {
+    case TY_STRUCT:
+    case TY_UNION:
+      assert(ty->size <= 16);
+      if (has_flonum1(ty))
+        store_fp(fp++, MIN(8, ty->size), var->ofs, var->ptr);
+      else
+        store_gp(gp++, MIN(8, ty->size), var->ofs, var->ptr);
+
+      if (ty->size > 8) {
+        if (has_flonum2(ty))
+          store_fp(fp++, ty->size - 8, var->ofs + 8, var->ptr);
+        else
+          store_gp(gp++, ty->size - 8, var->ofs + 8, var->ptr);
+      }
+      break;
+    case TY_FLOAT:
+    case TY_DOUBLE:
+      store_fp(fp++, ty->size, var->ofs, var->ptr);
+      break;
+    default:
+      store_gp(gp++, ty->size, var->ofs, var->ptr);
+    }
+  }
+
+  // Emit code
+  gen_stmt(fn->body);
+  assert(tmp_stack.depth == 0);
+
+  if (peak_stk_usage)
+    insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
+
+  // Epilogue
+  gen_label_ph(rtn_label, !strcmp(fn->name, "main"));
+  if (lvar_align > 16)
+    println("  mov -8(%%rbp), %%rbx");
+  println("  leave");
+  println("  ret");
+  println("  .size \"%s\", .-\"%s\"", fn->name, fn->name);
+}
+
+typedef struct {
+  char *buf;
+  size_t buflen;
+} FuncObj;
+
+void *prepare_funcgen(void) {
+  FuncObj *obj = malloc(sizeof(FuncObj));
+  output_file = open_memstream(&obj->buf, &obj->buflen);
+  return obj;
+}
+
+void end_funcgen(void) {
+  fclose(output_file);
+  output_file = NULL;
 }
 
 void codegen(Obj *prog, FILE *out) {
@@ -4192,10 +4188,23 @@ void codegen(Obj *prog, FILE *out) {
       println("  .file %d \"%s\"", files[i]->file_no, files[i]->name);
   }
 
-  for (; prog && prog->asm_str; prog = prog->next)
-    println("%s", prog->asm_str->str);
-
-  emit_data(prog);
-  emit_text(prog);
+  for (Obj *var = prog; var; var = var->next) {
+    if (var->asm_str) {
+      println("%s", var->asm_str->str);
+      continue;
+    }
+    if (!var->is_definition) {
+      if (var->is_weak || var->alias_name)
+        emit_symbol(var);
+      continue;
+    }
+    if (var->ty->kind == TY_FUNC) {
+      if (var->is_live)
+        fwrite(((FuncObj *)var->output)->buf, ((FuncObj *)var->output)->buflen, 1, out);
+      continue;
+    }
+    emit_data(var);
+    continue;
+  }
   println("  .section  .note.GNU-stack,\"\",@progbits");
 }
