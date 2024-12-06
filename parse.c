@@ -191,7 +191,7 @@ static void leave_scope(void) {
   scope = scope->parent;
 }
 
-static bool is_constant_context() {
+static bool is_constant_context(void) {
   return scope->parent == NULL || is_global_init_context;
 }
 
@@ -4018,7 +4018,12 @@ static Node *primary(Token **rest, Token *tok) {
     tok = skip(tok, ")");
 
     if (is_constant_context()) {
-      Obj *var = new_anon_gvar(ty);
+      Obj *var;
+      if (current_fn)
+        var = new_static_lvar(ty);
+      else
+        var = new_anon_gvar(ty);
+
       var->is_compound_lit = true;
       gvar_initializer(rest, tok, var);
       return new_var_node(var, start);
@@ -4307,10 +4312,10 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (tok->kind == TK_STR) {
     Obj *var;
-    if (!current_fn)
-      var = new_anon_gvar(tok->ty);
-    else
+    if (current_fn)
       var = new_static_lvar(tok->ty);
+    else
+      var = new_anon_gvar(tok->ty);
 
     var->init_data = tok->str;
     *rest = tok->next;
