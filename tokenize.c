@@ -129,15 +129,15 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
 static int read_ident(char *p) {
   char *start = p;
 
-  for (bool is_first = true;; is_first = false) {
-    if (Isalnum(*p) || *p == '_' || *p == '$') {
+  for (;;) {
+    if (p == start ? is_ident1_ascii(*p) : is_ident2_ascii(*p)) {
       p++;
       continue;
     }
-    if ((unsigned char)*p >= 128) {
+    if ((uint32_t)*p >= 128) {
       char *pos;
       uint32_t c = decode_utf8(&pos, p);
-      if (is_first ? is_ident1(c) : is_ident2(c)) {
+      if (p == start ? is_ident1_non_ascii(c) : is_ident2_non_ascii(c)) {
         p = pos;
         continue;
       }
@@ -424,13 +424,13 @@ static Token *new_pp_number(char *start, char *p) {
       p += 2;
       continue;
     }
-    if (Isalnum(*p) || *p == '_' || *p == '$') {
+    if (is_ident2_ascii(*p)) {
       p++;
       continue;
     }
     if ((unsigned char)*p >= 128) {
       char *pos;
-      if (is_ident2(decode_utf8(&pos, p))) {
+      if (is_ident2_non_ascii(decode_utf8(&pos, p))) {
         p = pos;
         continue;
       }

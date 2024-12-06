@@ -90,9 +90,8 @@ static bool in_range(uint32_t c, UTF32Range *range, int len) {
 // the first character of an identifier.
 //
 // Non-ASCII characters correspond to XID_Start set of Unicode 15.1.
-bool is_ident1(uint32_t c) {
+bool is_ident1_non_ascii(uint32_t c) {
   static UTF32Range range[] = {
-    {'$',     '$'},     {'A',     'Z'},     {'_',     '_'},     {'a',     'z'},
     {0x00AA,  0x00AA},  {0x00B5,  0x00B5},  {0x00BA,  0x00BA},  {0x00C0,  0x00D6},
     {0x00D8,  0x00F6},  {0x00F8,  0x02C1},  {0x02C6,  0x02D1},  {0x02E0,  0x02E4},
     {0x02EC,  0x02EC},  {0x02EE,  0x02EE},  {0x0370,  0x0374},  {0x0376,  0x0377},
@@ -269,9 +268,9 @@ bool is_ident1(uint32_t c) {
 // character of an identifier.
 //
 // Non-ASCII characters correspond to XID_Continue set of Unicode 15.1.
-bool is_ident2(uint32_t c) {
+bool is_ident2_non_ascii(uint32_t c) {
   static UTF32Range range[] = {
-    {'0',     '9'},     {0x00B7,  0x00B7},  {0x0300,  0x036F},  {0x0387,  0x0387},
+    {0x00B7,  0x00B7},  {0x0300,  0x036F},  {0x0387,  0x0387},
     {0x0483,  0x0487},  {0x0591,  0x05BD},  {0x05BF,  0x05BF},  {0x05C1,  0x05C2},
     {0x05C4,  0x05C5},  {0x05C7,  0x05C7},  {0x0610,  0x061A},  {0x064B,  0x0669},
     {0x0670,  0x0670},  {0x06D6,  0x06DC},  {0x06DF,  0x06E4},  {0x06E7,  0x06E8},
@@ -368,7 +367,7 @@ bool is_ident2(uint32_t c) {
     {0xE0100, 0xE01EF}
   };
 
-  return is_ident1(c) ||  in_range(c, range, sizeof(range) / sizeof(UTF32Range));
+  return is_ident1(c) || in_range(c, range, sizeof(range) / sizeof(UTF32Range));
 }
 
 // Returns the number of columns needed to display a given
