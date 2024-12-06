@@ -612,6 +612,14 @@ bool is_ident2(uint32_t c);
 int display_width(char *p, int len);
 
 //
+// arena.c
+//
+void arena_on(void);
+void arena_off(void);
+void *arena_malloc(size_t sz);
+void *arena_calloc(size_t n, size_t sz);
+
+//
 // main.c
 //
 typedef enum {
