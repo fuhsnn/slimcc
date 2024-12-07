@@ -1831,7 +1831,7 @@ static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_t
     Member head = {0};
     Member *cur = &head;
     for (Member *mem = ty->members; mem; mem = mem->next) {
-      Member *m = calloc(1, sizeof(Member));
+      Member *m = arena_calloc(1, sizeof(Member));
       *m = *mem;
       cur = cur->next = m;
     }
@@ -3565,7 +3565,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Anonymous struct member
     if (equal(tok, ";") &&
       (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
-      Member *mem = calloc(1, sizeof(Member));
+      Member *mem = arena_calloc(1, sizeof(Member));
       mem->ty = basety;
 
       tok = tok->next;
@@ -3576,7 +3576,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Regular struct members
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
-      Member *mem = calloc(1, sizeof(Member));
+      Member *mem = arena_calloc(1, sizeof(Member));
       mem->alt_align = attr.align;
       mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
 
