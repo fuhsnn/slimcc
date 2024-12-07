@@ -176,7 +176,7 @@ static int align_down(int n, int align) {
 }
 
 static void enter_scope(void) {
-  Scope *sc = calloc(1, sizeof(Scope));
+  Scope *sc = arena_calloc(1, sizeof(Scope));
   sc->parent = scope;
   sc->sibling_next = scope->children;
   scope = scope->children = sc;
