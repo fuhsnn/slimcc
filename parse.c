@@ -331,7 +331,7 @@ static void apply_cv_qualifier(Node *node, Type *ty2) {
 }
 
 static VarScope *push_scope(char *name) {
-  VarScope *sc = calloc(1, sizeof(VarScope));
+  VarScope *sc = arena_calloc(1, sizeof(VarScope));
   hashmap_put(&scope->vars, name, sc);
   return sc;
 }
@@ -4296,7 +4296,7 @@ static Node *primary(Token **rest, Token *tok) {
     // [GNU] __FUNCTION__ is yet another name of __func__.
     if (current_fn && (equal(tok, "__func__") || equal(tok, "__FUNCTION__"))) {
       char *name = current_fn->name;
-      VarScope *vsc = calloc(1, sizeof(VarScope));
+      VarScope *vsc = arena_calloc(1, sizeof(VarScope));
       vsc->var = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
       vsc->var->init_data = name;
       hashmap_put(&current_fn->ty->scopes->vars, "__func__", vsc);
