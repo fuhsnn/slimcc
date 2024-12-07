@@ -2011,7 +2011,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         srel = srel->next;
       for (int pos = 0; pos < ty->size && (pos + sofs) < var->ty->size;) {
         if (srel && srel->offset == (pos + sofs)) {
-          cur = cur->next = calloc(1, sizeof(Relocation));
+          cur = cur->next = arena_calloc(1, sizeof(Relocation));
           cur->offset = (pos + offset);
           cur->label = srel->label;
           cur->addend = srel->addend;
@@ -2055,7 +2055,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   int64_t addend = eval2(init_expr, &ctx);
 
   if (ctx.label) {
-    Relocation *rel = calloc(1, sizeof(Relocation));
+    Relocation *rel = arena_calloc(1, sizeof(Relocation));
     rel->offset = offset;
     rel->label = ctx.label;
     rel->addend = addend;
