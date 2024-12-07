@@ -383,8 +383,7 @@ static void new_initializer(Initializer *init, Type *ty, bool is_flexible) {
   }
 }
 
-static Obj *new_var(char *name, Type *ty) {
-  Obj *var = calloc(1, sizeof(Obj));
+static Obj *new_var(char *name, Type *ty, Obj *var) {
   var->name = name;
   var->ty = ty;
   var->align = ty->align;
@@ -394,7 +393,7 @@ static Obj *new_var(char *name, Type *ty) {
 }
 
 Obj *new_lvar(char *name, Type *ty) {
-  Obj *var = new_var(name, ty);
+  Obj *var = new_var(name, ty, ast_arena_calloc(sizeof(Obj)));
   var->is_local = true;
   var->next = scope->locals;
   scope->locals = var;
@@ -402,7 +401,7 @@ Obj *new_lvar(char *name, Type *ty) {
 }
 
 static Obj *new_gvar(char *name, Type *ty) {
-  Obj *var = new_var(name, ty);
+  Obj *var = new_var(name, ty, calloc(1, sizeof(Obj)));
   var->next = globals;
   globals = var;
   return var;
@@ -422,7 +421,7 @@ static Obj *new_anon_gvar(Type *ty) {
 }
 
 static Obj *new_static_lvar(Type *ty) {
-  Obj *var = new_var(NULL, ty);
+  Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
   var->name = new_unique_name();
   var->is_definition = true;
   var->is_static = true;
@@ -1333,7 +1332,7 @@ static void defr_cleanup(Obj *var, Obj *fn, Token *tok) {
   Node *arg = new_unary(ND_ADDR, new_var_node(var, tok), tok);
   add_type(arg);
 
-  n->args = new_var(NULL, arg->ty);
+  n->args = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
   n->args->arg_expr = arg;
   prepare_funcall(n, scope);
 
@@ -3951,7 +3950,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
       else if (arg->ty->kind == TY_FUNC)
         arg = new_cast(arg, pointer_to(arg->ty));
     }
-    cur = cur->param_next = new_var(NULL, arg->ty);
+    cur = cur->param_next = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
     cur->arg_expr = arg;
   }
   if (param)
@@ -4053,7 +4052,7 @@ static Node *primary(Token **rest, Token *tok) {
     while (sc->is_temporary)
       sc = sc->parent;
 
-    Obj *var = new_var(NULL, ty);
+    Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
     var->is_compound_lit = true;
     var->is_local = true;
     var->next = sc->locals;
