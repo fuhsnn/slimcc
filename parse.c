@@ -229,7 +229,7 @@ bool is_const_var(Obj *var) {
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
-  Node *node = calloc(1, sizeof(Node));
+  Node *node = arena_calloc(1, sizeof(Node));
   node->kind = kind;
   node->tok = tok;
   return node;
@@ -311,7 +311,7 @@ Node *new_cast(Node *expr, Type *ty) {
       return expr;
     }
   }
-  Node *node = malloc(sizeof(Node));
+  Node *node = arena_malloc(sizeof(Node));
   *node = tmp_node;
   return node;
 }
@@ -4448,6 +4448,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fn->ty = ty;
 
   fn->output = prepare_funcgen();
+  arena_on();
 
   current_fn = fn;
   current_defr = NULL;
@@ -4476,6 +4477,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   current_fn = NULL;
 
   emit_text(fn);
+  arena_off();
   end_funcgen();
 }
 
