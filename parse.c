@@ -425,7 +425,7 @@ static Obj *new_static_lvar(Type *ty) {
 }
 
 static DeferStmt *new_defr(DeferKind kind) {
-  DeferStmt *defr = calloc(1, sizeof(DeferStmt));
+  DeferStmt *defr = arena_calloc(1, sizeof(DeferStmt));
   defr->kind = kind;
   if (current_defr) {
     defr->vla = current_defr->vla;
@@ -2116,7 +2116,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
   while (!equal(tok, ":") && !equal(tok, ")")) {
     if (cur != &head)
       tok = skip(tok, ",");
-    cur = cur->next = calloc(1, sizeof(AsmParam));
+    cur = cur->next = arena_calloc(1, sizeof(AsmParam));
 
     if (consume(&tok, tok, "[")) {
       cur->name = tok;
@@ -2153,7 +2153,7 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
     node->goto_next = gotos;
     gotos = node;
 
-    cur = cur->next = calloc(1, sizeof(AsmParam));
+    cur = cur->next = arena_calloc(1, sizeof(AsmParam));
     cur->arg = node;
     tok = tok->next;
   }
