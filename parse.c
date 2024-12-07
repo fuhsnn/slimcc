@@ -4582,9 +4582,9 @@ Obj *parse(Token *tok) {
   }
 
   for (Obj *var = globals; var; var = var->next)
-    if (var->ty->kind == TY_FUNC)
-      if (var->is_referenced || !(var->is_static && var->is_inline))
-        mark_fn_live(var);
+    if (var->is_definition && var->ty->kind == TY_FUNC &&
+      (var->is_referenced || !(var->is_static && var->is_inline)))
+      mark_fn_live(var);
 
   cur->next = globals;
   return head.next;
