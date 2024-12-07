@@ -591,7 +591,7 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic);
 // codegen.c
 //
 
-void codegen(Obj *prog, FILE *out);
+int codegen(Obj *prog, FILE *out);
 void prepare_funcall(Node *node, Scope *scope);
 void prepare_inline_asm(Node *node);
 int align_to(int n, int align);

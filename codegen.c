@@ -4179,7 +4179,7 @@ void end_funcgen(void) {
   output_file = NULL;
 }
 
-void codegen(Obj *prog, FILE *out) {
+int codegen(Obj *prog, FILE *out) {
   output_file = out;
 
   if (opt_g) {
@@ -4207,4 +4207,5 @@ void codegen(Obj *prog, FILE *out) {
     continue;
   }
   println("  .section  .note.GNU-stack,\"\",@progbits");
+  return 0;
 }

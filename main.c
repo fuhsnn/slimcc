@@ -733,19 +733,13 @@ static void cc1(void) {
 
   Obj *prog = parse(tok);
 
-  // Open a temporary output buffer.
-  char *buf;
-  size_t buflen;
-  FILE *output_buf = open_memstream(&buf, &buflen);
-
-  // Traverse the AST to emit assembly.
-  codegen(prog, output_buf);
-  fclose(output_buf);
-
   // Write the asembly text to a file.
   FILE *out = open_file(output_file);
-  fwrite(buf, buflen, 1, out);
+  int failed = codegen(prog, out);
+
   fclose(out);
+  if (failed)
+    unlink(output_file);
 }
 
 static void assemble(char *input, char *output) {
