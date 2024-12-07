@@ -99,12 +99,83 @@ char *format(char *fmt, ...) FMTCHK(1,2);
 // tokenize.c
 //
 
+#define equal_kind(tk, tk_kind) (tk->kind == tk_kind)
+#define is_tykw(tk_kind) ((tk_kind >= TK_VOID && tk_kind <= TK___VOLATILE__) || \
+   tk_kind == TK_TYPEOF || (tk_kind >= TK_ALIGNAS && tk_kind <= TK_TYPEOF_UNQUAL))
+
 // Token
 typedef enum {
   TK_IDENT,   // Identifiers
   TK_PUNCT,   // Punctuators
-  TK_KEYWORD, // Keywords
-  TK_TYPEKW,  // Keywords
+  /* Keywords */
+  TK_RETURN,
+  TK_IF,
+  TK_ELSE,
+  TK_FOR,
+  TK_WHILE,
+  TK_DO,
+  TK_GOTO,
+  TK_BREAK,
+  TK_CONTINUE,
+  TK_SWITCH,
+  TK_CASE,
+  TK_DEFAULT,
+  TK__ALIGNOF,
+  TK_SIZEOF,
+  TK__ASM,
+  TK___ASM__,
+  TK__STATIC_ASSERT,
+  TK__DEFER,
+  /* Type Keywords */
+  TK_VOID,
+  TK__BOOL,
+  TK_CHAR,
+  TK_SHORT,
+  TK_INT,
+  TK_LONG,
+  TK_STRUCT,
+  TK_UNION,
+  TK_TYPEDEF,
+  TK_ENUM,
+  TK_STATIC,
+  TK_EXTERN,
+  TK__ALIGNAS,
+  TK_SIGNED,
+  TK_UNSIGNED,
+  TK_CONST,
+  TK_AUTO,
+  TK_REGISTER,
+  TK_RESTRICT,
+  TK___RESTRICT,
+  TK___RESTRICT__,
+  TK__NORETURN,
+  TK_FLOAT,
+  TK_DOUBLE,
+  TK_INLINE,
+  TK___AUTO_TYPE,
+  TK__THREAD_LOCAL,
+  TK___THREAD,
+  TK__ATOMIC,
+  TK___TYPEOF,
+  TK___TYPEOF__,
+  TK_VOLATILE,
+  TK___VOLATILE,
+  TK___VOLATILE__,
+  /* NONE Keywords */
+  TK_ASM,
+  /* NONE / C23+ Type Keywords */
+  TK_TYPEOF,
+  /* C23 Keywords */
+  TK_ALIGNOF,
+  TK_FALSE,
+  TK_TRUE,
+  TK_STATIC_ASSERT,
+  /* C23 Type Keyowords */
+  TK_ALIGNAS,
+  TK_BOOL,
+  TK_CONSTEXPR,
+  TK_THREAD_LOCAL,
+  TK_TYPEOF_UNQUAL,
   TK_STR,     // String literals
   TK_NUM,     // Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
