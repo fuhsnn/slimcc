@@ -4354,24 +4354,11 @@ static Node *primary(Token **rest, Token *tok) {
     return new_boolean(1, tok);
   }
 
-  if (tok->kind == TK_PP_NUM)
-    convert_pp_number(tok);
-
-  if (tok->kind == TK_NUM) {
-    Node *node;
-    if (is_flonum(tok->ty)) {
-      node = new_node(ND_NUM, tok);
-      node->fval = tok->fval;
-    } else {
-      node = new_num(tok->val, tok);
-    }
-
-    node->ty = tok->ty;
-    *rest = tok->next;
+  {
+    Node *node = new_node(ND_NUM, tok);
+    *rest = convert_pp_number(tok, &node->ty, &node->val, &node->fval);
     return node;
   }
-
-  error_tok(tok, "expected an expression");
 }
 
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr) {

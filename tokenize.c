@@ -439,7 +439,7 @@ static Token *new_pp_number(char *start, char *p) {
   }
 }
 
-static bool convert_pp_int(Token *tok, char *loc, int len) {
+static bool convert_pp_int(char *loc, int len, Type **ty_p, int64_t *val_p) {
   char *p = loc;
 
   // Read a binary, octal, decimal or hexadecimal number.
@@ -513,14 +513,22 @@ static bool convert_pp_int(Token *tok, char *loc, int len) {
       ty = ty_int;
   }
 
-  tok->kind = TK_NUM;
-  tok->val = val;
-  tok->ty = ty;
+  *val_p = val;
+  *ty_p = ty;
   return true;
 }
 
 // Converts a pp-number token to a regular number token.
-void convert_pp_number(Token *tok) {
+Token *convert_pp_number(Token *tok, Type **ty_p, int64_t *val_p, long double *fval_p) {
+  if (tok->kind == TK_NUM) {
+    *ty_p = tok->ty;
+    *val_p = tok->val;
+    return tok->next;
+  }
+
+  if (tok->kind != TK_PP_NUM)
+    error_tok(tok, "expected number token");
+
   // Remove digit seperators
   int len = 0;
   char buf[227];
@@ -538,8 +546,8 @@ void convert_pp_number(Token *tok) {
   buf[len] = '\0';
 
   // Try to parse as an integer constant.
-  if (convert_pp_int(tok, buf, len))
-    return;
+  if (convert_pp_int(buf, len, ty_p, val_p))
+    return tok->next;
 
   // If it's not an integer, it must be a floating point constant.
   char *end;
@@ -561,9 +569,9 @@ void convert_pp_number(Token *tok) {
   if (&buf[len] != end)
     error_tok(tok, "invalid numeric constant");
 
-  tok->kind = TK_NUM;
-  tok->fval = val;
-  tok->ty = ty;
+  *fval_p = val;
+  *ty_p = ty;
+  return tok->next;
 }
 
 // Initialize line info for all tokens.

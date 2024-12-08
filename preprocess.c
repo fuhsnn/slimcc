@@ -962,8 +962,8 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
     return tok;
 
   if (is_hash(start) && equal(start->next, "ifndef") &&
-      start->next->next->kind == TK_IDENT && equal(end, "endif"))
-    start->next->guard_file = end->guard_file = path;
+    start->next->next->kind == TK_IDENT && equal(end, "endif"))
+    start->next->is_incl_guard = end->is_incl_guard = true;
 
   end->next = tok;
   return start;
@@ -1051,13 +1051,15 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
 static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
   tok = preprocess2(copy_line(rest, tok));
-  convert_pp_number(tok);
 
-  if (tok->kind != TK_NUM || tok->ty->kind != TY_INT)
-    error_tok(tok, "invalid line marker");
-  start->file->line_delta = tok->val - start->line_no - 1;
+  Type *ty;
+  int64_t val;
+  tok = convert_pp_number(tok, &ty, &val, &(long double){0});
 
-  tok = tok->next;
+  if (ty->kind != TY_INT)
+    error_tok(start, "invalid line marker");
+  start->file->line_delta = val - start->line_no - 1;
+
   if (tok->kind == TK_EOF)
     return;
 
@@ -1205,10 +1207,11 @@ static Token *directives(Token **cur, Token *start) {
     if (!cond_incl)
       error_tok(start, "stray #endif");
 
-    if (tok->guard_file && tok->guard_file == cond_incl->tok->guard_file) {
+    if (tok->is_incl_guard && cond_incl->tok->is_incl_guard &&
+      tok->file == cond_incl->tok->file) {
       Token *name_tok = cond_incl->tok->next;
       char *guard_name = strndup(name_tok->loc, name_tok->len);
-      hashmap_put(&include_guards, tok->guard_file, guard_name);
+      hashmap_put(&include_guards, tok->file->name, guard_name);
     }
 
     cond_incl = cond_incl->next;

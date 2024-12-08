@@ -53,6 +53,14 @@
 #define PACKED
 #endif
 
+#if __STDC_VERSION__ >= 201112L
+#define ANON_UNION_START union {
+#define ANON_UNION_END };
+#else
+#define ANON_UNION_START
+#define ANON_UNION_END
+#endif
+
 typedef struct Type Type;
 typedef struct Node Node;
 typedef struct Member Member;
@@ -130,26 +138,26 @@ struct File {
 // Token type
 typedef struct Token Token;
 struct Token {
-  TokenKind kind;   // Token kind
-  Token *next;      // Next token
-  int64_t val;      // If kind is TK_NUM, its value
-  long double fval; // If kind is TK_NUM, its value
-  char *loc;        // Token location
-  int len;          // Token length
-  Type *ty;         // Used if TK_NUM or TK_STR
-  char *str;        // String literal contents including terminating '\0'
-
-  File *file;       // Source location
-  int line_no;      // Line number
+  Token *next;          // Next token
+  char *loc;            // Token location
+  int len;              // Token length
+  TokenKind kind : 8;   // Token kind
+  bool at_bol : 1;      // True if this token is at beginning of line
+  bool has_space : 1 ;  // True if this token follows a space character
+  bool dont_expand : 1; // True if a macro token is encountered during the macro's expansion
+  bool is_incl_guard : 1;
+  int16_t display_file_no;
   int display_line_no;
-  int display_file_no;
-  bool at_bol;      // True if this token is at beginning of line
-  bool has_space;   // True if this token follows a space character
-  bool dont_expand; // True if a macro token is encountered during the macro's expansion
-  Token *origin;    // If this is expanded from a macro, the original token
-  char *guard_file; // The path of a potentially include-guarded file
+  int line_no;          // Line number
+  File *file;           // Source location
+  Token *origin;        // If this is expanded from a macro, the original token
   Token *attr_next;
-} PACKED;
+  Type *ty;             // Used if TK_NUM or TK_STR
+ANON_UNION_START
+    int64_t val;        // If kind is TK_NUM, its value
+    char *str;          // String literal contents including terminating '\0'
+ANON_UNION_END
+};
 
 void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
 void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
@@ -166,7 +174,7 @@ Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end, int *incl_no);
 File *add_input_file(char *path, char *content, int *incl_no);
-void convert_pp_number(Token *tok);
+Token *convert_pp_number(Token *tok, Type **ty_p, int64_t *val_p, long double *fval_p);
 TokenKind ident_keyword(Token *tok);
 
 #define internal_error() \
