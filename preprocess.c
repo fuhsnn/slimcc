@@ -962,8 +962,8 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
     return tok;
 
   if (is_hash(start) && equal(start->next, "ifndef") &&
-      start->next->next->kind == TK_IDENT && equal(end, "endif"))
-    start->next->guard_file = end->guard_file = path;
+    start->next->next->kind == TK_IDENT && equal(end, "endif"))
+    start->next->is_guard_start = end->is_guard_end = true;
 
   end->next = tok;
   return start;
@@ -1205,10 +1205,11 @@ static Token *directives(Token **cur, Token *start) {
     if (!cond_incl)
       error_tok(start, "stray #endif");
 
-    if (tok->guard_file && tok->guard_file == cond_incl->tok->guard_file) {
+    if (tok->is_guard_end && cond_incl->tok->is_guard_start &&
+      tok->file == cond_incl->tok->file) {
       Token *name_tok = cond_incl->tok->next;
       char *guard_name = strndup(name_tok->loc, name_tok->len);
-      hashmap_put(&include_guards, tok->guard_file, guard_name);
+      hashmap_put(&include_guards, tok->file->name, guard_name);
     }
 
     cond_incl = cond_incl->next;

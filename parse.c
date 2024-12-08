@@ -4361,7 +4361,7 @@ static Node *primary(Token **rest, Token *tok) {
     Node *node;
     if (is_flonum(tok->ty)) {
       node = new_node(ND_NUM, tok);
-      node->fval = tok->fval;
+      node->fval = *tok->fval_ptr;
     } else {
       node = new_num(tok->val, tok);
     }

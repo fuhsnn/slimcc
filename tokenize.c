@@ -562,7 +562,8 @@ void convert_pp_number(Token *tok) {
     error_tok(tok, "invalid numeric constant");
 
   tok->kind = TK_NUM;
-  tok->fval = val;
+  tok->fval_ptr = malloc(sizeof(long double));
+  *tok->fval_ptr = val;
   tok->ty = ty;
 }
 
