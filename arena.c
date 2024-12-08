@@ -10,6 +10,10 @@
 
 #if USE_ASAN
 #include <sanitizer/asan_interface.h>
+
+const char *__asan_default_options(void) {
+  return "detect_leaks=0";
+}
 #endif
 
 #define PAGE_SIZE 4048

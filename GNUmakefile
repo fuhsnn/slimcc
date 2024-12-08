@@ -57,6 +57,12 @@ test-stage2: $(TESTS:test/%=stage2/test/%) $(TESTS_C23:test/c23/%=stage2/test/c2
 
 # Misc.
 
+asan: $(SRCS)
+	$(CC) $^ -Wno-switch -O3 -flto=auto -march=native -fsanitize=address -fno-omit-frame-pointer -fno-common -o slimcc
+
+opt: $(SRCS)
+	$(CC) $^ -Wno-switch -O3 -flto=auto -march=native -o slimcc -nodefaultlibs -lmimalloc -lc
+
 clean:
 	rm -rf slimcc stage2
 	find * -type f '(' -name '*~' -o -name '*.o' ')' -exec rm {} ';'
