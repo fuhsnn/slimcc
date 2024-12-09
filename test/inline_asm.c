@@ -128,7 +128,7 @@ void x87_clobber(void) {
   asm volatile (""::
     "f"((float){11}),
     "t"((double){22}),
-    "u"((long double){33}) : "st", "st(1)"
+    "u"((long double){33}) : "%st", "st(1)"
     );
   asm volatile ("": "=t"(f1));
   asm volatile ("": "=t"(f2));

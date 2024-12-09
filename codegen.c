@@ -3113,9 +3113,9 @@ static Reg ident_reg(Token *tok) {
   if (!strncmp(loc, "xmm", 3) || !strncmp(loc, "ymm", 3) || !strncmp(loc, "zmm", 3))
     return REG_XMM0 + strtoul(&loc[3], NULL, 10);
 
-  if (!strncmp(tok->str, "st", 2)) {
-    if (tok->str[2] == '(') {
-      unsigned long num = strtoul(&tok->str[3], NULL, 10);
+  if (!strncmp(loc, "st", 2)) {
+    if (loc[2] == '(') {
+      unsigned long num = strtoul(&loc[3], NULL, 10);
       return REG_X87_ST0 + MIN(num, 7);
     }
     return REG_X87_ST0;
