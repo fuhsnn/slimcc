@@ -613,7 +613,7 @@ Token *tokenize_string_literal(Token *tok, Type *basety) {
 }
 
 // Tokenize a given string and returns new tokens.
-Token *tokenize(File *file, Token **end) {
+Token *tokenize(File *file, Token **end, bool finalize) {
   current_file = file;
 
   char *p = file->contents;
@@ -752,8 +752,10 @@ Token *tokenize(File *file, Token **end) {
 
   if (end && cur != &head)
     *end = cur;
-  cur->next = new_token(TK_EOF, p, p);
-  add_line_numbers(head.next);
+  if (finalize) {
+    cur->next = new_token(TK_EOF, p, p);
+    add_line_numbers(head.next);
+  }
   return head.next;
 }
 
@@ -928,5 +930,5 @@ Token *tokenize_file(char *path, Token **end, int *incl_no) {
   if (opt_enable_universal_char)
     convert_universal_chars(p);
 
-  return tokenize(add_input_file(path, p, incl_no), end);
+  return tokenize(add_input_file(path, p, incl_no), end, true);
 }

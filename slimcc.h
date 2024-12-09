@@ -179,7 +179,7 @@ bool consume(Token **rest, Token *tok, char *str);
 File **get_input_files(void);
 File *new_file(char *name, int file_no, char *contents);
 Token *tokenize_string_literal(Token *tok, Type *basety);
-Token *tokenize(File *file, Token **end);
+Token *tokenize(File *file, Token **end, bool finalize);
 Token *tokenize_file(char *filename, Token **end, int *incl_no);
 File *add_input_file(char *path, char *content, int *incl_no);
 Token *convert_pp_number(Token *tok, Type **ty_p, int64_t *val_p, long double *fval_p);

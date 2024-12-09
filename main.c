@@ -691,7 +691,7 @@ static void cc1(void) {
     "  unsigned int fp_offset;"
     "  void *overflow_arg_area;"
     "  void *reg_save_area;"
-    "} __builtin_va_list[1];", NULL), &end);
+    "} __builtin_va_list[1];", NULL), &end, false);
     cur = end;
   }
 

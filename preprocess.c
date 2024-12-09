@@ -195,7 +195,7 @@ static char *quote_string(char *str) {
 
 static Token *new_str_token(char *str, Token *tmpl) {
   char *buf = quote_string(str);
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL, false);
 }
 
 // Copy all tokens until the next newline, terminate them with
@@ -287,11 +287,11 @@ static Token *find_last_tok(Token *tok) {
 
 static Token *new_num_token(int val, Token *tmpl) {
   char *buf = format("%d\n", val);
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL, false);
 }
 
 static Token *new_comma_token(Token *tmpl) {
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, ","), NULL);
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, ","), NULL, false);
 }
 
 static Token *to_int_token(Token *tok, int64_t val) {
@@ -614,16 +614,17 @@ static void align_token(Token *tok1, Token *tok2) {
 }
 
 // Concatenate two tokens to create a new token.
-static Token *paste(Token *lhs, Token *rhs) {
+static void paste(Token *lhs, Token *rhs) {
   // Paste the two tokens.
   char *buf = format("%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
   // Tokenize the resulting string.
-  Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf), NULL);
-  align_token(tok, lhs);
-  if (tok->next->kind != TK_EOF)
+  Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf), NULL, false);
+  if (tok->next)
     error_tok(lhs, "pasting forms '%s', an invalid token", buf);
-  return tok;
+
+  align_token(tok, lhs);
+  *lhs = *tok;
 }
 
 // Replace func-like macro parameters with given arguments.
@@ -678,13 +679,13 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
           continue;
 
         if (arg->tok->kind != TK_PMARK)
-          *cur = *paste(cur, arg->tok);
+          paste(cur, arg->tok);
 
         for (Token *t = arg->tok->next; t->kind != TK_EOF; t = t->next)
           cur = cur->next = copy_token(t);
         continue;
       }
-      *cur = *paste(cur, tok->next);
+      paste(cur, tok->next);
       tok = tok->next->next;
       continue;
     }
@@ -761,7 +762,7 @@ static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
         error_tok(tok, "'##' cannot appear at either end of macro expansion");
 
       tok = tok->next;
-      *cur = *paste(cur, tok);
+      paste(cur, tok);
     } else {
       cur = cur->next = copy_token(tok);
     }
@@ -1278,7 +1279,7 @@ static Token *directives(Token **cur, Token *start) {
 }
 
 void define_macro(char *name, char *buf) {
-  Token *tok = tokenize(new_file("<built-in>", 1, buf), NULL);
+  Token *tok = tokenize(new_file("<built-in>", 1, buf), NULL, true);
   add_macro(name, true, tok);
 }
 
@@ -1389,7 +1390,7 @@ static Token *pragma_macro(Token *start) {
   memcpy(buf + 8, str->loc + 1, str->len - 2);
 
   Token *end;
-  Token *hash = tokenize(new_file(start->file->name, start->file->file_no, buf), &end);
+  Token *hash = tokenize(new_file(start->file->name, start->file->file_no, buf), &end, false);
   end->next = tok;
   return hash;
 }
