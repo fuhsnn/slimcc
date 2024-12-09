@@ -114,7 +114,8 @@ typedef enum {
   TK_KEYWORD, // Keywords
   TK_TYPEKW,  // Keywords
   TK_STR,     // String literals
-  TK_NUM,     // Numeric literals
+  TK_CHAR,    // Character literals
+  TK_INT_NUM,
   TK_PP_NUM,  // Preprocessing numbers
   TK_PMARK,   // Placermarkers
   TK_ATTR,    // GNU attribute
@@ -135,6 +136,14 @@ struct File {
   bool is_input;
 };
 
+typedef struct {
+  Type *ty;
+ANON_UNION_START
+    char *str;
+    int64_t char_val;
+ANON_UNION_END
+} TokenVal;
+
 // Token type
 typedef struct Token Token;
 struct Token {
@@ -152,10 +161,9 @@ struct Token {
   File *file;           // Source location
   Token *origin;        // If this is expanded from a macro, the original token
   Token *attr_next;
-  Type *ty;             // Used if TK_NUM or TK_STR
 ANON_UNION_START
-    int64_t val;        // If kind is TK_NUM, its value
-    char *str;          // String literal contents including terminating '\0'
+    int64_t ival;        // TK_INT_NUM, its value
+    TokenVal *tval;          // String literal contents including terminating '\0'
 ANON_UNION_END
 };
 
@@ -176,6 +184,7 @@ Token *tokenize_file(char *filename, Token **end, int *incl_no);
 File *add_input_file(char *path, char *content, int *incl_no);
 Token *convert_pp_number(Token *tok, Type **ty_p, int64_t *val_p, long double *fval_p);
 TokenKind ident_keyword(Token *tok);
+TokenVal *new_tval(void);
 
 #define internal_error() \
   error("internal error at %s:%d", __FILE__, __LINE__)

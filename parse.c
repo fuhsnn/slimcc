@@ -1468,25 +1468,25 @@ static void string_initializer(Token *tok, Initializer *init) {
   if (init->is_flexible) {
     Type *ty = init->ty;
     *init = (Initializer){0};
-    new_initializer(init, array_of(ty->base, tok->ty->array_len), false);
+    new_initializer(init, array_of(ty->base, tok->tval->ty->array_len), false);
   }
-  int len = MIN(init->ty->array_len, tok->ty->array_len);
+  int len = MIN(init->ty->array_len, tok->tval->ty->array_len);
 
   switch (init->ty->base->size) {
   case 1: {
-    char *str = tok->str;
+    char *str = tok->tval->str;
     for (int i = 0; i < len; i++)
       init->children[i].expr = new_num(str[i], tok);
     break;
   }
   case 2: {
-    uint16_t *str = (uint16_t *)tok->str;
+    uint16_t *str = (uint16_t *)tok->tval->str;
     for (int i = 0; i < len; i++)
       init->children[i].expr = new_num(str[i], tok);
     break;
   }
   case 4: {
-    uint32_t *str = (uint32_t *)tok->str;
+    uint32_t *str = (uint32_t *)tok->tval->str;
     for (int i = 0; i < len; i++)
       init->children[i].expr = new_num(str[i], tok);
     break;
@@ -4333,11 +4333,11 @@ static Node *primary(Token **rest, Token *tok) {
   if (tok->kind == TK_STR) {
     Obj *var;
     if (current_fn)
-      var = new_static_lvar(tok->ty);
+      var = new_static_lvar(tok->tval->ty);
     else
-      var = new_anon_gvar(tok->ty);
+      var = new_anon_gvar(tok->tval->ty);
 
-    var->init_data = tok->str;
+    var->init_data = tok->tval->str;
     *rest = tok->next;
     Node *n = new_var_node(var, tok);
     add_type(n);

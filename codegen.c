@@ -3066,7 +3066,7 @@ static void asm_fill_ops(Node *node) {
 
 static void asm_fill_ops2(Node *node) {
   for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next)
-    if (*ap->constraint->str == '+')
+    if (*ap->constraint->tval->str == '+')
       asm_ops_push(ap);
 
   for (AsmParam *ap = node->asm_labels; ap; ap = ap->next)
@@ -3102,7 +3102,7 @@ static Reg ident_gp_reg(char *loc) {
 }
 
 static Reg ident_reg(Token *tok) {
-  char *loc = tok->str;
+  char *loc = tok->tval->str;
   while (*loc == '%')
     loc++;
 
@@ -3147,10 +3147,10 @@ static bool has_matching(AsmParam *ap) {
 }
 
 static bool asm_get_use(AsmParam *ap, Reg r) {
-  if (ap->constraint->str[0] != '=' && ap->constraint->str[0] != '+')
+  if (ap->constraint->tval->str[0] != '=' && ap->constraint->tval->str[0] != '+')
     return asm_use.in[r];
 
-  if (ap->constraint->str[0] == '=' && ap->kind == ASMOP_REG &&
+  if (ap->constraint->tval->str[0] == '=' && ap->kind == ASMOP_REG &&
     !ap->is_early_clobber && !has_matching(ap))
     return asm_use.out[r];
 
@@ -3158,11 +3158,11 @@ static bool asm_get_use(AsmParam *ap, Reg r) {
 }
 
 static void asm_set_use(AsmParam *ap) {
-  if (ap->constraint->str[0] != '=' && ap->constraint->str[0] != '+') {
+  if (ap->constraint->tval->str[0] != '=' && ap->constraint->tval->str[0] != '+') {
     asm_use.in[ap->reg] = true;
     return;
   }
-  if (ap->constraint->str[0] == '=' && ap->kind == ASMOP_REG &&
+  if (ap->constraint->tval->str[0] == '=' && ap->kind == ASMOP_REG &&
     !ap->is_early_clobber && !has_matching(ap)) {
     asm_use.out[ap->reg] = true;
     return;
@@ -3184,7 +3184,7 @@ static void fixed_reg(Reg *reg, Reg spec, Token *tok) {
 static void asm_constraint(AsmParam *ap, int x87_clobber) {
   for (; ap; ap = ap->next) {
     Reg reg = REG_NULL;
-    char *p = ap->constraint->str;
+    char *p = ap->constraint->tval->str;
     Token *tok = ap->arg->tok;
     int match_idx = -1;
     bool is_num = false;
@@ -3564,7 +3564,7 @@ static bool asm_bitfield_out(AsmParam *ap, Reg tmpreg) {
 }
 
 static Reg get_input_reg(AsmParam *ap) {
-  if (ap->kind == ASMOP_REG && *ap->constraint->str != '=')
+  if (ap->kind == ASMOP_REG && *ap->constraint->tval->str != '=')
     return ap->reg;
   return REG_NULL;
 }
@@ -3680,7 +3680,7 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
 }
 
 static void asm_body(Node *node) {
-  for (char *p = node->asm_str->str; *p != '\0';) {
+  for (char *p = node->asm_str->tval->str; *p != '\0';) {
     if (*p != '%') {
       fputc(*p, output_file);
       p++;
@@ -3825,7 +3825,7 @@ static void asm_pop_frame_ptr(Node *node, char *prev) {
 static void gen_asm(Node *node) {
   if (!node->asm_outputs && !node->asm_inputs &&
     !node->asm_clobbers && !node->asm_labels) {
-    println("  %s", node->asm_str->str);
+    println("  %s", node->asm_str->tval->str);
     return;
   }
   asm_alt_ptr.rbp = asm_alt_ptr.rbx = NULL;
@@ -3931,7 +3931,7 @@ static void emit_symbol(Obj *var) {
   if (var->alias_name)
     println("  .set \"%s\", %.*s", var->name, var->alias_name->len, var->alias_name->loc);
 
-  char *vis_mode = var->visibility ? var->visibility->str : opt_visibility;
+  char *vis_mode = var->visibility ? var->visibility->tval->str : opt_visibility;
   if (vis_mode && (!strcmp(vis_mode, "hidden") ||
     !strcmp(vis_mode, "internal") || !strcmp(vis_mode, "protected")))
     println("  .%s \"%s\"", vis_mode, var->name);
@@ -3956,7 +3956,7 @@ static void emit_data(Obj *var) {
   bool use_rodata = !opt_fpic && is_const_var(var);
 
   if (var->section_name)
-    Printstrf("  .section \"%s\"", var->section_name->str);
+    Printstrf("  .section \"%s\"", var->section_name->tval->str);
   else if (var->is_tls)
     Printstrf("  .section .%s", var->init_data ? "tdata" : "tbss");
   else if (use_rodata)
@@ -4190,7 +4190,7 @@ int codegen(Obj *prog, FILE *out) {
 
   for (Obj *var = prog; var; var = var->next) {
     if (var->asm_str) {
-      println("%s", var->asm_str->str);
+      println("%s", var->asm_str->tval->str);
       continue;
     }
     if (!var->is_definition) {

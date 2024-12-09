@@ -295,9 +295,8 @@ static Token *new_comma_token(Token *tmpl) {
 }
 
 static Token *to_int_token(Token *tok, int64_t val) {
-  tok->kind = TK_NUM;
-  tok->val = val;
-  tok->ty = ty_int;
+  tok->kind = TK_INT_NUM;
+  tok->ival = val;
   return tok;
 }
 
@@ -1066,7 +1065,7 @@ static void read_line_marker(Token **rest, Token *tok) {
   if (tok->kind != TK_STR)
     error_tok(tok, "filename expected");
 
-  start->file->display_file = add_input_file(tok->str, NULL, NULL);
+  start->file->display_file = add_input_file(tok->tval->str, NULL, NULL);
 }
 
 static void add_loc_info(Token *tok) {
@@ -1583,13 +1582,13 @@ static void join_adjacent_string_literals(Token *tok) {
   // If regular string literals are adjacent to wide string literals,
   // regular string literals are converted to the wide type.
   StringKind kind = getStringKind(tok);
-  Type *basety = tok->ty->base;
+  Type *basety = tok->tval->ty->base;
 
   for (Token *t = tok->next; t != end; t = t->next) {
     StringKind k = getStringKind(t);
     if (kind == STR_NONE) {
       kind = k;
-      basety = t->ty->base;
+      basety = t->tval->ty->base;
     } else if (k != STR_NONE && kind != k) {
       error_tok(t, "unsupported non-standard concatenation of string literals");
     }
@@ -1597,27 +1596,27 @@ static void join_adjacent_string_literals(Token *tok) {
 
   if (basety->size > 1)
     for (Token *t = tok; t != end; t = t->next)
-      if (t->ty->base->size == 1)
+      if (t->tval->ty->base->size == 1)
         *t = *tokenize_string_literal(t, basety);
 
   // Concatenate adjacent string literals.
-  int len = tok->ty->array_len;
+  int len = tok->tval->ty->array_len;
   for (Token *t = tok->next; t != end; t = t->next)
-    len = len + t->ty->array_len - 1;
+    len = len + t->tval->ty->array_len - 1;
 
   char *buf = calloc(basety->size, len);
-
   int i = 0;
   for (Token *t = tok; t != end; t = t->next) {
-    memcpy(buf + i, t->str, t->ty->size);
-    i = i + t->ty->size - t->ty->base->size;
+    memcpy(buf + i, t->tval->str, t->tval->ty->size);
+    i = i + t->tval->ty->size - t->tval->ty->base->size;
   }
 
   tok->display_file_no = fileno;
   tok->display_line_no = lineno;
 
-  tok->ty = array_of(basety, len);
-  tok->str = buf;
+  tok->tval = new_tval();
+  tok->tval->ty = array_of(basety, len);
+  tok->tval->str = buf;
   tok->next = end;
 }
 

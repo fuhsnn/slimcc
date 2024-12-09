@@ -323,8 +323,9 @@ static Token *read_string_literal(char *start, char *quote) {
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
-  tok->ty = array_of(ty_pchar, len + 1);
-  tok->str = buf;
+  tok->tval = new_tval();
+  tok->tval->ty = array_of(ty_pchar, len + 1);
+  tok->tval->str = buf;
   return tok;
 }
 
@@ -359,8 +360,9 @@ static Token *read_utf16_string_literal(char *start, char *quote) {
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
-  tok->ty = array_of(ty_ushort, len + 1);
-  tok->str = (char *)buf;
+  tok->tval = new_tval();
+  tok->tval->ty = array_of(ty_ushort, len + 1);
+  tok->tval->str = (char *)buf;
   return tok;
 }
 
@@ -381,8 +383,9 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
-  tok->ty = array_of(ty, len + 1);
-  tok->str = (char *)buf;
+  tok->tval = new_tval();
+  tok->tval->ty = array_of(ty, len + 1);
+  tok->tval->str = (char *)buf;
   return tok;
 }
 
@@ -401,10 +404,15 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
   if (!end)
     error_at(p, "unclosed char literal");
 
-  Token *tok = new_token(TK_NUM, start, end + 1);
-  tok->val = c;
-  tok->ty = ty;
+  Token *tok = new_token(TK_CHAR, start, end + 1);
+  tok->tval = new_tval();
+  tok->tval->ty = ty;
+  tok->tval->char_val = c;
   return tok;
+}
+
+TokenVal *new_tval(void) {
+  return malloc(sizeof(TokenVal));
 }
 
 // The definition of the numeric literal at the preprocessing stage
@@ -520,9 +528,14 @@ static bool convert_pp_int(char *loc, int len, Type **ty_p, int64_t *val_p) {
 
 // Converts a pp-number token to a regular number token.
 Token *convert_pp_number(Token *tok, Type **ty_p, int64_t *val_p, long double *fval_p) {
-  if (tok->kind == TK_NUM) {
-    *ty_p = tok->ty;
-    *val_p = tok->val;
+  if (tok->kind == TK_INT_NUM) {
+    *ty_p = ty_int;
+    *val_p = tok->ival;
+    return tok->next;
+  }
+  if (tok->kind == TK_CHAR) {
+    *ty_p = tok->tval->ty;
+    *val_p = tok->tval->char_val;
     return tok->next;
   }
 
@@ -699,7 +712,7 @@ Token *tokenize(File *file, Token **end) {
     // Character literal
     if (*p == '\'') {
       cur = cur->next = read_char_literal(p, p, ty_int);
-      cur->val = (char)cur->val;
+      cur->tval->char_val = (char)cur->tval->char_val;
       p += cur->len;
       continue;
     }
@@ -707,7 +720,7 @@ Token *tokenize(File *file, Token **end) {
     // UTF-16 character literal
     if (startswith2(p, 'u', '\'')) {
       cur = cur->next = read_char_literal(p, p + 1, ty_ushort);
-      cur->val &= 0xffff;
+      cur->tval->char_val &= 0xffff;
       p += cur->len;
       continue;
     }
