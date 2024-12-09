@@ -1338,15 +1338,16 @@ static Token *base_file_macro(Token *start) {
 }
 
 static Token *stdver_macro(Token *tok) {
+  tok->kind = TK_PP_NUM;
+  tok->len = 7;
+
   switch (opt_std) {
-  case STD_C99: tok->val = 199901L; break;
-  case STD_C11: tok->val = 201112L; break;
-  case STD_C17: tok->val = 201710L; break;
-  case STD_C23: tok->val = 202311L; break;
-  default: tok->val = 201710L;
+  case STD_C99: tok->loc = "199901L"; break;
+  case STD_C11: tok->loc = "201112L"; break;
+  case STD_C17: tok->loc = "201710L"; break;
+  case STD_C23: tok->loc = "202311L"; break;
+  default: tok->loc = "201710L";
   }
-  tok->kind = TK_NUM;
-  tok->ty = ty_long;
   return tok;
 }
 
