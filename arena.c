@@ -49,20 +49,16 @@ void arena_on(void) {
   page = head_page;
   use_arena = true;
   page_use = 0;
-
-#if USE_ASAN
-  for (Page *p = head_page; p; p = p->next)
-    __asan_poison_memory_region(&p->buf, PAGE_SIZE);
-#endif
 }
 
 void arena_off(void) {
   use_arena = false;
 
-#if USE_ASAN
-  for (Page *p = head_page; p; p = p->next)
-    __asan_poison_memory_region(&p->buf, PAGE_SIZE);
-#endif
+  while (head_page) {
+    Page *nxt = head_page->next;
+    free(head_page);
+    head_page = nxt;
+  }
 }
 
 static void *allocate(size_t sz, bool clear) {
