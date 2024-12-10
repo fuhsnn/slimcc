@@ -120,6 +120,10 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
   tok->at_bol = at_bol;
   tok->has_space = has_space;
 
+  if (track_tok_alloc) {
+    tok->next_alloc = last_alloc_tok;
+    last_alloc_tok = tok;
+  }
   at_bol = has_space = false;
   return tok;
 }

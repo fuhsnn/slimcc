@@ -155,12 +155,16 @@ struct Token {
   bool has_space : 1 ;  // True if this token follows a space character
   bool dont_expand : 1; // True if a macro token is encountered during the macro's expansion
   bool is_incl_guard : 1;
+  bool is_root : 1;
   int16_t display_file_no;
   int display_line_no;
   int line_no;          // Line number
   File *file;           // Source location
   Token *origin;        // If this is expanded from a macro, the original token
+ANON_UNION_START
   Token *attr_next;
+  Token *next_alloc;
+ANON_UNION_END
 ANON_UNION_START
     int64_t ival;        // TK_INT_NUM, its value
     TokenVal *tval;          // String literal contents including terminating '\0'
@@ -198,6 +202,8 @@ void init_macros(void);
 void define_macro(char *name, char *buf);
 void undef_macro(char *name);
 Token *preprocess(Token *tok);
+extern bool track_tok_alloc;
+extern Token *last_alloc_tok;
 
 //
 // parse.c

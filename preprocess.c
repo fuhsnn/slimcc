@@ -66,6 +66,9 @@ static CondIncl *cond_incl;
 static HashMap pragma_once;
 static HashMap include_guards;
 
+bool track_tok_alloc;
+Token *last_alloc_tok;
+
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
@@ -89,9 +92,14 @@ static Token *skip_line(Token *tok) {
 }
 
 static Token *copy_token(Token *tok) {
-  Token *t = calloc(1, sizeof(Token));
+  Token *t = malloc(sizeof(Token));
   *t = *tok;
   t->next = NULL;
+
+  if (track_tok_alloc) {
+    t->next_alloc = last_alloc_tok;
+    last_alloc_tok = t;
+  }
   return t;
 }
 
@@ -215,6 +223,9 @@ static Token *copy_line(Token **rest, Token *tok) {
 
 // Split tokens before the next newline into an EOF-terminated list.
 static Token *split_line(Token **rest, Token *tok) {
+  if (track_tok_alloc)
+    return copy_line(rest, tok);
+
   Token head = {.next = tok};
   Token *cur = &head;
 
@@ -624,7 +635,9 @@ static void paste(Token *lhs, Token *rhs) {
     error_tok(lhs, "pasting forms '%s', an invalid token", buf);
 
   align_token(tok, lhs);
+  Token *allon = lhs->next_alloc;
   *lhs = *tok;
+  lhs->next_alloc = allon;
 }
 
 // Replace func-like macro parameters with given arguments.
@@ -750,7 +763,7 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
   return head.next;
 }
 
-static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
+static Token *insert_objlike(Token *tok, Token *tok2, Token *orig, bool is_root) {
   Token head = {0};
   Token *cur = &head;
   if (orig->origin)
@@ -767,12 +780,13 @@ static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
       cur = cur->next = copy_token(tok);
     }
     cur->origin = orig;
+    cur->is_root = is_root;
   }
   cur->next = tok2;
   return head.next;
 }
 
-static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
+static Token *insert_funclike(Token *tok, Token *tok2, Token *orig, bool is_root) {
   Token head = {0};
   Token *cur = &head;
   if (orig->origin)
@@ -784,6 +798,7 @@ static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
 
     cur = cur->next = tok;
     cur->origin = orig;
+    cur->is_root = is_root;
   }
   cur->next = tok2;
   return head.next;
@@ -827,15 +842,45 @@ static bool expand_macro(Token **rest, Token *tok) {
   // The token right after the macro. For funclike, after parentheses.
   Token *stop_tok;
 
+  bool is_root = !track_tok_alloc;
+  if (is_root)
+    track_tok_alloc = true;
+
   if (m->is_objlike) {
     stop_tok = tok->next;
-    *rest = insert_objlike(m->body, stop_tok, tok);
+    *rest = insert_objlike(m->body, stop_tok, tok, is_root);
   } else {
     pop_macro_lock(tok->next);
     pop_macro_lock(tok->next->next);
     MacroArg *args = read_macro_args(&stop_tok, tok->next->next, m);
+
+    if (is_root) {
+      for (Token *t = tok->next; t != stop_tok;) {
+        Token *nxt = t->next;
+        free(t);
+        t = nxt;
+      }
+    }
     Token *body = subst(m->body, args, m);
-    *rest = insert_funclike(body, stop_tok, tok);
+
+    while (args) {
+      MacroArg *nxt = args->next;
+      free(args);
+      args = nxt;
+    }
+    *rest = insert_funclike(body, stop_tok, tok, is_root);
+  }
+
+  if (is_root) {
+    while (last_alloc_tok) {
+      Token *nxt = last_alloc_tok->next_alloc;
+      if (last_alloc_tok->is_root)
+        last_alloc_tok->next_alloc = NULL;
+      else
+        free(last_alloc_tok);
+      last_alloc_tok = nxt;
+    }
+    track_tok_alloc = false;
   }
 
   if (*rest != stop_tok) {
@@ -1050,7 +1095,7 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
 // Read #line arguments
 static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
-  tok = preprocess2(copy_line(rest, tok));
+  tok = preprocess2(split_line(rest, tok));
 
   Type *ty;
   int64_t val;
