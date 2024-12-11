@@ -1,4 +1,4 @@
-CFLAGS=-std=c99 -g -fno-common -Wall -pedantic -Wno-switch
+CFLAGS=-std=c11 -fsanitize=address -g -fno-common -Wall -pedantic -Wno-switch
 
 TEST_FLAGS=-Iinclude -Itest -fenable-universal-char
 
@@ -58,10 +58,16 @@ test-stage2: $(TESTS:test/%=stage2/test/%) $(TESTS_C23:test/c23/%=stage2/test/c2
 # Misc.
 
 asan: $(SRCS)
-	$(CC) $^ -Wno-switch -O3 -flto=auto -march=native -fsanitize=address -fno-omit-frame-pointer -fno-common -o slimcc
+	$(CC) $^ -std=c11 -Wno-switch -O3 -flto=auto -march=native -fsanitize=address -fno-common -o slimcc
 
 opt: $(SRCS)
-	$(CC) $^ -Wno-switch -O3 -flto=auto -march=native -o slimcc -nodefaultlibs -lmimalloc -lc
+	$(CC) $^ -std=c11 -Wno-switch -O3 -flto=auto -march=native -o slimcc
+
+opt-je: $(SRCS)
+	$(CC) $^ -std=c11 -Wno-switch -O3 -flto=auto -march=native -o slimcc -nodefaultlibs -ljemalloc -lc
+
+opt-mi: $(SRCS)
+	$(CC) $^ -std=c11 -Wno-switch -O3 -flto=auto -march=native -o slimcc -nodefaultlibs -lmimalloc -lc
 
 clean:
 	rm -rf slimcc stage2
