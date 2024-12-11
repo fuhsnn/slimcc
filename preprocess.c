@@ -162,6 +162,7 @@ static Token *skip_cond_incl2(Token *tok) {
 // Skip until next `#else`, `#elif` or `#endif`.
 // Nested `#if` and `#endif` are skipped.
 static Token *skip_cond_incl(Token *tok) {
+  Token *start = tok;
   while (tok->kind != TK_EOF) {
     if (is_hash(tok) &&
         (equal(tok->next, "if") || equal(tok->next, "ifdef") ||
@@ -175,6 +176,13 @@ static Token *skip_cond_incl(Token *tok) {
          equal(tok->next, "endif")))
       break;
     tok = tok->next;
+  }
+  if (!track_tok_alloc) {
+    for (Token *t = start; t != tok;) {
+      Token *nxt = t->next;
+      free(t);
+      t = nxt;
+    }
   }
   return tok;
 }
