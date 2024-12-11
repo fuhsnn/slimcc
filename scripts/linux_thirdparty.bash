@@ -257,7 +257,7 @@ build_gcc() {
 }
 
 build_musl() {
- url_tar https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.5.tar.gz musl
+ github_tar bminor musl v1.2.5
  rm -rf src/complex/
  AR=ar RANLIB=ranlib ../musl/configure --target=x86_64-linux-musl
  make
