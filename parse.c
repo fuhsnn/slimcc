@@ -2156,17 +2156,17 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
 }
 
 static Token *asm_clobbers(Token **rest, Token *tok) {
-  Token head = {0};
-  Token *cur = &head;
+  Token *first = NULL;
   while (!equal(tok, ":") && !equal(tok, ")")) {
-    if (cur != &head)
-      tok = skip(tok, ",");
-    cur = cur->next = tok;
-    tok = tok->next;
+    if (!first) {
+      first = str_tok(&tok, tok);
+      continue;
+    }
+    tok = skip(tok, ",");
+    str_tok(&tok, tok);
   }
   *rest = tok;
-  cur->next = NULL;
-  return head.next;
+  return first;
 }
 
 static AsmParam *asm_labels(Token **rest, Token *tok) {
@@ -3604,6 +3604,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       Member *mem = arena_calloc(1, sizeof(Member));
       mem->alt_align = attr.align;
       mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
+      if (mem->name && !current_fn)
+        mem->name->is_live = true;
 
       for (Type *t = mem->ty; t; t = t->base)
         if (t->kind == TY_VLA)
@@ -4567,10 +4569,16 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
 // program = (typedef | function-definition | global-variable)*
 Obj *parse(Token *tok) {
   globals = NULL;
-
+  Token *free_head = tok;
   Obj head = {0};
   Obj *cur = &head;
   while (tok->kind != TK_EOF) {
+    for (; free_head != tok;) {
+      Token *nxt = free_head->next;
+      if (!free_head->is_live)
+        free(free_head);
+      free_head = nxt;
+    }
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
       continue;
@@ -4579,6 +4587,7 @@ Obj *parse(Token *tok) {
     if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
       cur = cur->next = calloc(1, sizeof(Obj));
       cur->asm_str = str_tok(&tok, skip(tok->next, "("));
+      cur->asm_str->is_live = true;
       tok = skip(tok, ")");
       continue;
     }

@@ -156,6 +156,7 @@ struct Token {
   bool dont_expand : 1; // True if a macro token is encountered during the macro's expansion
   bool is_incl_guard : 1;
   bool is_root : 1;
+  bool is_live : 1;
   int16_t display_file_no;
   int display_line_no;
   int line_no;          // Line number
