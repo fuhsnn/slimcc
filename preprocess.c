@@ -68,7 +68,6 @@ static CondIncl *cond_incl;
 static HashMap pragma_once;
 static HashMap include_guards;
 
-bool track_tok_alloc;
 Token *last_alloc_tok;
 
 static Token *preprocess2(Token *tok);
@@ -97,11 +96,8 @@ static Token *copy_token(Token *tok) {
   Token *t = malloc(sizeof(Token));
   *t = *tok;
   t->next = NULL;
-
-  if (track_tok_alloc) {
-    t->next_alloc = last_alloc_tok;
-    last_alloc_tok = t;
-  }
+  t->next_alloc = last_alloc_tok;
+  last_alloc_tok = t;
   return t;
 }
 
@@ -164,7 +160,6 @@ static Token *skip_cond_incl2(Token *tok) {
 // Skip until next `#else`, `#elif` or `#endif`.
 // Nested `#if` and `#endif` are skipped.
 static Token *skip_cond_incl(Token *tok) {
-  Token *start = tok;
   while (tok->kind != TK_EOF) {
     if (is_hash(tok) &&
         (equal(tok->next, "if") || equal(tok->next, "ifdef") ||
@@ -178,13 +173,6 @@ static Token *skip_cond_incl(Token *tok) {
          equal(tok->next, "endif")))
       break;
     tok = tok->next;
-  }
-  if (!track_tok_alloc) {
-    for (Token *t = start; t != tok;) {
-      Token *nxt = t->next;
-      free(t);
-      t = nxt;
-    }
   }
   return tok;
 }
@@ -233,9 +221,6 @@ static Token *copy_line(Token **rest, Token *tok) {
 
 // Split tokens before the next newline into an EOF-terminated list.
 static Token *split_line(Token **rest, Token *tok) {
-  if (track_tok_alloc)
-    return copy_line(rest, tok);
-
   Token head = {.next = tok};
   Token *cur = &head;
 
@@ -775,7 +760,7 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
   return head.next;
 }
 
-static Token *insert_objlike(Token *tok, Token *tok2, Token *orig, bool is_root) {
+static Token *insert_objlike(Token *tok, Token *rest, Token *orig) {
   Token head = {0};
   Token *cur = &head;
   if (orig->origin)
@@ -792,13 +777,13 @@ static Token *insert_objlike(Token *tok, Token *tok2, Token *orig, bool is_root)
       cur = cur->next = copy_token(tok);
     }
     cur->origin = orig;
-    cur->is_root = is_root;
+    cur->is_root = true;
   }
-  cur->next = tok2;
+  cur->next = rest;
   return head.next;
 }
 
-static Token *insert_funclike(Token *tok, Token *tok2, Token *orig, bool is_root) {
+static Token *insert_funclike(Token *tok, Token *rest, Token *orig) {
   Token head = {0};
   Token *cur = &head;
   if (orig->origin)
@@ -810,9 +795,9 @@ static Token *insert_funclike(Token *tok, Token *tok2, Token *orig, bool is_root
 
     cur = cur->next = tok;
     cur->origin = orig;
-    cur->is_root = is_root;
+    cur->is_root = true;
   }
-  cur->next = tok2;
+  cur->next = rest;
   return head.next;
 }
 
@@ -854,25 +839,16 @@ static bool expand_macro(Token **rest, Token *tok) {
   // The token right after the macro. For funclike, after parentheses.
   Token *stop_tok;
 
-  bool is_root = !track_tok_alloc;
-  if (is_root)
-    track_tok_alloc = true;
+  Token *current_alloc = last_alloc_tok;
 
   if (m->is_objlike) {
     stop_tok = tok->next;
-    *rest = insert_objlike(m->body, stop_tok, tok, is_root);
+    *rest = insert_objlike(m->body, stop_tok, tok);
   } else {
     pop_macro_lock(tok->next);
     pop_macro_lock(tok->next->next);
     MacroArg *args = read_macro_args(&stop_tok, tok->next->next, m);
 
-    if (is_root) {
-      for (Token *t = tok->next; t != stop_tok;) {
-        Token *nxt = t->next;
-        free(t);
-        t = nxt;
-      }
-    }
     Token *body = subst(m->body, args, m);
 
     while (args) {
@@ -880,19 +856,24 @@ static bool expand_macro(Token **rest, Token *tok) {
       free(args);
       args = nxt;
     }
-    *rest = insert_funclike(body, stop_tok, tok, is_root);
+    *rest = insert_funclike(body, stop_tok, tok);
   }
 
-  if (is_root) {
-    while (last_alloc_tok) {
-      Token *nxt = last_alloc_tok->next_alloc;
-      if (last_alloc_tok->is_root)
-        last_alloc_tok->next_alloc = NULL;
-      else
-        free(last_alloc_tok);
-      last_alloc_tok = nxt;
+  {
+    Token head = {.next_alloc = last_alloc_tok};
+    Token *cur = &head;
+    for (Token *t = last_alloc_tok; t != current_alloc;) {
+      Token *nxt = t->next_alloc;
+      if (t->is_root) {
+        t->is_root = false;
+        cur = cur->next_alloc = t;
+      } else {
+        free(t);
+      }
+      t = nxt;
     }
-    track_tok_alloc = false;
+    cur->next_alloc = current_alloc;
+    last_alloc_tok = head.next_alloc;
   }
 
   if (*rest != stop_tok) {
@@ -1777,20 +1758,24 @@ Token *preprocess(Token *tok) {
   if (opt_E)
     return tok;
 
-  while (macro_list) {
-    for (Token *t = macro_list->body; t;) {
-      Token *nxt = t->next;
-      free(t);
-      t = nxt;
-    }
-    for (MacroParam  *p = macro_list->params; p;) {
-      MacroParam *nxt = p->next;
-      free(p);
-      p = nxt;
-    }
-    Macro *nxt = macro_list->next;
-    free(macro_list);
-    macro_list = nxt;
+  for (Token *t = tok;; t = t->next) {
+    if (t->origin)
+      t->origin->is_root = true;
+    t->is_root = true;
+    if (t->kind == TK_EOF)
+      break;
   }
+
+  for (Token *t = last_alloc_tok; t;) {
+    Token *nxt = t->next_alloc;
+    if (t->is_root) {
+      t->is_root = false;
+      t->next_alloc = NULL;
+    } else {
+      free(t);
+    }
+    t = nxt;
+  }
+
   return preprocess3(tok);
 }
