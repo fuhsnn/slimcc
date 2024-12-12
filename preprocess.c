@@ -45,6 +45,7 @@ struct Macro {
   Token *va_args_name;
   Token *body;
   macro_handler_fn *handler;
+  Macro *next;
 };
 
 // `#if` can be nested, so we use a stack to manage nested `#if`s.
@@ -61,6 +62,7 @@ struct CondIncl {
 // the lastest one for unlocking.
 static Macro *locked_macros;
 
+static Macro *macro_list;
 static HashMap macros;
 static CondIncl *cond_incl;
 static HashMap pragma_once;
@@ -402,6 +404,8 @@ static Macro *add_macro(char *name, bool is_objlike, Token *body) {
   m->is_objlike = is_objlike;
   m->body = body;
   hashmap_put(&macros, name, m);
+  m->next = macro_list;
+  macro_list = m;
   return m;
 }
 
@@ -1773,5 +1777,20 @@ Token *preprocess(Token *tok) {
   if (opt_E)
     return tok;
 
+  while (macro_list) {
+    for (Token *t = macro_list->body; t;) {
+      Token *nxt = t->next;
+      free(t);
+      t = nxt;
+    }
+    for (MacroParam  *p = macro_list->params; p;) {
+      MacroParam *nxt = p->next;
+      free(p);
+      p = nxt;
+    }
+    Macro *nxt = macro_list->next;
+    free(macro_list);
+    macro_list = nxt;
+  }
   return preprocess3(tok);
 }
