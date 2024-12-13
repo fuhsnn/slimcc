@@ -17,36 +17,32 @@
 
 #include "slimcc.h"
 
-typedef struct MacroParam MacroParam;
-struct MacroParam {
-  MacroParam *next;
-  Token *name;
-};
-
-typedef struct MacroArg MacroArg;
-struct MacroArg {
-  MacroArg *next;
-  Token *name;
-  bool is_va_args;
-  bool omit_comma;
+typedef struct {
   Token *tok;
   Token *expanded;
-};
+} MacroArg;
 
 typedef Token *macro_handler_fn(Token *);
 
 typedef struct Macro Macro;
 struct Macro {
-  bool is_objlike; // Object-like or function-like
-  bool is_locked;
   Token *stop_tok;
   Macro *locked_next;
-  MacroParam *params;
-  Token *va_args_name;
+  Token *params;
   Token *body;
   macro_handler_fn *handler;
   Macro *next;
+  int arg_cnt;
+  bool is_objlike; // Object-like or function-like
+  bool is_locked;
+  bool has_va_arg;
 };
+
+typedef struct {
+  Macro *m;
+  MacroArg *args;
+  bool omit_comma;
+} MacroContext;
 
 // `#if` can be nested, so we use a stack to manage nested `#if`s.
 typedef struct CondIncl CondIncl;
@@ -74,7 +70,7 @@ static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
 static Token *directives(Token **cur, Token *start);
-static Token *subst(Token *tok, MacroArg *args, Macro *macro);
+static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(Token **vendor, Token *tok);
 
 static bool is_hash(Token *tok) {
@@ -384,48 +380,48 @@ static Macro *find_macro(Token *tok) {
   return hashmap_get2(&macros, tok->loc, tok->len);
 }
 
-static Macro *add_macro(char *name, bool is_objlike, Token *body) {
-  Macro *m = calloc(1, sizeof(Macro));
+static void add_macro2(Macro *m, char *name, bool is_objlike, Token *body) {
   m->is_objlike = is_objlike;
   m->body = body;
   hashmap_put(&macros, name, m);
   m->next = macro_list;
   macro_list = m;
+}
+
+static Macro *add_macro(char *name, bool is_objlike, Token *body) {
+  Macro *m = calloc(1, sizeof(Macro));
+  add_macro2(m, name, is_objlike, body);
   return m;
 }
 
-static MacroParam *read_macro_params(Token **rest, Token *tok, Token **va_args_name) {
-  MacroParam head = {0};
-  MacroParam *cur = &head;
+static Macro *read_macro_params(Token **rest, Token *tok) {
+  Token head = {0};
+  Token *cur = &head;
+  Macro *m = calloc(1, sizeof(Macro));
 
-  while (!equal(tok, ")")) {
-    if (cur != &head)
+  while (!consume(rest, tok, ")")) {
+    if (m->arg_cnt++)
       tok = skip(tok, ",");
 
-    if (equal(tok, "...")) {
+    if (tok->kind != TK_IDENT) {
+      *rest = skip(skip(tok, "..."), ")");
       static Token va_args = {.loc = "__VA_ARGS__", .len = 11};
-      *va_args_name = &va_args;
-      *rest = skip(tok->next, ")");
-      return head.next;
+      cur = cur->next = &va_args;
+      m->has_va_arg = true;
+      break;
     }
-
-    if (tok->kind != TK_IDENT)
-      error_tok(tok, "expected an identifier");
-
     if (equal(tok->next, "...")) {
-      *va_args_name = tok;
       *rest = skip(tok->next->next, ")");
-      return head.next;
+      cur = cur->next = tok;
+      m->has_va_arg = true;
+      break;
     }
-
-    MacroParam *m = calloc(1, sizeof(MacroParam));
-    m->name = tok;
-    cur = cur->next = m;
+    cur = cur->next = tok;
     tok = tok->next;
   }
-
-  *rest = tok->next;
-  return head.next;
+  cur->next = NULL;
+  m->params = head.next;
+  return m;
 }
 
 static void read_macro_definition(Token **rest, Token *tok) {
@@ -436,19 +432,15 @@ static void read_macro_definition(Token **rest, Token *tok) {
 
   if (!tok->has_space && equal(tok, "(")) {
     // Function-like macro
-    Token *va_args_name = NULL;
-    MacroParam *params = read_macro_params(&tok, tok->next, &va_args_name);
-
-    Macro *m = add_macro(name, false, split_line(rest, tok));
-    m->params = params;
-    m->va_args_name = va_args_name;
+    Macro *m = read_macro_params(&tok, tok->next);
+    add_macro2(m, name, false, split_line(rest, tok));
   } else {
     // Object-like macro
     add_macro(name, true, split_line(rest, tok));
   }
 }
 
-static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
+static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   Token head = {0};
   Token *cur = &head;
   int level = 0;
@@ -483,41 +475,29 @@ static MacroArg *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
     cur = cur->next = copy_token(tok);
     tok = tok->next;
   }
-
   cur->next = new_eof(tok);
-
-  MacroArg *arg = calloc(1, sizeof(MacroArg));
-  arg->tok = head.next;
   *rest = tok;
-  return arg;
+  return head.next;
 }
 
-static MacroArg *
-read_macro_args(Token **rest, Token *tok, Macro *m) {
-  MacroArg head = {0};
-  MacroArg *cur = &head;
+static MacroContext read_macro_args(Token **rest, Token *tok, Macro *m) {
+  MacroContext ctx = {.m = m};
+  ctx.args = calloc(m->arg_cnt, sizeof(MacroArg));
 
-  for (MacroParam *pp = m->params; pp; pp = pp->next) {
-    if (cur != &head)
-      tok = skip(tok, ",");
-    cur = cur->next = read_macro_arg_one(&tok, tok, false);
-    cur->name = pp->name;
-  }
+  for (int idx = 0; idx < m->arg_cnt; idx++) {
+    bool is_va_arg = m->has_va_arg && (idx == m->arg_cnt - 1);
 
-  if (m->va_args_name) {
-    Token *start = tok;
-    if (!equal(tok, ")") && m->params)
+    MacroArg *ap = &ctx.args[idx];
+    if (is_va_arg && equal(tok, ")"))
+      ctx.omit_comma = (opt_std != STD_NONE && idx == 0) ? false : true;
+    else if (idx)
       tok = skip(tok, ",");
 
-    MacroArg *arg = read_macro_arg_one(&tok, tok, true);
-    arg->omit_comma = equal(start, ")");
-    arg->name = m->va_args_name;
-    arg->is_va_args = true;
-    cur->next = arg;
+    ap->tok = read_macro_arg_one(&tok, tok, is_va_arg);
   }
 
   *rest = skip(tok, ")");
-  return head.next;
+  return ctx;
 }
 
 static Token *expand_arg(MacroArg *arg) {
@@ -543,30 +523,38 @@ static Token *expand_arg(MacroArg *arg) {
   return arg->expanded = head.next;
 }
 
-static MacroArg *find_va_arg(MacroArg *args) {
-  for (MacroArg *ap = args; ap; ap = ap->next)
-    if (ap->is_va_args)
-      return ap;
-  return NULL;
+static bool has_non_empty_va_arg(MacroContext *ctx, MacroArg **arg_p) {
+  if (ctx->m->has_va_arg) {
+    MacroArg *va = &ctx->args[ctx->m->arg_cnt - 1];
+    if (arg_p)
+      *arg_p = va;
+    return expand_arg(va)->kind != TK_EOF;
+  }
+  return false;
 }
 
-static MacroArg *find_arg(Token **rest, Token *tok, MacroArg *args, Macro *m) {
-  for (MacroArg *ap = args; ap; ap = ap->next) {
-    if (tok->len == ap->name->len && !memcmp(tok->loc, ap->name->loc, tok->len)) {
+static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
+  if (tok->kind != TK_IDENT)
+    return NULL;
+
+  int idx = 0;
+  for (Token *t = ctx->m->params; t; t = t->next) {
+    if (tok->len == t->len && !memcmp(tok->loc, t->loc, tok->len)) {
       if (rest)
         *rest = tok->next;
-      return ap;
+      return &ctx->args[idx];
     }
+    idx++;
   }
 
   // __VA_OPT__(x) is treated like a parameter which expands to parameter-
   // substituted (x) if macro-expanded __VA_ARGS__ is not empty.
   if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
-    MacroArg *arg = read_macro_arg_one(&tok, tok->next->next, true);
+    MacroArg *arg = calloc(1, sizeof(MacroArg));
+    arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
 
-    MacroArg *vaarg = find_va_arg(args);
-    if (vaarg && expand_arg(vaarg)->kind != TK_EOF)
-      arg->tok = subst(arg->tok, args, m);
+    if (has_non_empty_va_arg(ctx, NULL))
+      arg->tok = subst(arg->tok, ctx);
     else
       arg->tok = new_eof(tok);
 
@@ -638,7 +626,7 @@ static void paste(Token *lhs, Token *rhs) {
 }
 
 // Replace func-like macro parameters with given arguments.
-static Token *subst(Token *tok, MacroArg *args, Macro *m) {
+static Token *subst(Token *tok, MacroContext *ctx) {
   Token head = {0};
   Token *cur = &head;
 
@@ -647,7 +635,7 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
 
     // "#" followed by a parameter is replaced with stringized actuals.
     if (equal(tok, "#")) {
-      MacroArg *arg = find_arg(&tok, tok->next, args, m);
+      MacroArg *arg = find_arg(&tok, tok->next, ctx);
       if (!arg)
         error_tok(tok->next, "'#' is not followed by a macro parameter");
       cur = cur->next = stringize(start, arg->tok);
@@ -658,10 +646,10 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
     // [GNU] If __VA_ARGS__ is empty, `,##__VA_ARGS__` is expanded
     // to an empty token list. Otherwise, it's expanded to `,` and
     // __VA_ARGS__.
-    if (equal(tok, ",") && equal(tok->next, "##")) {
-      MacroArg *arg = find_arg(NULL, tok->next->next, args, m);
-      if (arg && arg->is_va_args) {
-        if (arg->omit_comma) {
+    if (equal(tok, ",") && equal(tok->next, "##") && ctx->m->has_va_arg) {
+      MacroArg *arg = find_arg(NULL, tok->next->next, ctx);
+      if (arg && (arg == &ctx->args[ctx->m->arg_cnt - 1])) {
+        if (ctx->omit_comma) {
           tok = tok->next->next->next;
           continue;
         }
@@ -683,7 +671,7 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
         continue;
       }
 
-      MacroArg *arg = find_arg(&tok, tok->next, args, m);
+      MacroArg *arg = find_arg(&tok, tok->next, ctx);
       if (arg) {
         if (arg->tok->kind == TK_EOF)
           continue;
@@ -700,7 +688,7 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
       continue;
     }
 
-    MacroArg *arg = find_arg(&tok, tok, args, m);
+    MacroArg *arg = find_arg(&tok, tok, ctx);
     if (arg) {
       Token *t;
       if (equal(tok, "##"))
@@ -723,7 +711,7 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
       Macro *tail_m;
       Token *rparen;
       if (equal(tok, ")")) {
-        tail_m = m;
+        tail_m = ctx->m;
         rparen = tok;
         tok = tok->next;
       } else {
@@ -731,22 +719,23 @@ static Token *subst(Token *tok, MacroArg *args, Macro *m) {
         rparen = tok->next;
         tok = skip(tok->next, ")");
       }
-      if (!(tail_m && tail_m->params))
+      if (!(tail_m && tail_m->arg_cnt))
         error_tok(start, "expected function-like macro with at least one named parameter");
 
-      MacroArg *vaarg = find_va_arg(args);
-      if (!vaarg || expand_arg(vaarg)->kind == TK_EOF) {
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg)) {
         cur = cur->next = new_pmark(tok);
         continue;
       }
       Token *tail_arg_tok = copy_line(&(Token *){0}, vaarg->expanded);
       find_last_tok(tail_arg_tok)->next = rparen;
 
-      MacroArg *tail_args = read_macro_args(&(Token *){0}, tail_arg_tok, tail_m);
-      for (MacroArg *ap = tail_args; ap; ap = ap->next)
-        ap->expanded = ap->tok;
+      MacroContext tail_ctx = read_macro_args(&(Token *){0}, tail_arg_tok, tail_m);
+      for (int i = 0; i < tail_m->arg_cnt; i++)
+        tail_ctx.args[i].expanded = tail_ctx.args[i].tok;
 
-      cur->next = subst(tail_m->body, tail_args, tail_m);
+      cur->next = subst(tail_m->body, &tail_ctx);
+      free(tail_ctx.args);
       cur = find_last_tok(cur);
       continue;
     }
@@ -847,16 +836,10 @@ static bool expand_macro(Token **rest, Token *tok) {
   } else {
     pop_macro_lock(tok->next);
     pop_macro_lock(tok->next->next);
-    MacroArg *args = read_macro_args(&stop_tok, tok->next->next, m);
 
-    Token *body = subst(m->body, args, m);
-
-    while (args) {
-      MacroArg *nxt = args->next;
-      free(args);
-      args = nxt;
-    }
-    *rest = insert_funclike(body, stop_tok, tok);
+    MacroContext ctx = read_macro_args(&stop_tok, tok->next->next, m);
+    *rest = insert_funclike(subst(m->body, &ctx), stop_tok, tok);
+    free(ctx.args);
   }
 
   {
@@ -1777,5 +1760,10 @@ Token *preprocess(Token *tok) {
     t = nxt;
   }
 
+  for (Macro *m = macro_list; m;) {
+    Macro *nxt = m->next;
+    free(m);
+    m = nxt;
+  }
   return preprocess3(tok);
 }
