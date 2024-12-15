@@ -641,6 +641,12 @@ void arena_on(void);
 void arena_off(void);
 void *arena_malloc(size_t sz);
 void *arena_calloc(size_t n, size_t sz);
+void arena_combine(void);
+void pp_arena_on(void);
+void pp_arena_off(void);
+void *pp_arena_malloc(size_t sz);
+void *pp_arena_calloc(size_t n, size_t sz);
+
 
 //
 // main.c

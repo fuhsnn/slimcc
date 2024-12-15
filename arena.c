@@ -29,10 +29,15 @@ struct Page {
 #endif
 };
 
-static bool use_arena;
-static size_t page_use;
-static Page *page;
-static Page *head_page;
+typedef struct {
+  bool on;
+  size_t used;
+  Page *page;
+  Page *head_page;
+} Arena;
+
+static Arena ast_arena;
+static Arena pp_arena;
 
 static Page *new_page(void) {
   Page *p;
@@ -46,38 +51,68 @@ static Page *new_page(void) {
   return p;
 }
 
-void arena_on(void) {
-  if (!head_page)
-    head_page = new_page();
+static void arena_on2(Arena *arena) {
+  if (!arena->head_page)
+    arena->head_page = new_page();
 
-  page = head_page;
-  use_arena = true;
-  page_use = 0;
+  arena->page = arena->head_page;
+  arena->on = true;
+  arena->used = 0;
 }
 
-void arena_off(void) {
-  use_arena = false;
 
-  while (head_page) {
-    Page *nxt = head_page->next;
-    free(head_page);
-    head_page = nxt;
+static void arena_off2(Arena *arena) {
+  arena->on = false;
+
+  while (arena->head_page) {
+    Page *nxt = arena->head_page->next;
+    free(arena->head_page);
+    arena->head_page = nxt;
   }
 }
 
-static void *allocate(size_t sz, bool clear) {
-  size_t aligned_sz = (sz + 15) & -16LL;
+void arena_combine(void) {
+  // if (ast_arena.page) {
+  //   while (ast_arena.page->next)
+  //     ast_arena.page = ast_arena.page->next;
+  //   ast_arena.page->next = pp_arena.head_page;
+  // } else {
+  //   ast_arena.head_page = pp_arena.head_page;
+  // }
+  // pp_arena_off();
+  // pp_arena.head_page = NULL;
+}
 
+void arena_on(void) {
+  arena_on2(&ast_arena);
+}
+
+void arena_off(void) {
+  arena_off2(&ast_arena);
+}
+
+void pp_arena_on(void) {
+  arena_on2(&pp_arena);
+}
+
+void pp_arena_off(void) {
+  arena_off2(&pp_arena);
+}
+
+
+static void *allocate(Arena *arena, size_t sz, bool clear) {
+  size_t aligned_sz = (sz + 15) & -16LL;
   void *ptr;
-  if ((page_use + aligned_sz) <= PAGE_SIZE) {
-    ptr = &page->buf[page_use];
-    page_use += aligned_sz;
+  if ((arena->used + aligned_sz) <= PAGE_SIZE) {
+    ptr = &arena->page->buf[arena->used];
+    arena->used += aligned_sz;
   } else {
-    if (!page->next)
-      page->next = new_page();
-    page = page->next;
-    ptr = &page->buf;
-    page_use = aligned_sz;
+    if (!arena->page->next)
+      arena->page->next = new_page();
+
+    arena->page = arena->page->next;
+    ptr = &arena->page->buf;
+    arena->used = aligned_sz;
   }
 
 #if USE_ASAN
@@ -92,13 +127,25 @@ static void *allocate(size_t sz, bool clear) {
 }
 
 void *arena_malloc(size_t sz) {
-  if (!use_arena)
+  if (!ast_arena.on)
     return malloc(sz);
-  return allocate(sz, false);
+  return allocate(&ast_arena, sz, false);
 }
 
 void *arena_calloc(size_t n, size_t sz) {
-  if (!use_arena)
+  if (!ast_arena.on)
     return calloc(n, sz);
-  return allocate(n * sz, true);
+  return allocate(&ast_arena, n * sz, true);
+}
+
+void *pp_arena_malloc(size_t sz) {
+  if (!pp_arena.on)
+    return malloc(sz);
+  return allocate(&pp_arena, sz, false);
+}
+
+void *pp_arena_calloc(size_t n, size_t sz) {
+  if (!pp_arena.on)
+    return calloc(n, sz);
+  return allocate(&pp_arena, n * sz, true);
 }

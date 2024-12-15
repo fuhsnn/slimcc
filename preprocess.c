@@ -31,7 +31,6 @@ struct Macro {
   Token *params;
   Token *body;
   macro_handler_fn *handler;
-  Macro *next;
   int arg_cnt;
   bool is_objlike; // Object-like or function-like
   bool is_locked;
@@ -48,8 +47,8 @@ typedef struct {
 typedef struct CondIncl CondIncl;
 struct CondIncl {
   CondIncl *next;
-  enum { IN_THEN, IN_ELIF, IN_ELSE } ctx;
   Token *tok;
+  enum { IN_THEN, IN_ELIF, IN_ELSE } ctx;
   bool included;
 };
 
@@ -58,7 +57,6 @@ struct CondIncl {
 // the lastest one for unlocking.
 static Macro *locked_macros;
 
-static Macro *macro_list;
 static HashMap macros;
 static CondIncl *cond_incl;
 static HashMap pragma_once;
@@ -71,7 +69,7 @@ static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
-static bool is_supported_attr(Token **vendor, Token *tok);
+static bool is_supported_attr(bool is_battr, Token *vendor, Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -365,7 +363,7 @@ static int64_t eval_const_expr(Token *tok) {
 }
 
 static CondIncl *push_cond_incl(Token *tok, bool included) {
-  CondIncl *ci = calloc(1, sizeof(CondIncl));
+  CondIncl *ci = pp_arena_malloc(sizeof(CondIncl));
   ci->next = cond_incl;
   ci->ctx = IN_THEN;
   ci->tok = tok;
@@ -384,12 +382,10 @@ static void add_macro2(Macro *m, char *name, bool is_objlike, Token *body) {
   m->is_objlike = is_objlike;
   m->body = body;
   hashmap_put(&macros, name, m);
-  m->next = macro_list;
-  macro_list = m;
 }
 
 static Macro *add_macro(char *name, bool is_objlike, Token *body) {
-  Macro *m = calloc(1, sizeof(Macro));
+  Macro *m = pp_arena_calloc(1, sizeof(Macro));
   add_macro2(m, name, is_objlike, body);
   return m;
 }
@@ -397,7 +393,7 @@ static Macro *add_macro(char *name, bool is_objlike, Token *body) {
 static Macro *read_macro_params(Token **rest, Token *tok) {
   Token head = {0};
   Token *cur = &head;
-  Macro *m = calloc(1, sizeof(Macro));
+  Macro *m = pp_arena_calloc(1, sizeof(Macro));
 
   while (!consume(rest, tok, ")")) {
     if (m->arg_cnt++)
@@ -500,11 +496,7 @@ static MacroContext read_macro_args(Token **rest, Token *tok, Macro *m) {
   return ctx;
 }
 
-static Token *expand_arg(MacroArg *arg) {
-  if (arg->expanded)
-    return arg->expanded;
-
-  Token *tok = arg->tok;
+static Token *expand_tok(Token *tok) {
   Token head = {0};
   Token *cur = &head;
   Macro *start_m = locked_macros;
@@ -520,7 +512,14 @@ static Token *expand_arg(MacroArg *arg) {
 
   if (start_m != locked_macros)
     internal_error();
-  return arg->expanded = head.next;
+  return head.next;
+}
+
+static Token *expand_arg(MacroArg *arg) {
+  if (arg->expanded)
+    return arg->expanded;
+
+  return arg->expanded = expand_tok(arg->tok);
 }
 
 static bool has_non_empty_va_arg(MacroContext *ctx, MacroArg **arg_p) {
@@ -550,7 +549,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
   // __VA_OPT__(x) is treated like a parameter which expands to parameter-
   // substituted (x) if macro-expanded __VA_ARGS__ is not empty.
   if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
-    MacroArg *arg = calloc(1, sizeof(MacroArg));
+    MacroArg *arg = pp_arena_malloc(sizeof(MacroArg));
     arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
 
     if (has_non_empty_va_arg(ctx, NULL))
@@ -827,8 +826,7 @@ static bool expand_macro(Token **rest, Token *tok) {
 
   // The token right after the macro. For funclike, after parentheses.
   Token *stop_tok;
-
-  Token *current_alloc = last_alloc_tok;
+  Token *alloc_end = last_alloc_tok;
 
   if (m->is_objlike) {
     stop_tok = tok->next;
@@ -842,10 +840,18 @@ static bool expand_macro(Token **rest, Token *tok) {
     free(ctx.args);
   }
 
+  if (*rest != stop_tok) {
+    push_macro_lock(m, stop_tok);
+    align_token(*rest, tok);
+  } else if (!m->is_objlike) {
+    (*rest)->at_bol |= tok->at_bol;
+    (*rest)->has_space |= tok->has_space;
+  }
+
   {
     Token head = {.next_alloc = last_alloc_tok};
     Token *cur = &head;
-    for (Token *t = last_alloc_tok; t != current_alloc;) {
+    for (Token *t = last_alloc_tok; t != alloc_end;) {
       Token *nxt = t->next_alloc;
       if (t->is_root) {
         t->is_root = false;
@@ -855,17 +861,10 @@ static bool expand_macro(Token **rest, Token *tok) {
       }
       t = nxt;
     }
-    cur->next_alloc = current_alloc;
+    cur->next_alloc = alloc_end;
     last_alloc_tok = head.next_alloc;
   }
 
-  if (*rest != stop_tok) {
-    push_macro_lock(m, stop_tok);
-    align_token(*rest, tok);
-  } else if (!m->is_objlike) {
-    (*rest)->at_bol |= tok->at_bol;
-    (*rest)->has_space |= tok->has_space;
-  }
   return true;
 }
 
@@ -920,7 +919,7 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
   // a single string token or a sequence of "<" ... ">".
   bool is_expanded = false;
   if (tok->kind == TK_IDENT) {
-    tok = preprocess2(tok);
+    tok = expand_tok(tok);
     is_expanded = true;
   }
 
@@ -1071,7 +1070,7 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
 // Read #line arguments
 static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
-  tok = preprocess2(split_line(rest, tok));
+  tok = expand_tok(split_line(rest, tok));
 
   Type *ty;
   int64_t val;
@@ -1446,7 +1445,7 @@ static Token *has_embed_macro(Token *start) {
 static Token *has_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  bool val = is_supported_attr(NULL, tok);
+  bool val = is_supported_attr(false, NULL, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1463,7 +1462,7 @@ static Token *has_c_attribute_macro(Token *start) {
     vendor = tok;
     tok = skip(tok->next->next, ":");
   }
-  bool val = is_supported_attr(&vendor, tok);
+  bool val = is_supported_attr(true, vendor, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1591,6 +1590,15 @@ static StringKind getStringKind(Token *tok) {
   internal_error();
 }
 
+static Token *free_tok_till(Token *tok, Token *end) {
+  while (tok != end) {
+    Token *nxt = tok->next;
+    free(tok);
+    tok = nxt;
+  }
+  return end;
+}
+
 // Concatenate adjacent string literals into a single string literal
 // as per the C spec.
 static void join_adjacent_string_literals(Token *tok) {
@@ -1632,6 +1640,7 @@ static void join_adjacent_string_literals(Token *tok) {
     memcpy(buf + i, t->tval->str, t->tval->ty->size);
     i = i + t->tval->ty->size - t->tval->ty->base->size;
   }
+  free_tok_till(tok->next, end);
 
   tok->display_file_no = fileno;
   tok->display_line_no = lineno;
@@ -1642,13 +1651,13 @@ static void join_adjacent_string_literals(Token *tok) {
   tok->next = end;
 }
 
-static bool is_supported_attr(Token **vendor, Token *tok) {
+static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
-  bool gnu_if_vendored = !vendor || (*vendor && equal(*vendor, "gnu"));
+  bool gnu_if_battr = !is_bracket || (vendor && equal(vendor, "gnu"));
 
-  if (gnu_if_vendored) {
+  if (gnu_if_battr) {
     if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
       equal_ext(tok, "packed") || equal_ext(tok, "section") || equal_ext(tok, "visibility") ||
       equal_ext(tok, "weak"))
@@ -1663,28 +1672,30 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
     if (!first)
       tok = skip(tok, ",");
 
-    if (is_bracket) {
-      Token *vendor = NULL;
-      if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-        vendor = tok;
-        tok = skip(tok->next->next, ":");
-      }
-      if (is_supported_attr(&vendor, tok)) {
-        tok->kind = TK_BATTR;
-        *lst = (*lst)->attr_next = tok;
-      }
-    } else {
-      if (is_supported_attr(NULL, tok)) {
-        tok->kind = TK_ATTR;
-        *lst = (*lst)->attr_next = tok;
-      }
+    Token *vendor = NULL;
+    if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      vendor = tok;
+      tok = skip(tok->next->next, ":");
     }
-    if (consume(&tok, tok->next, "(")) {
+    Token *start = tok;
+    bool is_sup_attr = is_supported_attr(is_bracket, vendor, tok);
+
+    if (consume(&tok, tok->next, "("))
       tok = skip_paren(tok);
-      continue;
+    else
+      tok = tok->next;
+
+    if (is_sup_attr) {
+      Token head = {0};
+      Token *cur = &head;
+      for (Token *t = start; t != tok; t = t->next)
+        cur = cur->next = copy_token(t);
+      cur->next = new_eof(tok);
+
+      *lst = (*lst)->next_alloc = head.next;
+      (*lst)->kind = is_bracket ? TK_BATTR : TK_ATTR;
+      (*lst)->next_alloc = NULL;
     }
-    tok = tok->next;
-    continue;
   }
 }
 
@@ -1696,6 +1707,7 @@ static Token *preprocess3(Token *tok) {
   Token *attr_cur = &attr_head;
 
   while (tok->kind != TK_EOF) {
+    Token *start = tok;
     if (equal(tok, "__attribute__") || equal(tok, "__attribute")) {
       tok = skip(tok->next, "(");
       tok = skip(tok, "(");
@@ -1703,6 +1715,7 @@ static Token *preprocess3(Token *tok) {
       tok = skip(tok, ")");
 
       filter_attr(list, &attr_cur, false);
+      free_tok_till(start, tok);
       continue;
     }
 
@@ -1711,6 +1724,7 @@ static Token *preprocess3(Token *tok) {
       tok = skip(tok, "]");
 
       filter_attr(list, &attr_cur, true);
+      free_tok_till(start, tok);
       continue;
     }
 
@@ -1734,12 +1748,18 @@ static Token *preprocess3(Token *tok) {
 
 // Entry point function of the preprocessor.
 Token *preprocess(Token *tok) {
+  pp_arena_on();
+
   tok = preprocess2(tok);
+
   if (cond_incl)
     error_tok(cond_incl->tok, "unterminated conditional directive");
 
   if (opt_E)
     return tok;
+
+  pp_arena_off();
+  arena_combine();
 
   for (Token *t = tok;; t = t->next) {
     if (t->origin)
@@ -1760,10 +1780,5 @@ Token *preprocess(Token *tok) {
     t = nxt;
   }
 
-  for (Macro *m = macro_list; m;) {
-    Macro *nxt = m->next;
-    free(m);
-    m = nxt;
-  }
   return preprocess3(tok);
 }
