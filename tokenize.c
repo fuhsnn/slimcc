@@ -211,7 +211,7 @@ TokenKind ident_keyword(Token *tok) {
       "_Static_assert", "_Defer"
     };
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
-      hashmap_put(&map, kw[i], (void *)TK_KEYWORD);
+      hashmap_put(&map, kw[i], (void *)(intptr_t)(TK_RETURN + i));
 
     static char *ty_kw[] = {
       "void", "_Bool", "char", "short", "int", "long", "struct", "union",
@@ -222,23 +222,23 @@ TokenKind ident_keyword(Token *tok) {
       "volatile", "__volatile", "__volatile__"
     };
     for (int i = 0; i < sizeof(ty_kw) / sizeof(*ty_kw); i++)
-      hashmap_put(&map, ty_kw[i], (void *)TK_TYPEKW);
+      hashmap_put(&map, ty_kw[i], (void *)(intptr_t)(TK_VOID + i));
 
     if (opt_std == STD_NONE)
-      hashmap_put(&map, "asm", (void *)TK_KEYWORD);
+      hashmap_put(&map, "asm", (void *)TK_ASM);
     if (opt_std == STD_NONE || opt_std >= STD_C23)
-      hashmap_put(&map, "typeof", (void *)TK_TYPEKW);
+      hashmap_put(&map, "typeof", (void *)TK_TYPEOF);
     if (opt_std >= STD_C23) {
-      hashmap_put(&map, "alignof", (void *)TK_KEYWORD);
-      hashmap_put(&map, "false", (void *)TK_KEYWORD);
-      hashmap_put(&map, "true", (void *)TK_KEYWORD);
-      hashmap_put(&map, "static_assert", (void *)TK_KEYWORD);
+      hashmap_put(&map, "alignof", (void *)TK_ALIGNOF);
+      hashmap_put(&map, "false", (void *)TK_FALSE);
+      hashmap_put(&map, "true", (void *)TK_TRUE);
+      hashmap_put(&map, "static_assert", (void *)TK_STATIC_ASSERT);
 
-      hashmap_put(&map, "alignas", (void *)TK_TYPEKW);
-      hashmap_put(&map, "bool", (void *)TK_TYPEKW);
-      hashmap_put(&map, "constexpr", (void *)TK_TYPEKW);
-      hashmap_put(&map, "thread_local", (void *)TK_TYPEKW);
-      hashmap_put(&map, "typeof_unqual", (void *)TK_TYPEKW);
+      hashmap_put(&map, "alignas", (void *)TK_ALIGNAS);
+      hashmap_put(&map, "bool", (void *)TK_BOOL);
+      hashmap_put(&map, "constexpr", (void *)TK_CONSTEXPR);
+      hashmap_put(&map, "thread_local", (void *)TK_THREAD_LOCAL);
+      hashmap_put(&map, "typeof_unqual", (void *)TK_TYPEOF_UNQUAL);
     }
   }
   void *val = hashmap_get2(&map, tok->loc, tok->len);
