@@ -65,6 +65,9 @@ static HashMap macros;
 static HashMap pragma_once;
 static HashMap include_guards;
 
+Token *last_alloc_tok;
+Token *tok_freelist;
+
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok);
@@ -88,14 +91,21 @@ static Token *skip_line(Token *tok) {
 }
 
 static Token *copy_token(Token *tok) {
-  Token *t = calloc(1, sizeof(Token));
+  Token *t;
+  if ((t = tok_freelist))
+    tok_freelist = t->next;
+  else
+    t = malloc(sizeof(Token));
+
   *t = *tok;
-  t->next = NULL;
+  t->alloc_next = last_alloc_tok;
+  last_alloc_tok = t;
   return t;
 }
 
 static Token *new_eof(Token *tok) {
   Token *t = copy_token(tok);
+  t->next = NULL;
   t->kind = TK_EOF;
   t->len = 0;
   t->at_bol = true;
@@ -614,7 +624,7 @@ static void align_token(Token *tok1, Token *tok2) {
 }
 
 // Concatenate two tokens to create a new token.
-static Token *paste(Token *lhs, Token *rhs) {
+static void paste(Token *lhs, Token *rhs) {
   // Paste the two tokens.
   char *buf = format("%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
@@ -623,7 +633,10 @@ static Token *paste(Token *lhs, Token *rhs) {
   align_token(tok, lhs);
   if (tok->next->kind != TK_EOF)
     error_tok(lhs, "pasting forms '%s', an invalid token", buf);
-  return tok;
+
+  Token *t = lhs->alloc_next;
+  *lhs = *tok;
+  lhs->alloc_next = t;
 }
 
 // Replace func-like macro parameters with given arguments.
@@ -678,13 +691,13 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           continue;
 
         if (arg->tok->kind != TK_PMARK)
-          *cur = *paste(cur, arg->tok);
+          paste(cur, arg->tok);
 
         for (Token *t = arg->tok->next; t->kind != TK_EOF; t = t->next)
           cur = cur->next = copy_token(t);
         continue;
       }
-      *cur = *paste(cur, tok->next);
+      paste(cur, tok->next);
       tok = tok->next->next;
       continue;
     }
@@ -750,7 +763,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
   return head.next;
 }
 
-static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
+static Token *insert_objlike(Token *tok, Token *stop_tok, Token *orig) {
   Token head = {0};
   Token *cur = &head;
   if (orig->origin)
@@ -762,17 +775,18 @@ static Token *insert_objlike(Token *tok, Token *tok2, Token *orig) {
         error_tok(tok, "'##' cannot appear at either end of macro expansion");
 
       tok = tok->next;
-      *cur = *paste(cur, tok);
+      paste(cur, tok);
     } else {
       cur = cur->next = copy_token(tok);
     }
     cur->origin = orig;
+    cur->is_root = true;
   }
-  cur->next = tok2;
+  cur->next = stop_tok;
   return head.next;
 }
 
-static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
+static Token *insert_funclike(Token *tok, Token *stop_tok, Token *orig) {
   Token head = {0};
   Token *cur = &head;
   if (orig->origin)
@@ -784,8 +798,9 @@ static Token *insert_funclike(Token *tok, Token *tok2, Token *orig) {
 
     cur = cur->next = tok;
     cur->origin = orig;
+    cur->is_root = true;
   }
-  cur->next = tok2;
+  cur->next = stop_tok;
   return head.next;
 }
 
@@ -826,6 +841,7 @@ static bool expand_macro(Token **rest, Token *tok) {
 
   // The token right after the macro. For funclike, after parentheses.
   Token *stop_tok;
+  Token *free_alloc_end = last_alloc_tok;
 
   if (m->is_objlike) {
     stop_tok = tok->next;
@@ -845,6 +861,24 @@ static bool expand_macro(Token **rest, Token *tok) {
   } else if (!m->is_objlike) {
     (*rest)->at_bol |= tok->at_bol;
     (*rest)->has_space |= tok->has_space;
+  }
+
+  {
+    Token head = {.alloc_next = last_alloc_tok};
+    Token *cur = &head;
+    for (Token *t = last_alloc_tok; t != free_alloc_end;) {
+      Token *nxt = t->alloc_next;
+      if (t->is_root) {
+        t->is_root = false;
+        cur = cur->alloc_next = t;
+      } else {
+        t->next = tok_freelist;
+        tok_freelist = t;
+      }
+      t = nxt;
+    }
+    cur->alloc_next = free_alloc_end;
+    last_alloc_tok = head.alloc_next;
   }
   return true;
 }

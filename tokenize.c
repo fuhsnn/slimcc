@@ -112,15 +112,24 @@ bool consume(Token **rest, Token *tok, char *str) {
 
 // Create a new token.
 static Token *new_token(TokenKind kind, char *start, char *end) {
-  Token *tok = calloc(1, sizeof(Token));
+  Token *tok;
+  if ((tok = tok_freelist)) {
+    tok_freelist = tok_freelist->next;
+    memset(tok, 0, sizeof(Token));
+  } else {
+    tok = calloc(1, sizeof(Token));
+  }
   tok->kind = kind;
   tok->loc = start;
   tok->len = end - start;
   tok->file = current_file;
+
   tok->at_bol = at_bol;
   tok->has_space = has_space;
-
   at_bol = has_space = false;
+
+  tok->alloc_next = last_alloc_tok;
+  last_alloc_tok = tok;
   return tok;
 }
 

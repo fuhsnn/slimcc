@@ -147,8 +147,10 @@ struct Token {
   bool has_space;   // True if this token follows a space character
   bool dont_expand; // True if a macro token is encountered during the macro's expansion
   bool is_incl_guard;
+  bool is_root;
   Token *origin;    // If this is expanded from a macro, the original token
   Token *attr_next;
+  Token *alloc_next;
 } PACKED;
 
 void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
@@ -181,6 +183,8 @@ void init_macros(void);
 void define_macro(char *name, char *buf);
 void undef_macro(char *name);
 Token *preprocess(Token *tok);
+extern Token *last_alloc_tok;
+extern Token *tok_freelist;
 
 //
 // parse.c
