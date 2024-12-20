@@ -1,4 +1,4 @@
-CFLAGS=-std=c99 -g -fno-common -Wall -pedantic -Wno-switch
+CFLAGS=-std=c99 -fsanitize=address -g -fno-common -Wall -pedantic -Wno-switch
 
 TEST_FLAGS=-Iinclude -Itest -fenable-universal-char
 
