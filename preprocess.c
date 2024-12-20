@@ -44,13 +44,17 @@ typedef struct {
 } MacroContext;
 
 // `#if` can be nested, so we use a stack to manage nested `#if`s.
-typedef struct CondIncl CondIncl;
-struct CondIncl {
-  CondIncl *next;
-  enum { IN_THEN, IN_ELIF, IN_ELSE } ctx;
+typedef struct {
   Token *tok;
+  enum { IN_THEN, IN_ELIF, IN_ELSE } ctx;
   bool included;
-};
+} CondIncl;
+
+static struct {
+  CondIncl *data;
+  int capacity;
+  int cnt;
+} cond_incl;
 
 // A linked list of locked macros. Since macro nesting happens in
 // LIFO fashion (inner expansions end first), we only need to check
@@ -58,7 +62,6 @@ struct CondIncl {
 static Macro *locked_macros;
 
 static HashMap macros;
-static CondIncl *cond_incl;
 static HashMap pragma_once;
 static HashMap include_guards;
 
@@ -355,14 +358,23 @@ static int64_t eval_const_expr(Token *tok) {
   return val;
 }
 
-static CondIncl *push_cond_incl(Token *tok, bool included) {
-  CondIncl *ci = calloc(1, sizeof(CondIncl));
-  ci->next = cond_incl;
-  ci->ctx = IN_THEN;
-  ci->tok = tok;
-  ci->included = included;
-  cond_incl = ci;
-  return ci;
+static void push_cond_incl(Token *tok, bool included) {
+  int idx = cond_incl.cnt++;
+  if (idx >= cond_incl.capacity) {
+    cond_incl.capacity = idx + 8;
+    cond_incl.data = realloc(cond_incl.data, sizeof(CondIncl) * cond_incl.capacity);
+  }
+  cond_incl.data[idx].ctx = IN_THEN;
+  cond_incl.data[idx].tok = tok;
+  cond_incl.data[idx].included = included;
+}
+
+static bool get_cond_incl(CondIncl **cond) {
+  if (cond_incl.cnt <= 0)
+    return false;
+
+  *cond = &cond_incl.data[cond_incl.cnt - 1];
+  return true;
 }
 
 static Macro *find_macro(Token *tok) {
@@ -951,8 +963,8 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
     return tok;
 
   if (is_hash(start) && equal(start->next, "ifndef") &&
-      start->next->next->kind == TK_IDENT && equal(end, "endif"))
-    start->next->guard_file = end->guard_file = path;
+    start->next->next->kind == TK_IDENT && equal(end, "endif"))
+    start->next->is_incl_guard = end->is_incl_guard = true;
 
   end->next = tok;
   return start;
@@ -1168,39 +1180,44 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "elif")) {
-    if (!cond_incl || cond_incl->ctx == IN_ELSE)
+    CondIncl *cond;
+    if (!get_cond_incl(&cond) || cond->ctx == IN_ELSE)
       error_tok(start, "stray #elif");
-    cond_incl->ctx = IN_ELIF;
+    cond->ctx = IN_ELIF;
+    cond->tok->is_incl_guard = false;
 
-    if (!cond_incl->included && eval_const_expr(split_line(&tok, tok->next)))
-      cond_incl->included = true;
+    if (!cond->included && eval_const_expr(split_line(&tok, tok->next)))
+      cond->included = true;
     else
       tok = skip_cond_incl(tok);
     return tok;
   }
 
   if (equal(tok, "else")) {
-    if (!cond_incl || cond_incl->ctx == IN_ELSE)
+    CondIncl *cond;
+    if (!get_cond_incl(&cond) || cond->ctx == IN_ELSE)
       error_tok(start, "stray #else");
-    cond_incl->ctx = IN_ELSE;
+    cond->ctx = IN_ELSE;
+    cond->tok->is_incl_guard = false;
     tok = skip_line(tok->next);
 
-    if (cond_incl->included)
+    if (cond->included)
       tok = skip_cond_incl(tok);
     return tok;
   }
 
   if (equal(tok, "endif")) {
-    if (!cond_incl)
+    CondIncl *cond;
+    if (!get_cond_incl(&cond))
       error_tok(start, "stray #endif");
 
-    if (tok->guard_file && tok->guard_file == cond_incl->tok->guard_file) {
-      Token *name_tok = cond_incl->tok->next;
+    if (tok->is_incl_guard && cond->tok->is_incl_guard && tok->file == cond->tok->file) {
+      Token *name_tok = cond->tok->next;
       char *guard_name = strndup(name_tok->loc, name_tok->len);
-      hashmap_put(&include_guards, tok->guard_file, guard_name);
+      hashmap_put(&include_guards, tok->file->name, guard_name);
     }
 
-    cond_incl = cond_incl->next;
+    cond_incl.cnt--;
     tok = skip_line(tok->next);
     return tok;
   }
@@ -1700,8 +1717,10 @@ static Token *preprocess3(Token *tok) {
 // Entry point function of the preprocessor.
 Token *preprocess(Token *tok) {
   tok = preprocess2(tok);
-  if (cond_incl)
-    error_tok(cond_incl->tok, "unterminated conditional directive");
+
+  CondIncl *cond;
+  if (get_cond_incl(&cond))
+    error_tok(cond->tok, "unterminated conditional directive");
 
   if (opt_E)
     return tok;
