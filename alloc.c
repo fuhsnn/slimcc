@@ -24,6 +24,7 @@ struct Page {
   Page *next;
 };
 
+Arena node_arena;
 Arena pp_arena;
 bool free_alloc;
 

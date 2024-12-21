@@ -75,6 +75,7 @@ void *arena_calloc(Arena *a, size_t sz);
 void *arena_malloc(Arena *a, size_t sz);
 bool check_mem_usage(void);
 
+extern Arena node_arena;
 extern Arena pp_arena;
 extern bool free_alloc;
 

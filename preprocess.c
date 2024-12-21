@@ -385,8 +385,12 @@ static int64_t eval_const_expr(Token *tok) {
   if (tok->kind == TK_EOF)
     error_tok(start, "no expression");
 
+  arena_on(&node_arena);
+
   Token *end;
   int64_t val = const_expr(&end, tok);
+
+  arena_off(&node_arena);
 
   if (end->kind != TK_EOF)
     error_tok(end, "extra token");

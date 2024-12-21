@@ -231,7 +231,7 @@ bool is_const_var(Obj *var) {
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
-  Node *node = calloc(1, sizeof(Node));
+  Node *node = arena_calloc(&node_arena, sizeof(Node));
   node->kind = kind;
   node->tok = tok;
   return node;
@@ -313,7 +313,7 @@ Node *new_cast(Node *expr, Type *ty) {
       return expr;
     }
   }
-  Node *node = malloc(sizeof(Node));
+  Node *node = arena_malloc(&node_arena, sizeof(Node));
   *node = tmp_node;
   return node;
 }
@@ -4575,8 +4575,11 @@ Obj *parse(Token *tok) {
   Obj head = {0};
   Obj *cur = &head;
   while (tok->kind != TK_EOF) {
+    arena_on(&node_arena);
+
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
+      arena_off(&node_arena);
       continue;
     }
 
@@ -4584,6 +4587,7 @@ Obj *parse(Token *tok) {
       cur = cur->next = calloc(1, sizeof(Obj));
       cur->asm_str = str_tok(&tok, skip(tok->next, "("));
       tok = skip(tok, ")");
+      arena_off(&node_arena);
       continue;
     }
 
@@ -4593,11 +4597,13 @@ Obj *parse(Token *tok) {
     // Typedef
     if (attr.is_typedef) {
       parse_typedef(&tok, tok, basety, &attr);
+      arena_off(&node_arena);
       continue;
     }
 
     // Global declarations
     tok = global_declaration(tok, basety, &attr);
+    arena_off(&node_arena);
   }
 
   for (Obj *var = globals; var; var = var->next)
