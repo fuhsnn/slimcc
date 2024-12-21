@@ -11,8 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -57,6 +57,13 @@ typedef struct Type Type;
 typedef struct Node Node;
 typedef struct Member Member;
 typedef struct Relocation Relocation;
+
+//
+// alloc.c
+
+bool check_mem_usage(void);
+
+extern bool free_alloc;
 
 //
 // hashmap.c

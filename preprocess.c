@@ -1791,5 +1791,32 @@ Token *preprocess(Token *tok) {
   if (opt_E)
     return tok;
 
-  return preprocess3(tok);
+  if (!(free_alloc = check_mem_usage()))
+    return preprocess3(tok);
+
+  Token *t = tok;
+  for (; t->kind != TK_EOF; t = t->next) {
+    if (t->origin)
+      t->origin->is_root = true;
+    t->is_root = true;
+  }
+  t->is_root = true;
+
+  for (t = last_alloc_tok; t;) {
+    Token *nxt = t->alloc_next;
+    if (!t->is_root)
+      free(t);
+    t = nxt;
+  }
+
+  tok = preprocess3(tok);
+
+  for (t = tok_freelist; t;) {
+    Token *nxt = t->next;
+    free(t);
+    t = nxt;
+  }
+
+  free(cond_incl.data);
+  return tok;
 }
