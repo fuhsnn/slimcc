@@ -70,7 +70,7 @@ Token *tok_freelist;
 
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
-static bool expand_macro(Token **rest, Token *tok);
+static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(Token **vendor, Token *tok);
@@ -88,6 +88,17 @@ static Token *skip_line(Token *tok) {
   while (!tok->at_bol)
     tok = tok->next;
   return tok;
+}
+
+static void to_freelist_cont(Token *tok, Token *end) {
+  Token *pre_end = NULL;
+  for (Token *t = tok; t != end && t->next->alloc_next == t; t = t->next)
+    pre_end = t;
+  if (pre_end) {
+    pre_end->next->alloc_next = tok->alloc_next;
+    pre_end->next = tok_freelist;
+    tok_freelist = tok;
+  }
 }
 
 static Token *copy_token(Token *tok) {
@@ -316,7 +327,7 @@ static Token *read_const_expr(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, false))
       continue;
 
     // "defined(foo)" or "defined foo" becomes "1" if macro "foo"
@@ -517,7 +528,7 @@ static Token *expand_tok(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, false))
       continue;
 
     cur = cur->next = copy_token(tok);
@@ -806,7 +817,7 @@ static Token *insert_funclike(Token *tok, Token *stop_tok, Token *orig) {
 
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
-static bool expand_macro(Token **rest, Token *tok) {
+static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   if (tok->dont_expand)
     return false;
 
@@ -851,6 +862,8 @@ static bool expand_macro(Token **rest, Token *tok) {
     pop_macro_lock(tok->next->next);
 
     MacroContext ctx = read_macro_args(&stop_tok, tok->next->next, m);
+    if (is_root)
+      to_freelist_cont(tok->next, stop_tok);
     *rest = insert_funclike(subst(m->body, &ctx), stop_tok, tok);
     free(ctx.args);
   }
@@ -934,7 +947,7 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
   // a single string token or a sequence of "<" ... ">".
   bool is_expanded = false;
   if (tok->kind == TK_IDENT) {
-    tok = preprocess2(tok);
+    tok = expand_tok(tok);
     is_expanded = true;
   }
 
@@ -1085,7 +1098,7 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
 // Read #line arguments
 static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
-  tok = preprocess2(copy_line(rest, tok));
+  tok = expand_tok(split_line(rest, tok));
   convert_pp_number(tok);
 
   if (tok->kind != TK_NUM || tok->ty->kind != TY_INT)
@@ -1120,7 +1133,7 @@ static Token *preprocess2(Token *tok) {
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
     // If it is a macro, expand it.
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, true))
       continue;
 
     if (is_hash(tok) && !locked_macros) {
@@ -1403,7 +1416,7 @@ static Token *pragma_macro(Token *start) {
       error_tok(start, "unterminated _Pragma sequence");
 
     pop_macro_lock(tok);
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, false))
       continue;
 
     switch (progress++) {
