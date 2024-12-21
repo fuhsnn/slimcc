@@ -425,7 +425,7 @@ static void add_macro2(Macro *m, char *name, bool is_objlike, Token *body) {
 }
 
 static Macro *add_macro(char *name, bool is_objlike, Token *body) {
-  Macro *m = calloc(1, sizeof(Macro));
+  Macro *m = arena_calloc(&pp_arena, sizeof(Macro));
   add_macro2(m, name, is_objlike, body);
   return m;
 }
@@ -433,7 +433,7 @@ static Macro *add_macro(char *name, bool is_objlike, Token *body) {
 static Macro *read_macro_params(Token **rest, Token *tok) {
   Token head = {0};
   Token *cur = &head;
-  Macro *m = calloc(1, sizeof(Macro));
+  Macro *m = arena_calloc(&pp_arena, sizeof(Macro));
 
   while (!consume(rest, tok, ")")) {
     if (m->arg_cnt++)
@@ -589,7 +589,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
   // __VA_OPT__(x) is treated like a parameter which expands to parameter-
   // substituted (x) if macro-expanded __VA_ARGS__ is not empty.
   if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
-    MacroArg *arg = malloc(sizeof(MacroArg));
+    MacroArg *arg = arena_malloc(&pp_arena, sizeof(MacroArg));
     arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
 
     if (has_non_empty_va_arg(ctx, NULL))
@@ -1551,6 +1551,8 @@ static char *format_time(struct tm *tm) {
 }
 
 void init_macros(void) {
+  arena_on(&pp_arena);
+
   // Define predefined macros
   define_macro("_LP64", "1");
   define_macro("__BYTE_ORDER__", "1234");
@@ -1791,8 +1793,10 @@ Token *preprocess(Token *tok) {
   if (opt_E)
     return tok;
 
-  if (!(free_alloc = check_mem_usage()))
+  if (!(free_alloc = check_mem_usage())) {
+    arena_off(&pp_arena);
     return preprocess3(tok);
+  }
 
   Token *t = tok;
   for (; t->kind != TK_EOF; t = t->next) {
@@ -1818,5 +1822,6 @@ Token *preprocess(Token *tok) {
   }
 
   free(cond_incl.data);
+  arena_off(&pp_arena);
   return tok;
 }

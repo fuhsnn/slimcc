@@ -61,8 +61,21 @@ typedef struct Relocation Relocation;
 //
 // alloc.c
 
+typedef struct Page Page;
+typedef struct {
+  int used;
+  bool on;
+  Page *head_page;
+  Page *page;
+} Arena;
+
+void arena_on(Arena *arena);
+void arena_off(Arena *arena);
+void *arena_calloc(Arena *a, size_t sz);
+void *arena_malloc(Arena *a, size_t sz);
 bool check_mem_usage(void);
 
+extern Arena pp_arena;
 extern bool free_alloc;
 
 //
