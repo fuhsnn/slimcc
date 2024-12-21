@@ -69,11 +69,12 @@ Token *last_alloc_tok;
 Token *tok_freelist;
 
 static Token *preprocess2(Token *tok);
+static Token *preprocess3(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start, bool is_root);
 static Token *subst(Token *tok, MacroContext *ctx);
-static bool is_supported_attr(Token **vendor, Token *tok);
+static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -88,6 +89,16 @@ static Token *skip_line(Token *tok) {
   while (!tok->at_bol)
     tok = tok->next;
   return tok;
+}
+
+static void to_freelist(Token *tok, Token *end) {
+  Token *pre_end = NULL;
+  for (Token *t = tok; t != end; t = t->next)
+    pre_end = t;
+  if (pre_end) {
+    pre_end->next = tok_freelist;
+    tok_freelist = tok;
+  }
 }
 
 static void to_freelist_cont(Token *tok, Token *end) {
@@ -1478,7 +1489,7 @@ static Token *has_embed_macro(Token *start) {
 static Token *has_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  bool val = is_supported_attr(NULL, tok);
+  bool val = is_supported_attr(false, NULL, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1495,7 +1506,7 @@ static Token *has_c_attribute_macro(Token *start) {
     vendor = tok;
     tok = skip(tok->next->next, ":");
   }
-  bool val = is_supported_attr(&vendor, tok);
+  bool val = is_supported_attr(true, vendor, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1674,13 +1685,13 @@ static void join_adjacent_string_literals(Token *tok) {
   tok->next = end;
 }
 
-static bool is_supported_attr(Token **vendor, Token *tok) {
+static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
-  bool gnu_if_vendored = !vendor || (*vendor && equal(*vendor, "gnu"));
+  bool gnu_if_battr = !is_bracket || (vendor && equal(vendor, "gnu"));
 
-  if (gnu_if_vendored) {
+  if (gnu_if_battr) {
     if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
       equal_ext(tok, "packed") || equal_ext(tok, "section") || equal_ext(tok, "visibility") ||
       equal_ext(tok, "weak"))
@@ -1695,28 +1706,30 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
     if (!first)
       tok = skip(tok, ",");
 
-    if (is_bracket) {
-      Token *vendor = NULL;
-      if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-        vendor = tok;
-        tok = skip(tok->next->next, ":");
-      }
-      if (is_supported_attr(&vendor, tok)) {
-        tok->kind = TK_BATTR;
-        *lst = (*lst)->attr_next = tok;
-      }
-    } else {
-      if (is_supported_attr(NULL, tok)) {
-        tok->kind = TK_ATTR;
-        *lst = (*lst)->attr_next = tok;
-      }
+    Token *vendor = NULL;
+    if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      vendor = tok;
+      tok = skip(tok->next->next, ":");
     }
-    if (consume(&tok, tok->next, "(")) {
+    Token *start = tok;
+    bool is_sup_attr = is_supported_attr(is_bracket, vendor, tok);
+
+    if (consume(&tok, tok->next, "("))
       tok = skip_paren(tok);
-      continue;
+    else
+      tok = tok->next;
+
+    if (is_sup_attr) {
+      Token head = {0};
+      Token *cur = &head;
+      for (Token *t = start; t != tok; t = t->next)
+        cur = cur->next = copy_token(t);
+      cur->next = new_eof(tok);
+
+      *lst = (*lst)->attr_next = preprocess3(head.next);
+      (*lst)->kind = is_bracket ? TK_BATTR : TK_ATTR;
+      (*lst)->attr_next = NULL;
     }
-    tok = tok->next;
-    continue;
   }
 }
 
@@ -1728,6 +1741,7 @@ static Token *preprocess3(Token *tok) {
   Token *attr_cur = &attr_head;
 
   while (tok->kind != TK_EOF) {
+    Token *start = tok;
     if (equal(tok, "__attribute__") || equal(tok, "__attribute")) {
       tok = skip(tok->next, "(");
       tok = skip(tok, "(");
@@ -1735,6 +1749,7 @@ static Token *preprocess3(Token *tok) {
       tok = skip(tok, ")");
 
       filter_attr(list, &attr_cur, false);
+      to_freelist(start, tok);
       continue;
     }
 
@@ -1743,6 +1758,7 @@ static Token *preprocess3(Token *tok) {
       tok = skip(tok, "]");
 
       filter_attr(list, &attr_cur, true);
+      to_freelist(start, tok);
       continue;
     }
 
