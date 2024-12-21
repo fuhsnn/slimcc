@@ -4469,6 +4469,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fn->ty = ty;
 
   fn->output = prepare_funcgen();
+  arena_on(&ast_arena);
 
   current_fn = fn;
   current_defr = NULL;
@@ -4497,6 +4498,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   current_fn = NULL;
 
   emit_text(fn);
+  arena_off(&ast_arena);
   end_funcgen();
 }
 
@@ -4607,9 +4609,9 @@ Obj *parse(Token *tok) {
   }
 
   for (Obj *var = globals; var; var = var->next)
-    if (var->ty->kind == TY_FUNC)
-      if (var->is_referenced || !(var->is_static && var->is_inline))
-        mark_fn_live(var);
+    if (var->is_definition && var->ty->kind == TY_FUNC &&
+      (var->is_referenced || !(var->is_static && var->is_inline)))
+      mark_fn_live(var);
 
   cur->next = globals;
   return head.next;

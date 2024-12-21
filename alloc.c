@@ -24,6 +24,7 @@ struct Page {
   Page *next;
 };
 
+Arena ast_arena;
 Arena node_arena;
 Arena pp_arena;
 bool free_alloc;
@@ -102,4 +103,16 @@ void *arena_malloc(Arena *a, size_t sz) {
 
 void *arena_calloc(Arena *a, size_t sz) {
   return allocate(a, sz, true);
+}
+
+void *ast_arena_malloc(size_t sz) {
+  if (!ast_arena.on)
+    return malloc(sz);
+  return allocate(&ast_arena, sz, false);
+}
+
+void *ast_arena_calloc(size_t sz) {
+  if (!ast_arena.on)
+    return calloc(1, sz);
+  return allocate(&ast_arena, sz, true);
 }

@@ -22,7 +22,7 @@ Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
 Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {
-  Type *ty = calloc(1, sizeof(Type));
+  Type *ty = ast_arena_calloc(sizeof(Type));
   ty->kind = kind;
   ty->size = size;
   ty->align = align;
@@ -30,7 +30,7 @@ Type *new_type(TypeKind kind, int64_t size, int32_t align) {
 }
 
 Type *copy_type(Type *ty) {
-  Type *ret = calloc(1, sizeof(Type));
+  Type *ret = ast_arena_malloc(sizeof(Type));
   *ret = *ty;
   return ret;
 }
@@ -53,7 +53,12 @@ Type *new_qualified_type(Type *ty) {
   if (ty->origin)
     ty = ty->origin;
 
-  Type *ret = calloc(1, sizeof(Type));
+  Type *ret;
+  if (ty->size < 0)
+    ret = malloc(sizeof(Type));
+  else
+    ret = ast_arena_malloc(sizeof(Type));
+
   *ret = *ty;
   ret->origin = ty;
 
