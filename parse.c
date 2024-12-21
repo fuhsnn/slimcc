@@ -178,7 +178,7 @@ static int align_down(int n, int align) {
 }
 
 static void enter_scope(void) {
-  Scope *sc = calloc(1, sizeof(Scope));
+  Scope *sc = ast_arena_calloc(sizeof(Scope));
   sc->parent = scope;
   sc->sibling_next = scope->children;
   scope = scope->children = sc;
@@ -333,7 +333,7 @@ static void apply_cv_qualifier(Node *node, Type *ty2) {
 }
 
 static VarScope *push_scope(char *name) {
-  VarScope *sc = calloc(1, sizeof(VarScope));
+  VarScope *sc = ast_arena_calloc(sizeof(VarScope));
   hashmap_put(&scope->vars, name, sc);
   return sc;
 }
@@ -432,7 +432,7 @@ static Obj *new_static_lvar(Type *ty) {
 }
 
 static DeferStmt *new_defr(DeferKind kind) {
-  DeferStmt *defr = calloc(1, sizeof(DeferStmt));
+  DeferStmt *defr = arena_calloc(&ast_arena, sizeof(DeferStmt));
   defr->kind = kind;
   if (current_defr) {
     defr->vla = current_defr->vla;
@@ -1846,7 +1846,7 @@ static Type *initializer(Token **rest, Initializer *init, Token *tok, Type *ty) 
     Member head = {0};
     Member *cur = &head;
     for (Member *mem = ty->members; mem; mem = mem->next) {
-      Member *m = calloc(1, sizeof(Member));
+      Member *m = ast_arena_calloc(sizeof(Member));
       *m = *mem;
       cur = cur->next = m;
     }
@@ -2026,7 +2026,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         srel = srel->next;
       for (int pos = 0; pos < ty->size && (pos + sofs) < var->ty->size;) {
         if (srel && srel->offset == (pos + sofs)) {
-          cur = cur->next = calloc(1, sizeof(Relocation));
+          cur = cur->next = ast_arena_calloc(sizeof(Relocation));
           cur->offset = (pos + offset);
           cur->label = srel->label;
           cur->addend = srel->addend;
@@ -2070,7 +2070,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   int64_t addend = eval2(init_expr, &ctx);
 
   if (ctx.label) {
-    Relocation *rel = calloc(1, sizeof(Relocation));
+    Relocation *rel = ast_arena_calloc(sizeof(Relocation));
     rel->offset = offset;
     rel->label = ctx.label;
     rel->addend = addend;
@@ -2137,7 +2137,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
   while (!equal(tok, ":") && !equal(tok, ")")) {
     if (cur != &head)
       tok = skip(tok, ",");
-    cur = cur->next = calloc(1, sizeof(AsmParam));
+    cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
 
     if (consume(&tok, tok, "[")) {
       cur->name = tok;
@@ -2174,7 +2174,7 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
     node->goto_next = gotos;
     gotos = node;
 
-    cur = cur->next = calloc(1, sizeof(AsmParam));
+    cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
     cur->arg = node;
     tok = tok->next;
   }
@@ -3586,7 +3586,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Anonymous struct member
     if (equal(tok, ";") &&
       (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
-      Member *mem = calloc(1, sizeof(Member));
+      Member *mem = ast_arena_calloc(sizeof(Member));
       mem->ty = basety;
 
       tok = tok->next;
@@ -3597,7 +3597,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Regular struct members
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
-      Member *mem = calloc(1, sizeof(Member));
+      Member *mem = ast_arena_calloc(sizeof(Member));
       mem->alt_align = attr.align;
       mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
 
@@ -4317,7 +4317,7 @@ static Node *primary(Token **rest, Token *tok) {
     // [GNU] __FUNCTION__ is yet another name of __func__.
     if (current_fn && (equal(tok, "__func__") || equal(tok, "__FUNCTION__"))) {
       char *name = current_fn->name;
-      VarScope *vsc = calloc(1, sizeof(VarScope));
+      VarScope *vsc = ast_arena_calloc(sizeof(VarScope));
       vsc->var = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
       vsc->var->init_data = name;
       hashmap_put(&current_fn->ty->scopes->vars, "__func__", vsc);
@@ -4579,7 +4579,9 @@ Obj *parse(Token *tok) {
     arena_on(&node_arena);
 
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
+      arena_on(&ast_arena);
       static_assertion(&tok, tok->next);
+      arena_off(&ast_arena);
       arena_off(&node_arena);
       continue;
     }
