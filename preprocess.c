@@ -71,7 +71,7 @@ Token *tok_freelist;
 static Token *preprocess2(Token *tok);
 static Macro *find_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok, bool is_root);
-static Token *directives(Token **cur, Token *start);
+static Token *directives(Token **cur, Token *start, bool is_root);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(Token **vendor, Token *tok);
 
@@ -173,7 +173,8 @@ static Token *skip_cond_incl2(Token *tok) {
 
 // Skip until next `#else`, `#elif` or `#endif`.
 // Nested `#if` and `#endif` are skipped.
-static Token *skip_cond_incl(Token *tok) {
+static Token *skip_cond_incl(Token *tok, bool is_root) {
+  Token *start = tok;
   while (tok->kind != TK_EOF) {
     if (is_hash(tok) &&
         (equal(tok->next, "if") || equal(tok->next, "ifdef") ||
@@ -188,6 +189,8 @@ static Token *skip_cond_incl(Token *tok) {
       break;
     tok = tok->next;
   }
+  if (is_root)
+    to_freelist_cont(start, tok);
   return tok;
 }
 
@@ -477,7 +480,7 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
     }
 
     if (is_hash(tok) && !locked_macros) {
-      tok = directives(&cur, tok);
+      tok = directives(&cur, tok, false);
       continue;
     }
 
@@ -1137,7 +1140,7 @@ static Token *preprocess2(Token *tok) {
       continue;
 
     if (is_hash(tok) && !locked_macros) {
-      tok = directives(&cur, tok);
+      tok = directives(&cur, tok, true);
       continue;
     }
 
@@ -1154,7 +1157,7 @@ static Token *preprocess2(Token *tok) {
   return head.next;
 }
 
-static Token *directives(Token **cur, Token *start) {
+static Token *directives(Token **cur, Token *start, bool is_root) {
   Token *tok = start->next;
 
   if (equal(tok, "embed")) {
@@ -1204,7 +1207,7 @@ static Token *directives(Token **cur, Token *start) {
     bool val = eval_const_expr(split_line(&tok, tok->next));
     push_cond_incl(start, val);
     if (!val)
-      tok = skip_cond_incl(tok);
+      tok = skip_cond_incl(tok, is_root);
     return tok;
   }
 
@@ -1213,7 +1216,7 @@ static Token *directives(Token **cur, Token *start) {
     push_cond_incl(tok, defined);
     tok = skip_line(tok->next->next);
     if (!defined)
-      tok = skip_cond_incl(tok);
+      tok = skip_cond_incl(tok, is_root);
     return tok;
   }
 
@@ -1222,7 +1225,7 @@ static Token *directives(Token **cur, Token *start) {
     push_cond_incl(tok, !defined);
     tok = skip_line(tok->next->next);
     if (defined)
-      tok = skip_cond_incl(tok);
+      tok = skip_cond_incl(tok, is_root);
     return tok;
   }
 
@@ -1236,7 +1239,7 @@ static Token *directives(Token **cur, Token *start) {
     if (!cond->included && eval_const_expr(split_line(&tok, tok->next)))
       cond->included = true;
     else
-      tok = skip_cond_incl(tok);
+      tok = skip_cond_incl(tok, is_root);
     return tok;
   }
 
@@ -1249,7 +1252,7 @@ static Token *directives(Token **cur, Token *start) {
     tok = skip_line(tok->next);
 
     if (cond->included)
-      tok = skip_cond_incl(tok);
+      tok = skip_cond_incl(tok, is_root);
     return tok;
   }
 
