@@ -173,6 +173,7 @@ struct Token {
   bool dont_expand; // True if a macro token is encountered during the macro's expansion
   bool is_incl_guard;
   bool is_root;
+  bool is_live;
   Token *origin;    // If this is expanded from a macro, the original token
   Token *attr_next;
   Token *alloc_next;

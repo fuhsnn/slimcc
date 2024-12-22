@@ -3589,6 +3589,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       Member *mem = ast_arena_calloc(sizeof(Member));
       mem->alt_align = attr.align;
       mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
+      if (mem->name && !current_fn)
+        mem->name->is_live = true;
 
       for (Type *t = mem->ty; t; t = t->base)
         if (t->kind == TY_VLA)
@@ -4558,16 +4560,40 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
   return tok;
 }
 
+static Token *free_parsed_tok(Token *tok, Token *end) {
+  while (tok != end) {
+    for (Token *t = tok->attr_next; t;) {
+      Token *nxt_attr = t->attr_next;
+      while (t) {
+        Token *nxt_t = t->next;
+        free(t);
+        t = nxt_t;
+      }
+      t = nxt_attr;
+    }
+    Token *nxt = tok->next;
+    if (!tok->is_live)
+      free(tok);
+    tok = nxt;
+  }
+  return end;
+}
+
 // program = (typedef | function-definition | global-variable)*
 Obj *parse(Token *tok) {
   globals = NULL;
 
+  Token *free_head = tok;
   Obj head = {0};
   Obj *cur = &head;
   while (tok->kind != TK_EOF) {
+    if (free_alloc)
+      free_head = free_parsed_tok(free_head, tok);
+
     if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
       cur = cur->next = calloc(1, sizeof(Obj));
       cur->asm_str = str_tok(&tok, skip(tok->next, "("));
+      cur->asm_str->is_live = true;
       tok = skip(tok, ")");
       continue;
     }
