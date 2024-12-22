@@ -247,6 +247,7 @@ struct Obj {
   Obj *static_lvars;
   char *alias_name;
   char *visibility;
+  char *asm_name;
 
   // Global variable
   bool is_tentative;

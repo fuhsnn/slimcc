@@ -187,6 +187,10 @@ static void insrtln(char *fmt, long loc, ...) {
   fseek(output_file, cur_loc, SEEK_SET);
 }
 
+static char *asm_name(Obj *var) {
+  return var->asm_name ? var->asm_name : var->name;
+}
+
 static int count(void) {
   static int i = 1;
   return i++;
@@ -225,7 +229,7 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, boo
       *ptr = var->ptr;
       return true;
     } else if (!var->is_tls && (!opt_fpic || var->is_static)) {
-      snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, var->name);
+      snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, asm_name(var));
       *ptr = "%rip";
       return true;
     }
@@ -713,7 +717,7 @@ static void gen_addr(Node *node) {
       // Thread-local variable
       if (node->var->is_tls) {
         clobber_all_regs();
-        println("  data16 lea \"%s\"@tlsgd(%%rip), %%rdi", node->var->name);
+        println("  data16 lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
         println("  .value 0x6666");
         println("  rex64");
         println("  call __tls_get_addr@PLT");
@@ -721,14 +725,14 @@ static void gen_addr(Node *node) {
       }
 
       // Function or global variable
-      println("  mov \"%s\"@GOTPCREL(%%rip), %%rax", node->var->name);
+      println("  mov \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
       return;
     }
 
     // Thread-local variable
     if (node->var->is_tls) {
       println("  mov %%fs:0, %%rax");
-      println("  add $\"%s\"@tpoff, %%rax", node->var->name);
+      println("  add $\"%s\"@tpoff, %%rax", asm_name(node->var));
       return;
     }
 
@@ -758,14 +762,14 @@ static void gen_addr(Node *node) {
     // Function
     if (node->ty->kind == TY_FUNC) {
       if (node->var->is_definition)
-        println("  lea \"%s\"(%%rip), %%rax", node->var->name);
+        println("  lea \"%s\"(%%rip), %%rax", asm_name(node->var));
       else
-        println("  mov \"%s\"@GOTPCREL(%%rip), %%rax", node->var->name);
+        println("  mov \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
       return;
     }
 
     // Global variable
-    println("  lea \"%s\"(%%rip), %%rax", node->var->name);
+    println("  lea \"%s\"(%%rip), %%rax", asm_name(node->var));
     return;
   case ND_DEREF:
     gen_expr(node->lhs);
@@ -1748,7 +1752,7 @@ static void gen_expr(Node *node) {
     }
     return;
   case ND_FUNCALL: {
-    if (node->lhs->kind == ND_VAR && !strcmp(node->lhs->var->name, "alloca")) {
+    if (node->lhs->kind == ND_VAR && !strcmp(asm_name(node->lhs->var), "alloca")) {
       gen_expr(node->args->arg_expr);
       builtin_alloca(node);
       return;
@@ -1798,7 +1802,7 @@ static void gen_expr(Node *node) {
       }
       println("  call *%s", pop_inreg("%r10"));
     } else {
-      println("  call \"%s\"%s", node->lhs->var->name, opt_fpic ? "@PLT" : "");
+      println("  call \"%s\"%s", asm_name(node->lhs->var), opt_fpic ? "@PLT" : "");
     }
 
     clobber_all_regs();
@@ -3733,7 +3737,7 @@ static void asm_body(Node *node) {
         continue;
       case ASMOP_SYMBOLIC:{
         if (ap->arg->kind == ND_VAR && !ap->arg->var->is_local && !opt_fpic) {
-          fprintf(output_file, "%s\"%s\"", punct, ap->arg->var->name);
+          fprintf(output_file, "%s\"%s\"", punct, asm_name(ap->arg->var));
           continue;
         }
         char ofs[STRBUF_SZ], *ptr;
@@ -3929,11 +3933,11 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
 
 static void emit_symbol(Obj *var) {
   if (var->is_static)
-    println("  .local \"%s\"", var->name);
+    println("  .local \"%s\"", asm_name(var));
   else if (var->is_weak)
-    println("  .weak \"%s\"", var->name);
+    println("  .weak \"%s\"", asm_name(var));
   else
-    println("  .globl \"%s\"", var->name);
+    println("  .globl \"%s\"", asm_name(var));
 
   if (var->alias_name)
     println("  .set \"%s\", \"%s\"", var->name, var->alias_name);
@@ -3941,7 +3945,7 @@ static void emit_symbol(Obj *var) {
   char *vis_mode = var->visibility ? var->visibility : opt_visibility;
   if (vis_mode && (!strcmp(vis_mode, "hidden") ||
     !strcmp(vis_mode, "internal") || !strcmp(vis_mode, "protected")))
-    println("  .%s \"%s\"", vis_mode, var->name);
+    println("  .%s \"%s\"", vis_mode, asm_name(var));
 }
 
 static void emit_data(Obj *var) {
@@ -3956,7 +3960,7 @@ static void emit_data(Obj *var) {
 
     // Common symbol
     if (!var->is_weak && opt_fcommon) {
-      println("  .comm \"%s\", %"PRIi64", %d", var->name, var->ty->size, align);
+      println("  .comm \"%s\", %"PRIi64", %d", asm_name(var), var->ty->size, align);
       return;
     }
   }
@@ -3972,7 +3976,7 @@ static void emit_data(Obj *var) {
     Printstrf("  .section .%s", var->init_data ? "data" : "bss");
 
   if (opt_data_sections)
-    Printstrf(".\"%s\"", var->name);
+    Printstrf(".\"%s\"", asm_name(var));
 
   if (var->is_tls)
     Printstr(",\"awT\"");
@@ -3986,9 +3990,9 @@ static void emit_data(Obj *var) {
   else
     println(",@progbits");
 
-  println("  .size \"%s\", %"PRIi64, var->name, var->ty->size);
+  println("  .size \"%s\", %"PRIi64, asm_name(var), var->ty->size);
   println("  .align %d", align);
-  println("\"%s\":", var->name);
+  println("\"%s\":", asm_name(var));
 
   if (!var->init_data) {
     println("  .zero %"PRIi64, var->ty->size);
@@ -4047,11 +4051,11 @@ void emit_text(Obj *fn) {
   emit_symbol(fn);
 
   if (opt_func_sections)
-    println("  .section .text.\"%s\",\"ax\",@progbits", fn->name);
+    println("  .section .text.\"%s\",\"ax\",@progbits", asm_name(fn));
   else
     println("  .text");
-  println("  .type \"%s\", @function", fn->name);
-  println("\"%s\":", fn->name);
+  println("  .type \"%s\", @function", asm_name(fn));
+  println("\"%s\":", asm_name(fn));
 
   bool rtn_by_stk = fn->ty->return_ty->size > 16;
   int gp_count = rtn_by_stk;
@@ -4162,12 +4166,12 @@ void emit_text(Obj *fn) {
     insrtln("  sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
 
   // Epilogue
-  gen_label_ph(rtn_label, !strcmp(fn->name, "main"));
+  gen_label_ph(rtn_label, !strcmp(asm_name(fn), "main"));
   if (lvar_align > 16)
     println("  mov -8(%%rbp), %%rbx");
   println("  leave");
   println("  ret");
-  println("  .size \"%s\", .-\"%s\"", fn->name, fn->name);
+  println("  .size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
 }
 
 typedef struct {

@@ -4505,6 +4505,10 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
       }
       Obj *fn = func_prototype(ty, attr, name);
       symbol_attr(fn, attr, name, tok);
+      if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+        fn->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
+        tok = skip(tok, ")");
+      }
       continue;
     }
 
