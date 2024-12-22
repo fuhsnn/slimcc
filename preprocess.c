@@ -1136,15 +1136,6 @@ static void read_line_marker(Token **rest, Token *tok) {
   start->file->display_file = add_input_file(tok->str, NULL, NULL);
 }
 
-static void add_loc_info(Token *tok) {
-  Token *tmpl = tok;
-  if (tmpl->origin)
-    tmpl = tmpl->origin;
-
-  tok->display_file_no = tmpl->file->display_file->file_no;
-  tok->display_line_no = tmpl->line_no + tmpl->file->line_delta;
-}
-
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
 static Token *preprocess2(Token *tok) {
@@ -1162,11 +1153,19 @@ static Token *preprocess2(Token *tok) {
       continue;
     }
 
-    add_loc_info(tok);
+    Token *orig = tok;
+    if (tok->origin) {
+      orig = orig->origin;
+      orig->is_root = true;
+    }
+    tok->display_file_no = orig->file->display_file->file_no;
+    tok->display_line_no = orig->line_no + orig->file->line_delta;
+    tok->is_root = true;
 
     cur = cur->next = tok;
     tok = tok->next;
   }
+  tok->is_root = true;
   cur->next = tok;
 
   if (start_m != locked_macros)
@@ -1805,13 +1804,6 @@ Token *preprocess(Token *tok) {
   }
 
   Token *t = tok;
-  for (; t->kind != TK_EOF; t = t->next) {
-    if (t->origin)
-      t->origin->is_root = true;
-    t->is_root = true;
-  }
-  t->is_root = true;
-
   for (t = last_alloc_tok; t;) {
     Token *nxt = t->alloc_next;
     if (!t->is_root)
