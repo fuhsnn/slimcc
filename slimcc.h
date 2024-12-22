@@ -30,16 +30,12 @@
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
 #define NORETURN __attribute__((noreturn))
-#define PACKED __attribute__((packed))
 #elif defined(__has_attribute)
 #if __has_attribute(format)
 #define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
 #endif
 #if __has_attribute(noreturn)
 #define NORETURN __attribute__((noreturn))
-#endif
-#if __has_attribute(packed)
-#define PACKED __attribute__((packed))
 #endif
 #endif
 
@@ -49,8 +45,13 @@
 #ifndef NORETURN
 #define NORETURN
 #endif
-#ifndef PACKED
-#define PACKED
+
+#if __STDC_VERSION__ >= 201112L
+#define ANON_UNION_START union {
+#define ANON_UNION_END };
+#else
+#define ANON_UNION_START
+#define ANON_UNION_END
 #endif
 
 typedef struct Type Type;
@@ -155,28 +156,31 @@ struct File {
 // Token type
 typedef struct Token Token;
 struct Token {
-  TokenKind kind;   // Token kind
-  Token *next;      // Next token
-  int64_t ival;     // If kind is TK_INT_NUM, its value
-  char *loc;        // Token location
-  int len;          // Token length
-  Type *ty;         // Used if TK_INT_NUM or TK_STR
-  char *str;        // String literal contents including terminating '\0'
-
-  File *file;       // Source location
-  int line_no;      // Line number
+  Token *next;            // Next token
+  TokenKind kind : 16;    // Token kind
+  bool at_bol : 1;        // True if this token is at beginning of line
+  bool has_space : 1;     // True if this token follows a space character
+  bool dont_expand : 1;   // True if a macro token is encountered during the macro's expansion
+  bool is_incl_guard : 1;
+  bool is_root : 1;
+  bool is_live : 1;
+  int len;                // Token length
+  char *loc;              // Token location
+  File *file;             // Source location
+  Token *origin;          // If this is expanded from a macro, the original token
+  int line_no;            // Line number
   int display_line_no;
   int display_file_no;
-  bool at_bol;      // True if this token is at beginning of line
-  bool has_space;   // True if this token follows a space character
-  bool dont_expand; // True if a macro token is encountered during the macro's expansion
-  bool is_incl_guard;
-  bool is_root;
-  bool is_live;
-  Token *origin;    // If this is expanded from a macro, the original token
-  Token *attr_next;
-  Token *alloc_next;
-} PACKED;
+  Type *ty;               // Used if TK_INT_NUM or TK_STR
+ANON_UNION_START
+    Token *attr_next;
+    Token *alloc_next;
+ANON_UNION_END
+ANON_UNION_START
+    int64_t ival;         // If kind is TK_INT_NUM, its value
+    char *str;            // String literal contents including terminating '\0'
+ANON_UNION_END
+};
 
 void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
 void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
