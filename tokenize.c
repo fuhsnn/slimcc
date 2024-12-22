@@ -29,7 +29,7 @@ void error(char *fmt, ...) {
 //
 // foo.c:10: x = y + 1;
 //               ^ <error message here>
-void verror_at(char *filename, char *input, int line_no,
+static void verror_at(char *filename, char *input, int line_no,
                char *loc, char *fmt, va_list ap) {
   // Find a line containing `loc`.
   char *line = loc;
@@ -53,6 +53,21 @@ void verror_at(char *filename, char *input, int line_no,
   fprintf(stderr, "\n");
 }
 
+void verror_at_tok(Token *tok, char *fmt, va_list ap) {
+  if (tok->file->file_no != tok->display_file_no) {
+    char *name = NULL;
+    File **files = get_input_files();
+    for (int i = 0; files[i]; i++)
+      if (tok->display_file_no == files[i]->file_no)
+        name = files[i]->name;
+    if (name)
+      fprintf(stderr, "#line %d \"%s\"\n", tok->display_line_no, name);
+  }
+  verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+  if (tok->origin)
+    warn_tok(tok->origin, "in expansion of macro");
+}
+
 void error_at(char *loc, char *fmt, ...) {
   int line_no = 1;
   for (char *p = current_file->contents; p < loc; p++)
@@ -69,18 +84,15 @@ void error_at(char *loc, char *fmt, ...) {
 void error_tok(Token *tok, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+  verror_at_tok(tok, fmt, ap);
   va_end(ap);
-
-  if (tok->origin)
-    warn_tok(tok->origin, "in expansion of macro");
   exit(1);
 }
 
 void warn_tok(Token *tok, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+  verror_at_tok(tok, fmt, ap);
   va_end(ap);
 }
 

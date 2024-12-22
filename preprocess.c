@@ -1162,8 +1162,7 @@ static Token *preprocess2(Token *tok) {
       continue;
     }
 
-    if (opt_g)
-      add_loc_info(tok);
+    add_loc_info(tok);
 
     cur = cur->next = tok;
     tok = tok->next;

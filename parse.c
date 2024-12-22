@@ -2613,10 +2613,8 @@ static int64_t eval_error(Token *tok, char *fmt, ...) {
   }
   va_list ap;
   va_start(ap, fmt);
-  verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+  verror_at_tok(tok, fmt, ap);
   va_end(ap);
-  if (tok->origin)
-    warn_tok(tok->origin, "in expansion of macro");
   exit(1);
 }
 

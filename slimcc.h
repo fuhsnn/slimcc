@@ -182,7 +182,7 @@ void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
 void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void error_tok(Token *tok, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
-void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt, va_list ap);
+void verror_at_tok(Token *tok, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
