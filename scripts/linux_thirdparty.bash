@@ -105,7 +105,7 @@ test_metalang99() {
  github_tar hirrolot interface99 v1.0.1
  sh scripts/test-all.sh
  github_tar hirrolot metalang99 v1.13.3
- sh scripts/test.sh
+ sh scripts/test-all.sh
 }
 
 test_oniguruma_jq() {
@@ -153,7 +153,7 @@ test_perl() {
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
    -Alibpth="/usr/local/lib /lib /usr/lib /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu"
- make test -j4
+ make -j4 test_prep && HARNESS_OPTIONS=j4 make test_harness
 }
 
 test_php() {
@@ -276,6 +276,15 @@ build_sdl() {
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  ./configure
  make
+}
+
+build_zig() {
+ github_clone fuhsnn zig wasm2c-stack
+ sed -i 's/stack-size=0x1000000/stack-size=0x4000000/g' bootstrap.c
+ cp lib/zig.h stage1/
+ "$CC" bootstrap.c -o _bootstrap
+ ./_bootstrap
+ ./zig2 test --show-builtin
 }
 
 # run a test
