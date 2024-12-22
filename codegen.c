@@ -3936,9 +3936,9 @@ static void emit_symbol(Obj *var) {
     println("  .globl \"%s\"", var->name);
 
   if (var->alias_name)
-    println("  .set \"%s\", %.*s", var->name, var->alias_name->len, var->alias_name->loc);
+    println("  .set \"%s\", \"%s\"", var->name, var->alias_name);
 
-  char *vis_mode = var->visibility ? var->visibility->str : opt_visibility;
+  char *vis_mode = var->visibility ? var->visibility : opt_visibility;
   if (vis_mode && (!strcmp(vis_mode, "hidden") ||
     !strcmp(vis_mode, "internal") || !strcmp(vis_mode, "protected")))
     println("  .%s \"%s\"", vis_mode, var->name);
@@ -3963,7 +3963,7 @@ static void emit_data(Obj *var) {
   bool use_rodata = !opt_fpic && is_const_var(var);
 
   if (var->section_name)
-    Printstrf("  .section \"%s\"", var->section_name->str);
+    Printstrf("  .section \"%s\"", var->section_name);
   else if (var->is_tls)
     Printstrf("  .section .%s", var->init_data ? "tdata" : "tbss");
   else if (use_rodata)

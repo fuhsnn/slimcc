@@ -39,9 +39,9 @@ typedef struct {
   bool is_weak;
   bool local_only;
   Obj *cleanup_fn;
-  Token *alias;
-  Token *section;
-  Token *visibility;
+  char *alias;
+  char *section;
+  char *visibility;
   int align;
 } VarAttr;
 
@@ -548,54 +548,43 @@ static void attr_weak(Token *loc, bool *b, TokenKind kind) {
   bool_attr("weak", loc, b, kind);
 }
 
-static void str_attr(char *name, Token *loc, Token **t, TokenKind kind) {
+static void str_attr(char *name, Token *loc, char **str, TokenKind kind) {
+  if (*str)
+    return;
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind == kind && equal_ext(tok, name)) {
-      *t = str_tok(&(Token *){0}, skip(tok->next, "("));
+      Token *t;
+      *str = str_tok(&t, skip(tok->next, "("))->str;
+      skip(t, ")");
       return;
     }
   }
 }
 
-static void attr_alias(Token *loc, Token **str_tok, TokenKind kind) {
-  if (!*str_tok)
-    str_attr("alias", loc, str_tok, kind);
-}
-
-static void attr_section(Token *loc, Token **str_tok, TokenKind kind) {
-  if (!*str_tok)
-    str_attr("section", loc, str_tok, kind);
-}
-
-static void attr_visibility(Token *loc, Token **str_tok, TokenKind kind) {
-  if (!*str_tok)
-    str_attr("visibility", loc, str_tok, kind);
-}
-
 static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
-  attr_alias(tok, &attr->alias, kind);
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, &attr->cleanup_fn, kind);
-  attr_section(tok, &attr->section, kind);
-  attr_visibility(tok, &attr->visibility, kind);
   attr_weak(tok, &attr->is_weak, kind);
+  str_attr("alias", tok, &attr->alias, kind);
+  str_attr("section", tok, &attr->section, kind);
+  str_attr("visibility", tok, &attr->visibility, kind);
 }
 
 static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
   var->alias_name = attr->alias;
-  attr_alias(name, &var->alias_name, TK_ATTR);
-  attr_alias(name->next, &var->alias_name, TK_BATTR);
-  attr_alias(tok, &var->alias_name, TK_ATTR);
+  str_attr("alias", name, &var->alias_name, TK_ATTR);
+  str_attr("alias", name->next, &var->alias_name, TK_BATTR);
+  str_attr("alias", tok, &var->alias_name, TK_ATTR);
 
   var->section_name = attr->section;
-  attr_section(name, &var->section_name, TK_ATTR);
-  attr_section(name->next, &var->section_name, TK_BATTR);
-  attr_section(tok, &var->section_name, TK_ATTR);
+  str_attr("section", name, &var->section_name, TK_ATTR);
+  str_attr("section", name->next, &var->section_name, TK_BATTR);
+  str_attr("section", tok, &var->section_name, TK_ATTR);
 
   var->visibility = attr->visibility;
-  attr_visibility(name, &var->visibility, TK_ATTR);
-  attr_visibility(name->next, &var->visibility, TK_BATTR);
-  attr_visibility(tok, &var->visibility, TK_ATTR);
+  str_attr("visibility", name, &var->visibility, TK_ATTR);
+  str_attr("visibility", name->next, &var->visibility, TK_BATTR);
+  str_attr("visibility", tok, &var->visibility, TK_ATTR);
 
   var->is_weak = attr->is_weak;
   attr_weak(name, &var->is_weak, TK_ATTR);

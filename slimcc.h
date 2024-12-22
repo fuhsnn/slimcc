@@ -241,13 +241,13 @@ struct Obj {
   bool is_static;
   bool is_weak;
   Obj *static_lvars;
-  Token *alias_name;
-  Token *visibility;
+  char *alias_name;
+  char *visibility;
 
   // Global variable
   bool is_tentative;
   bool is_tls;
-  Token *section_name;
+  char *section_name;
   char *init_data;
   Relocation *rel;
 
