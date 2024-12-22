@@ -190,6 +190,10 @@ static void enter_tmp_scope(void) {
 }
 
 static void leave_scope(void) {
+  if (current_fn) {
+    free(scope->vars.buckets);
+    free(scope->tags.buckets);
+  }
   scope = scope->parent;
 }
 

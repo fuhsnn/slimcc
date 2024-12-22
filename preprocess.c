@@ -1819,6 +1819,9 @@ Token *preprocess(Token *tok) {
     t = nxt;
   }
 
+  free(macros.buckets);
+  free(pragma_once.buckets);
+  free(include_guards.buckets);
   free(cond_incl.data);
   arena_off(&pp_arena);
   return tok;

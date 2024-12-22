@@ -49,6 +49,7 @@ static void rehash(HashMap *map) {
   }
 
   assert(map2.used == nkeys);
+  free(map->buckets);
   *map = map2;
 }
 
