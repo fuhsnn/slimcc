@@ -4576,20 +4576,19 @@ Obj *parse(Token *tok) {
   Obj head = {0};
   Obj *cur = &head;
   while (tok->kind != TK_EOF) {
+    if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+      cur = cur->next = calloc(1, sizeof(Obj));
+      cur->asm_str = str_tok(&tok, skip(tok->next, "("));
+      tok = skip(tok, ")");
+      continue;
+    }
+
     arena_on(&node_arena);
 
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       arena_on(&ast_arena);
       static_assertion(&tok, tok->next);
       arena_off(&ast_arena);
-      arena_off(&node_arena);
-      continue;
-    }
-
-    if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
-      cur = cur->next = calloc(1, sizeof(Obj));
-      cur->asm_str = str_tok(&tok, skip(tok->next, "("));
-      tok = skip(tok, ")");
       arena_off(&node_arena);
       continue;
     }
