@@ -4,7 +4,7 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
  - C23 features: `constexpr`, `enum:T{}`, `#embed`, `auto` type-inference, etc.
  - C2Y/TS features: `defer`(as `_Defer`), `__VA_TAIL__`
  - GNU features: inline asm, `cleanup`
- - Basic optimizations: const folding, reg-alloc for temporaries, instruction selection.
+ - Basic codegen optimizations: const folding, reg-alloc for temporaries, instruction selection.
 
 ## Project goal
 
@@ -17,7 +17,7 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
 ## Building & Running
 
  - Should just work on recent glibc-based (2.28+) x86-64 Linux. Also see [porting](#porting)
- - Test script needs `bash`; depending on the distro, `file` and/or `glibc-static` packages may be required.
+ - Test script needs `bash`; depending on the distro, `file` and `glibc-static` packages may be required.
 ```
 git clone --depth 1 https://github.com/fuhsnn/slimcc
 cd slimcc
@@ -26,9 +26,10 @@ make test-stage2 -j4
 Run it in base directory like `CC=~/slimcc/slimcc`, since internal header path is hardcoded for simplicity.
 
 ## What can it build?
+
 `slimcc` should be able to compile most C89 to C11 projects not requiring optional or compiler-specific features.
 
-A CI workflow is set up to `make test` real-world projects in a Debian container with `cc` `gcc` `cpp` uninstalled. The lineup includes Curl, Git, OpenSSL, PHP, Perl, Python, PostgreSQL, and continues to grow. Please have a look a the [workflow](https://github.com/fuhsnn/slimcc/blob/main/.github/workflows/linux_thirdparty.yml), [dockerfile](https://github.com/fuhsnn/slimcc/blob/main/scripts/debian_asan.Dockerfile), and [build instructions](https://github.com/fuhsnn/slimcc/blob/main/scripts/linux_thirdparty.bash) to verify this claim.
+For testing, a CI workflow is set up to not only build real C codebases in a container with `slimcc` as the sole C compiler (no `cc`/`gcc`/`cpp`), but also expect 100% pass rate from their test-suites. The lineup includes the likes of CPython, Curl, Git, jq, OpenSSH, OpenSSL, PHP, Perl, PostgreSQL, Sqlite, Toybox, and Zstd; please have a look at the [workflow](https://github.com/fuhsnn/slimcc/blob/main/.github/workflows/linux_thirdparty.yml), [dockerfile](https://github.com/fuhsnn/slimcc/blob/main/scripts/debian_asan.Dockerfile), and [build instructions](https://github.com/fuhsnn/slimcc/blob/main/scripts/linux_thirdparty.bash) to verify this claim.
 
 `musl` is also buildable sans complex numbers, it's a goal to set up a self-hosted `slimcc-musl` environment.
 
@@ -42,14 +43,15 @@ Binary size is roughly among TinyCC's and GCC/Clang at `-O0`, no claims about sp
 
 ## How optimized is the compiler itself?
 
-The compiler leaks all allocations, it gets bad for large translation units, I'm looking for a clean way to remedy this.
+The coding style is greatly influenced by `chibicc`, which means in the eyes of C veterans there might be all kinds of inefficiencies in the name of readability. While micro-optimizing is fun, I only commit changes that noticeably improve `-flto=auto -march=native -lmimalloc` builds.
+
+Previously all allocations were leaked, that led to pretty bad RAM usage for large translation units (Zig bootstrap) or macro expansion tricks (Metalang99). This was remedied with arena allocation and tracing linked lists, peak consumption brought down from over 16 GB to about 3 GB.
 
 ## Can it be built with another small C compiler?
 
-Here's some I've tried:
- - TinyCC, kefir, vanilla chibicc: can build with `cc *.c`, `make test` will fail but not big deal.
+ - TinyCC, kefir, vanilla chibicc: can build with `cc *.c`, `make test` might fail at ABI tests.
  - pcc: has a bug parsing escaped sequence in a comment, otherwise can build.
- - cproc: can't build, lacks long double support.
+ - cproc: lack long double support.
  - mir, xcc: missing header.
 
 ## Porting
