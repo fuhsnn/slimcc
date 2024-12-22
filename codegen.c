@@ -3124,7 +3124,14 @@ static Reg ident_reg(Token *tok) {
 }
 
 static void asm_clobbers(Token *tok, int *x87_clobber) {
-  for (; tok; tok = tok->next) {
+  if (!tok)
+    return;
+
+  Token *start = tok;
+  for (; !equal(tok, ":") && !equal(tok, ")"); tok = tok->next) {
+    if (tok != start)
+      tok = skip(tok, ",");
+
     if (equal(tok, "\"cc\""))
       continue;
     if (equal(tok, "\"memory\""))

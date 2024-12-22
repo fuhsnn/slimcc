@@ -2152,17 +2152,17 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
 }
 
 static Token *asm_clobbers(Token **rest, Token *tok) {
-  Token head = {0};
-  Token *cur = &head;
+  Token *first = NULL;
   while (!equal(tok, ":") && !equal(tok, ")")) {
-    if (cur != &head)
-      tok = skip(tok, ",");
-    cur = cur->next = tok;
-    tok = tok->next;
+    if (!first) {
+      first = str_tok(&tok, tok);
+      continue;
+    }
+    tok = skip(tok, ",");
+    str_tok(&tok, tok);
   }
   *rest = tok;
-  cur->next = NULL;
-  return head.next;
+  return first;
 }
 
 static AsmParam *asm_labels(Token **rest, Token *tok) {
