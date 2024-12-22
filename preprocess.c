@@ -329,8 +329,8 @@ static Token *new_comma_token(Token *tmpl) {
 }
 
 static Token *to_int_token(Token *tok, int64_t val) {
-  tok->kind = TK_NUM;
-  tok->val = val;
+  tok->kind = TK_INT_NUM;
+  tok->ival = val;
   tok->ty = ty_int;
   return tok;
 }
@@ -1119,11 +1119,12 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
 static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
   tok = expand_tok(split_line(rest, tok));
-  convert_pp_number(tok);
 
-  if (tok->kind != TK_NUM || tok->ty->kind != TY_INT)
+  int64_t val;
+  if (convert_pp_number(tok, &val, &(long double){0})->kind != TY_INT)
     error_tok(tok, "invalid line marker");
-  start->file->line_delta = tok->val - start->line_no - 1;
+
+  start->file->line_delta = val - start->line_no - 1;
 
   tok = tok->next;
   if (tok->kind == TK_EOF)

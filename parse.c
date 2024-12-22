@@ -4345,19 +4345,9 @@ static Node *primary(Token **rest, Token *tok) {
     return new_boolean(1, tok);
   }
 
-  if (tok->kind == TK_PP_NUM)
-    convert_pp_number(tok);
-
-  if (tok->kind == TK_NUM) {
-    Node *node;
-    if (is_flonum(tok->ty)) {
-      node = new_node(ND_NUM, tok);
-      node->fval = tok->fval;
-    } else {
-      node = new_num(tok->val, tok);
-    }
-
-    node->ty = tok->ty;
+  if (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) {
+    Node *node = new_node(ND_NUM, tok);
+    node->ty = convert_pp_number(tok, &node->val, &node->fval);
     *rest = tok->next;
     return node;
   }

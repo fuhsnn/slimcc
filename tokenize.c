@@ -410,8 +410,8 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
   if (!end)
     error_at(p, "unclosed char literal");
 
-  Token *tok = new_token(TK_NUM, start, end + 1);
-  tok->val = c;
+  Token *tok = new_token(TK_INT_NUM, start, end + 1);
+  tok->ival = c;
   tok->ty = ty;
   return tok;
 }
@@ -448,7 +448,7 @@ static Token *new_pp_number(char *start, char *p) {
   }
 }
 
-static bool convert_pp_int(Token *tok, char *loc, int len) {
+static bool convert_pp_int(char *loc, int len, Type **res_ty, int64_t *res_val) {
   char *p = loc;
 
   // Read a binary, octal, decimal or hexadecimal number.
@@ -522,14 +522,18 @@ static bool convert_pp_int(Token *tok, char *loc, int len) {
       ty = ty_int;
   }
 
-  tok->kind = TK_NUM;
-  tok->val = val;
-  tok->ty = ty;
+  *res_val = val;
+  *res_ty = ty;
   return true;
 }
 
 // Converts a pp-number token to a regular number token.
-void convert_pp_number(Token *tok) {
+Type *convert_pp_number(Token *tok, int64_t *res_val, long double *res_fval) {
+  if (tok->kind == TK_INT_NUM) {
+    *res_val = tok->ival;
+    return tok->ty;
+  }
+
   // Remove digit seperators
   int len = 0;
   char buf[227];
@@ -546,15 +550,15 @@ void convert_pp_number(Token *tok) {
 
   buf[len] = '\0';
 
+  Type *ty;
   // Try to parse as an integer constant.
-  if (convert_pp_int(tok, buf, len))
-    return;
+  if (convert_pp_int(buf, len, &ty, res_val))
+    return ty;
 
   // If it's not an integer, it must be a floating point constant.
   char *end;
   long double val = strtold(buf, &end);
 
-  Type *ty;
   if (*end == 'f' || *end == 'F') {
     val = (float)val;
     ty = ty_float;
@@ -570,9 +574,8 @@ void convert_pp_number(Token *tok) {
   if (&buf[len] != end)
     error_tok(tok, "invalid numeric constant");
 
-  tok->kind = TK_NUM;
-  tok->fval = val;
-  tok->ty = ty;
+  *res_fval = val;
+  return ty;
 }
 
 // Initialize line info for all tokens.
@@ -700,7 +703,7 @@ Token *tokenize(File *file, Token **end) {
     // Character literal
     if (*p == '\'') {
       cur = cur->next = read_char_literal(p, p, ty_int);
-      cur->val = (char)cur->val;
+      cur->ival = (char)cur->ival;
       p += cur->len;
       continue;
     }
@@ -708,7 +711,7 @@ Token *tokenize(File *file, Token **end) {
     // UTF-16 character literal
     if (startswith2(p, 'u', '\'')) {
       cur = cur->next = read_char_literal(p, p + 1, ty_ushort);
-      cur->val &= 0xffff;
+      cur->ival &= 0xffff;
       p += cur->len;
       continue;
     }

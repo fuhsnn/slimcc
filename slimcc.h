@@ -131,7 +131,7 @@ typedef enum {
   TK_KEYWORD, // Keywords
   TK_TYPEKW,  // Keywords
   TK_STR,     // String literals
-  TK_NUM,     // Numeric literals
+  TK_INT_NUM, // Integer Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
   TK_PMARK,   // Placermarkers
   TK_ATTR,    // GNU attribute
@@ -157,11 +157,10 @@ typedef struct Token Token;
 struct Token {
   TokenKind kind;   // Token kind
   Token *next;      // Next token
-  int64_t val;      // If kind is TK_NUM, its value
-  long double fval; // If kind is TK_NUM, its value
+  int64_t ival;     // If kind is TK_INT_NUM, its value
   char *loc;        // Token location
   int len;          // Token length
-  Type *ty;         // Used if TK_NUM or TK_STR
+  Type *ty;         // Used if TK_INT_NUM or TK_STR
   char *str;        // String literal contents including terminating '\0'
 
   File *file;       // Source location
@@ -194,7 +193,7 @@ Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end, int *incl_no);
 File *add_input_file(char *path, char *content, int *incl_no);
-void convert_pp_number(Token *tok);
+Type *convert_pp_number(Token *tok, int64_t *res_val, long double *res_fval);
 TokenKind ident_keyword(Token *tok);
 
 #define internal_error() \
