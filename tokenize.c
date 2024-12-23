@@ -653,8 +653,11 @@ Token *tokenize(File *file, Token **end) {
 
     // Skip block comments.
     if (startswith2(p, '/', '*')) {
-      char *q = strstr(p + 2, "*/");
-      if (!q)
+      char *q = p + 2;
+      for (; *q; q++)
+        if (startswith2(q, '*', '/'))
+          break;
+      if (!*q)
         error_at(p, "unclosed block comment");
       p = q + 2;
       has_space = true;
