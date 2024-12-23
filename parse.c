@@ -3206,15 +3206,25 @@ static Node *conditional(Token **rest, Token *tok) {
   if (equal(tok->next, ":")) {
     // [GNU] Compile `a ?: b` as `tmp = a, tmp ? tmp : b`.
     add_type(cond);
-    enter_tmp_scope();
-    Obj *var = new_lvar(NULL, cond->ty);
-    Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
-    Node *rhs = new_node(ND_COND, tok);
-    rhs->cond = to_bool(new_var_node(var, tok));
-    rhs->then = new_var_node(var, tok);
-    rhs->els = conditional(rest, tok->next->next);
-    leave_scope();
-    return new_binary(ND_CHAIN, lhs, rhs, tok);
+
+    int64_t val;
+    Node n = *cond;
+    if (!is_const_expr(to_bool(&n), &val)) {
+      enter_tmp_scope();
+      Obj *var = new_lvar(NULL, cond->ty);
+      Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
+      Node *rhs = new_node(ND_COND, tok);
+      rhs->cond = to_bool(new_var_node(var, tok));
+      rhs->then = new_var_node(var, tok);
+      rhs->els = conditional(rest, tok->next->next);
+      leave_scope();
+      return new_binary(ND_CHAIN, lhs, rhs, tok);
+    }
+    Node *node = new_node(ND_COND, tok);
+    node->cond = new_boolean(!!val, cond->tok);
+    node->then = cond;
+    node->els = conditional(rest, tok->next->next);
+    return node;
   }
 
   Node *node = new_node(ND_COND, tok);
