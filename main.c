@@ -749,6 +749,7 @@ static void assemble(char *input, char *output) {
   strarray_push(&arr, input);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
+  strarray_push(&arr, "--fatal-warnings");
 
   for (int i = 0; i < as_args.len; i++)
     strarray_push(&arr, as_args.data[i]);
