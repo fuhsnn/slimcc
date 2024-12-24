@@ -927,7 +927,7 @@ static void load_fval2(Type *ty, long double fval, int reg) {
     return;
   }
   union { double f64; uint64_t u64; } u = { fval };
-  println("  movq $%lu, %%rax", u.u64);
+  println("  movq $%"PRIu64", %%rax", u.u64);
   println("  movq %%rax, %%xmm%d", reg);
   return;
 }
@@ -961,8 +961,8 @@ static void load_fval(Type *ty, long double fval) {
   union { long double f80; uint64_t u64[2]; } u;
   memset(&u, 0, sizeof(u));
   u.f80 = fval;
-  println("  movq $%lu, %%rax", u.u64[0]);
-  println("  movw $%lu, %%dx", u.u64[1]);
+  println("  movq $%"PRIu64", %%rax", u.u64[0]);
+  println("  movw $%"PRIu16", %%dx", (uint16_t)u.u64[1]);
   println("  push %%rdx");
   println("  push %%rax");
   println("  fninit; fldt (%%rsp)");
