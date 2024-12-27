@@ -361,7 +361,7 @@ static void parse_args(int argc, char **argv) {
     }
 
     if (!strcmp(argv[i], "-idirafter")) {
-      strarray_push(&idirafter, argv[i++]);
+      strarray_push(&idirafter, argv[++i]);
       continue;
     }
 

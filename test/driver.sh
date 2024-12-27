@@ -166,12 +166,14 @@ echo 'static inline void f2(); static inline void f1() { f2(); } static inline v
 check inline
 
 # -idirafter
-mkdir -p $tmp/dir1 $tmp/dir2
+mkdir -p $tmp/dir1 $tmp/dir2 $tmp/dir3
 echo foo > $tmp/dir1/idirafter
 echo bar > $tmp/dir2/idirafter
 echo "#include \"idirafter\"" | $testcc -I$tmp/dir1 -I$tmp/dir2 -E -xc - | grep -q foo
 check -idirafter
 echo "#include \"idirafter\"" | $testcc -idirafter $tmp/dir1 -I$tmp/dir2 -E -xc - | grep -q bar
+check -idirafter
+echo "#include \"idirafter\"" | $testcc -idirafter $tmp/dir1 -I$tmp/dir3 -E -xc - | grep -q foo
 check -idirafter
 
 # -fcommon
