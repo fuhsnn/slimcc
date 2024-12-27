@@ -50,15 +50,15 @@ static void usage(int status) {
   exit(status);
 }
 
-static bool take_arg(char *arg) {
-  char *x[] = {
-    "-o", "-I", "-idirafter", "-include", "-x", "-MF", "-MT", "-Xlinker",
-  };
+static char *take_arg(char **argv, int *i, char *opt) {
+  if (strcmp(argv[*i], opt))
+    return NULL;
 
-  for (int i = 0; i < sizeof(x) / sizeof(*x); i++)
-    if (!strcmp(arg, x[i]))
-      return true;
-  return false;
+  if (!argv[++(*i)]) {
+    fprintf(stderr, "missing argument to %s\n", opt);
+    exit(1);
+  }
+  return argv[*i];
 }
 
 static void add_include_path(char *p) {
@@ -155,13 +155,7 @@ static char *quote_makefile(char *s) {
 }
 
 static void parse_args(int argc, char **argv) {
-  // Make sure that all command line options that take an argument
-  // have an argument.
-  for (int i = 1; i < argc; i++)
-    if (take_arg(argv[i]))
-      if (!argv[++i])
-        usage(1);
-
+  char *arg;
   StringArray idirafter = {0};
 
   for (int i = 1; i < argc; i++) {
@@ -181,8 +175,8 @@ static void parse_args(int argc, char **argv) {
     if (!strcmp(argv[i], "--help"))
       usage(0);
 
-    if (!strcmp(argv[i], "-o")) {
-      opt_o = argv[++i];
+    if ((arg = take_arg(argv, &i, "-o"))) {
+      opt_o = arg;
       continue;
     }
 
@@ -221,8 +215,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-I")) {
-      add_include_path(argv[++i]);
+    if ((arg = take_arg(argv, &i, "-I"))) {
+      add_include_path(arg);
       continue;
     }
 
@@ -231,8 +225,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-D")) {
-      define(argv[++i]);
+    if ((arg = take_arg(argv, &i, "-D"))) {
+      define(arg);
       continue;
     }
 
@@ -241,8 +235,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-U")) {
-      undef_macro(argv[++i]);
+    if ((arg = take_arg(argv, &i, "-U"))) {
+      undef_macro(arg);
       continue;
     }
 
@@ -251,14 +245,14 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-include")) {
-      strarray_push(&opt_include, argv[++i]);
+    if ((arg = take_arg(argv, &i, "-include"))) {
+      strarray_push(&opt_include, arg);
       continue;
     }
 
-    if (!strcmp(argv[i], "-x")) {
+    if ((arg = take_arg(argv, &i, "-x"))) {
       strarray_push(&input_paths, "-x");
-      strarray_push(&input_paths, argv[++i]);
+      strarray_push(&input_paths, arg);
       continue;
     }
 
@@ -288,8 +282,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-Xlinker")) {
-      strarray_push(&ld_extra_args, argv[++i]);
+    if ((arg = take_arg(argv, &i, "-Xlinker"))) {
+      strarray_push(&ld_extra_args, arg);
       continue;
     }
 
@@ -303,8 +297,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-MF")) {
-      opt_MF = argv[++i];
+    if ((arg = take_arg(argv, &i, "-MF"))) {
+      opt_MF = arg;
       continue;
     }
 
@@ -313,11 +307,11 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-MT")) {
+    if ((arg = take_arg(argv, &i, "-MT"))) {
       if (opt_MT == NULL)
-        opt_MT = argv[++i];
+        opt_MT = arg;
       else
-        opt_MT = format("%s %s", opt_MT, argv[++i]);
+        opt_MT = format("%s %s", opt_MT, arg);
       continue;
     }
 
@@ -326,11 +320,11 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-MQ")) {
+    if ((arg = take_arg(argv, &i, "-MQ"))) {
       if (opt_MT == NULL)
-        opt_MT = quote_makefile(argv[++i]);
+        opt_MT = quote_makefile(arg);
       else
-        opt_MT = format("%s %s", opt_MT, quote_makefile(argv[++i]));
+        opt_MT = format("%s %s", opt_MT, quote_makefile(arg));
       continue;
     }
 
@@ -344,13 +338,13 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-cc1-input")) {
-      base_file = argv[++i];
+    if ((arg = take_arg(argv, &i, "-cc1-input"))) {
+      base_file = arg;
       continue;
     }
 
-    if (!strcmp(argv[i], "-cc1-output")) {
-      output_file = argv[++i];
+    if ((arg = take_arg(argv, &i, "-cc1-output"))) {
+      output_file = arg;
       continue;
     }
 
@@ -360,8 +354,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-idirafter")) {
-      strarray_push(&idirafter, argv[++i]);
+    if ((arg = take_arg(argv, &i, "-idirafter"))) {
+      strarray_push(&idirafter, arg);
       continue;
     }
 
@@ -383,9 +377,9 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-L")) {
+    if ((arg = take_arg(argv, &i, "-L"))) {
       strarray_push(&ld_extra_args, "-L");
-      strarray_push(&ld_extra_args, argv[++i]);
+      strarray_push(&ld_extra_args, arg);
       continue;
     }
 
