@@ -51,6 +51,10 @@ echo 'int y;' > $tmp/bar.c
 [ -f $tmp/foo.s ] && [ -f $tmp/bar.s ]
 check 'multiple input files'
 
+touch $tmp/foo.c
+$testcc -E "$__undefined_shell_var" $tmp/foo.c >/dev/null
+check 'empty input string'
+
 # Run linker
 rm -f $tmp/foo
 echo 'int main() { return 0; }' | $testcc -o $tmp/foo -xc -xc -

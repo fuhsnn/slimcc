@@ -165,6 +165,9 @@ static void parse_args(int argc, char **argv) {
   StringArray idirafter = {0};
 
   for (int i = 1; i < argc; i++) {
+    if (*argv[i] == '\0')
+      continue;
+
     if (!strcmp(argv[i], "-###")) {
       opt_hash_hash_hash = true;
       continue;
