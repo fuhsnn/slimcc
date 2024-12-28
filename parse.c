@@ -3383,6 +3383,11 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_ADD, lhs, rhs, tok);
 
+  if (lhs->ty->kind == TY_FUNC)
+    lhs = new_cast(lhs, pointer_to(lhs->ty));
+  if (rhs->ty->kind == TY_FUNC)
+    rhs = new_cast(rhs, pointer_to(rhs->ty));
+
   Node **ofs = is_integer(lhs->ty) ? &lhs : is_integer(rhs->ty) ? &rhs : NULL;
   Node *ptr = lhs->ty->base ? lhs : rhs->ty->base ? rhs : NULL;
 
@@ -3406,6 +3411,11 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   // num - num
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_SUB, lhs, rhs, tok);
+
+  if (lhs->ty->kind == TY_FUNC)
+    lhs = new_cast(lhs, pointer_to(lhs->ty));
+  if (rhs->ty->kind == TY_FUNC)
+    rhs = new_cast(rhs, pointer_to(rhs->ty));
 
   // ptr - num
   if (lhs->ty->base && is_integer(rhs->ty)) {
