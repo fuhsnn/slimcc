@@ -96,21 +96,21 @@ static char *rtn_label;
 
 bool dont_reuse_stack;
 
-struct {
+static struct {
   bool in[REG_END];
   bool out[REG_END];
-} static asm_use;
+} asm_use;
 
-struct {
+static struct {
  AsmParam **data;
  int capacity;
  int cnt;
-} static asm_ops;
+} asm_ops;
 
-struct {
+static struct {
   char *rbp;
   char *rbx;
-} static asm_alt_ptr;
+} asm_alt_ptr;
 
 typedef enum {
   SL_GP,
@@ -128,11 +128,11 @@ typedef struct {
   long loc;
 } Slot;
 
-struct {
+static struct {
   Slot *data;
   int capacity;
   int depth;
-} static tmp_stack;
+} tmp_stack;
 
 static void load2(Type *ty, int sofs, char *sptr);
 static void store2(Type *ty, int dofs, char *dptr);
@@ -3416,7 +3416,7 @@ void prepare_inline_asm(Node *node) {
   }
 }
 
-static char *reg_high_byte(Reg reg, Token *tok) {
+static char *reg_high_byte(Reg reg) {
   switch (reg) {
   case REG_AX: return "%ah";
   case REG_BX: return "%bh";
@@ -3598,7 +3598,7 @@ static void asm_gp_inputs(void) {
   }
 }
 
-static int asm_x87_inputs(Node *node) {
+static int asm_x87_inputs(void) {
   AsmParam *sort_buf[8] = {0};
 
   for (int i = 0; i < asm_ops.cnt; i++) {
@@ -3772,7 +3772,7 @@ static void asm_body(Node *node) {
         if (is_gp_reg(ap->reg)) {
           char *regname = NULL;
           switch (mod) {
-          case 'h': regname = reg_high_byte(ap->reg, ap->arg->tok); break;
+          case 'h': regname = reg_high_byte(ap->reg); break;
           case 'b': regname = regs[ap->reg][0]; break;
           case 'w': regname = regs[ap->reg][1]; break;
           case 'k': regname = regs[ap->reg][2]; break;
@@ -3843,7 +3843,7 @@ static void gen_asm(Node *node) {
   asm_fill_ops(node);
   asm_gen_operands();
 
-  int x87_depth = asm_x87_inputs(node);
+  int x87_depth = asm_x87_inputs();
   asm_xmm_inputs();
 
   asm_push_clobbers(node);
