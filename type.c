@@ -399,17 +399,18 @@ void add_type(Node *node) {
     node->ty = ty_int;
     return;
   case ND_ADD:
-  case ND_SUB:
-    if (node->lhs->ty->base) {
-      if (node->lhs->ty->kind != TY_PTR)
-        node->lhs = new_cast(node->lhs, pointer_to(node->lhs->ty->base));
-      node->rhs = new_cast(node->rhs, ty_ullong);
-      node->ty = node->lhs->ty;
+  case ND_SUB: {
+    Node **ptr = node->lhs->ty->base ? &node->lhs : node->rhs->ty->base ? &node->rhs : NULL;
+    if (ptr) {
+      if ((*ptr)->ty->kind != TY_PTR)
+        *ptr = new_cast(*ptr, pointer_to((*ptr)->ty->base));
+      node->ty = (*ptr)->ty;
       return;
     }
     usual_arith_conv(&node->lhs, &node->rhs, false);
     node->ty = node->lhs->ty;
     return;
+  }
   case ND_MUL:
   case ND_DIV:
   case ND_MOD:
