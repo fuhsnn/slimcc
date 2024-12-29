@@ -150,7 +150,7 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
 static int read_ident(char *p) {
   char *start = p;
 
-  for (bool is_first = true;; is_first = false) {
+  for (;;) {
     if (Isalnum(*p) || *p == '_' || *p == '$') {
       p++;
       continue;
@@ -158,7 +158,7 @@ static int read_ident(char *p) {
     if ((unsigned char)*p >= 128) {
       char *pos;
       uint32_t c = decode_utf8(&pos, p);
-      if (is_first ? is_ident1(c) : is_ident2(c)) {
+      if (p == start ? is_ident1(c) : is_ident2(c)) {
         p = pos;
         continue;
       }
