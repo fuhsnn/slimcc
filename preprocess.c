@@ -1075,8 +1075,8 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
     if (tok->kind != TK_EOF)
       return to_int_token(start, EMBED_NOT_FOUND);
 
-    FILE *fp = fopen(path, "r");
-    if (!fp)
+    FILE *fp;
+    if (!path || !(fp = fopen(path, "r")))
       return to_int_token(start, EMBED_NOT_FOUND);
     bool is_empty = !fread(&(char){0}, 1, sizeof(char), fp);
     fclose(fp);
@@ -1087,8 +1087,8 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
   if (tok->kind != TK_EOF)
     error_tok(start, "unknown embed parameter");
 
-  FILE *fp = fopen(path, "r");
-  if (!fp)
+  FILE *fp;
+  if (!path || !(fp = fopen(path, "r")))
     error_tok(start, "%s: cannot open file: %s", path, strerror(errno));
 
   Token head = {0};
@@ -1186,7 +1186,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     bool is_dquote;
     char *filename = read_filename(&tok, split_line(&cont, tok->next), &is_dquote);
     char *path = search_include_paths2(filename, start, is_dquote, NULL);
-    return embed_file(cont, tok, path ? path : filename, start->next->next);
+    return embed_file(cont, tok, path, start->next->next);
   }
 
   if (equal(tok, "include")) {
@@ -1486,7 +1486,7 @@ static Token *has_embed_macro(Token *start) {
   bool is_dquote;
   char *filename = read_filename(&tok, split_paren(&end, tok), &is_dquote);
   char *path = search_include_paths2(filename, start, is_dquote, NULL);
-  Token *tok2 = embed_file(NULL, tok, path ? path : filename, start->next->next);
+  Token *tok2 = embed_file(NULL, tok, path, start->next->next);
 
   pop_macro_lock_until(start, end);
   tok2->next = end;
