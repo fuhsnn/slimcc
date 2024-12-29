@@ -95,6 +95,11 @@ check -I
 echo "#include \"i-option-test\"" | $testcc -I $tmp/dir -E -xc - | grep -q foo
 check -I
 
+# pragma once
+printf "#pragma once\n#ifdef A\n#error\n#endif\n#define A\n" > $tmp/inc.h
+printf "#include \"inc.h\"\n#include \"inc.h\"" | $testcc -xc - -E -I$tmp -o/dev/null
+check "pragma once"
+
 # -D
 echo foo | $testcc -Dfoo -E -xc - | grep -q 1
 check -D

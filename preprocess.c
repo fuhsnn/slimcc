@@ -1016,6 +1016,9 @@ static char *read_include_filename(Token *tok, bool *is_dquote) {
 }
 
 static Token *include_file(Token *tok, char *path, Token *filename_tok, int *incl_no) {
+  if (!path)
+    error_tok(filename_tok, "file not found");
+
   // Check for "#pragma once"
   if (hashmap_get(&pragma_once, path))
     return tok;
@@ -1191,7 +1194,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
     int incl_no = -1;
     char *path = search_include_paths2(filename, start, is_dquote, &incl_no);
-    return include_file(tok, path ? path : filename, start->next->next, &incl_no);
+    return include_file(tok, path, start->next->next, &incl_no);
   }
 
   if (equal(tok, "include_next")) {
@@ -1201,9 +1204,6 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     int incl_no = tok->file->incl_no + 1;
     char *filename = read_include_filename(split_line(&tok, tok->next), &(bool){0});
     char *path = search_include_next(filename, &incl_no);
-    if (!path)
-      error_tok(start->next->next, "%s: cannot open file: %s", filename, strerror(errno));
-
     return include_file(tok, path, start->next->next, &incl_no);
   }
 
