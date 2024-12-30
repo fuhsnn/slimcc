@@ -11,6 +11,7 @@ bool opt_optimize = true;
 bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;
+bool opt_werror;
 bool opt_cc1_asm_pp;
 char *opt_visibility;
 StdVer opt_std;
@@ -467,6 +468,11 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-nostdlib")) {
       opt_nostdlib = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-Werror")) {
+      opt_werror = true;
       continue;
     }
 
