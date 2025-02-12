@@ -544,21 +544,20 @@ static void bool_attr(char *name, Token *loc, bool *b, TokenKind kind) {
   }
 }
 
-static void attr_packed(Token *loc, bool *b, TokenKind kind) {
-  bool_attr("packed", loc, b, kind);
-}
-
-static void attr_weak(Token *loc, bool *b, TokenKind kind) {
-  bool_attr("weak", loc, b, kind);
+static void apply_str_attr(char *attr_name, Token *tok, char **var_str, char *attr_str) {
+  if (!*var_str) {
+    *var_str = attr_str;
+    return;
+  }
+  if (attr_str && strcmp(*var_str, attr_str))
+    error_tok(tok, "conflict of attribute \'%s\'", attr_name);
 }
 
 static void str_attr(char *name, Token *loc, char **str, TokenKind kind) {
-  if (*str)
-    return;
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind == kind && equal_ext(tok, name)) {
       Token *t;
-      *str = str_tok(&t, skip(tok->next, "("))->str;
+      apply_str_attr(name, tok, str, str_tok(&t, skip(tok->next, "("))->str);
       skip(t, ")");
       return;
     }
@@ -568,32 +567,28 @@ static void str_attr(char *name, Token *loc, char **str, TokenKind kind) {
 static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, &attr->cleanup_fn, kind);
-  attr_weak(tok, &attr->is_weak, kind);
+  bool_attr("weak", tok, &attr->is_weak, kind);
   str_attr("alias", tok, &attr->alias, kind);
   str_attr("section", tok, &attr->section, kind);
   str_attr("visibility", tok, &attr->visibility, kind);
 }
 
+static void str_attr2(char *attr_name, Token *var_name, Token *var_end, char **str, char *attr_str) {
+  apply_str_attr(attr_name, var_name, str, attr_str);
+  str_attr(attr_name, var_name, str, TK_ATTR);
+  str_attr(attr_name, var_name->next, str, TK_BATTR);
+  str_attr(attr_name, var_end, str, TK_ATTR);
+}
+
 static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
-  var->alias_name = attr->alias;
-  str_attr("alias", name, &var->alias_name, TK_ATTR);
-  str_attr("alias", name->next, &var->alias_name, TK_BATTR);
-  str_attr("alias", tok, &var->alias_name, TK_ATTR);
+  str_attr2("alias", name, tok, &var->alias_name, attr->alias);
+  str_attr2("section", name, tok, &var->section_name, attr->section);
+  str_attr2("visibility", name, tok, &var->visibility, attr->visibility);
 
-  var->section_name = attr->section;
-  str_attr("section", name, &var->section_name, TK_ATTR);
-  str_attr("section", name->next, &var->section_name, TK_BATTR);
-  str_attr("section", tok, &var->section_name, TK_ATTR);
-
-  var->visibility = attr->visibility;
-  str_attr("visibility", name, &var->visibility, TK_ATTR);
-  str_attr("visibility", name->next, &var->visibility, TK_BATTR);
-  str_attr("visibility", tok, &var->visibility, TK_ATTR);
-
-  var->is_weak = attr->is_weak;
-  attr_weak(name, &var->is_weak, TK_ATTR);
-  attr_weak(name->next, &var->is_weak, TK_BATTR);
-  attr_weak(tok, &var->is_weak, TK_ATTR);
+  var->is_weak |= attr->is_weak;
+  bool_attr("weak", name, &var->is_weak, TK_ATTR);
+  bool_attr("weak", name->next, &var->is_weak, TK_BATTR);
+  bool_attr("weak", tok, &var->is_weak, TK_ATTR);
 }
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
@@ -3639,8 +3634,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *ty = new_type(kind, -1, 1);
 
-  attr_packed(tok, &ty->is_packed, TK_ATTR);
-  attr_packed(tok, &ty->is_packed, TK_BATTR);
+  bool_attr("packed", tok, &ty->is_packed, TK_ATTR);
+  bool_attr("packed", tok, &ty->is_packed, TK_BATTR);
 
   int alt_align = 0;
   attr_aligned(tok, &alt_align, TK_ATTR);
@@ -3670,7 +3665,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   struct_members(&tok, tok, ty);
 
   attr_aligned(tok, &alt_align, TK_ATTR);
-  attr_packed(tok, &ty->is_packed, TK_ATTR);
+  bool_attr("packed", tok, &ty->is_packed, TK_ATTR);
   *rest = tok;
 
   if (kind == TY_STRUCT)
