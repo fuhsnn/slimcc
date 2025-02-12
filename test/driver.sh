@@ -341,4 +341,14 @@ echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
 $testcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Xlinker
 
+# constructor/destructor attribute
+echo "int putchar(int);" > $tmp/foo.c
+echo "__attribute__((constructor,destructor(333)))void z(void){putchar('z');}" >> $tmp/foo.c
+echo "int main(void){putchar('m');}" >> $tmp/foo.c
+echo "void x(void)__attribute__((constructor(111)));" >> $tmp/foo.c
+echo "void __attribute__((destructor)) x(void){putchar('x');}" >> $tmp/foo.c
+$testcc $tmp/foo.c -o $tmp/foo
+$tmp/foo | grep -q '^xzmxz$'
+check '__attribute__((constructor,destructor))'
+
 echo OK

@@ -4053,6 +4053,17 @@ static void store_gp(int r, int sz, int ofs, char *ptr) {
   store_gp2((char *[]){argreg8[r], argreg16[r], argreg32[r], argreg64[r]}, sz, ofs, ptr);
 }
 
+static void emit_cdtor(char *sec, uint16_t priority, Obj *fn) {
+  Printfts(".section .%s", sec);
+  if (priority)
+    Printf(".%"PRIu16, (uint16_t)(priority - 1));
+  Printssn(",\"aw\"");
+  Printstn(".align 8");
+  Printftn(".quad \"%s\"", asm_name(fn));
+
+  fn->is_referenced = true;
+}
+
 void emit_text(Obj *fn) {
   for (Obj *var = fn->static_lvars; var; var = var->next)
     emit_data(var);
@@ -4181,6 +4192,11 @@ void emit_text(Obj *fn) {
   Printstn("leave");
   Printstn("ret");
   Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
+
+  if (fn->is_ctor)
+    emit_cdtor("init_array", fn->ctor_prior, fn);
+  if (fn->is_dtor)
+    emit_cdtor("fini_array", fn->dtor_prior, fn);
 }
 
 typedef struct {

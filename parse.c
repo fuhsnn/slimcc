@@ -38,6 +38,10 @@ typedef struct {
   bool is_constexpr;
   bool is_weak;
   bool local_only;
+  bool is_ctor;
+  bool is_dtor;
+  uint16_t ctor_prior;
+  uint16_t dtor_prior;
   Obj *cleanup_fn;
   char *alias;
   char *section;
@@ -502,6 +506,14 @@ static bool equal_tykw(Token *tok, char *op) {
   return tok->kind == TK_TYPEKW && equal(tok, op);
 }
 
+static bool get_attr_val(Token *tok, int64_t *val) {
+  if (equal(tok, "(")) {
+    *val = const_expr(&tok, tok);
+    return true;
+  }
+  return false;
+}
+
 static void attr_aligned(Token *loc, int *align, TokenKind kind) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind != kind)
@@ -531,6 +543,29 @@ static void attr_cleanup(Token *loc, Obj **fn, TokenKind kind) {
       strarray_push(&current_fn->refs, sc->var->name);
       *fn = sc->var;
       return;
+    }
+  }
+}
+
+static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor, uint16_t *priority, uint16_t pri, bool apply) {
+  if (apply) {
+    if (*is_cdtor && *priority != pri)
+      error_tok(tok, "%s priority conflict", attr_name);
+    *is_cdtor = true;
+    *priority = pri;
+  }
+}
+
+static void cdtor_attr(char *name, Token *loc, bool *is_cdtor, uint16_t *priority, TokenKind kind) {
+  for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
+    if (tok->kind != kind)
+      continue;
+    if (equal_ext(tok, name)) {
+      uint16_t pri = 0;
+      int64_t val;
+      if (get_attr_val(tok->next, &val))
+        pri = MIN(val, 65535L) + 1;
+      apply_cdtor_attr(name, tok, is_cdtor, priority, pri, true);
     }
   }
 }
@@ -568,6 +603,8 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, &attr->cleanup_fn, kind);
   bool_attr("weak", tok, &attr->is_weak, kind);
+  cdtor_attr("constructor", tok, &attr->is_ctor, &attr->ctor_prior, kind);
+  cdtor_attr("destructor", tok, &attr->is_dtor, &attr->dtor_prior, kind);
   str_attr("alias", tok, &attr->alias, kind);
   str_attr("section", tok, &attr->section, kind);
   str_attr("visibility", tok, &attr->visibility, kind);
@@ -589,6 +626,20 @@ static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
   bool_attr("weak", name, &var->is_weak, TK_ATTR);
   bool_attr("weak", name->next, &var->is_weak, TK_BATTR);
   bool_attr("weak", tok, &var->is_weak, TK_ATTR);
+}
+
+static void attr_cdtor2(char *attr_name, Token *var_name, Token *var_end, bool *is_cdtor, uint16_t *priority) {
+  cdtor_attr(attr_name, var_name, is_cdtor, priority, TK_ATTR);
+  cdtor_attr(attr_name, var_name->next, is_cdtor, priority, TK_BATTR);
+  cdtor_attr(attr_name, var_end, is_cdtor, priority, TK_ATTR);
+}
+
+static void func_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
+  apply_cdtor_attr("constructor", name, &var->is_ctor, &var->ctor_prior, attr->ctor_prior, attr->is_ctor);
+  attr_cdtor2("constructor", name, tok, &var->is_ctor, &var->ctor_prior);
+
+  apply_cdtor_attr("destructor", name, &var->is_dtor, &var->dtor_prior, attr->dtor_prior, attr->is_dtor);
+  attr_cdtor2("destructor", name, tok, &var->is_dtor, &var->dtor_prior);
 }
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
@@ -4502,16 +4553,17 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
       if (!name)
         error_tok(tok, "function name omitted");
 
+      Obj *fn = func_prototype(ty, attr, name);
+      func_attr(fn, attr, name, tok);
+      symbol_attr(fn, attr, name, tok);
+
       if (equal(tok, "{")) {
         if (!first || scope->parent)
           error_tok(tok, "function definition is not allowed here");
-        Obj *fn = func_prototype(ty, attr, name);
-        symbol_attr(fn, attr, name, tok);
         func_definition(&tok, tok, fn, ty);
         return tok;
       }
-      Obj *fn = func_prototype(ty, attr, name);
-      symbol_attr(fn, attr, name, tok);
+
       if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
         fn->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
         tok = skip(tok, ")");

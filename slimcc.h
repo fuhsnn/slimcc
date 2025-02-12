@@ -262,6 +262,10 @@ struct Obj {
   // Function
   bool is_inline;
   bool dealloc_vla;
+  bool is_ctor;
+  bool is_dtor;
+  uint16_t ctor_prior;
+  uint16_t dtor_prior;
   Node *body;
   void *output; // backend defined output object
 

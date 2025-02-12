@@ -1705,6 +1705,7 @@ static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
 
   if (gnu_if_battr) {
     if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
+      equal_ext(tok, "constructor") || equal_ext(tok, "destructor") ||
       equal_ext(tok, "packed") || equal_ext(tok, "section") || equal_ext(tok, "visibility") ||
       equal_ext(tok, "weak"))
       return true;
