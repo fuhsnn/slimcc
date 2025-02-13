@@ -3996,16 +3996,27 @@ static void emit_data(Obj *var) {
     Printftn(".zero %"PRIi64, var->ty->size);
     return;
   }
+
   Relocation *rel = var->rel;
-  int pos = 0;
-  while (pos < var->ty->size) {
-    if (rel && rel->offset == pos) {
-      Printftn(".quad \"%s\"%+ld", *rel->label, rel->addend);
-      rel = rel->next;
-      pos += 8;
-    } else {
-      Printftn(".byte %d", var->init_data[pos++]);
+  for (int pos = 0;;) {
+    int rem = (rel ? rel->offset : var->ty->size) - pos;
+
+    while (rem > 0) {
+      if (rem >= 8)
+        Printftn(".quad 0x%"PRIx64, *(uint64_t *)&var->init_data[pos]), pos += 8, rem -= 8;
+      else if (rem >= 4)
+        Printftn(".int 0x%"PRIx32, *(uint32_t *)&var->init_data[pos]), pos += 4, rem -= 4;
+      else if (rem >= 2)
+        Printftn(".word %"PRIi16, *(int16_t *)&var->init_data[pos]), pos += 2, rem -= 2;
+      else
+        Printftn(".byte %"PRIi8, *(int8_t *)&var->init_data[pos]), pos += 1, rem -= 1;
     }
+
+    if (!rel)
+      break;
+
+    Printftn(".quad \"%s\"%+ld", *rel->label, rel->addend), pos += 8;
+    rel = rel->next;
   }
 }
 
