@@ -1,7 +1,7 @@
 #include "test.h"
 
 long double clobber(void) {
-  asm("fninit\n");
+  __asm__("fninit\n");
 
   return 2.0L;
 }

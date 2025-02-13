@@ -60,7 +60,7 @@ void i_constraint(void) {
 
 void reg_assign(void) {
   int a,b,c,d,e,f,g;
-  asm volatile(
+  __asm__ volatile(
     "movl %%edx, %3;"
     "movl %%ebp, %6;"
     :"=a"(a), "=b"(b), "=c"(c), "=&r"(d), "=S"(e), "=D"(f), "=&r"(g)
@@ -76,7 +76,7 @@ int float_flag(float f) {
   static int e;
   short np;
   char p;
-  asm (
+  __asm__ (
     "xorps %%xmm0, %%xmm0;"
     "ucomiss %[f_in], %%xmm3"
     : "=@ccp"(p), "=@ccnp"(np), "=@cce"(e), "=@ccne"(*indir_flag())
@@ -87,7 +87,7 @@ int float_flag(float f) {
 }
 
 int asm_goto(int arg){
-  asm goto (
+  __asm__ goto (
     "subl $5, %0; je %l2;"
     "subl $2, %0; jl %l1;"
     :
@@ -103,7 +103,7 @@ int asm_goto(int arg){
 }
 
 int asm_goto_output(int *arg){
-  asm goto (
+  __asm__ goto (
     "subl $5, %0; je %l[labB];"
     "subl $2, %0; jl %l[labA];"
     "movq $0, %%rbp;"
@@ -125,38 +125,38 @@ void x87_clobber(void) {
   volatile double f2;
   volatile float f3;
 
-  asm volatile (""::
+  __asm__ volatile (""::
     "f"((float){11}),
     "t"((double){22}),
     "u"((long double){33}) : "%st", "st(1)"
     );
-  asm volatile ("": "=t"(f1));
-  asm volatile ("": "=t"(f2));
+  __asm__ volatile ("": "=t"(f1));
+  __asm__ volatile ("": "=t"(f2));
   ASSERT(1, 33 == f1);
   ASSERT(1, 11 == f2);
 
-  asm volatile (""::
+  __asm__ volatile (""::
     "u"((float){44}),
     "f"((double){55}),
     "t"((long double){66}) : "st"
     );
-  asm volatile("": "=t"(f3));
+  __asm__ volatile("": "=t"(f3));
   ASSERT(1, 55 == f3);
 
-  asm volatile (""::
+  __asm__ volatile (""::
     "f"((float){77}),
     "u"((double){88}),
     "t"((long double){99}) : "st", "st(1)", "st(2)"
     );
-  asm volatile ("": "=t"(f1));
-  asm volatile ("": "=t"(f2));
+  __asm__ volatile ("": "=t"(f1));
+  __asm__ volatile ("": "=t"(f2));
   ASSERT(1, 88 == f1);
   ASSERT(1, 77 == f2);
 }
 
 int ptr_conversion(char *str) {
     int res;
-    asm (
+    __asm__ (
     "  leaq %3, %%rsi;"
     "  call *%2"
     : "=a"(res)
@@ -176,7 +176,7 @@ int exhaust_inner2(struct Large s) {
   ASSERT(0, 1023 & (intptr_t)&res);
 
   int register init __asm__("%bh") = 0;
-  asm volatile(
+  __asm__ volatile(
     "shl $4, %1;"
     "add %1, %%ebx;"
     "shl $3, %%eax;"
@@ -221,7 +221,7 @@ int exhaust_inner(void) {
 void exhaust(void) {
   void *(arr)[12];
   int res;
-  asm volatile(
+  __asm__ volatile(
     "movq %%r12, %[arr];"
     "movq %%r13, 8+0%[arr];"
     "movq %%r14, 16+0%[arr];"
@@ -248,7 +248,7 @@ void bitfield_out() {
   struct S s;
   s.z = -1;
   struct S *p = &s;
-  asm (
+  __asm__ (
     "mov $13, %b2;"
     "mov $6, %b0;"
     "mov $-2, %b1;"
@@ -263,7 +263,7 @@ void bitfield_out() {
 void x87(void) {
   long double f1 = 11, f2 = 22;
   long double *p2 = &f2;
-  asm (
+  __asm__ (
     "fxch %1;"
     "fmul %2, %0;"
     :"+t"(f1), "+u"(*p2)
