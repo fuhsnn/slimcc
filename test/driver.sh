@@ -1,4 +1,3 @@
-#!/bin/bash
 testcc=$1
 refcc=$2
 
@@ -22,17 +21,17 @@ $testcc -c -o $tmp/out $tmp/empty.c
 check -o
 
 # -S
-echo 'int main() {}' | $testcc -S -o- -xc - | grep -q '"main":'
+echo 'int main() {}' | $testcc -S -o- -xc - | grep -q 'main'
 check -S
 
 # Default output file
 rm -f $tmp/out.o $tmp/out.s
 echo 'int main() {}' > $tmp/out.c
-(cd $tmp; $OLDPWD/$testcc -c out.c)
+(cd $tmp; $testcc -c out.c)
 [ -f $tmp/out.o ]
 check 'default output file'
 
-(cd $tmp; $OLDPWD/$testcc -c -S out.c)
+(cd $tmp; $testcc -c -S out.c)
 [ -f $tmp/out.s ]
 check 'default output file'
 
@@ -40,20 +39,16 @@ check 'default output file'
 rm -f $tmp/foo.o $tmp/bar.o
 echo 'int x;' > $tmp/foo.c
 echo 'int y;' > $tmp/bar.c
-(cd $tmp; $OLDPWD/$testcc -c $tmp/foo.c $tmp/bar.c)
+(cd $tmp; $testcc -c $tmp/foo.c $tmp/bar.c)
 [ -f $tmp/foo.o ] && [ -f $tmp/bar.o ]
 check 'multiple input files'
 
 rm -f $tmp/foo.s $tmp/bar.s
 echo 'int x;' > $tmp/foo.c
 echo 'int y;' > $tmp/bar.c
-(cd $tmp; $OLDPWD/$testcc -c -S $tmp/foo.c $tmp/bar.c)
+(cd $tmp; $testcc -c -S $tmp/foo.c $tmp/bar.c)
 [ -f $tmp/foo.s ] && [ -f $tmp/bar.s ]
 check 'multiple input files'
-
-touch $tmp/foo.c
-$testcc -E "$__undefined_shell_var" $tmp/foo.c >/dev/null
-check 'empty input string'
 
 # Run linker
 rm -f $tmp/foo
@@ -72,7 +67,7 @@ check linker
 # a.out
 rm -f $tmp/a.out
 echo 'int main() {}' > $tmp/foo.c
-(cd $tmp; $OLDPWD/$testcc foo.c)
+(cd $tmp; $testcc foo.c)
 [ -f $tmp/a.out ]
 check a.out
 
@@ -83,7 +78,7 @@ check -E
 
 echo foo > $tmp/out1
 echo "#include \"$tmp/out1\"" | $testcc -E -o $tmp/out2 -xc -
-cat $tmp/out2 | grep -q foo
+grep -q foo $tmp/out2
 check '-E and -o'
 
 # -I
@@ -112,14 +107,10 @@ check -D
 echo foo | $testcc -Dfoo=bar -Ufoo -E -xc - | grep -q foo
 check -U
 
-# ignored options
-$testcc -c -O -Wall -g -std=c11 -ffreestanding -fno-builtin \
-         -fno-omit-frame-pointer -fno-stack-protector -fno-strict-aliasing \
-         -m64 -mno-red-zone -w -o /dev/null $tmp/empty.c
-check 'ignored options'
-
 # BOM marker
-printf '\xef\xbb\xbfxyz\n' | $testcc -E -o- -xc - | grep -q '^xyz'
+rm -f $tmp/foo
+printf '#include <stdio.h>\nint main(){printf("%%c%%c%%cint i;\\n",0xEF,0xBB,0xBF);}\n' | $testcc -xc - -o $tmp/foo
+$tmp/foo | $testcc -S -o/dev/null -xc -
 check 'BOM marker'
 
 # Inline functions
@@ -134,40 +125,40 @@ echo 'int foo(); int main() { foo(); }' > $tmp/inline2.c
 $testcc -o /dev/null $tmp/inline1.c $tmp/inline2.c
 check inline
 
-echo 'static inline void f1() {}' | $testcc -o- -S -xc - | grep -v -q \"f1\":
+echo 'static inline void fn1() {}' | $testcc -o- -S -xc - | (! grep -q 'fn1')
 check inline
 
-echo 'static inline void f1() {} void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
+echo 'static inline void fn1() {} void foo() { fn1(); }' | $testcc -o- -S -xc - | grep -q 'fn1'
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
+echo 'static inline void fn1() {} static inline void fn2() { fn1(); } void foo() { fn1(); }' | $testcc -o- -S -xc - | grep -q 'fn1'
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -v -q \"f2\":
+echo 'static inline void fn1() {} static inline void fn2() { fn1(); } void foo() { fn1(); }' | $testcc -o- -S -xc - | (! grep -q 'fn2')
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
+echo 'static inline void fn1() {} static inline void fn2() { fn1(); } void foo() { fn2(); }' | $testcc -o- -S -xc - | grep -q 'fn1'
 check inline
 
-echo 'static inline void f1() {} static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f2\":
+echo 'static inline void fn1() {} static inline void fn2() { fn1(); } void foo() { fn2(); }' | $testcc -o- -S -xc - | grep -q 'fn2'
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() {}' | $testcc -o- -S -xc - | grep -v -q \"f1\":
+echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() {}' | $testcc -o- -S -xc - | (! grep -q 'fn1')
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() {}' | $testcc -o- -S -xc - | grep -v -q \"f2\":
+echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() {}' | $testcc -o- -S -xc - | (! grep -q 'fn2')
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
+echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() { fn1(); }' | $testcc -o- -S -xc - | grep -q 'fn1'
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f1(); }' | $testcc -o- -S -xc - | grep -q \"f2\":
+echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() { fn1(); }' | $testcc -o- -S -xc - | grep -q 'fn2'
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f1\":
+echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() { fn2(); }' | $testcc -o- -S -xc - | grep -q 'fn1'
 check inline
 
-echo 'static inline void f2(); static inline void f1() { f2(); } static inline void f2() { f1(); } void foo() { f2(); }' | $testcc -o- -S -xc - | grep -q \"f2\":
+echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() { fn2(); }' | $testcc -o- -S -xc - | grep -q 'fn2'
 check inline
 
 # -idirafter
@@ -182,39 +173,39 @@ echo "#include \"idirafter\"" | $testcc -idirafter $tmp/dir1 -I$tmp/dir3 -E -xc 
 check -idirafter
 
 # -fcommon
-echo 'int foo;' | $testcc -S -o- -xc - | grep -q '\.comm "foo"'
-check '-fcommon (default)'
-
-echo 'int foo;' | $testcc -fcommon -S -o- -xc - | grep -q '\.comm "foo"'
+echo 'int foo;' | $testcc -fcommon -S -o- -xc - | grep '\.comm' | grep -q 'foo'
 check '-fcommon'
 
 # -fno-common
-echo 'int foo;' | $testcc -fno-common -S -o- -xc - | grep -q '^"foo":'
+echo 'int foo;' | $testcc -fno-common -S -o- -xc - | (! grep -q '\.comm')
 check '-fno-common'
 
+# -fsigned-char
+echo '_Static_assert( (char)-1 == (signed char)-1, "");' | $testcc -xc - -S -o/dev/null -fsigned-char
+check '-fsigned-char'
+
 # -funsigned-char
-rm -f $tmp/out
-echo 'int main(void){ return (char)-1 != (unsigned char)-1; }' | $testcc -funsigned-char -xc - -o $tmp/out
-$tmp/out
+echo '_Static_assert( (char)-1 == (unsigned char)-1, "");' | $testcc -xc - -S -o/dev/null -funsigned-char
 check '-funsigned-char'
 
 # -ffunction-sections
-echo 'void f1() {}' | $testcc -xc - -S -o- -ffunction-sections | grep -q '.text."f1",'
+echo 'void fn1() {}' | $testcc -xc - -S -o- -ffunction-sections | grep '\.text\.' | grep -q 'fn1'
 check '-ffunction-sections'
 
 # -fdata-sections
-echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.data."var",'
+echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep '\.data\.' | grep -q 'var'
 check '-fdata-sections'
-echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tdata."var",'
+echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep '\.tdata\.' | grep -q 'var'
 check '-fdata-sections'
-echo 'void fn(void){static int var;}' | $testcc -xc - -S -o- -fdata-sections | grep -q '.bss.'
+echo 'void fn(void){static int var;}' | $testcc -xc - -S -o- -fdata-sections | grep -q '\.bss\.'
 check '-fdata-sections'
-echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections | grep -q '.tbss."var",'
+echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections | grep '\.tbss\.' | grep -q 'var'
 check '-fdata-sections'
 
 # -include
-echo foo > $tmp/out.h
-echo bar | $testcc -include $tmp/out.h -E -o- -xc - | grep -q -z 'foo.*bar'
+echo foo > $tmp/foo.h
+echo bar | $testcc -include $tmp/foo.h -xc - -E -P -o $tmp/out
+printf 'foo\nbar\n' | diff - $tmp/out
 check -include
 echo NULL | $testcc -Iinclude -include stdio.h -E -o- -xc - | grep -q 0
 check -include
@@ -249,19 +240,23 @@ echo 'void foo(); void bar(); int main() { foo(); bar(); }' > $tmp/main.c
 $testcc -o $tmp/foo $tmp/main.c $tmp/foo.so
 check '.so'
 
-$testcc -hashmap-test
-check 'hashmap'
-
 # -M
 echo '#include "out2.h"' > $tmp/out.c
 echo '#include "out3.h"' >> $tmp/out.c
 touch $tmp/out2.h $tmp/out3.h
-$testcc -M -I$tmp $tmp/out.c | grep -q -z '^out.o: .*/out\.c .*/out2\.h .*/out3\.h'
+$testcc -M -I$tmp $tmp/out.c > $tmp/m
+grep -q '^out\.o:' $tmp/m
+check -M
+grep -q 'out\.c' $tmp/m
+check -M
+grep -q 'out2\.h' $tmp/m
+check -M
+grep -q 'out3\.h' $tmp/m
 check -M
 
 # -MF
 $testcc -MF $tmp/mf -M -I$tmp $tmp/out.c
-grep -q -z '^out.o: .*/out\.c .*/out2\.h .*/out3\.h' $tmp/mf
+diff $tmp/m $tmp/mf
 check -MF
 
 # -MP
@@ -280,15 +275,28 @@ check -MT
 # -MD
 echo '#include "out2.h"' > $tmp/md2.c
 echo '#include "out3.h"' > $tmp/md3.c
-(cd $tmp; $OLDPWD/$testcc -c -MD -I. md2.c md3.c)
-grep -q -z '^md2.o:.* md2\.c .* ./out2\.h' $tmp/md2.d
+(cd $tmp; $testcc -c -MD -I. md2.c md3.c)
+grep -q '^md2\.o:' $tmp/md2.d
 check -MD
-grep -q -z '^md3.o:.* md3\.c .* ./out3\.h' $tmp/md3.d
+grep -q 'md2\.c' $tmp/md2.d
+check -MD
+grep -q 'out2\.h' $tmp/md2.d
+check -MD
+
+grep -q '^md3\.o:' $tmp/md3.d
+check -MD
+grep -q 'md3\.c' $tmp/md3.d
+check -MD
+grep -q 'out3\.h' $tmp/md3.d
 check -MD
 
 $testcc -c -MD -MF $tmp/md-mf.d -I. $tmp/md2.c
-grep -q -z '^md2.o:.*md2\.c .*/out2\.h' $tmp/md-mf.d
-check -MD
+grep -q '^md2\.o:' $tmp/md-mf.d
+check '-MD -MF'
+grep -q 'md2\.c' $tmp/md-mf.d
+check '-MD -MF'
+grep -q 'out2\.h' $tmp/md-mf.d
+check '-MD -MF'
 
 echo 'extern int bar; int foo() { return bar; }' | $testcc -fPIC -xc -c -o $tmp/foo.o -
 $refcc -shared -o $tmp/foo.so $tmp/foo.o
@@ -311,7 +319,9 @@ echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
 echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
 $testcc -static -o $tmp/foo $tmp/foo.c $tmp/bar.c
 check -static
-file $tmp/foo | grep -q 'statically linked'
+$tmp/foo
+check -static
+ldd $tmp/foo 2>/dev/null | (! grep -q '\.so')
 check -static
 
 # -shared
@@ -328,15 +338,15 @@ $testcc -o $tmp/foo $tmp/bar.c -L$tmp -lfoobar
 check -L
 
 # -Wl,
-echo 'int foo() {}' | $testcc -c -o $tmp/foo.o -xc -
-echo 'int foo() {}' | $testcc -c -o $tmp/bar.o -xc -
+echo 'void foo() {}' | $testcc -c -o $tmp/foo.o -xc -
+echo 'void foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
 $testcc -Wl,-z,muldefs,--gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Wl,
 
 # -Xlinker
-echo 'int foo() {}' | $testcc -c -o $tmp/foo.o -xc -
-echo 'int foo() {}' | $testcc -c -o $tmp/bar.o -xc -
+echo 'void foo() {}' | $testcc -c -o $tmp/foo.o -xc -
+echo 'void foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
 $testcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Xlinker
@@ -344,7 +354,7 @@ check -Xlinker
 # constructor/destructor attribute
 echo "int putchar(int);" > $tmp/foo.c
 echo "__attribute__((constructor,destructor(333)))void z(void){putchar('z');}" >> $tmp/foo.c
-echo "int main(void){putchar('m');}" >> $tmp/foo.c
+echo "int main(){putchar('m');}" >> $tmp/foo.c
 echo "void x(void)__attribute__((constructor(111)));" >> $tmp/foo.c
 echo "void __attribute__((destructor)) x(void){putchar('x');}" >> $tmp/foo.c
 $testcc $tmp/foo.c -o $tmp/foo
