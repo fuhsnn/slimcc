@@ -27,7 +27,8 @@ $(TESTS): slimcc test/host/common.o
 
 test: $(TESTS)
 	for i in $(TESTS); do echo $$i; ./$$i || exit 1; echo; done
-	bash test/driver.sh ./slimcc $(CC)
+	sh test/driver.sh $(PWD)/slimcc $(CC)
+	./slimcc -hashmap-test
 
 # Stage 2
 
@@ -50,7 +51,8 @@ $(TESTS_S2): slimcc-stage2 test/host/common.o
 
 test-stage2: $(TESTS_S2)
 	for i in $(TESTS_S2); do echo $$i; ./$$i || exit 1; echo; done
-	bash test/driver.sh ./slimcc-stage2 $(CC)
+	sh test/driver.sh $(PWD)/slimcc-stage2 $(CC)
+	./slimcc-stage2 -hashmap-test
 
 # Misc.
 
