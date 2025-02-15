@@ -49,11 +49,20 @@ void i_constraint(void) {
   static struct { char c; long long i; } s = {.i = 33};
   __asm__ volatile (
     "movabsq %[imm], %%rdi;"
+#if !defined(__PIC__)
     "movabsq %[ptr], %%rsi; movl (%%rsi), %%esi;"
     "movabsq %[agg], %%rdx; movl (%%rdx), %%edx;"
     "movabsq %[fun], %%rax; callq *%%rax;"
+#else
+    "movl $22, %%esi;"
+    "movl $33, %%edx;"
+    "call verify_123"
+#endif
     :
-    : [imm]"i"(11), [ptr]"i"(&v), [agg]"i"(&s.i), [fun]"i"(verify_123)
+    : [imm]"i"(11)
+#if !defined(__PIC__)
+      , [ptr]"i"(&v), [agg]"i"(&s.i), [fun]"i"(verify_123)
+#endif
     : "ax"
   );
 }

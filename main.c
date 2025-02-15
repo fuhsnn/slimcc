@@ -127,6 +127,24 @@ static void set_std(int val) {
     error("unknown c standard");
 }
 
+static void set_pic(char *lvl, bool is_pie) {
+  if (is_pie) {
+    opt_fpic = true;
+    // opt_fpie = true;
+    define_macro("__pic__", lvl);
+    define_macro("__PIC__", lvl);
+    define_macro("__pie__", lvl);
+    define_macro("__PIE__", lvl);
+  } else {
+    opt_fpic = true;
+    // opt_fpie = false;
+    define_macro("__pic__", lvl);
+    define_macro("__PIC__", lvl);
+    undef_macro("__pie__");
+    undef_macro("__PIE__");
+  }
+}
+
 static char *quote_makefile(char *s) {
   char *buf = calloc(1, strlen(s) * 2 + 1);
 
@@ -334,8 +352,33 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-fpic") || !strcmp(argv[i], "-fPIC")) {
-      opt_fpic = true;
+    if (!strcmp(argv[i], "-fpic")) {
+      set_pic("1", false);
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-fPIC")) {
+      set_pic("2", false);
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-fpie")) {
+      set_pic("1", true);
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-fPIE")) {
+      set_pic("2", true);
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-fno-pic") || !strcmp(argv[i], "-fno-PIC") ||
+      !strcmp(argv[i], "-fno-pie") || !strcmp(argv[i], "-fno-PIE")) {
+      opt_fpic = false;
+      undef_macro("__pic__");
+      undef_macro("__PIC__");
+      undef_macro("__pie__");
+      undef_macro("__PIE__");
       continue;
     }
 
