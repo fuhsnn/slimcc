@@ -212,6 +212,11 @@ static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
 
+static bool use_rip(Obj *var) {
+  return !(opt_fpic || opt_fpie) || var->is_static ||
+    (opt_fpie && (var->ty->kind != TY_FUNC || var->is_definition));
+}
+
 static Node *skip_gp_cast(Node *node) {
   while (node->kind == ND_CAST && node->ty->size == node->lhs->ty->size &&
     node->ty->kind != TY_BOOL && is_gp_ty(node->ty) && is_gp_ty(node->lhs->ty))
@@ -228,8 +233,12 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, boo
       snprintf(ofs, STRBUF_SZ, "%d", offset + var->ofs);
       *ptr = var->ptr;
       return true;
-    } else if (!var->is_tls && (!opt_fpic || var->is_static)) {
-      snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, asm_name(var));
+    }
+    if (!var->is_tls && use_rip(var)) {
+      if (offset)
+        snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, asm_name(var));
+      else
+        snprintf(ofs, STRBUF_SZ, "\"%s\"", asm_name(var));
       *ptr = "%rip";
       return true;
     }
@@ -716,9 +725,9 @@ static void gen_addr(Node *node) {
       return;
     }
 
-    if (opt_fpic) {
-      // Thread-local variable
-      if (node->var->is_tls) {
+    // Thread-local variable
+    if (node->var->is_tls) {
+      if (opt_fpic) {
         clobber_all_regs();
         Printftn("data16 lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
         Printstn(".value 0x6666");
@@ -727,52 +736,18 @@ static void gen_addr(Node *node) {
         return;
       }
 
-      // Function or global variable
-      Printftn("mov \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
-      return;
-    }
-
-    // Thread-local variable
-    if (node->var->is_tls) {
       Printstn("mov %%fs:0, %%rax");
       Printftn("add $\"%s\"@tpoff, %%rax", asm_name(node->var));
       return;
     }
 
-    // Here, we generate an absolute address of a function or a global
-    // variable. Even though they exist at a certain address at runtime,
-    // their addresses are not known at link-time for the following
-    // two reasons.
-    //
-    //  - Address randomization: Executables are loaded to memory as a
-    //    whole but it is not known what address they are loaded to.
-    //    Therefore, at link-time, relative address in the same
-    //    exectuable (i.e. the distance between two functions in the
-    //    same executable) is known, but the absolute address is not
-    //    known.
-    //
-    //  - Dynamic linking: Dynamic shared objects (DSOs) or .so files
-    //    are loaded to memory alongside an executable at runtime and
-    //    linked by the runtime loader in memory. We know nothing
-    //    about addresses of global stuff that may be defined by DSOs
-    //    until the runtime relocation is complete.
-    //
-    // In order to deal with the former case, we use RIP-relative
-    // addressing, denoted by `(%rip)`. For the latter, we obtain an
-    // address of a stuff that may be in a shared object file from the
-    // Global Offset Table using `@GOTPCREL(%rip)` notation.
-
-    // Function
-    if (node->ty->kind == TY_FUNC) {
-      if (node->var->is_definition)
-        Printftn("lea \"%s\"(%%rip), %%rax", asm_name(node->var));
-      else
-        Printftn("mov \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
-      return;
-    }
-
-    // Global variable
-    Printftn("lea \"%s\"(%%rip), %%rax", asm_name(node->var));
+    // Function or global variable
+    if (!(opt_fpic || opt_fpie))
+      Printftn("movl $\"%s\", %%eax", asm_name(node->var));
+    else if (use_rip(node->var))
+      Printftn("leaq \"%s\"(%%rip), %%rax", asm_name(node->var));
+    else
+      Printftn("movq \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
     return;
   case ND_DEREF:
     gen_expr(node->lhs);
@@ -1531,7 +1506,10 @@ static void gen_funcall(Node *node) {
     }
     Printftn("call *%s", pop_inreg("%r10"));
   } else {
-    Printftn("call \"%s\"%s", asm_name(node->lhs->var), opt_fpic ? "@PLT" : "");
+    if (use_rip(node->lhs->var))
+      Printftn("call \"%s\"", asm_name(node->lhs->var));
+    else
+      Printftn("call \"%s\"@PLT", asm_name(node->lhs->var));
   }
 
   clobber_all_regs();
@@ -2334,7 +2312,7 @@ static void gen_void_assign(Node *node) {
     }
   }
 
-  if (!opt_fpic && is_memop_ptr(rhs, sofs, &sptr) && !strcmp(sptr, "%rip")) {
+  if (is_memop_ptr(rhs, sofs, &sptr) && !(opt_fpic || opt_fpie) && !strcmp(sptr, "%rip")) {
     char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       Printftn("movq $%s, %s(%s)", sofs, dofs, dptr);
@@ -2745,7 +2723,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
 
   if (is_memop_ptr(node, ofs, &ptr)) {
     if (gen) {
-      if (!strcmp(ptr, "%rip") && !opt_fpic)
+      if (!(opt_fpic || opt_fpie) && !strcmp(ptr, "%rip"))
         Printftn("movl $%s, %s", ofs, regs[r][2]);
       else
         Printftn("lea %s(%s), %s", ofs, ptr, regs[r][3]);
@@ -3687,8 +3665,8 @@ static void asm_body(Node *node) {
         Printf("%s%"PRIi64, punct, ap->val);
         continue;
       case ASMOP_SYMBOLIC:{
-        if (ap->arg->kind == ND_VAR && !ap->arg->var->is_local && !opt_fpic) {
-          Printf("%s\"%s\"", punct, asm_name(ap->arg->var));
+        if (ap->arg->kind == ND_VAR && ap->arg->var->ty->kind == TY_FUNC && use_rip(ap->arg->var)) {
+          fprintf(output_file, "%s\"%s\"", punct, asm_name(ap->arg->var));
           continue;
         }
         char ofs[STRBUF_SZ], *ptr;
@@ -3915,7 +3893,7 @@ static void emit_data(Obj *var) {
       return;
     }
   }
-  bool use_rodata = !opt_fpic && is_const_var(var);
+  bool use_rodata = is_const_var(var) && !((opt_fpic || opt_fpie) && var->rel);
 
   if (var->section_name)
     Printfts(".section \"%s\"", var->section_name);
@@ -3923,6 +3901,8 @@ static void emit_data(Obj *var) {
     Printfts(".section .%s", var->init_data ? "tdata" : "tbss");
   else if (use_rodata)
     Printsts(".section .rodata");
+  else if ((opt_fpic || opt_fpie) && var->rel)
+    Printfts(".section .data.rel%s%s", (is_const_var(var) ? ".ro" : ""), (opt_fpie ? ".local" : ""));
   else
     Printfts(".section .%s", var->init_data ? "data" : "bss");
 

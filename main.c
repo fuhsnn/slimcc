@@ -7,6 +7,7 @@ typedef enum {
 StringArray include_paths;
 bool opt_fcommon = true;
 bool opt_fpic;
+bool opt_fpie;
 bool opt_optimize = true;
 bool opt_g;
 bool opt_func_sections;
@@ -134,6 +135,24 @@ static void set_std(int val) {
     opt_std = STD_C23;
   else
     error("unknown c standard");
+}
+
+void set_fpic(char *lvl) {
+  opt_fpic = true;
+  opt_fpie = false;
+  define_macro("__pic__", lvl);
+  define_macro("__PIC__", lvl);
+  undef_macro("__pie__");
+  undef_macro("__PIE__");
+}
+
+void set_fpie(char *lvl) {
+  opt_fpic = false;
+  opt_fpie = true;
+  define_macro("__pic__", lvl);
+  define_macro("__PIC__", lvl);
+  define_macro("__pie__", lvl);
+  define_macro("__PIE__", lvl);
 }
 
 static char *quote_makefile(char *s) {
@@ -333,8 +352,18 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-fpic") || !strcmp(argv[i], "-fPIC")) {
-      opt_fpic = true;
+    if (!strcmp(argv[i], "-fpic")) { set_fpic("1"); continue; }
+    if (!strcmp(argv[i], "-fPIC")) { set_fpic("2"); continue; }
+    if (!strcmp(argv[i], "-fpie")) { set_fpie("1"); continue; }
+    if (!strcmp(argv[i], "-fPIE")) { set_fpie("2"); continue; }
+
+    if (!strcmp(argv[i], "-fno-pic") || !strcmp(argv[i], "-fno-PIC") ||
+      !strcmp(argv[i], "-fno-pie") || !strcmp(argv[i], "-fno-PIE")) {
+      opt_fpic = opt_fpie = false;
+      undef_macro("__pic__");
+      undef_macro("__PIC__");
+      undef_macro("__pie__");
+      undef_macro("__PIE__");
       continue;
     }
 
