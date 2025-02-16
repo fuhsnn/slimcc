@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <errno.h>
-#include <glob.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <stdarg.h>
@@ -671,6 +670,8 @@ typedef enum {
 } StdVer;
 
 bool file_exists(char *path);
+void run_subprocess(char **argv);
+void set_pic(char *lvl, bool is_pie);
 
 extern StringArray include_paths;
 extern bool opt_E;
@@ -682,7 +683,26 @@ extern bool opt_g;
 extern bool opt_func_sections;
 extern bool opt_data_sections;
 extern bool opt_werror;
+extern bool opt_pie;
+extern bool opt_nopie;
+extern bool opt_pthread;
+extern bool opt_r;
+extern bool opt_rdynamic;
+extern bool opt_static;
+extern bool opt_static_pie;
+extern bool opt_shared;
+extern bool opt_nostdinc;
+extern bool opt_nostartfiles;
+extern bool opt_nodefaultlibs;
+extern bool opt_nolibc;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern char *base_file;
 extern StdVer opt_std;
+
+// platform.c
+
+void add_default_include_paths(StringArray *paths, char *argv0);
+void run_assembler(StringArray *as_args, char *input, char *output);
+void run_linker(StringArray *extra_args, StringArray *inputs, char *output);
+void platform_init(void);

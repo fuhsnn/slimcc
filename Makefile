@@ -1,4 +1,4 @@
-SRCS=alloc.c codegen.c hashmap.c main.c parse.c preprocess.c strings.c tokenize.c type.c unicode.c
+SRCS=alloc.c codegen.c hashmap.c main.c parse.c platform.c preprocess.c strings.c tokenize.c type.c unicode.c
 
 TEST_SRCS!=ls test/*.c
 
