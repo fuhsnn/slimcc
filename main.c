@@ -913,6 +913,7 @@ int main(int argc, char **argv) {
 
   if (opt_cc1) {
     add_default_include_paths(argv[0]);
+    init_ty(ty_ulong, ty_long, ty_long);
     cc1();
     return 0;
   }

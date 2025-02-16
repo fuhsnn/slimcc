@@ -602,6 +602,12 @@ extern Type *ty_float;
 extern Type *ty_double;
 extern Type *ty_ldouble;
 
+extern Type *ty_size_t;
+extern Type *ty_intptr_t;
+extern Type *ty_ptrdiff_t;
+extern Type *ty_first_64bit_int;
+extern Type *ty_first_64bit_uint;
+
 bool is_integer(Type *ty);
 bool is_flonum(Type *ty);
 bool is_numeric(Type *ty);
@@ -613,6 +619,7 @@ bool is_compatible2(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
 bool is_const_double(Node *node, long double *fval);
 bool is_nullptr(Node *node);
+void init_ty(Type *t_size, Type *t_ptr, Type *first_64);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *array_to_pointer(Type *ty);

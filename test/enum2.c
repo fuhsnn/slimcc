@@ -1,5 +1,15 @@
 #include "test.h"
 
+#if (__SIZEOF_INT__ != 4)
+#error
+#endif
+
+#if (__SIZEOF_LONG__ > 4)
+#define FIRST_64BIT_INT long
+#else
+#define FIRST_64BIT_INT long long
+#endif
+
 enum e0 {
     e0_i32max = 0x7FFFFFFF,
 };
@@ -18,8 +28,8 @@ enum e2 {
     e2_i32max = 0x7FFFFFFF,
     e2_i32max_plus1,
 };
-_Static_assert(_Generic(e2_i32max, int64_t:1), "");
-_Static_assert(_Generic((enum e2)0, int64_t:1), "");
+_Static_assert(_Generic(e2_i32max, FIRST_64BIT_INT:1), "");
+_Static_assert(_Generic((enum e2)0, FIRST_64BIT_INT:1), "");
 
 enum e3 {
     e3_i32max = 0x7FFFFFFF,
@@ -38,23 +48,23 @@ enum e5 {
     e5_u32max = 0xFFFFFFFF,
     e5_neg = -1
 };
-_Static_assert(_Generic(e5_u32max, int64_t:1), "");
-_Static_assert(_Generic((enum e5)0, int64_t:1), "");
+_Static_assert(_Generic(e5_u32max, FIRST_64BIT_INT:1), "");
+_Static_assert(_Generic((enum e5)0, FIRST_64BIT_INT:1), "");
 
 enum e6 {
     e6_u32max = 0xFFFFFFFF,
     e6_u32max_plus1,
 };
-_Static_assert(_Generic(e6_u32max_plus1, uint64_t:1), "");
-_Static_assert(_Generic((enum e6)0, uint64_t:1), "");
+_Static_assert(_Generic(e6_u32max_plus1, unsigned FIRST_64BIT_INT:1), "");
+_Static_assert(_Generic((enum e6)0, unsigned FIRST_64BIT_INT:1), "");
 
 enum e7 {
     e7_u32max = 0xFFFFFFFF,
     e7_u32max_plus1,
     e7_neg = -1
 };
-_Static_assert(_Generic(e7_u32max_plus1, int64_t:1), "");
-_Static_assert(_Generic((enum e7)0, int64_t:1), "");
+_Static_assert(_Generic(e7_u32max_plus1, FIRST_64BIT_INT:1), "");
+_Static_assert(_Generic((enum e7)0, FIRST_64BIT_INT:1), "");
 
 int main(void) {
   enum E1;
