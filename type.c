@@ -21,6 +21,31 @@ Type *ty_float = &(Type){TY_FLOAT, 4, 4};
 Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
 Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
 
+Type *ty_size_t;
+Type *ty_intptr_t;
+Type *ty_ptrdiff_t;
+Type *ty_first_64bit_int;
+Type *ty_first_64bit_uint;
+
+Type *to_unsigned(TypeKind kind) {
+  switch (kind) {
+    case TY_INT:
+      return ty_uint;
+    case TY_LONG:
+      return ty_ulong;
+    case TY_LONGLONG:
+      return ty_ullong;
+  }
+  internal_error();
+}
+
+void init_ty(Type *t_size, Type *t_ptr, Type *first_64) {
+  ty_size_t = t_size;
+  ty_intptr_t = ty_ptrdiff_t = t_ptr;
+  ty_first_64bit_int = first_64;
+  ty_first_64bit_uint = to_unsigned(first_64->kind);
+}
+
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {
   Type *ty = ast_arena_calloc(sizeof(Type));
   ty->kind = kind;
@@ -355,15 +380,7 @@ static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
 
   // If same size but different sign, the common type is unsigned
   // variant of the highest-ranked type between the two.
-  switch (ranked_ty->kind) {
-    case TY_INT:
-      return ty_uint;
-    case TY_LONG:
-      return ty_ulong;
-    case TY_LONGLONG:
-      return ty_ullong;
-  }
-  internal_error();
+  return to_unsigned(ranked_ty->kind);
 }
 
 // For many binary operators, we implicitly promote operands so that

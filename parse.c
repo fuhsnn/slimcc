@@ -264,17 +264,17 @@ static Node *new_num(int64_t val, Token *tok) {
   return node;
 }
 
-static Node *new_long(int64_t val, Token *tok) {
+static Node *new_intptr(int64_t val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->val = val;
-  node->ty = ty_long;
+  node->ty = ty_intptr_t;
   return node;
 }
 
-static Node *new_ulong(long val, Token *tok) {
+static Node *new_size(long val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->val = val;
-  node->ty = ty_ulong;
+  node->ty = ty_size_t;
   return node;
 }
 
@@ -1286,9 +1286,9 @@ static Type *enum_specifier(Token **rest, Token *tok) {
         error_tok(tok, "enum value out of type range");
 
       if (been_negative) {
-        base_ty = (in_ty_range(val, ty_int) && !been_unsigned) ? ty_int : ty_long;
+        base_ty = (in_ty_range(val, ty_int) && !been_unsigned) ? ty_int : ty_first_64bit_int;
       } else {
-        base_ty = in_ty_range(val, ty_uint) ? ty_uint : ty_ulong;
+        base_ty = in_ty_range(val, ty_uint) ? ty_uint : ty_first_64bit_uint;
         been_unsigned = true;
       }
     }
@@ -1304,7 +1304,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   if (base_ty->kind == TY_INT && !been_negative && !been_unsigned)
     update_enum_ty(ty, ty_uint, true);
   else if (been_negative && been_unsigned)
-    update_enum_ty(ty, ty_long, false);
+    update_enum_ty(ty, ty_first_64bit_int, false);
   else
     update_enum_ty(ty, base_ty, false);
 
@@ -1347,7 +1347,7 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
   else
     base_sz = new_num(ty->base->size, tok);
 
-  ty->vla_size = new_lvar(NULL, ty_ulong);
+  ty->vla_size = new_lvar(NULL, ty_size_t);
   chain_expr(&node, new_binary(ND_ASSIGN, new_var_node(ty->vla_size, tok),
                                new_binary(ND_MUL, ty->vla_len, base_sz, tok),
                                tok));
@@ -3441,7 +3441,7 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
     if (ptr->ty->base->kind == TY_VLA)
       *ofs = new_binary(ND_MUL, *ofs, new_var_node(ptr->ty->base->vla_size, tok), tok);
     else
-      *ofs = new_binary(ND_MUL, *ofs, new_long(ptr->ty->base->size, tok), tok);
+      *ofs = new_binary(ND_MUL, *ofs, new_intptr(ptr->ty->base->size, tok), tok);
 
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
@@ -3468,7 +3468,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
     if (lhs->ty->base->kind == TY_VLA)
       rhs = new_binary(ND_MUL, rhs, new_var_node(lhs->ty->base->vla_size, tok), tok);
     else
-      rhs = new_binary(ND_MUL, rhs, new_long(lhs->ty->base->size, tok), tok);
+      rhs = new_binary(ND_MUL, rhs, new_intptr(lhs->ty->base->size, tok), tok);
 
     return new_binary(ND_SUB, lhs, rhs, tok);
   }
@@ -3476,8 +3476,8 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   // ptr - ptr, which returns how many elements are between the two.
   if (lhs->ty->base && rhs->ty->base) {
     int sz = lhs->ty->base->size;
-    Node *node = new_binary(ND_SUB, new_cast(lhs, ty_llong), new_cast(rhs, ty_llong), tok);
-    return new_binary(ND_DIV, node, new_num(sz, tok), tok);
+    Node *node = new_binary(ND_SUB, new_cast(lhs, ty_intptr_t), new_cast(rhs, ty_intptr_t), tok);
+    return new_cast(new_binary(ND_DIV, node, new_num(sz, tok), tok), ty_ptrdiff_t);
   }
 
   error_tok(tok, "invalid operands");
@@ -4152,9 +4152,9 @@ static Node *primary(Token **rest, Token *tok) {
       while (mem->next)
         mem = mem->next;
       if (mem->ty->kind == TY_ARRAY)
-        return new_ulong((ty->size - mem->ty->size), start);
+        return new_size((ty->size - mem->ty->size), start);
     }
-    return new_ulong(ty->size, start);
+    return new_size(ty->size, start);
   }
 
   if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
@@ -4167,16 +4167,16 @@ static Node *primary(Token **rest, Token *tok) {
       Node *node = unary(rest, tok->next);
       switch (node->kind) {
       case ND_MEMBER:
-        return new_ulong(MAX(node->member->ty->align, node->member->alt_align), start);
+        return new_size(MAX(node->member->ty->align, node->member->alt_align), start);
       case ND_VAR:
-        return new_ulong(node->var->align, start);
+        return new_size(node->var->align, start);
       }
       add_type(node);
       ty = node->ty;
     }
     while (is_array(ty))
       ty = ty->base;
-    return new_ulong(ty->align, start);
+    return new_size(ty->align, start);
   }
 
   if (equal(tok, "_Generic"))
@@ -4242,7 +4242,7 @@ static Node *primary(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_offsetof")) {
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);
-    Node *node = new_unary(ND_DEREF, new_cast(new_long(0, tok), pointer_to(ty)), tok);
+    Node *node = new_unary(ND_DEREF, new_cast(new_num(0, tok), pointer_to(ty)), tok);
     tok = skip(tok, ",");
     Token dot = {.kind = TK_PUNCT, .loc = ".", .len = 1, .next = tok};
     node = postfix(node, &tok, &dot);
@@ -4251,8 +4251,8 @@ static Node *primary(Token **rest, Token *tok) {
 
     int64_t ofs;
     if (eval_non_var_ofs(node, &ofs))
-      return new_ulong(ofs, tok);
-    return new_cast(new_unary(ND_ADDR, node, tok), ty_ulong);
+      return new_size(ofs, tok);
+    return new_cast(new_unary(ND_ADDR, node, tok), ty_size_t);
   }
 
   if (equal(tok, "__builtin_types_compatible_p")) {
