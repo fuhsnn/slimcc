@@ -50,7 +50,7 @@ install_libtool() {
 # tests
 
 test_cello() {
- git_fetch https://github.com/orangeduck/Cello cbf055dda4efa0fb22286f12f24fada728cde8b3 cello
+ git_fetch https://github.com/orangeduck/Cello 61ee5c3d9bca98fd68af575e9704f5f02533ae26 cello
  make check
 }
 
@@ -71,12 +71,12 @@ test_doom() {
 }
 
 test_git() {
- github_tar git git v2.47.1
- make CC="$CC" test
+ github_tar git git v2.48.1
+ make CC="$CC" test -j2
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.44
+ github_tar pnggroup libpng v1.6.46
  fix_configure ./configure
  ./configure
  make test
@@ -142,7 +142,7 @@ test_openssl() {
  github_tar openssl openssl openssl-3.4.0
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
- make test
+ make test -j2
 }
 
 test_perl() {
@@ -171,14 +171,14 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_17_2
+ github_tar postgres postgres REL_17_3
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  ./configure && make && make check
 }
 
 test_python() {
- github_tar python cpython v3.13.1
+ github_tar python cpython v3.13.2
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
  ./configure && make
@@ -188,7 +188,7 @@ test_python() {
   # don't work in CI https://github.com/python/cpython/blob/6d3b5206cfaf5a85c128b671b1d9527ed553c930/.github/workflows/build.yml#L408
   test_asyncio test_socket
  )
- ./python -m test --exclude "${skip_tests[@]}"
+ ./python -m test -j4 --exclude "${skip_tests[@]}"
 }
 
 test_qbe_hare() {
@@ -200,14 +200,13 @@ test_qbe_hare() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.47.1
- fix_configure ./configure
- CFLAGS=-D_GNU_SOURCE ./configure
- make tcltest
+ github_tar sqlite sqlite version-3.49.0
+ CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
+ make test
 }
 
 test_tinycc() {
- git_fetch https://github.com/TinyCC/tinycc 729918ef35dede267926bc517826e3fe280d84b0 tinycc
+ git_fetch https://github.com/TinyCC/tinycc f8bd136d198bdafe71342517fa325da2e243dc68 tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
@@ -221,7 +220,8 @@ test_toxcore() {
 }
 
 test_toybox() {
- git_fetch https://github.com/landley/toybox fb3ca98e2faaa11512061cdd3fc946ddf0c2696b toybox
+ github_tar landley toybox 0.8.12
+ replace_line "#define QUIET" "#define QUIET = 0" lib/portability.h
  make CC="$CC" HOSTCC="$CC" defconfig
  make CC="$CC" HOSTCC="$CC"
  make CC="$CC" HOSTCC="$CC" tests
@@ -264,7 +264,7 @@ build_musl() {
 }
 
 build_nano() {
- url_tar https://git.savannah.gnu.org/cgit/nano.git/snapshot/nano-8.2.tar.gz nano
+ url_tar https://git.savannah.gnu.org/cgit/nano.git/snapshot/nano-8.3.tar.gz nano
  sed -i 's/--depth=2222/--depth=1/g' autogen.sh
  bash autogen.sh
  ./configure && make
