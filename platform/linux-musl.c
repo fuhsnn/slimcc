@@ -1,5 +1,5 @@
 #include "slimcc.h"
-
+#define MUSLPATH
 #if !defined(MUSLPATH)
 #error
 #endif
@@ -56,23 +56,45 @@ void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
   strarray_push(&arr, "-m");
   strarray_push(&arr, "elf_x86_64");
 
-  if (opt_r) {
+  LinkType type = get_link_type();
+
+  switch (type) {
+  case LT_RELO:
     strarray_push(&arr, "-r");
-  } else if (opt_shared) {
+    break;
+  case LT_SHARED:
     strarray_push(&arr, "-shared");
-  } else if (opt_static_pie) {
+    break;
+  case LT_STATIC_PIE:
     strarray_push(&arr, "-static");
     strarray_push(&arr, "-pie");
-  } else if (opt_static) {
+    break;
+  case LT_STATIC:
     strarray_push(&arr, "-static");
-  } else if (opt_pie) {
+    break;
+  case LT_PIE:
     strarray_push(&arr, "-pie");
+    break;
   }
 
-  if (!(opt_nostartfiles || opt_r)) {
-    if (opt_static_pie)
+  switch (type) {
+  case LT_STATIC_PIE:
+    strarray_push(&arr, "-no-dynamic-linker");
+    break;
+  case LT_DYNAMIC:
+  case LT_SHARED:
+  case LT_PIE:
+    if (opt_rdynamic)
+      strarray_push(&arr, "-export-dynamic");
+
+    strarray_push(&arr, "-dynamic-linker");
+    strarray_push(&arr, MUSLPATH"/lib/libc.so");
+  }
+
+  if (!opt_nostartfiles && type != LT_RELO) {
+    if (type == LT_STATIC_PIE)
       strarray_push(&arr, MUSLPATH"/lib/rcrt1.o");
-    else if (opt_pie)
+    else if (type == LT_PIE)
       strarray_push(&arr, MUSLPATH"/lib/Scrt1.o");
     else
       strarray_push(&arr, MUSLPATH"/lib/crt1.o");
@@ -83,31 +105,20 @@ void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
   for (int i = 0; i < extra_args->len; i++)
     strarray_push(&arr, extra_args->data[i]);
 
-  if (!opt_nodefaultlibs) {
+  if (!opt_nodefaultlibs)
     strarray_push(&arr, ("-L"MUSLPATH"/lib"));
-  }
-
-  if (opt_static || opt_static_pie || opt_r) {
-    strarray_push(&arr, "-no-dynamic-linker");
-  } else {
-    if (opt_rdynamic)
-      strarray_push(&arr, "-export-dynamic");
-
-    strarray_push(&arr, "-dynamic-linker");
-    strarray_push(&arr, MUSLPATH"/lib/libc.so");
-  }
 
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);
 
-  if (!(opt_nodefaultlibs || opt_r)) {
+  if (!opt_nodefaultlibs && type != LT_RELO) {
     if (opt_pthread)
       strarray_push(&arr, "-lpthread");
     if (!opt_nolibc)
       strarray_push(&arr, "-lc");
   }
 
-  if (!(opt_nostartfiles || opt_r))
+  if (!opt_nostartfiles && type != LT_RELO)
     strarray_push(&arr, MUSLPATH"/lib/crtn.o");
 
   strarray_push(&arr, NULL);

@@ -845,6 +845,20 @@ static FileType get_file_type(char *filename) {
   error("<command line>: unknown file extension: %s", filename);
 }
 
+LinkType get_link_type(void) {
+  if (opt_r)
+    return LT_RELO;
+  if (opt_shared)
+    return LT_SHARED;
+  if (opt_static_pie)
+    return LT_STATIC_PIE;
+  if (opt_static)
+    return LT_STATIC;
+  if (opt_pie)
+    return LT_PIE;
+  return LT_DYNAMIC;
+}
+
 int main(int argc, char **argv) {
   atexit(cleanup);
   init_macros();

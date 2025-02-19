@@ -706,3 +706,15 @@ void add_default_include_paths(StringArray *paths, char *argv0);
 void run_assembler(StringArray *as_args, char *input, char *output);
 void run_linker(StringArray *extra_args, StringArray *inputs, char *output);
 void platform_init(void);
+
+typedef enum {
+  LT_DEFAULT,
+  LT_RELO,
+  LT_SHARED,
+  LT_DYNAMIC,
+  LT_STATIC_PIE,
+  LT_STATIC,
+  LT_PIE,
+} LinkType;
+
+LinkType get_link_type(void);
