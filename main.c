@@ -45,6 +45,7 @@ static char *opt_MF;
 static char *opt_MT;
 static char *opt_o;
 
+static StringArray ld_paths;
 static StringArray ld_extra_args;
 static StringArray std_include_paths;
 
@@ -265,8 +266,8 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strncmp(argv[i], "-l", 2) || !strncmp(argv[i], "-Wl,", 4)) {
-      strarray_push(&input_paths, argv[i]);
+    if (!strncmp(argv[i], "-l", 2)) {
+      strarray_push(&ld_extra_args, argv[i]);
       continue;
     }
 
@@ -275,6 +276,16 @@ static void parse_args(int argc, char **argv) {
       char *arg = strtok(s, ",");
       while (arg) {
         strarray_push(&as_args, arg);
+        arg = strtok(NULL, ",");
+      }
+      continue;
+    }
+
+    if (!strncmp(argv[i], "-Wl,", 4)) {
+      char *s = strdup(argv[i] + 4);
+      char *arg = strtok(s, ",");
+      while (arg) {
+        strarray_push(&ld_extra_args, arg);
         arg = strtok(NULL, ",");
       }
       continue;
@@ -435,14 +446,13 @@ static void parse_args(int argc, char **argv) {
     }
 
     if ((arg = take_arg(argv, &i, "-L"))) {
-      strarray_push(&ld_extra_args, "-L");
-      strarray_push(&ld_extra_args, arg);
+      strarray_push(&ld_paths, "-L");
+      strarray_push(&ld_paths, arg);
       continue;
     }
 
     if (!strncmp(argv[i], "-L", 2)) {
-      strarray_push(&ld_extra_args, "-L");
-      strarray_push(&ld_extra_args, argv[i] + 2);
+      strarray_push(&ld_paths, argv[i]);
       continue;
     }
 
@@ -873,6 +883,9 @@ int main(int argc, char **argv) {
 
   if (opt_cc1) {
     add_default_include_paths(&std_include_paths, argv[0]);
+    for (int i = 0; i < std_include_paths.len; i++)
+      strarray_push(&include_paths, std_include_paths.data[i]);
+
     cc1();
     return 0;
   }
@@ -889,21 +902,6 @@ int main(int argc, char **argv) {
     }
 
     char *input = input_paths.data[i];
-
-    if (!strncmp(input, "-l", 2)) {
-      strarray_push(&ld_args, input);
-      continue;
-    }
-
-    if (!strncmp(input, "-Wl,", 4)) {
-      char *s = strdup(input + 4);
-      char *arg = strtok(s, ",");
-      while (arg) {
-        strarray_push(&ld_args, arg);
-        arg = strtok(NULL, ",");
-      }
-      continue;
-    }
 
     if (opt_o && (opt_c || opt_S || opt_E))
       if (++file_count > 1)
@@ -1000,8 +998,11 @@ int main(int argc, char **argv) {
     continue;
   }
 
-  if (run_ld)
-    run_linker(&ld_extra_args, &ld_args, opt_o ? opt_o : "a.out");
+  if (run_ld) {
+    for (int i = 0; i < ld_extra_args.len; i++)
+      strarray_push(&ld_args, ld_extra_args.data[i]);
 
+    run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
+  }
   return 0;
 }

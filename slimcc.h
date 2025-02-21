@@ -705,7 +705,7 @@ extern StdVer opt_std;
 
 void add_default_include_paths(StringArray *paths, char *argv0);
 void run_assembler(StringArray *as_args, char *input, char *output);
-void run_linker(StringArray *extra_args, StringArray *inputs, char *output);
+void run_linker(StringArray *paths, StringArray *inputs, char *output);
 void platform_init(void);
 
 typedef enum {

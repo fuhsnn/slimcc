@@ -36,9 +36,6 @@ void add_default_include_paths(StringArray *paths, char *argv0) {
   strarray_push(paths, "/usr/local/include");
   strarray_push(paths, "/usr/include/x86_64-linux-gnu");
   strarray_push(paths, "/usr/include");
-
-  for (int i = 0; i < paths->len; i++)
-    strarray_push(&include_paths, paths->data[i]);
 }
 
 static char *libpath(void) {
@@ -212,7 +209,7 @@ void link_type(StringArray *arr, LinkType type, char *ldso_path) {
   }
 }
 
-void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
+void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   StringArray arr = {0};
 
   strarray_push(&arr, "ld");
@@ -228,10 +225,8 @@ void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
   link_linux_libc_begin(&arr, type, libpath());
   link_gnu_crt_begin(&arr, type, gcc_libpath());
 
-  for (int i = 0; i < extra_args->len; i++)
-    strarray_push(&arr, extra_args->data[i]);
-
-  // -L...
+  for (int i = 0; i < paths->len; i++)
+    strarray_push(&arr, paths->data[i]);
 
   if (!opt_nodefaultlibs) {
     strarray_push(&arr, format("-L%s", gcc_libpath()));
@@ -247,8 +242,6 @@ void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
 
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);
-
-  // Xlinker / Wl
 
   link_defaultlibs_libgcc(&arr, type);
 

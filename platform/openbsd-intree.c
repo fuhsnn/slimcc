@@ -17,9 +17,6 @@ void add_default_include_paths(StringArray *paths, char *argv0) {
   strarray_push(paths, format("%s/include", dirname(strdup(argv0))));
 
   strarray_push(paths, "/usr/include");
-
-  for (int i = 0; i < paths->len; i++)
-    strarray_push(&include_paths, paths->data[i]);
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {

@@ -25,9 +25,6 @@ void add_default_include_paths(StringArray *paths, char *argv0) {
 
   // Add standard include paths.
   strarray_push(paths, MUSLPATH"/include");
-
-  for (int i = 0; i < paths->len; i++)
-    strarray_push(&include_paths, paths->data[i]);
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
