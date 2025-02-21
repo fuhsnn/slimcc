@@ -72,6 +72,27 @@ static char *take_arg(char **argv, int *i, char *opt) {
   return argv[*i];
 }
 
+static bool take_arg2(char **argv, int *i, char *opt, char **arg) {
+  if (strcmp(argv[*i], opt))
+    return false;
+  *i += 1;
+  if (argv[*i]) {
+    *arg = argv[*i];
+    return true;
+  }
+  fprintf(stderr, "missing argument to %s\n", opt);
+  exit(1);
+}
+
+static bool startswith(char *s, char *n, char **p) {
+  size_t len = strlen(n);
+  if (!strncmp(s, n, len)) {
+    *p = s + len;
+    return true;
+  }
+  return false;
+}
+
 static void add_include_path(char *p) {
   char *str = strdup(p);
 
@@ -110,6 +131,31 @@ static void set_std(int val) {
     opt_std = STD_C23;
   else
     error("unknown c standard");
+}
+
+static bool std_arg(char **argv, int *i) {
+  if (!strcmp(argv[*i], "-ansi")) {
+    set_std(89);
+    define_macro_cli("__STRICT_ANSI__");
+    return true;
+  }
+  if (!strncmp(argv[*i], "-std=c", 6)) {
+    set_std(strtoul(argv[*i] + 6, NULL, 10));
+    return true;
+  }
+  if (!strncmp(argv[*i], "--std=c", 7)) {
+    set_std(strtoul(argv[*i] + 7, NULL, 10));
+    return true;
+  }
+  if (!strcmp(argv[*i], "--std")) {
+    *i += 1;
+    if (*argv[*i] == 'c') {
+      set_std(strtoul(argv[*i] + 1, NULL, 10));
+      return true;
+    }
+    error("unknown c standard");
+  }
+  return false;
 }
 
 void set_pic(char *lvl, bool is_pie) {
@@ -158,6 +204,30 @@ static char *quote_makefile(char *s) {
   return buf;
 }
 
+static bool bool_opt(char *p, char *str, bool *opt, bool val) {
+  if (!strcmp(p, str)) {
+    *opt = val;
+    return true;
+  }
+  return false;
+}
+
+static bool set_opt(char *p, char *str, bool *opt) {
+  return bool_opt(p, str, opt, true);
+}
+
+static bool comma_arg(StringArray *arr, char *p, char *hdr) {
+  if (startswith(p, hdr, &p)) {
+    char *arg = strtok(strdup(p), ",");
+    while (arg) {
+      strarray_push(arr, arg);
+      arg = strtok(NULL, ",");
+    }
+    return true;
+  }
+  return false;
+}
+
 static void parse_args(int argc, char **argv) {
   char *arg;
   StringArray idirafter = {0};
@@ -166,56 +236,111 @@ static void parse_args(int argc, char **argv) {
     if (*argv[i] == '\0')
       continue;
 
-    if (!strcmp(argv[i], "-###")) {
-      opt_hash_hash_hash = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-cc1")) {
-      opt_cc1 = true;
-      continue;
-    }
-
     if (!strcmp(argv[i], "--help"))
       usage(0);
 
-    if ((arg = take_arg(argv, &i, "-o"))) {
-      opt_o = arg;
+    if (!strcmp(argv[i], "-hashmap-test")) {
+      hashmap_test();
+      exit(0);
+    }
+
+    if (set_opt(argv[i], "-S", &opt_S) ||
+      set_opt(argv[i], "-c", &opt_c) ||
+      set_opt(argv[i], "-###", &opt_hash_hash_hash) ||
+      set_opt(argv[i], "-cc1", &opt_cc1))
+      continue;
+
+    if (take_arg2(argv, &i, "-o", &opt_o) ||
+      startswith(argv[i], "-o", &opt_o))
+      continue;
+
+    if (take_arg2(argv, &i, "-x", &arg) ||
+      startswith(argv[i], "-x", &arg)) {
+      strarray_push(&input_paths, "-x");
+      strarray_push(&input_paths, arg);
       continue;
     }
 
-    if (!strncmp(argv[i], "-o", 2)) {
-      opt_o = argv[i] + 2;
+    if (take_arg2(argv, &i, "-L", &arg) ||
+      startswith(argv[i], "-L", &arg)) {
+      strarray_push(&ld_paths, "-L");
+      strarray_push(&ld_paths, arg);
       continue;
     }
 
-    if (!strcmp(argv[i], "-S")) {
-      opt_S = true;
+    if (comma_arg(&as_args, argv[i], "-Wa,"))
+      continue;
+
+    if (comma_arg(&ld_extra_args, argv[i], "-Wl,"))
+      continue;
+
+    if ((arg = take_arg(argv, &i, "-Xlinker"))) {
+      strarray_push(&ld_extra_args, arg);
       continue;
     }
 
-    if (!strcmp(argv[i], "-fcommon")) {
-      opt_fcommon = true;
+    if (!strncmp(argv[i], "-l", 2)) {
+      strarray_push(&ld_extra_args, argv[i]);
       continue;
     }
 
-    if (!strcmp(argv[i], "-fno-common")) {
-      opt_fcommon = false;
+    if (!strcmp(argv[i], "-s")) {
+      strarray_push(&ld_extra_args, "-s");
       continue;
     }
 
-    if (!strcmp(argv[i], "-c")) {
-      opt_c = true;
+    if (set_opt(argv[i], "-pie", &opt_pie) ||
+      set_opt(argv[i], "-nopie", &opt_nopie) ||
+      set_opt(argv[i], "-r", &opt_r) ||
+      set_opt(argv[i], "-rdynamic", &opt_rdynamic) ||
+      set_opt(argv[i], "-static", &opt_static) ||
+      set_opt(argv[i], "-static-pie", &opt_static_pie) ||
+      set_opt(argv[i], "-static-libgcc", &opt_static_libgcc) ||
+      set_opt(argv[i], "-shared", &opt_shared) ||
+      set_opt(argv[i], "-nostdinc", &opt_nostdinc) ||
+      set_opt(argv[i], "-nostartfiles", &opt_nostartfiles) ||
+      set_opt(argv[i], "-nodefaultlibs", &opt_nodefaultlibs) ||
+      set_opt(argv[i], "-nolibc", &opt_nolibc))
+      continue;
+
+    if (!strcmp(argv[i], "-nostdlib")) {
+      opt_nostartfiles = opt_nodefaultlibs = true;
       continue;
     }
 
-    if (!strcmp(argv[i], "-E")) {
-      opt_E = true;
+    if (!strcmp(argv[i], "-no-pie")) {
+      opt_pie = false;
+      opt_nopie = true;
       continue;
     }
 
-    if (!strcmp(argv[i], "-P")) {
-      opt_P = true;
+    if (set_opt(argv[i], "-E", &opt_E) ||
+      set_opt(argv[i], "-P", &opt_P) ||
+      set_opt(argv[i], "-Werror", &opt_werror))
+      continue;
+
+    if (!strncmp(argv[i], "-g", 2)) {
+      if (argv[i][2] == '0')
+        opt_g = false;
+      else
+        opt_g = true;
+      continue;
+    }
+
+    if (!strncmp(argv[i], "-O", 2)) {
+      if (argv[i][2] == '0')
+        opt_optimize = false;
+      else
+        opt_optimize = true;
+      continue;
+    }
+
+    if (take_arg2(argv, &i, "-cc1-input", &base_file) ||
+      take_arg2(argv, &i, "-cc1-output", &output_file))
+      continue;
+
+    if (!strcmp(argv[i], "-cc1-asm-pp")) {
+      opt_E = opt_cc1_asm_pp = true;
       continue;
     }
 
@@ -224,8 +349,13 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strncmp(argv[i], "-I", 2)) {
-      add_include_path(argv[i] + 2);
+    if (startswith(argv[i], "-I", &arg)) {
+      add_include_path(arg);
+      continue;
+    }
+
+    if (take_arg2(argv, &i, "-idirafter", &arg)) {
+      strarray_push(&idirafter, arg);
       continue;
     }
 
@@ -254,113 +384,10 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-x"))) {
-      strarray_push(&input_paths, "-x");
-      strarray_push(&input_paths, arg);
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-x", 2)) {
-      strarray_push(&input_paths, "-x");
-      strarray_push(&input_paths, argv[i] + 2);
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-l", 2)) {
-      strarray_push(&ld_extra_args, argv[i]);
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-Wa,", 4)) {
-      char *s = strdup(&argv[i][4]);
-      char *arg = strtok(s, ",");
-      while (arg) {
-        strarray_push(&as_args, arg);
-        arg = strtok(NULL, ",");
-      }
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-Wl,", 4)) {
-      char *s = strdup(argv[i] + 4);
-      char *arg = strtok(s, ",");
-      while (arg) {
-        strarray_push(&ld_extra_args, arg);
-        arg = strtok(NULL, ",");
-      }
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-Xlinker"))) {
-      strarray_push(&ld_extra_args, arg);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-s")) {
-      strarray_push(&ld_extra_args, "-s");
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-M")) {
-      opt_M = true;
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-MF"))) {
-      opt_MF = arg;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-MP")) {
-      opt_MP = true;
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-MT"))) {
-      if (opt_MT == NULL)
-        opt_MT = arg;
-      else
-        opt_MT = format("%s %s", opt_MT, arg);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-MD")) {
-      opt_MD = true;
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-MQ"))) {
-      if (opt_MT == NULL)
-        opt_MT = quote_makefile(arg);
-      else
-        opt_MT = format("%s %s", opt_MT, quote_makefile(arg));
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-MMD")) {
-      opt_MD = opt_MMD = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fpic")) {
-      set_pic("1", false);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fPIC")) {
-      set_pic("2", false);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fpie")) {
-      set_pic("1", true);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fPIE")) {
-      set_pic("2", true);
-      continue;
-    }
+    if (!strcmp(argv[i], "-fpic")) { set_pic("1", false); continue; }
+    if (!strcmp(argv[i], "-fPIC")) { set_pic("2", false); continue; }
+    if (!strcmp(argv[i], "-fpie")) { set_pic("1", true); continue; }
+    if (!strcmp(argv[i], "-fPIE")) { set_pic("2", true); continue; }
 
     if (!strcmp(argv[i], "-fno-pic") || !strcmp(argv[i], "-fno-PIC") ||
       !strcmp(argv[i], "-fno-pie") || !strcmp(argv[i], "-fno-PIE")) {
@@ -372,40 +399,63 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-cc1-input"))) {
-      base_file = arg;
+    if (startswith(argv[i], "-fstack-reuse=", &arg)) {
+      if (strncmp(arg, "all\0", 4))
+        dont_reuse_stack = true;
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-cc1-output"))) {
-      output_file = arg;
+    if (bool_opt(argv[i], "-fsigned-char", &ty_pchar->is_unsigned, false) ||
+      bool_opt(argv[i], "-funsigned-char", &ty_pchar->is_unsigned, true))
+      continue;
+
+    if (startswith(argv[i], "-fvisibility=", &arg)) {
+      opt_visibility = arg;
       continue;
     }
 
-    if (!strcmp(argv[i], "-cc1-asm-pp")) {
-      opt_E = true;
-      opt_cc1_asm_pp = true;
+    bool bval;
+    char *argp = NULL;
+    if (startswith(argv[i], "-fno-", &argp))
+      bval = false;
+    else if (startswith(argv[i], "-f", &argp))
+      bval = true;
+
+    if (argp && (bool_opt(argp, "common", &opt_fcommon, bval) ||
+      bool_opt(argp, "function-sections", &opt_func_sections, bval) ||
+      bool_opt(argp, "data-sections", &opt_data_sections, bval) ||
+      bool_opt(argp, "enable-universal-char", &opt_enable_universal_char, bval)))
+      continue;
+
+    if (std_arg(argv, &i))
+      continue;
+
+    if (set_opt(argv[i], "-M", &opt_M) ||
+      set_opt(argv[i], "-MP", &opt_MP) ||
+      set_opt(argv[i], "-MD", &opt_MD))
+      continue;
+
+    if (!strcmp(argv[i], "-MMD")) {
+      opt_MD = opt_MMD = true;
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-idirafter"))) {
-      strarray_push(&idirafter, arg);
+    if (take_arg2(argv, &i, "-MF", &opt_MF))
+      continue;
+
+    if ((arg = take_arg(argv, &i, "-MT"))) {
+      if (opt_MT == NULL)
+        opt_MT = arg;
+      else
+        opt_MT = format("%s %s", opt_MT, arg);
       continue;
     }
 
-    if (!strcmp(argv[i], "-pie")) {
-      opt_pie = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-no-pie")) {
-      opt_pie = false;
-      opt_nopie = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-nopie")) {
-      opt_nopie = true;
+    if ((arg = take_arg(argv, &i, "-MQ"))) {
+      if (opt_MT == NULL)
+        opt_MT = quote_makefile(arg);
+      else
+        opt_MT = format("%s %s", opt_MT, quote_makefile(arg));
       continue;
     }
 
@@ -415,151 +465,9 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-r")) {
-      opt_r = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-rdynamic")) {
-      opt_rdynamic = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-static")) {
-      opt_static = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-static-pie")) {
-      opt_static_pie = true;
-      continue;
-    }
-
-     if (!strcmp(argv[i], "-static-libgcc")) {
-      opt_static_libgcc = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-shared")) {
-      opt_shared = true;
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-L"))) {
-      strarray_push(&ld_paths, "-L");
-      strarray_push(&ld_paths, arg);
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-L", 2)) {
-      strarray_push(&ld_paths, argv[i]);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-hashmap-test")) {
-      hashmap_test();
-      exit(0);
-    }
-
-    if (!strncmp(argv[i], "-g", 2)) {
-      if (argv[i][2] == '0')
-        opt_g = false;
-      else
-        opt_g = true;
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-O", 2)) {
-      if (argv[i][2] == '0')
-        opt_optimize = false;
-      else
-        opt_optimize = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-ansi")) {
-      set_std(89);
-      define_macro_cli("__STRICT_ANSI__");
-      continue;
-    } else if (!strncmp(argv[i], "-std=c", 6)) {
-      set_std(strtoul(argv[i] + 6, NULL, 10));
-      continue;
-    } else if (!strncmp(argv[i], "--std=c", 7)) {
-      set_std(strtoul(argv[i] + 7, NULL, 10));
-      continue;
-    } else if (!strcmp(argv[i], "--std")) {
-      if (*argv[++i] != 'c')
-        error("unknown c standard");
-      set_std(strtoul(argv[i] + 1, NULL, 10));
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fenable-universal-char")) {
-      opt_enable_universal_char = true;
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-fstack-reuse=", 14)) {
-      if (strncmp(argv[i] + 14, "all\0", 4))
-        dont_reuse_stack = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fsigned-char"))
-      continue;
-    if (!strcmp(argv[i], "-funsigned-char")) {
-      ty_pchar->is_unsigned = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-ffunction-sections")) {
-      opt_func_sections = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fdata-sections")) {
-      opt_data_sections = true;
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-fvisibility=", 13)) {
-      opt_visibility = strdup(&argv[i][13]);
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-nostdinc")) {
-      opt_nostdinc = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-nostdlib")) {
-      opt_nostartfiles = opt_nodefaultlibs = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-nostartfiles")) {
-      opt_nostartfiles = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-nodefaultlibs")) {
-      opt_nodefaultlibs = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-nolibc")) {
-      opt_nolibc = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-Werror")) {
-      opt_werror = true;
-      continue;
-    }
-
     // These options are ignored for now.
     if (!strncmp(argv[i], "-W", 2) ||
-        !strncmp(argv[i], "-std=", 5) ||
+        !strncmp(argv[i], "-std=gnu", 8) ||
         !strncmp(argv[i], "-march=", 7) ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
@@ -574,7 +482,6 @@ static void parse_args(int argc, char **argv) {
         !strcmp(argv[i], "-m64") ||
         !strcmp(argv[i], "-mfpmath=sse") ||
         !strcmp(argv[i], "-mno-red-zone") ||
-        !strcmp(argv[i], "-no-pie") ||
         !strcmp(argv[i], "-pedantic") ||
         !strcmp(argv[i], "-w"))
       continue;
@@ -583,6 +490,7 @@ static void parse_args(int argc, char **argv) {
       error("unknown argument: %s", argv[i]);
 
     strarray_push(&input_paths, argv[i]);
+    continue;
   }
 
   for (int i = 0; i < idirafter.len; i++)
