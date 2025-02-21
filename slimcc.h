@@ -690,6 +690,7 @@ extern bool opt_r;
 extern bool opt_rdynamic;
 extern bool opt_static;
 extern bool opt_static_pie;
+extern bool opt_static_libgcc;
 extern bool opt_shared;
 extern bool opt_nostdinc;
 extern bool opt_nostartfiles;

@@ -35,6 +35,7 @@ bool opt_r;
 bool opt_rdynamic;
 bool opt_static;
 bool opt_static_pie;
+bool opt_static_libgcc;
 bool opt_shared;
 bool opt_nostdinc;
 bool opt_nostartfiles;
@@ -420,6 +421,11 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-static-pie")) {
       opt_static_pie = true;
+      continue;
+    }
+
+     if (!strcmp(argv[i], "-static-libgcc")) {
+      opt_static_libgcc = true;
       continue;
     }
 
