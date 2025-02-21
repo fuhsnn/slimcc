@@ -50,7 +50,6 @@ static StringArray ld_extra_args;
 static StringArray std_include_paths;
 
 char *base_file;
-static char *output_file;
 
 static StringArray input_paths;
 static StringArray tmpfiles;
@@ -246,8 +245,7 @@ static void parse_args(int argc, char **argv) {
 
     if (set_opt(argv[i], "-S", &opt_S) ||
       set_opt(argv[i], "-c", &opt_c) ||
-      set_opt(argv[i], "-###", &opt_hash_hash_hash) ||
-      set_opt(argv[i], "-cc1", &opt_cc1))
+      set_opt(argv[i], "-###", &opt_hash_hash_hash))
       continue;
 
     if (take_arg2(argv, &i, "-o", &opt_o) ||
@@ -332,15 +330,6 @@ static void parse_args(int argc, char **argv) {
         opt_optimize = false;
       else
         opt_optimize = true;
-      continue;
-    }
-
-    if (take_arg2(argv, &i, "-cc1-input", &base_file) ||
-      take_arg2(argv, &i, "-cc1-output", &output_file))
-      continue;
-
-    if (!strcmp(argv[i], "-cc1-asm-pp")) {
-      opt_E = opt_cc1_asm_pp = true;
       continue;
     }
 
@@ -563,26 +552,23 @@ void run_subprocess(char **argv) {
   if (wait(&status) <= 0 || status != 0)
     exit(1);
 }
+static void cc1(char *input, char *output);
+static void run_cc1(char *input, char *output, char *option) {
+  if (opt_hash_hash_hash)
+    return;
 
-static void run_cc1(int argc, char **argv, char *input, char *output, char *option) {
-  char **args = calloc(argc + 10, sizeof(char *));
-  memcpy(args, argv, argc * sizeof(char *));
-  args[argc++] = "-cc1";
+  if (fork() == 0) {
+    if (option)
+      opt_E = opt_cc1_asm_pp = true;
 
-  if (input) {
-    args[argc++] = "-cc1-input";
-    args[argc++] = input;
+    cc1(input, output);
+    _exit(0);
   }
 
-  if (output) {
-    args[argc++] = "-cc1-output";
-    args[argc++] = output;
-  }
-
-  if (option)
-    args[argc++] = option;
-
-  run_subprocess(args);
+  // Wait for the child process to finish.
+  int status;
+  if (wait(&status) <= 0 || status != 0)
+    exit(1);
 }
 
 // Print tokens to stdout. Used for -E.
@@ -610,6 +596,7 @@ static void print_tokens(Token *tok, char *path) {
     line++;
   }
   fprintf(out, "\n");
+  fclose(out);
 }
 
 static bool in_std_include_path(char *path) {
@@ -661,6 +648,7 @@ static void print_dependencies(void) {
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
   }
+  fclose(out);
 }
 
 static Token *must_tokenize_file(char *path, Token **end) {
@@ -671,9 +659,10 @@ static Token *must_tokenize_file(char *path, Token **end) {
   return tok;
 }
 
-static void cc1(void) {
+static void cc1(char *input, char *output_file) {
   Token head = {0};
   Token *cur = &head;
+  base_file = input;
 
   if (!opt_E) {
     Token *end;
@@ -789,14 +778,9 @@ int main(int argc, char **argv) {
   platform_init();
   parse_args(argc, argv);
 
-  if (opt_cc1) {
-    add_default_include_paths(&std_include_paths, argv[0]);
-    for (int i = 0; i < std_include_paths.len; i++)
-      strarray_push(&include_paths, std_include_paths.data[i]);
-
-    cc1();
-    return 0;
-  }
+  add_default_include_paths(&std_include_paths, argv[0]);
+  for (int i = 0; i < std_include_paths.len; i++)
+    strarray_push(&include_paths, std_include_paths.data[i]);
 
   StringArray ld_args = {0};
   int file_count = 0;
@@ -856,18 +840,18 @@ int main(int argc, char **argv) {
     // Handle .S
     if (type == FILE_PP_ASM) {
       if (opt_S || opt_E || opt_M) {
-        run_cc1(argc, argv, input, (opt_o ? opt_o : "-"), "-cc1-asm-pp");
+        run_cc1(input, (opt_o ? opt_o : "-"), "-cc1-asm-pp");
         continue;
       }
       if (opt_c) {
         char *tmp = create_tmpfile();
-        run_cc1(argc, argv, input, tmp, "-cc1-asm-pp");
+        run_cc1(input, tmp, "-cc1-asm-pp");
         run_assembler(&as_args, tmp, output);
         continue;
       }
       char *tmp1 = create_tmpfile();
       char *tmp2 = create_tmpfile();
-      run_cc1(argc, argv, input, tmp1, "-cc1-asm-pp");
+      run_cc1(input, tmp1, "-cc1-asm-pp");
       run_assembler(&as_args, tmp1, tmp2);
       strarray_push(&ld_args, tmp2);
       run_ld = true;
@@ -878,20 +862,20 @@ int main(int argc, char **argv) {
 
     // Just preprocess
     if (opt_E || opt_M) {
-      run_cc1(argc, argv, input, (opt_o ? opt_o : "-"), NULL);
+      run_cc1(input, (opt_o ? opt_o : "-"), NULL);
       continue;
     }
 
     // Compile
     if (opt_S) {
-      run_cc1(argc, argv, input, output, NULL);
+      run_cc1(input, output, NULL);
       continue;
     }
 
     // Compile and assemble
     if (opt_c) {
       char *tmp = create_tmpfile();
-      run_cc1(argc, argv, input, tmp, NULL);
+      run_cc1(input, tmp, NULL);
       run_assembler(&as_args, tmp, output);
       continue;
     }
@@ -899,7 +883,7 @@ int main(int argc, char **argv) {
     // Compile, assemble and link
     char *tmp1 = create_tmpfile();
     char *tmp2 = create_tmpfile();
-    run_cc1(argc, argv, input, tmp1, NULL);
+    run_cc1(input, tmp1, NULL);
     run_assembler(&as_args, tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
     run_ld = true;
