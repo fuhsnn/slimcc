@@ -693,7 +693,6 @@ extern bool opt_static;
 extern bool opt_static_pie;
 extern bool opt_static_libgcc;
 extern bool opt_shared;
-extern bool opt_nostdinc;
 extern bool opt_nostartfiles;
 extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
@@ -704,13 +703,12 @@ extern StdVer opt_std;
 
 // platform.c
 
-void add_default_include_paths(StringArray *paths, char *argv0);
+void platform_init(void);
+void platform_stdinc_paths(StringArray *paths, char *argv0);
 void run_assembler(StringArray *as_args, char *input, char *output);
 void run_linker(StringArray *paths, StringArray *inputs, char *output);
-void platform_init(void);
 
 typedef enum {
-  LT_DEFAULT,
   LT_RELO,
   LT_SHARED,
   LT_DYNAMIC,

@@ -15,10 +15,7 @@ void platform_init(void) {
   opt_pie = true;
 }
 
-void add_default_include_paths(StringArray *paths, char *argv0) {
-  if (opt_nostdinc)
-    return;
-
+void platform_stdinc_paths(StringArray *paths, char *argv0) {
   // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
   incpath_push(paths, format("%s/include", dirname(strdup(argv0))));

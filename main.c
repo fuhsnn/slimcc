@@ -26,7 +26,6 @@ static bool opt_MMD;
 static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
-static bool opt_cc1;
 static bool opt_hash_hash_hash;
 bool opt_pie;
 bool opt_nopie;
@@ -37,7 +36,6 @@ bool opt_static;
 bool opt_static_pie;
 bool opt_static_libgcc;
 bool opt_shared;
-bool opt_nostdinc;
 bool opt_nostartfiles;
 bool opt_nodefaultlibs;
 bool opt_nolibc;
@@ -236,6 +234,7 @@ static bool comma_arg(StringArray *arr, char *p, char *hdr) {
 static void parse_args(int argc, char **argv) {
   char *arg;
   StringArray idirafter_arr = {0};
+  bool opt_nostdinc = false;
 
   for (int i = 1; i < argc; i++) {
     if (*argv[i] == '\0')
@@ -493,28 +492,28 @@ static void parse_args(int argc, char **argv) {
     error("no input files");
 
   if (!opt_nostdinc)
-    add_default_include_paths(&sys_incpaths, argv[0]);
+    platform_stdinc_paths(&sys_incpaths, argv[0]);
 
   for (int i = 0; i < idirafter_arr.len; i++)
     incpath_push(&sys_incpaths, idirafter_arr.data[i]);
+}
 
+void process_incpaths(void) {
   HashMap sys_incs = {0};
   for (int i = 0; i < sys_incpaths.len; i++)
     hashmap_put(&sys_incs, sys_incpaths.data[i], (void *)1);
 
-  int j = 0;
-  for (int i = 0; i < incpaths.len; i++) {
-    if (hashmap_get(&sys_incs, incpaths.data[i]))
-      continue;
-    incpaths.data[j++] = incpaths.data[i];
-  }
+  int cnt = 0;
+  for (int i = 0; i < incpaths.len; i++)
+    if (!hashmap_get(&sys_incs, incpaths.data[i]))
+      incpaths.data[cnt++] = incpaths.data[i];
 
-  size_t new_len = j + sys_incpaths.len;
+  size_t new_len = cnt + sys_incpaths.len;
   if (new_len > incpaths.len)
     incpaths.data = realloc(incpaths.data, sizeof(char *) * new_len);
 
-  memcpy(&incpaths.data[j], &sys_incpaths.data[0], sizeof(char *) * sys_incpaths.len);
   incpaths.len = new_len;
+  memcpy(&incpaths.data[cnt], &sys_incpaths.data[0], sizeof(char *) * sys_incpaths.len);
 }
 
 static FILE *open_file(char *path) {
@@ -557,8 +556,6 @@ static char *create_tmpfile(void) {
   strarray_push(&tmpfiles, path);
   return path;
 }
-
-static int jobs = 0;
 
 void run_subprocess(char **argv) {
   // If -### is given, dump the subprocess's command line.
@@ -808,6 +805,7 @@ int main(int argc, char **argv) {
   init_macros();
   platform_init();
   parse_args(argc, argv);
+  process_incpaths();
 
   StringArray ld_args = {0};
   int file_count = 0;

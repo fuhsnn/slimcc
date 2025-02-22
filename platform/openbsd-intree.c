@@ -10,13 +10,10 @@ void platform_init(void) {
   set_pic("1", true);
 }
 
-void add_default_include_paths(StringArray *paths, char *argv0) {
-  if (opt_nostdinc)
-    return;
+void platform_stdinc_paths(StringArray *paths, char *argv0) {
+  incpath_push(paths, format("%s/include", dirname(strdup(argv0))));
 
-  strarray_push(paths, format("%s/include", dirname(strdup(argv0))));
-
-  strarray_push(paths, "/usr/include");
+  incpath_push(paths, "/usr/include");
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
