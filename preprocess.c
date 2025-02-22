@@ -954,8 +954,8 @@ static char *search_include_paths3(char *filename, int *incl_no) {
     return cached;
 
   // Search a file from the include paths.
-  for (int i = 0; i < include_paths.len; i++) {
-    char *path = format("%s/%s", include_paths.data[i], filename);
+  for (int i = 0; i < incpaths.len; i++) {
+    char *path = format("%s/%s", incpaths.data[i], filename);
     if (!file_exists(path))
       continue;
     hashmap_put(&cache, filename, path);
@@ -981,8 +981,8 @@ char *search_include_paths(char *filename) {
 }
 
 static char *search_include_next(char *filename, int *idx) {
-  for (; *idx < include_paths.len; (*idx)++) {
-    char *path = format("%s/%s", include_paths.data[*idx], filename);
+  for (; *idx < incpaths.len; (*idx)++) {
+    char *path = format("%s/%s", incpaths.data[*idx], filename);
     if (file_exists(path))
       return path;
   }

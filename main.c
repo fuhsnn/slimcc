@@ -4,7 +4,7 @@ typedef enum {
   FILE_NONE, FILE_C, FILE_ASM, FILE_OBJ, FILE_AR, FILE_DSO, FILE_PP_ASM
 } FileType;
 
-StringArray include_paths;
+StringArray incpaths;
 bool opt_fcommon = true;
 bool opt_fpic;
 bool opt_optimize = true;
@@ -47,7 +47,7 @@ static char *opt_o;
 
 static StringArray ld_paths;
 static StringArray ld_extra_args;
-static StringArray std_include_paths;
+static StringArray sys_incpaths;
 
 char *base_file;
 
@@ -92,17 +92,23 @@ static bool startswith(char *s, char *n, char **p) {
   return false;
 }
 
-static void add_include_path(char *p) {
-  char *str = strdup(p);
+void incpath_push(StringArray *arr, char *s) {
+  size_t orig_len = strlen(s);
+  size_t len = orig_len;
 
-  for (int i = strlen(str) - 1; i >= 0 && str[i] == '/';)
-    str[i--] = '\0';
+  for (int i = len - 1; i > 0 && s[i] == '/'; i--)
+    len--;
 
-  for (int i = 0; i < include_paths.len; i++) {
-    if (!strcmp(include_paths.data[i], str))
+  for (int i = 0; i < arr->len; i++) {
+    char *s2 = arr->data[i];
+    if ((strlen(s2) == len) && !memcmp(s2, s, len))
       return;
   }
-  strarray_push(&include_paths, str);
+
+  if (len != orig_len)
+    s = strndup(s, len);
+
+  strarray_push(arr, s);
 }
 
 static FileType parse_opt_x(char *s) {
@@ -229,7 +235,7 @@ static bool comma_arg(StringArray *arr, char *p, char *hdr) {
 
 static void parse_args(int argc, char **argv) {
   char *arg;
-  StringArray idirafter = {0};
+  StringArray idirafter_arr = {0};
 
   for (int i = 1; i < argc; i++) {
     if (*argv[i] == '\0')
@@ -333,18 +339,19 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-I"))) {
-      add_include_path(arg);
+    if (take_arg2(argv, &i, "-I", &arg) ||
+      startswith(argv[i], "-I", &arg)) {
+      incpath_push(&incpaths, arg);
       continue;
     }
 
-    if (startswith(argv[i], "-I", &arg)) {
-      add_include_path(arg);
+    if (take_arg2(argv, &i, "-isystem", &arg)) {
+      incpath_push(&sys_incpaths, arg);
       continue;
     }
 
     if (take_arg2(argv, &i, "-idirafter", &arg)) {
-      strarray_push(&idirafter, arg);
+      incpath_push(&idirafter_arr, arg);
       continue;
     }
 
@@ -482,11 +489,32 @@ static void parse_args(int argc, char **argv) {
     continue;
   }
 
-  for (int i = 0; i < idirafter.len; i++)
-    add_include_path(idirafter.data[i]);
-
   if (input_paths.len == 0)
     error("no input files");
+
+  if (!opt_nostdinc)
+    add_default_include_paths(&sys_incpaths, argv[0]);
+
+  for (int i = 0; i < idirafter_arr.len; i++)
+    incpath_push(&sys_incpaths, idirafter_arr.data[i]);
+
+  HashMap sys_incs = {0};
+  for (int i = 0; i < sys_incpaths.len; i++)
+    hashmap_put(&sys_incs, sys_incpaths.data[i], (void *)1);
+
+  int j = 0;
+  for (int i = 0; i < incpaths.len; i++) {
+    if (hashmap_get(&sys_incs, incpaths.data[i]))
+      continue;
+    incpaths.data[j++] = incpaths.data[i];
+  }
+
+  size_t new_len = j + sys_incpaths.len;
+  if (new_len > incpaths.len)
+    incpaths.data = realloc(incpaths.data, sizeof(char *) * new_len);
+
+  memcpy(&incpaths.data[j], &sys_incpaths.data[0], sizeof(char *) * sys_incpaths.len);
+  incpaths.len = new_len;
 }
 
 static FILE *open_file(char *path) {
@@ -530,6 +558,8 @@ static char *create_tmpfile(void) {
   return path;
 }
 
+static int jobs = 0;
+
 void run_subprocess(char **argv) {
   // If -### is given, dump the subprocess's command line.
   if (opt_hash_hash_hash) {
@@ -552,13 +582,14 @@ void run_subprocess(char **argv) {
   if (wait(&status) <= 0 || status != 0)
     exit(1);
 }
+
 static void cc1(char *input, char *output);
-static void run_cc1(char *input, char *output, char *option) {
+static void run_cc1(char *input, char *output, bool is_asm_pp) {
   if (opt_hash_hash_hash)
     return;
 
   if (fork() == 0) {
-    if (option)
+    if (is_asm_pp)
       opt_E = opt_cc1_asm_pp = true;
 
     cc1(input, output);
@@ -600,8 +631,8 @@ static void print_tokens(Token *tok, char *path) {
 }
 
 static bool in_std_include_path(char *path) {
-  for (int i = 0; i < std_include_paths.len; i++) {
-    char *dir = std_include_paths.data[i];
+  for (int i = 0; i < sys_incpaths.len; i++) {
+    char *dir = sys_incpaths.data[i];
     int len = strlen(dir);
     if (strncmp(dir, path, len) == 0 && path[len] == '/')
       return true;
@@ -778,10 +809,6 @@ int main(int argc, char **argv) {
   platform_init();
   parse_args(argc, argv);
 
-  add_default_include_paths(&std_include_paths, argv[0]);
-  for (int i = 0; i < std_include_paths.len; i++)
-    strarray_push(&include_paths, std_include_paths.data[i]);
-
   StringArray ld_args = {0};
   int file_count = 0;
   FileType opt_x = FILE_NONE;
@@ -840,18 +867,18 @@ int main(int argc, char **argv) {
     // Handle .S
     if (type == FILE_PP_ASM) {
       if (opt_S || opt_E || opt_M) {
-        run_cc1(input, (opt_o ? opt_o : "-"), "-cc1-asm-pp");
+        run_cc1(input, (opt_o ? opt_o : "-"), true);
         continue;
       }
       if (opt_c) {
         char *tmp = create_tmpfile();
-        run_cc1(input, tmp, "-cc1-asm-pp");
+        run_cc1(input, tmp, true);
         run_assembler(&as_args, tmp, output);
         continue;
       }
       char *tmp1 = create_tmpfile();
       char *tmp2 = create_tmpfile();
-      run_cc1(input, tmp1, "-cc1-asm-pp");
+      run_cc1(input, tmp1, true);
       run_assembler(&as_args, tmp1, tmp2);
       strarray_push(&ld_args, tmp2);
       run_ld = true;
@@ -862,20 +889,20 @@ int main(int argc, char **argv) {
 
     // Just preprocess
     if (opt_E || opt_M) {
-      run_cc1(input, (opt_o ? opt_o : "-"), NULL);
+      run_cc1(input, (opt_o ? opt_o : "-"), false);
       continue;
     }
 
     // Compile
     if (opt_S) {
-      run_cc1(input, output, NULL);
+      run_cc1(input, output, false);
       continue;
     }
 
     // Compile and assemble
     if (opt_c) {
       char *tmp = create_tmpfile();
-      run_cc1(input, tmp, NULL);
+      run_cc1(input, tmp, false);
       run_assembler(&as_args, tmp, output);
       continue;
     }
@@ -883,7 +910,7 @@ int main(int argc, char **argv) {
     // Compile, assemble and link
     char *tmp1 = create_tmpfile();
     char *tmp2 = create_tmpfile();
-    run_cc1(input, tmp1, NULL);
+    run_cc1(input, tmp1, false);
     run_assembler(&as_args, tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
     run_ld = true;

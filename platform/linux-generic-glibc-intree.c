@@ -25,9 +25,6 @@ static char *find_file(char *pattern) {
 }
 
 void add_default_include_paths(StringArray *paths, char *argv0) {
-  if (opt_nostdinc)
-    return;
-
   // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
   strarray_push(paths, format("%s/include", dirname(strdup(argv0))));

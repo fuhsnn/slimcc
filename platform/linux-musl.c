@@ -21,10 +21,10 @@ void add_default_include_paths(StringArray *paths, char *argv0) {
 
   // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
-  strarray_push(paths, format("%s/include", dirname(strdup(argv0))));
+  incpath_push(paths, format("%s/include", dirname(strdup(argv0))));
 
   // Add standard include paths.
-  strarray_push(paths, MUSLPATH"/include");
+  incpath_push(paths, MUSLPATH"/include");
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {

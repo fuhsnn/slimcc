@@ -672,8 +672,9 @@ typedef enum {
 bool file_exists(char *path);
 void run_subprocess(char **argv);
 void set_pic(char *lvl, bool is_pie);
+void incpath_push(StringArray *arr, char *s);
 
-extern StringArray include_paths;
+extern StringArray incpaths;
 extern bool opt_E;
 extern bool opt_enable_universal_char;
 extern bool opt_fpic;
