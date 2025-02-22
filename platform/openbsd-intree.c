@@ -10,30 +10,17 @@ void platform_init(void) {
   set_pic("1", true);
 }
 
-void platform_stdinc_paths(StringArray *paths, char *argv0) {
-  incpath_push(paths, format("%s/include", dirname(strdup(argv0))));
+void platform_stdinc_paths(StringArray *paths) {
+  incpath_push(paths, in_tree_hdr());
 
   incpath_push(paths, "/usr/include");
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
-  StringArray arr = {0};
-
-  strarray_push(&arr, "gas");
-  strarray_push(&arr, input);
-  strarray_push(&arr, "-o");
-  strarray_push(&arr, output);
-  strarray_push(&arr, "--fatal-warnings");
-
-  for (int i = 0; i < as_args->len; i++)
-    strarray_push(&arr, as_args->data[i]);
-
-  strarray_push(&arr, NULL);
-
-  run_subprocess(arr.data);
+  run_assembler_gnu("gas", as_args, input, output);
 }
 
-void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
+void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   StringArray arr = {0};
   const bool opt_pg = false;
 
@@ -86,8 +73,8 @@ void run_linker(StringArray *extra_args, StringArray *inputs, char *output) {
     }
   }
 
-  for (int i = 0; i < extra_args->len; i++)
-    strarray_push(&arr, extra_args->data[i]);
+  for (int i = 0; i < paths->len; i++)
+    strarray_push(&arr, paths->data[i]);
 
   if (!opt_nodefaultlibs)
     strarray_push(&arr, "-L/usr/lib");

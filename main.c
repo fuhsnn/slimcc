@@ -47,11 +47,13 @@ static StringArray ld_paths;
 static StringArray ld_extra_args;
 static StringArray sys_incpaths;
 
-char *base_file;
+char *cc1_base_file;
 
 static StringArray input_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
+
+static char *argv0;
 
 static void usage(int status) {
   fprintf(stderr, "slimcc [ -o <path> ] <file>\n");
@@ -457,7 +459,7 @@ static void parse_args(int argc, char **argv) {
     error("no input files");
 
   if (!opt_nostdinc)
-    platform_stdinc_paths(&sys_incpaths, argv[0]);
+    platform_stdinc_paths(&sys_incpaths);
 
   for (int i = 0; i < idirafter_arr.len; i++)
     incpath_push(&sys_incpaths, idirafter_arr.data[i]);
@@ -610,7 +612,7 @@ static void print_dependencies(void) {
   if (opt_MF)
     path = opt_MF;
   else if (opt_MD)
-    path = replace_extn(opt_o ? opt_o : base_file, ".d");
+    path = replace_extn(opt_o ? opt_o : cc1_base_file, ".d");
   else if (opt_o)
     path = opt_o;
   else
@@ -620,7 +622,7 @@ static void print_dependencies(void) {
   if (opt_MT)
     fprintf(out, "%s:", opt_MT);
   else
-    fprintf(out, "%s:", quote_makefile(replace_extn(base_file, ".o")));
+    fprintf(out, "%s:", quote_makefile(replace_extn(cc1_base_file, ".o")));
 
   File **files = get_input_files();
 
@@ -655,7 +657,7 @@ static Token *must_tokenize_file(char *path, Token **end) {
 static void cc1(char *input, char *output_file) {
   Token head = {0};
   Token *cur = &head;
-  base_file = input;
+  cc1_base_file = input;
 
   if (!opt_E) {
     Token *end;
@@ -689,7 +691,7 @@ static void cc1(char *input, char *output_file) {
   }
 
   // Tokenize and parse.
-  cur->next = must_tokenize_file(base_file, NULL);
+  cur->next = must_tokenize_file(cc1_base_file, NULL);
   Token *tok = preprocess(head.next);
 
   // If -M or -MD are given, print file dependencies.
@@ -714,6 +716,27 @@ static void cc1(char *input, char *output_file) {
   fclose(out);
   if (failed)
     unlink(output_file);
+}
+
+static char *find_file(char *pattern) {
+  char *path = NULL;
+  glob_t buf = {0};
+  glob(pattern, 0, NULL, &buf);
+  if (buf.gl_pathc > 0)
+    path = strdup(buf.gl_pathv[buf.gl_pathc - 1]);
+  globfree(&buf);
+  return path;
+}
+
+char *find_dir_w_file(char *pattern) {
+  static char *path;
+  if (!path) {
+    path = find_file("/usr/lib*/gcc/x86_64*-linux*/*/crtbegin.o");
+    if (!path)
+      return NULL;
+    path = dirname(path);
+  }
+  return path;
 }
 
 // Returns true if a given file exists.
@@ -751,6 +774,30 @@ static FileType get_file_type(char *filename) {
   error("<command line>: unknown file extension: %s", filename);
 }
 
+char *in_tree_hdr(void) {
+  static char *path;
+  if (!path)
+    path = format("%s/include", dirname(strdup(argv0)));
+  return path;
+}
+
+void run_assembler_gnu(char *exe, StringArray *as_args, char *input, char *output) {
+  StringArray arr = {0};
+
+  strarray_push(&arr, exe);
+  strarray_push(&arr, input);
+  strarray_push(&arr, "-o");
+  strarray_push(&arr, output);
+  strarray_push(&arr, "--fatal-warnings");
+
+  for (int i = 0; i < as_args->len; i++)
+    strarray_push(&arr, as_args->data[i]);
+
+  strarray_push(&arr, NULL);
+
+  run_subprocess(arr.data);
+}
+
 LinkType get_link_type(void) {
   if (opt_r)
     return LT_RELO;
@@ -765,7 +812,149 @@ LinkType get_link_type(void) {
   return LT_DYNAMIC;
 }
 
+void link_type_gnu(StringArray *arr, LinkType type, char *ldso_path) {
+  switch (type) {
+  case LT_RELO:
+    strarray_push(arr, "-r");
+    break;
+  case LT_SHARED:
+    strarray_push(arr, "-shared");
+    break;
+  case LT_STATIC_PIE:
+    strarray_push(arr, "-static");
+    strarray_push(arr, "-pie");
+    break;
+  case LT_STATIC:
+    strarray_push(arr, "-static");
+    break;
+  case LT_PIE:
+    strarray_push(arr, "-pie");
+    break;
+  }
+
+  switch (type) {
+  case LT_STATIC_PIE:
+    strarray_push(arr, "-no-dynamic-linker");
+    break;
+  case LT_DYNAMIC:
+  case LT_SHARED:
+  case LT_PIE:
+    if (opt_rdynamic)
+      strarray_push(arr, "--export-dynamic");
+
+    strarray_push(arr, "-dynamic-linker");
+    strarray_push(arr, ldso_path);
+  }
+}
+
+static void link_libgcc(StringArray *arr, LinkType type, bool is_static) {
+  strarray_push(arr, "-lgcc");
+
+  if (is_static) {
+    strarray_push(arr, "-lgcc_eh");
+  } else {
+    strarray_push(arr, "--push-state");
+    strarray_push(arr, "--as-needed");
+    strarray_push(arr, "-lgcc_s");
+    strarray_push(arr, "--pop-state");
+  }
+}
+
+static void link_libc(StringArray *arr) {
+  if (opt_pthread)
+    strarray_push(arr, "-lpthread");
+  if (!opt_nolibc)
+    strarray_push(arr, "-lc");
+}
+
+void run_linker_linux_gnu(StringArray *paths, StringArray *inputs, char *output,
+  char *ldso_path, char *libpath, char *gcclibpath, StringArray *defaultlibs) {
+  StringArray arr = {0};
+
+  strarray_push(&arr, "ld");
+  strarray_push(&arr, "-o");
+  strarray_push(&arr, output);
+  strarray_push(&arr, "-m");
+  strarray_push(&arr, "elf_x86_64");
+  strarray_push(&arr, "--eh-frame-hdr");
+
+  LinkType lt = get_link_type();
+  link_type_gnu(&arr, lt, ldso_path);
+
+  if (!opt_nostartfiles && lt != LT_RELO) {
+    switch (lt) {
+    case LT_STATIC_PIE:
+      strarray_push(&arr, format("%s/rcrt1.o", libpath));
+      break;
+    case LT_PIE:
+      strarray_push(&arr, format("%s/Scrt1.o", libpath));
+      break;
+    case LT_STATIC:
+    case LT_DYNAMIC:
+      strarray_push(&arr, format("%s/crt1.o", libpath));
+      break;
+    }
+    strarray_push(&arr, format("%s/crti.o", libpath));
+
+    switch (lt) {
+    case LT_STATIC_PIE:
+    case LT_SHARED:
+    case LT_PIE:
+      strarray_push(&arr, format("%s/crtbeginS.o", gcclibpath));
+      break;
+    case LT_STATIC:
+      strarray_push(&arr, format("%s/crtbeginT.o", gcclibpath));
+      break;
+    case LT_DYNAMIC:
+      strarray_push(&arr, format("%s/crtbegin.o", gcclibpath));
+      break;
+    }
+  }
+
+  for (int i = 0; i < paths->len; i++)
+    strarray_push(&arr, paths->data[i]);
+
+  if (!opt_nodefaultlibs)
+    for (int i = 0; i < defaultlibs->len; i++)
+      strarray_push(&arr, defaultlibs->data[i]);
+
+  for (int i = 0; i < inputs->len; i++)
+    strarray_push(&arr, inputs->data[i]);
+
+  if (!opt_nodefaultlibs && lt != LT_RELO) {
+    if (lt == LT_STATIC_PIE || lt == LT_STATIC) {
+      strarray_push(&arr, "--start-group");
+      link_libgcc(&arr, lt, true);
+      link_libc(&arr);
+      strarray_push(&arr, "--end-group");
+    } else {
+      link_libgcc(&arr, lt, opt_static_libgcc);
+      link_libc(&arr);
+      link_libgcc(&arr, lt, opt_static_libgcc);
+    }
+  }
+
+  if (!opt_nostartfiles && lt != LT_RELO) {
+    switch (lt) {
+    case LT_STATIC_PIE:
+    case LT_SHARED:
+    case LT_PIE:
+      strarray_push(&arr, format("%s/crtendS.o", gcclibpath));
+      break;
+    case LT_STATIC:
+    case LT_DYNAMIC:
+      strarray_push(&arr, format("%s/crtend.o", gcclibpath));
+    }
+
+    strarray_push(&arr, format("%s/crtn.o", libpath));
+  }
+  strarray_push(&arr, NULL);
+
+  run_subprocess(arr.data);
+}
+
 int main(int argc, char **argv) {
+  argv0 = argv[0];
   atexit(cleanup);
   init_macros();
   platform_init();

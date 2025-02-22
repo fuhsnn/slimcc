@@ -1439,7 +1439,7 @@ static Token *timestamp_macro(Token *start) {
 }
 
 static Token *base_file_macro(Token *start) {
-  Token *tok = new_str_token(base_file, start);
+  Token *tok = new_str_token(cc1_base_file, start);
   tok->next = start->next;
   return tok;
 }

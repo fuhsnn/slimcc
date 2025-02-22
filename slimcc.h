@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <errno.h>
+#include <glob.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <stdarg.h>
@@ -657,9 +658,17 @@ bool is_ident1(uint32_t c);
 bool is_ident2(uint32_t c);
 int display_width(char *p, int len);
 
+// platform.c
+
+void platform_init(void);
+void platform_stdinc_paths(StringArray *paths);
+void run_assembler(StringArray *as_args, char *input, char *output);
+void run_linker(StringArray *paths, StringArray *inputs, char *output);
+
 //
 // main.c
 //
+
 typedef enum {
   STD_NONE = 0,
   STD_C89,
@@ -669,10 +678,27 @@ typedef enum {
   STD_C23
 } StdVer;
 
+typedef enum {
+  LT_RELO,
+  LT_SHARED,
+  LT_DYNAMIC,
+  LT_STATIC_PIE,
+  LT_STATIC,
+  LT_PIE,
+} LinkType;
+
+char *in_tree_hdr(void);
+char *find_dir_w_file(char *pattern);
 bool file_exists(char *path);
 void run_subprocess(char **argv);
 void set_pic(char *lvl, bool is_pie);
 void incpath_push(StringArray *arr, char *s);
+
+LinkType get_link_type(void);
+void link_type_gnu(StringArray *arr, LinkType type, char *ldso_path);
+void run_assembler_gnu(char *exe, StringArray *as_args, char *input, char *output);
+void run_linker_linux_gnu(StringArray *paths, StringArray *inputs, char *output,
+  char *ldso_path, char *libpath, char *gcclibpath, StringArray *defaultlibs);
 
 extern StringArray incpaths;
 extern bool opt_E;
@@ -698,23 +724,5 @@ extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
-extern char *base_file;
+extern char *cc1_base_file;
 extern StdVer opt_std;
-
-// platform.c
-
-void platform_init(void);
-void platform_stdinc_paths(StringArray *paths, char *argv0);
-void run_assembler(StringArray *as_args, char *input, char *output);
-void run_linker(StringArray *paths, StringArray *inputs, char *output);
-
-typedef enum {
-  LT_RELO,
-  LT_SHARED,
-  LT_DYNAMIC,
-  LT_STATIC_PIE,
-  LT_STATIC,
-  LT_PIE,
-} LinkType;
-
-LinkType get_link_type(void);
