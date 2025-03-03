@@ -17,7 +17,7 @@ void platform_stdinc_paths(StringArray *paths) {
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
-  run_assembler_gnu("gas", as_args, input, output);
+  run_assembler_gnustyle("gas", as_args, input, output);
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
@@ -76,8 +76,7 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   for (int i = 0; i < paths->len; i++)
     strarray_push(&arr, paths->data[i]);
 
-  if (!opt_nodefaultlibs)
-    strarray_push(&arr, "-L/usr/lib");
+  strarray_push(&arr, "-L/usr/lib");
 
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);

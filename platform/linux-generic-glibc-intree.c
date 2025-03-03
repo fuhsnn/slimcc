@@ -6,7 +6,12 @@ void platform_init(void) {
   define_macro("__linux", "1");
   define_macro("__linux__", "1");
   define_macro("__gnu_linux__", "1");
-
+/*
+  define_macro("__inline", "inline");
+  define_macro("__GNUC__", "2");
+  define_macro("__GNUC_MINOR__", "7");
+  define_macro("__PRETTY_FUNCTION__", "__func__");
+*/
   init_ty(ty_ulong, ty_long, ty_long);
 
 #if 0 // default PIE
@@ -39,7 +44,7 @@ static char *libpath(void) {
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
-  run_assembler_gnu("as", as_args, input, output);
+  run_assembler_gnustyle("as", as_args, input, output);
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
@@ -47,20 +52,18 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   if (!gcclibpath)
     error("gcc library path not found");
 
-  StringArray defaultlibs = {0};
-  strarray_push(&defaultlibs, format("-L%s", gcclibpath));
-  strarray_push(&defaultlibs, "-L/usr/lib/x86_64-linux-gnu");
-  strarray_push(&defaultlibs, "-L/usr/lib64");
-  strarray_push(&defaultlibs, "-L/lib64");
-  strarray_push(&defaultlibs, "-L/usr/lib/x86_64-linux-gnu");
-  strarray_push(&defaultlibs, "-L/usr/lib/x86_64-pc-linux-gnu");
-  strarray_push(&defaultlibs, "-L/usr/lib/x86_64-redhat-linux");
-  strarray_push(&defaultlibs, "-L/usr/lib");
-  strarray_push(&defaultlibs, "-L/lib");
+  strarray_push(paths, format("-L%s", gcclibpath));
+  strarray_push(paths, "-L/usr/lib/x86_64-linux-gnu");
+  strarray_push(paths, "-L/usr/lib64");
+  strarray_push(paths, "-L/lib64");
+  strarray_push(paths, "-L/usr/lib/x86_64-linux-gnu");
+  strarray_push(paths, "-L/usr/lib/x86_64-pc-linux-gnu");
+  strarray_push(paths, "-L/usr/lib/x86_64-redhat-linux");
+  strarray_push(paths, "-L/usr/lib");
+  strarray_push(paths, "-L/lib");
 
-  run_linker_linux_gnu(paths, inputs, output,
+  run_linker_gnustyle(paths, inputs, output,
     "/lib64/ld-linux-x86-64.so.2",
     libpath(),
-    gcclibpath,
-    &defaultlibs);
+    gcclibpath);
 }

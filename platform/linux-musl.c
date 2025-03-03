@@ -18,22 +18,19 @@ void platform_stdinc_paths(StringArray *paths) {
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
-  run_assembler_gnu("as", as_args, input, output);
+  run_assembler_gnustyle("as", as_args, input, output);
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   char *libgccpath = find_dir_w_file("/usr/lib/gcc/x86_64-alpine-linux-musl/*/crtbegin.o");
-  if (!libgccpath)
-    error("gcc library path not found");
 
-  StringArray defaultlibs = {0};
-  strarray_push(&defaultlibs, format("-L%s", libgccpath));
-  strarray_push(&defaultlibs, "-L/usr/lib");
-  strarray_push(&defaultlibs, "-L/lib");
+  if (libgccpath)
+    strarray_push(paths, format("-L%s", libgccpath));
+  strarray_push(paths, "-L/usr/lib");
+  strarray_push(paths, "-L/lib");
 
-  run_linker_linux_gnu(paths, inputs, output,
+  run_linker_gnustyle(paths, inputs, output,
     "/lib/ld-musl-x86_64.so.1",
-    "/usr/lib",
-    libgccpath,
-    &defaultlibs);
+    "/usr/lib", // ubuntu musl: /usr/lib/x86_64-linux-musl/
+    libgccpath);
 }

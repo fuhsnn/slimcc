@@ -65,6 +65,8 @@ static HashMap macros;
 static HashMap pragma_once;
 static HashMap include_guards;
 
+static char *base_file;
+
 Token *last_alloc_tok;
 Token *tok_freelist;
 
@@ -1439,7 +1441,7 @@ static Token *timestamp_macro(Token *start) {
 }
 
 static Token *base_file_macro(Token *start) {
-  Token *tok = new_str_token(cc1_base_file, start);
+  Token *tok = new_str_token(base_file, start);
   tok->next = start->next;
   return tok;
 }
@@ -1823,7 +1825,8 @@ static Token *preprocess3(Token *tok) {
 }
 
 // Entry point function of the preprocessor.
-Token *preprocess(Token *tok) {
+Token *preprocess(Token *tok, char *name) {
+  base_file = name;
   tok = preprocess2(tok);
 
   CondIncl *cond;

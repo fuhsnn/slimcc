@@ -47,8 +47,6 @@ static StringArray ld_paths;
 static StringArray ld_extra_args;
 static StringArray sys_incpaths;
 
-char *cc1_base_file;
-
 static StringArray input_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
@@ -466,6 +464,7 @@ static void parse_args(int argc, char **argv) {
 }
 
 void process_incpaths(void) {
+  // Filter system directories passed as -I
   HashMap sys_incs = {0};
   for (int i = 0; i < sys_incpaths.len; i++)
     hashmap_put(&sys_incs, sys_incpaths.data[i], (void *)1);
@@ -475,12 +474,24 @@ void process_incpaths(void) {
     if (!hashmap_get(&sys_incs, incpaths.data[i]))
       incpaths.data[cnt++] = incpaths.data[i];
 
+  // Add system directories to the end of search paths
   size_t new_len = cnt + sys_incpaths.len;
   if (new_len > incpaths.len)
     incpaths.data = realloc(incpaths.data, sizeof(char *) * new_len);
 
   incpaths.len = new_len;
   memcpy(&incpaths.data[cnt], &sys_incpaths.data[0], sizeof(char *) * sys_incpaths.len);
+
+  // Process -include option
+  for (int i = 0; i < opt_include.len; i++) {
+    char *incl = opt_include.data[i];
+    if (!file_exists(incl)) {
+      char *path = search_include_paths(incl);
+      if (!path)
+        error("-include: %s: %s", incl, strerror(errno));
+      opt_include.data[i] = path;
+    }
+  }
 }
 
 static FILE *open_file(char *path) {
@@ -607,12 +618,12 @@ static bool in_std_include_path(char *path) {
 // If -M options is given, the compiler write a list of input files to
 // stdout in a format that "make" command can read. This feature is
 // used to automate file dependency management.
-static void print_dependencies(void) {
+static void print_dependencies(char *inputfile) {
   char *path;
   if (opt_MF)
     path = opt_MF;
   else if (opt_MD)
-    path = replace_extn(opt_o ? opt_o : cc1_base_file, ".d");
+    path = replace_extn(opt_o ? opt_o : inputfile, ".d");
   else if (opt_o)
     path = opt_o;
   else
@@ -622,7 +633,7 @@ static void print_dependencies(void) {
   if (opt_MT)
     fprintf(out, "%s:", opt_MT);
   else
-    fprintf(out, "%s:", quote_makefile(replace_extn(cc1_base_file, ".o")));
+    fprintf(out, "%s:", quote_makefile(replace_extn(inputfile, ".o")));
 
   File **files = get_input_files();
 
@@ -654,49 +665,35 @@ static Token *must_tokenize_file(char *path, Token **end) {
   return tok;
 }
 
-static void cc1(char *input, char *output_file) {
+static void cc1(char *input_file, char *output_file) {
   Token head = {0};
   Token *cur = &head;
-  cc1_base_file = input;
 
   if (!opt_E) {
-    Token *end;
     head.next = tokenize(add_input_file("slimcc_builtins",
     "typedef struct {"
     "  unsigned int gp_offset;"
     "  unsigned int fp_offset;"
     "  void *overflow_arg_area;"
     "  void *reg_save_area;"
-    "} __builtin_va_list[1];", NULL), &end);
+    "} __builtin_va_list[1];", NULL), &cur);
+  }
+
+  for (int i = 0; i < opt_include.len; i++) {
+    char *path = opt_include.data[i];
+
+    Token *end;
+    cur->next = must_tokenize_file(path, &end);
     cur = end;
   }
 
-  // Process -include option
-  for (int i = 0; i < opt_include.len; i++) {
-    char *incl = opt_include.data[i];
+  cur->next = must_tokenize_file(input_file, NULL);
 
-    char *path;
-    if (file_exists(incl)) {
-      path = incl;
-    } else {
-      path = search_include_paths(incl);
-      if (!path)
-        error("-include: %s: %s", incl, strerror(errno));
-    }
-
-    Token *end = NULL;
-    cur->next = must_tokenize_file(path, &end);
-    if (end)
-      cur = end;
-  }
-
-  // Tokenize and parse.
-  cur->next = must_tokenize_file(cc1_base_file, NULL);
-  Token *tok = preprocess(head.next);
+  Token *tok = preprocess(head.next, input_file);
 
   // If -M or -MD are given, print file dependencies.
   if (opt_M || opt_MD) {
-    print_dependencies();
+    print_dependencies(input_file);
     if (opt_M)
       return;
   }
@@ -781,7 +778,7 @@ char *in_tree_hdr(void) {
   return path;
 }
 
-void run_assembler_gnu(char *exe, StringArray *as_args, char *input, char *output) {
+void run_assembler_gnustyle(char *exe, StringArray *as_args, char *input, char *output) {
   StringArray arr = {0};
 
   strarray_push(&arr, exe);
@@ -812,7 +809,7 @@ LinkType get_link_type(void) {
   return LT_DYNAMIC;
 }
 
-void link_type_gnu(StringArray *arr, LinkType type, char *ldso_path) {
+void link_type_gnustyle(StringArray *arr, LinkType type, char *ldso_path) {
   switch (type) {
   case LT_RELO:
     strarray_push(arr, "-r");
@@ -867,19 +864,19 @@ static void link_libc(StringArray *arr) {
     strarray_push(arr, "-lc");
 }
 
-void run_linker_linux_gnu(StringArray *paths, StringArray *inputs, char *output,
-  char *ldso_path, char *libpath, char *gcclibpath, StringArray *defaultlibs) {
+void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
+  char *ldso_path, char *libpath, char *gcclibpath) {
   StringArray arr = {0};
 
   strarray_push(&arr, "ld");
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
   strarray_push(&arr, "-m");
-  strarray_push(&arr, "elf_x86_64");
+  strarray_push(&arr, "elf_x86_64"); // aarch64linux elf64lriscv
   strarray_push(&arr, "--eh-frame-hdr");
 
   LinkType lt = get_link_type();
-  link_type_gnu(&arr, lt, ldso_path);
+  link_type_gnustyle(&arr, lt, ldso_path);
 
   if (!opt_nostartfiles && lt != LT_RELO) {
     switch (lt) {
@@ -913,10 +910,6 @@ void run_linker_linux_gnu(StringArray *paths, StringArray *inputs, char *output,
 
   for (int i = 0; i < paths->len; i++)
     strarray_push(&arr, paths->data[i]);
-
-  if (!opt_nodefaultlibs)
-    for (int i = 0; i < defaultlibs->len; i++)
-      strarray_push(&arr, defaultlibs->data[i]);
 
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);

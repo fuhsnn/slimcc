@@ -213,7 +213,7 @@ void init_macros(void);
 void define_macro(char *name, char *buf);
 void define_macro_cli(char *str);
 void undef_macro(char *name);
-Token *preprocess(Token *tok);
+Token *preprocess(Token *tok, char *base_file);
 extern Token *last_alloc_tok;
 extern Token *tok_freelist;
 
@@ -694,11 +694,12 @@ void run_subprocess(char **argv);
 void set_pic(char *lvl, bool is_pie);
 void incpath_push(StringArray *arr, char *s);
 
-LinkType get_link_type(void);
-void link_type_gnu(StringArray *arr, LinkType type, char *ldso_path);
-void run_assembler_gnu(char *exe, StringArray *as_args, char *input, char *output);
-void run_linker_linux_gnu(StringArray *paths, StringArray *inputs, char *output,
-  char *ldso_path, char *libpath, char *gcclibpath, StringArray *defaultlibs);
+void link_defaultlibs_gnustyle(StringArray *arr);
+
+void ld_settype_gnustyle(StringArray *arr, LinkType type, char *ldso_path);
+void run_assembler_gnustyle(char *exe, StringArray *as_args, char *input, char *output);
+void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
+  char *ldso_path, char *libpath, char *gcclibpath);
 
 extern StringArray incpaths;
 extern bool opt_E;
@@ -724,5 +725,4 @@ extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
-extern char *cc1_base_file;
 extern StdVer opt_std;
