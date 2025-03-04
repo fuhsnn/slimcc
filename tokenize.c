@@ -55,13 +55,15 @@ static void verror_at(char *filename, char *input, int line_no,
 
 void verror_at_tok(Token *tok, char *fmt, va_list ap) {
   if (tok->file->file_no != tok->display_file_no) {
-    char *name = NULL;
     File **files = get_input_files();
-    for (int i = 0; files[i]; i++)
-      if (tok->display_file_no == files[i]->file_no)
-        name = files[i]->name;
-    if (name)
-      fprintf(stderr, "#line %d \"%s\"\n", tok->display_line_no, name);
+    if (files)
+      for (int i = 0; files[i]; i++)
+        if (tok->display_file_no == files[i]->file_no)
+          fprintf(stderr, "#line %d \"%s\"\n", tok->display_line_no, files[i]->name);
+  }
+  if (tok->is_generated) {
+    vfprintf(stderr, fmt, ap);
+    return;
   }
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
   if (tok->origin)
@@ -761,6 +763,7 @@ Token *tokenize(File *file, Token **end) {
   if (end && cur != &head)
     *end = cur;
   cur->next = new_token(TK_EOF, p, p);
+  cur->next->at_bol = true;
   add_line_numbers(head.next);
   return head.next;
 }
