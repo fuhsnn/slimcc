@@ -164,6 +164,7 @@ struct Token {
   bool is_incl_guard : 1;
   bool is_root : 1;
   bool is_live : 1;
+  bool is_generated : 1;
   int len;                // Token length
   char *loc;              // Token location
   File *file;             // Source location
@@ -210,6 +211,7 @@ TokenKind ident_keyword(Token *tok);
 char *search_include_paths(char *filename);
 void init_macros(void);
 void define_macro(char *name, char *buf);
+void define_macro_cli(char *str);
 void undef_macro(char *name);
 Token *preprocess(Token *tok);
 extern Token *last_alloc_tok;
