@@ -92,14 +92,6 @@ static void add_default_include_paths(char *argv0) {
     strarray_push(&include_paths, std_include_paths.data[i]);
 }
 
-static void define(char *str) {
-  char *eq = strchr(str, '=');
-  if (eq)
-    define_macro(strndup(str, eq - str), eq + 1);
-  else
-    define_macro(str, "1");
-}
-
 static FileType parse_opt_x(char *s) {
   if (!strcmp(s, "c"))
     return FILE_C;
@@ -227,12 +219,12 @@ static void parse_args(int argc, char **argv) {
     }
 
     if ((arg = take_arg(argv, &i, "-D"))) {
-      define(arg);
+      define_macro_cli(arg);
       continue;
     }
 
     if (!strncmp(argv[i], "-D", 2)) {
-      define(argv[i] + 2);
+      define_macro_cli(argv[i] + 2);
       continue;
     }
 
@@ -361,7 +353,7 @@ static void parse_args(int argc, char **argv) {
     }
 
     if (!strcmp(argv[i], "-pthread")) {
-      define("_REENTRANT");
+      define_macro_cli("_REENTRANT");
       strarray_push(&input_paths, "-lpthread");
       continue;
     }
@@ -413,7 +405,7 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-ansi")) {
       set_std(89);
-      define("__STRICT_ANSI__");
+      define_macro_cli("__STRICT_ANSI__");
       continue;
     } else if (!strncmp(argv[i], "-std=c", 6)) {
       set_std(strtoul(argv[i] + 6, NULL, 10));

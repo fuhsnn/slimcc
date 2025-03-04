@@ -307,13 +307,22 @@ static Token *find_last_tok(Token *tok) {
   return tok;
 }
 
-static Token *new_num_token(int val, Token *tmpl) {
-  char *buf = format("%d\n", val);
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
+static Token *make_token(char *str, Token *tmpl) {
+  File file = {0};
+  file.name = tmpl->file->name;
+  file.file_no = tmpl->file->file_no;
+  file.contents = str;
+
+  Token *tok = tokenize(&file, NULL);
+  tok->file = tmpl->file;
+  tok->origin = tmpl;
+  tok->is_generated = true;
+  tok->at_bol = false;
+  return tok;
 }
 
-static Token *new_comma_token(Token *tmpl) {
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, ","), NULL);
+static Token *new_num_token(int val, Token *tmpl) {
+  return make_token(format("%d\n", val), tmpl);
 }
 
 static Token *to_int_token(Token *tok, int64_t val) {
@@ -412,22 +421,17 @@ static Macro *find_macro(Token *tok) {
   return hashmap_get2(&macros, tok->loc, tok->len);
 }
 
-static void add_macro2(Macro *m, char *name, bool is_objlike, Token *body) {
-  m->is_objlike = is_objlike;
-  m->body = body;
-  hashmap_put(&macros, name, m);
-}
-
-static Macro *add_macro(char *name, bool is_objlike, Token *body) {
+static Macro *new_macro(char *name, bool is_objlike) {
   Macro *m = arena_calloc(&pp_arena, sizeof(Macro));
-  add_macro2(m, name, is_objlike, body);
+  m->is_objlike = is_objlike;
+  hashmap_put(&macros, name, m);
   return m;
 }
 
-static Macro *read_macro_params(Token **rest, Token *tok) {
+static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
   Token head = {0};
   Token *cur = &head;
-  Macro *m = arena_calloc(&pp_arena, sizeof(Macro));
+  Macro *m = new_macro(name, false);
 
   while (!consume(rest, tok, ")")) {
     if (m->arg_cnt++)
@@ -454,20 +458,41 @@ static Macro *read_macro_params(Token **rest, Token *tok) {
   return m;
 }
 
-static void read_macro_definition(Token **rest, Token *tok) {
+static void read_macro_definition(Token **rest, Token *tok, bool is_opt_d) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "macro name must be an identifier");
   char *name = strndup(tok->loc, tok->len);
   tok = tok->next;
 
-  if (!tok->has_space && equal(tok, "(")) {
-    // Function-like macro
-    Macro *m = read_macro_params(&tok, tok->next);
-    add_macro2(m, name, false, split_line(rest, tok));
-  } else {
-    // Object-like macro
-    add_macro(name, true, split_line(rest, tok));
+  Macro *m;
+  if (!tok->has_space && equal(tok, "("))
+    m = read_macro_params(name, &tok, tok->next);
+  else
+    m = new_macro(name, true);
+
+  if (!is_opt_d) {
+    m->body = split_line(rest, tok);
+    return;
   }
+
+  Token head = {0};
+  Token *cur = &head;
+  bool has_eq = false;
+  for (; tok->kind != TK_EOF;) {
+    if (!has_eq && consume(&tok, tok, "=")) {
+      tok->has_space = true;
+      has_eq = true;
+      continue;
+    }
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
+  if (!has_eq) {
+    cur = cur->next = make_token("1", tok);
+    cur->has_space = true;
+  }
+  cur->next = tok;
+  m->body = head.next;
 }
 
 static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
@@ -1101,10 +1126,9 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
     if (!fread(&buf, 1, sizeof(buf), fp))
       break;
 
-    if (cur != &head) {
-      cur = cur->next = new_comma_token(start);
-      cur->at_bol = false;
-    }
+    if (cur != &head)
+      cur = cur->next = make_token(",", start);
+
     cur = cur->next = new_num_token(buf, start);
     cur->at_bol = false;
   }
@@ -1211,7 +1235,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
   }
 
   if (equal(tok, "define")) {
-    read_macro_definition(&tok, tok->next);
+    read_macro_definition(&tok, tok->next, false);
     return tok;
   }
 
@@ -1352,19 +1376,21 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
   error_tok(tok, "invalid preprocessor directive");
 }
 
+void define_macro_cli(char *str) {
+  Token *tok = tokenize(new_file("<built-in>", 1, str), NULL);
+  read_macro_definition(&tok, tok, true);
+}
+
 void define_macro(char *name, char *buf) {
-  Token *tok = tokenize(new_file("<built-in>", 1, buf), NULL);
-  add_macro(name, true, tok);
+  new_macro(name, true)->body = tokenize(new_file("<built-in>", 1, buf), NULL);
+}
+
+static void add_builtin(char *name, macro_handler_fn *fn) {
+  new_macro(name, true)->handler = fn;
 }
 
 void undef_macro(char *name) {
   hashmap_delete(&macros, name);
-}
-
-static Macro *add_builtin(char *name, macro_handler_fn *fn) {
-  Macro *m = add_macro(name, true, NULL);
-  m->handler = fn;
-  return m;
 }
 
 static Token *file_macro(Token *start) {
