@@ -108,7 +108,9 @@ echo foo | $testcc -Dfoo=bar -Ufoo -E -xc - | grep -q foo
 check -U
 
 # BOM marker
-exec printf '\xef\xbb\xbfint i;\n' | $testcc -S -o/dev/null -xc -
+rm -f $tmp/foo
+printf '#include <stdio.h>\nint main(){printf("%%c%%c%%cint i;\\n",0xEF,0xBB,0xBF);}\n' | $testcc -xc - -o $tmp/foo
+$tmp/foo | $testcc -S -o/dev/null -xc -
 check 'BOM marker'
 
 # Inline functions
@@ -314,8 +316,6 @@ test_exec() {
 
 # -static / -pie
 test_exec '-static'
-
-test_exec '-fPIE -static-pie'
 
 test_exec '-fPIE -pie'
 

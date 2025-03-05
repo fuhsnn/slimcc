@@ -42,7 +42,7 @@ test_obj() {
 
 if [ `uname` = 'OpenBSD' ]; then
     test_obj '-fPIE -static' 'pie executable,' 'static-pie linked'
-else
+elif [ `uname` = 'Linux' ]; then
     test_obj '-fPIE -static-pie' 'pie executable,' 'static-pie linked'
 fi
 
