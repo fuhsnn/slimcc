@@ -5,6 +5,10 @@
 
 extern void *alloca (size_t);
 
+#ifdef alloca
+#undef alloca
+#endif
+
 #define alloca(sz) __builtin_alloca(sz)
 
 #endif
