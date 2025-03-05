@@ -189,8 +189,8 @@ static char *asm_name(Obj *var) {
   return var->asm_name ? var->asm_name : var->name;
 }
 
-static int count(void) {
-  static int i = 1;
+static int64_t count(void) {
+  static int64_t i = 1;
   return i++;
 }
 
@@ -1695,15 +1695,15 @@ static void gen_expr(Node *node) {
       gen_void_assign(n);
     return;
   case ND_COND: {
-    int c = count();
+    int64_t c = count();
     char *ins = gen_cond(node->cond, false);
     if (ins)
-      Printftn("j%s .L.else.%d", ins, c);
+      Printftn("j%s .L.else.%"PRIi64, ins, c);
     gen_expr(node->then);
-    Printftn("jmp .L.end.%d", c);
-    Printfsn(".L.else.%d:", c);
+    Printftn("jmp .L.end.%"PRIi64, c);
+    Printfsn(".L.else.%"PRIi64":", c);
     gen_expr(node->els);
-    Printfsn(".L.end.%d:", c);
+    Printfsn(".L.end.%"PRIi64":", c);
     return;
   }
   case ND_NOT:
@@ -1715,21 +1715,21 @@ static void gen_expr(Node *node) {
     Printstn("not %%rax");
     return;
   case ND_LOGAND: {
-    int c = count();
+    int64_t c = count();
     char *ins = gen_logical_cond(node->lhs, false);
     if (ins)
-      Printftn("j%s .L.false.%d", ins, c);
+      Printftn("j%s .L.false.%"PRIi64, ins, c);
     gen_expr(node->rhs);
-    Printfsn(".L.false.%d:", c);
+    Printfsn(".L.false.%"PRIi64":", c);
     return;
   }
   case ND_LOGOR: {
-    int c = count();
+    int64_t c = count();
     char *ins = gen_logical_cond(node->lhs, true);
     if (ins)
-      Printftn("j%s .L.true.%d", ins, c);
+      Printftn("j%s .L.true.%"PRIi64, ins, c);
     gen_expr(node->rhs);
-    Printfsn(".L.true.%d:", c);
+    Printfsn(".L.true.%"PRIi64":", c);
     return;
   }
   case ND_SHL:
@@ -2116,26 +2116,26 @@ static void gen_stmt(Node *node) {
   case ND_NULL_STMT:
     return;
   case ND_IF: {
-    int c = count();
+    int64_t c = count();
     char *ins = gen_cond(node->cond, false);
     if (ins)
-      Printftn("j%s .L.else.%d", ins, c);
+      Printftn("j%s .L.else.%"PRIi64, ins, c);
     gen_stmt(node->then);
     if (!node->els) {
-      Printfsn(".L.else.%d:", c);
+      Printfsn(".L.else.%"PRIi64":", c);
       return;
     }
-    Printftn("jmp .L.end.%d", c);
-    Printfsn(".L.else.%d:", c);
+    Printftn("jmp .L.end.%"PRIi64, c);
+    Printfsn(".L.else.%"PRIi64":", c);
     gen_stmt(node->els);
-    Printfsn(".L.end.%d:", c);
+    Printfsn(".L.end.%"PRIi64":", c);
     return;
   }
   case ND_FOR: {
-    int c = count();
+    int64_t c = count();
     if (node->init)
       gen_stmt(node->init);
-    Printfsn(".L.begin.%d:", c);
+    Printfsn(".L.begin.%"PRIi64":", c);
     char *ins = gen_cond(node->cond, false);
     if (ins)
       Printftn("j%s %s", ins, node->brk_label);
@@ -2143,19 +2143,19 @@ static void gen_stmt(Node *node) {
     Printfsn("%s:", node->cont_label);
     if (node->inc)
       gen_void_expr(node->inc);
-    Printftn("jmp .L.begin.%d", c);
+    Printftn("jmp .L.begin.%"PRIi64, c);
     Printfsn("%s:", node->brk_label);
     gen_defr(node);
     return;
   }
   case ND_DO: {
-    int c = count();
-    Printfsn(".L.begin.%d:", c);
+    int64_t c = count();
+    Printfsn(".L.begin.%"PRIi64":", c);
     gen_stmt(node->then);
     Printfsn("%s:", node->cont_label);
     char *ins = gen_cond(node->cond, true);
     if (ins)
-      Printftn("j%s .L.begin.%d", ins, c);
+      Printftn("j%s .L.begin.%"PRIi64, ins, c);
     Printfsn("%s:", node->brk_label);
     return;
   }

@@ -416,8 +416,8 @@ static Obj *new_gvar(char *name, Type *ty) {
 }
 
 char *new_unique_name(void) {
-  static int id = 0;
-  return format(".L..%d", id++);
+  static int64_t id = 0;
+  return format(".L..%"PRIi64, id++);
 }
 
 static Obj *new_anon_gvar(Type *ty) {
