@@ -3665,28 +3665,32 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
 }
 
 static void asm_body(Node *node) {
-  for (char *p = node->asm_str->str; *p != '\0';) {
-    if (*p != '%') {
-      fputc(*p, output_file);
-      p++;
+  char *p = node->asm_str->str;
+  for (;;) {
+    size_t spn = strcspn(p, "%");
+    if (spn) {
+      fwrite(p, 1, spn, output_file);
+      p += spn;
+    }
+    if (*p == '\0')
+      break;
+
+    if (p[1] == '%') {
+      fputc('%', output_file);
+      p += 2;
       continue;
     }
     p++;
 
-    if (*p == '%') {
-      fputc('%', output_file);
-      p++;
-      continue;
-    }
     if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
       AsmParam *ap = find_op(p + 1, &p, node->asm_str, true);
       if (!ap->arg->unique_label)
         error_tok(ap->arg->tok, "not a label");
 
       if (node->asm_outputs)
-        fprintf(output_file, "%df", ap->label_id);
+        Printf("%df", ap->label_id);
       else
-        fprintf(output_file, "%s", ap->arg->unique_label);
+        Printf("%s", ap->arg->unique_label);
       continue;
     }
 
@@ -3707,17 +3711,17 @@ static void asm_body(Node *node) {
 
       switch (ap->kind) {
       case ASMOP_NUM:
-        fprintf(output_file, "%s%"PRIi64, punct, ap->val);
+        Printf("%s%"PRIi64, punct, ap->val);
         continue;
       case ASMOP_SYMBOLIC:{
         if (ap->arg->kind == ND_VAR && !ap->arg->var->is_local && !opt_fpic) {
-          fprintf(output_file, "%s\"%s\"", punct, asm_name(ap->arg->var));
+          Printf("%s\"%s\"", punct, asm_name(ap->arg->var));
           continue;
         }
         char ofs[STRBUF_SZ], *ptr;
         if (ap->arg->kind == ND_ADDR &&
           is_memop(ap->arg->lhs, ofs, &ptr, true) && !strcmp(ptr, "%rip")) {
-          fprintf(output_file, "%s%s", punct, ofs);
+          Printf("%s%s", punct, ofs);
           continue;
         }
         break;
@@ -3725,22 +3729,22 @@ static void asm_body(Node *node) {
       case ASMOP_MEM: {
         char ofs[STRBUF_SZ], *ptr;
         if (is_memop(ap->arg, ofs, &ptr, true)) {
-          fprintf(output_file, "%s(%s)", ofs, alt_ptr(ptr));
+          Printf("%s(%s)", ofs, alt_ptr(ptr));
           continue;
         }
         if (ap->reg) {
-          fprintf(output_file, "(%s)", regs[ap->reg][3]);
+          Printf("(%s)", regs[ap->reg][3]);
           continue;
         }
         break;
       }
       case ASMOP_REG:
         if (is_xmm_reg(ap->reg)) {
-          fprintf(output_file, "%%xmm%d", ap->reg - REG_XMM0);
+          Printf("%%xmm%d", ap->reg - REG_XMM0);
           continue;
         }
         if (is_x87_reg(ap->reg)) {
-          fprintf(output_file, "%%st(%d)", ap->reg - REG_X87_ST0);
+          Printf("%%st(%d)", ap->reg - REG_X87_ST0);
           continue;
         }
         if (is_gp_reg(ap->reg)) {
@@ -3753,7 +3757,7 @@ static void asm_body(Node *node) {
           case 'q': regname = regs[ap->reg][3]; break;
           default: regname = reg_sz(ap->reg, ap->arg->ty->size); break;
           }
-          fprintf(output_file, "%s", regname);
+          Printf("%s", regname);
           continue;
         }
       }
@@ -3761,7 +3765,7 @@ static void asm_body(Node *node) {
     }
     error_tok(node->asm_str, "unknown modifier \"%c\"", *p);
   }
-  fprintf(output_file, "\n");
+  fputc('\n', output_file);
 }
 
 static void asm_push_clobbers(Node *node) {
@@ -4233,7 +4237,7 @@ int codegen(Obj *prog, FILE *out) {
     }
     if (var->ty->kind == TY_FUNC) {
       if (var->is_live)
-        fwrite(((FuncObj *)var->output)->buf, ((FuncObj *)var->output)->buflen, 1, out);
+        fwrite(((FuncObj *)var->output)->buf, 1, ((FuncObj *)var->output)->buflen, out);
       continue;
     }
     emit_data(var);
