@@ -92,7 +92,7 @@ static int vla_base_ofs;
 static int rtn_ptr_ofs;
 static int lvar_stk_sz;
 static int peak_stk_usage;
-static char *rtn_label;
+static int64_t rtn_label;
 
 bool dont_reuse_stack;
 
@@ -1495,31 +1495,6 @@ static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
   gen_expr(new_cast(&expr, ty));
 }
 
-static void gen_label_ph(char *label_str, bool is_main_epilogue) {
-  if (!label_str) {
-    if (is_main_epilogue)
-      Printstn("xor %%eax, %%eax");
-    return;
-  }
-  static char *buf;
-  static size_t buf_n;
-  int len = strlen(label_str);
-  fseek(output_file, -(len + 7), SEEK_CUR);
-  if (getline(&buf, &buf_n, output_file) != (len + 7) ||
-    strncmp(buf, "  jmp ", 6) || strncmp(&buf[6], label_str, len)) {
-    fseek(output_file, (len + 7), SEEK_CUR);
-    if (is_main_epilogue)
-      Printstn("xor %%eax, %%eax");
-  }
-  Printfsn("%s:", label_str);
-}
-
-static void gen_return_jmp(void) {
-  if (!rtn_label)
-    rtn_label = new_unique_name();
-  Printftn("jmp %s", rtn_label);
-}
-
 static char *gen_cond_opt(Node *node, bool need_result, bool jump_cond) {
   if (!node)
     return NULL;
@@ -2190,7 +2165,7 @@ static void gen_stmt(Node *node) {
 
     Printftn("jmp %s", node->brk_label);
     gen_stmt(node->then);
-    gen_label_ph(node->brk_label, false);
+    Printfsn("%s:", node->brk_label);
     return;
   }
   case ND_CASE:
@@ -2220,7 +2195,7 @@ static void gen_stmt(Node *node) {
     if (!node->lhs) {
       if (has_defr(node))
         gen_defr(node);
-      gen_return_jmp();
+      Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
       return;
     }
     gen_expr(node->lhs);
@@ -2234,7 +2209,7 @@ static void gen_stmt(Node *node) {
           pop_copy(ty->size, "%rax");
         }
         copy_struct_reg();
-        gen_return_jmp();
+        Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
         return;
       }
       copy_struct_mem();
@@ -2243,7 +2218,7 @@ static void gen_stmt(Node *node) {
         gen_defr(node);
         pop("%rax");
       }
-      gen_return_jmp();
+      Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
       return;
     }
     if (has_defr(node)) {
@@ -2251,7 +2226,7 @@ static void gen_stmt(Node *node) {
       gen_defr(node);
       pop_by_ty(ty);
     }
-    gen_return_jmp();
+    Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
     return;
   }
   case ND_EXPR_STMT:
@@ -4085,7 +4060,7 @@ void emit_text(Obj *fn) {
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
   lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
   current_fn = fn;
-  rtn_label = NULL;
+  rtn_label = count();
 
   // Prologue
   Printstn("push %%rbp");
@@ -4185,8 +4160,11 @@ void emit_text(Obj *fn) {
   if (peak_stk_usage)
     insrtln("sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
 
+  if (!strcmp(fn->name, "main"))
+    Printstn("xor %%eax, %%eax");
+
   // Epilogue
-  gen_label_ph(rtn_label, !strcmp(asm_name(fn), "main"));
+  Printfsn(".L.rtn.%"PRIi64":", rtn_label);
   if (lvar_align > 16)
     Printstn("mov -8(%%rbp), %%rbx");
   Printstn("leave");
