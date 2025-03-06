@@ -711,9 +711,9 @@ static void gen_addr(Node *node) {
       return;
     }
 
-    if (opt_fpic) {
-      // Thread-local variable
-      if (node->var->is_tls) {
+    // Thread-local variable
+    if (node->var->is_tls) {
+      if (opt_fpic) {
         clobber_all_regs();
         Printftn("data16 lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
         Printstn(".value 0x6666");
@@ -722,15 +722,17 @@ static void gen_addr(Node *node) {
         return;
       }
 
-      // Function or global variable
-      Printftn("mov \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
+      Printstn("mov %%fs:0, %%rax");
+      if (node->var->is_definition)
+        Printftn("add $\"%s\"@tpoff, %%rax", asm_name(node->var));
+      else
+        Printftn("add \"%s\"@gottpoff(%%rip), %%rax", asm_name(node->var));
       return;
     }
 
-    // Thread-local variable
-    if (node->var->is_tls) {
-      Printstn("mov %%fs:0, %%rax");
-      Printftn("add $\"%s\"@tpoff, %%rax", asm_name(node->var));
+    if (opt_fpic) {
+      // Function or global variable
+      Printftn("mov \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
       return;
     }
 
