@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <pthread.h>
 
-static _Thread_local int tentative;
-static _Thread_local int tentative = 3;
+static _Thread_local int tentative_tls;
+static _Thread_local int tentative_tls = 3;
+
+extern _Thread_local int extern_tls;
 
 void *thread_main(void *unused) {
 
@@ -13,11 +15,19 @@ void *thread_main(void *unused) {
   ASSERT(0, v1);
   ASSERT(5, v2);
 
+  ASSERT(3, tentative_tls);
+  ASSERT(0, extern_tls);
+
   v1 = 1;
   v2 = 2;
+  tentative_tls = 9;
+  extern_tls = 7;
 
   ASSERT(1, v1);
   ASSERT(2, v2);
+
+  ASSERT(9, tentative_tls);
+  ASSERT(7, extern_tls);
 
   return NULL;
 }

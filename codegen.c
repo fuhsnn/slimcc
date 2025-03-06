@@ -737,7 +737,10 @@ static void gen_addr(Node *node) {
       }
 
       Printstn("mov %%fs:0, %%rax");
-      Printftn("add $\"%s\"@tpoff, %%rax", asm_name(node->var));
+      if (node->var->is_definition)
+        Printftn("add $\"%s\"@tpoff, %%rax", asm_name(node->var));
+      else
+        Printftn("add \"%s\"@gottpoff(%%rip), %%rax", asm_name(node->var));
       return;
     }
 
