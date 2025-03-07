@@ -3880,19 +3880,22 @@ static void emit_symbol(Obj *var) {
 static void emit_data(Obj *var) {
   emit_symbol(var);
 
-  int align = (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
-    ? MAX(16, var->align) : var->align;
+  int64_t sz = var->ty->size;
+  int align = var->align;
 
-  if (var->is_tentative && !var->is_tls && !var->section_name) {
-    if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
-      var->ty->size = var->ty->base->size;
-
-    // Common symbol
-    if (!var->is_weak && opt_fcommon) {
-      Printftn(".comm \"%s\", %"PRIi64", %d", asm_name(var), var->ty->size, align);
-      return;
-    }
+  if (var->ty->kind == TY_ARRAY) {
+    if (sz < 0 && var->is_tentative)
+      sz = var->ty->base->size;
+    if (sz >= 16)
+      align = MAX(16, align);
   }
+
+  if (opt_fcommon && var->is_tentative &&
+    !(var->is_tls || var->is_weak || var->section_name)) {
+    Printftn(".comm \"%s\", %"PRIi64", %d", asm_name(var), sz, align);
+    return;
+  }
+
   bool use_rodata = is_const_var(var) && !((opt_fpic || opt_fpie) && var->rel);
 
   if (var->section_name)
@@ -3921,18 +3924,18 @@ static void emit_data(Obj *var) {
   else
     Printssn(",@progbits");
 
-  Printftn(".size \"%s\", %"PRIi64, asm_name(var), var->ty->size);
+  Printftn(".size \"%s\", %"PRIi64, asm_name(var), sz);
   Printftn(".align %d", align);
   Printfsn("\"%s\":", asm_name(var));
 
   if (!var->init_data) {
-    Printftn(".zero %"PRIi64, var->ty->size);
+    Printftn(".zero %"PRIi64, sz);
     return;
   }
 
   Relocation *rel = var->rel;
   for (int pos = 0;;) {
-    int rem = (rel ? rel->offset : var->ty->size) - pos;
+    int rem = (rel ? rel->offset : sz) - pos;
 
     while (rem > 0) {
       if (rem >= 8)
