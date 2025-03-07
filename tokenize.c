@@ -799,10 +799,7 @@ static char *read_file(char *path) {
     fclose(fp);
 
   // Make sure that the last line is properly terminated with '\n'.
-  fflush(out);
-  if (buflen == 0 || buf[buflen - 1] != '\n')
-    fputc('\n', out);
-  fputc('\0', out);
+  fwrite("\n", 1, 2, out);
   fclose(out);
   return buf;
 }

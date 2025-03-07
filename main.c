@@ -603,7 +603,11 @@ static void print_tokens(Token *tok, char *path) {
     line++;
   }
   fprintf(out, "\n");
-  fclose(out);
+
+  if (out == stdout)
+    fflush(out);
+  else
+    fclose(out);
 }
 
 static bool in_std_include_path(char *path) {
@@ -655,7 +659,10 @@ static void print_dependencies(char *inputfile) {
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
   }
-  fclose(out);
+  if (out == stdout)
+    fflush(out);
+  else
+    fclose(out);
 }
 
 static Token *must_tokenize_file(char *path, Token **end) {
@@ -709,11 +716,12 @@ static void cc1(char *input_file, char *output_file) {
 
   // Write the asembly text to a file.
   FILE *out = open_file(output_file);
-  int failed = codegen(prog, out);
+  codegen(prog, out);
 
-  fclose(out);
-  if (failed)
-    unlink(output_file);
+  if (out == stdout)
+    fflush(out);
+  else
+    fclose(out);
 }
 
 static char *find_file(char *pattern) {
