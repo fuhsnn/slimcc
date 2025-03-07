@@ -8,6 +8,7 @@ StringArray incpaths;
 bool opt_fcommon = true;
 bool opt_fpic;
 bool opt_fpie;
+bool opt_femulated_tls;
 bool opt_optimize = true;
 bool opt_g;
 bool opt_func_sections;
@@ -388,6 +389,7 @@ static void parse_args(int argc, char **argv) {
     if (argp && (set_bool(argp, "common", &opt_fcommon, bval) ||
       set_bool(argp, "function-sections", &opt_func_sections, bval) ||
       set_bool(argp, "data-sections", &opt_data_sections, bval) ||
+      set_bool(argp, "emulated-tls", &opt_femulated_tls, bval) ||
       set_bool(argp, "enable-universal-char", &opt_enable_universal_char, bval)))
       continue;
 

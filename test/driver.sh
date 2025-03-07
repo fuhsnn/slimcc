@@ -195,11 +195,11 @@ check '-ffunction-sections'
 # -fdata-sections
 echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep '\.data\.' | grep -q 'var'
 check '-fdata-sections'
-echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep '\.tdata\.' | grep -q 'var'
+echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections -fno-emulated-tls | grep '\.tdata\.' | grep -q 'var'
 check '-fdata-sections'
 echo 'void fn(void){static int var;}' | $testcc -xc - -S -o- -fdata-sections | grep -q '\.bss\.'
 check '-fdata-sections'
-echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections | grep '\.tbss\.' | grep -q 'var'
+echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections -fno-emulated-tls | grep '\.tbss\.' | grep -q 'var'
 check '-fdata-sections'
 
 # -include

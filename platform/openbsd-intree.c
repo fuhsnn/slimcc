@@ -7,6 +7,7 @@ void platform_init(void) {
 
   init_ty(ty_ulong, ty_long, ty_long);
 
+  opt_femulated_tls = true;
   set_fpie("1");
 }
 
