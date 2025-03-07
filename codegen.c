@@ -727,6 +727,12 @@ static void gen_addr(Node *node) {
 
     // Thread-local variable
     if (node->var->is_tls) {
+      if (opt_femulated_tls) {
+        clobber_all_regs();
+        Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", asm_name(node->var));
+        Printstn("call __emutls_get_address@PLT");
+        return;
+      }
       if (opt_fpic) {
         clobber_all_regs();
         Printftn("data16 lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
@@ -3881,8 +3887,6 @@ static void emit_symbol(Obj *var) {
 }
 
 static void emit_data(Obj *var) {
-  emit_symbol(var);
-
   int64_t sz = var->ty->size;
   int align = var->align;
 
@@ -3892,6 +3896,33 @@ static void emit_data(Obj *var) {
     if (sz >= 16)
       align = MAX(16, align);
   }
+
+  if (opt_femulated_tls && var->is_tls) {
+    char name_t[STRBUF_SZ], name_v[STRBUF_SZ];
+    snprintf(name_t, STRBUF_SZ, "__emutls_t.%s", asm_name(var));
+    snprintf(name_v, STRBUF_SZ, "__emutls_v.%s", asm_name(var));
+
+    Obj tmp_var = *var;
+    tmp_var.is_tls = false;
+    tmp_var.asm_name = tmp_var.alias_name = NULL;
+
+    tmp_var.name = name_v;
+    emit_symbol(&tmp_var);
+    Printstn(".data");
+    Printftn(".size \"%s\", 32", name_v);
+    Printstn(".align 8");
+    Printfsn("\"%s\":", name_v);
+    Printftn(".quad %" PRIi64, sz);
+    Printftn(".quad %d", align);
+    Printstn(".quad 0");
+    Printftn(".quad \"%s\"", name_t);
+
+    tmp_var.name = name_t;
+    emit_data(&tmp_var);
+    return;
+  }
+
+  emit_symbol(var);
 
   if (opt_fcommon && var->is_tentative &&
     !(var->is_tls || var->is_weak || var->section_name)) {
