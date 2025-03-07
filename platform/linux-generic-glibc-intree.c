@@ -14,10 +14,8 @@ void platform_init(void) {
 */
   init_ty(ty_ulong, ty_long, ty_long);
 
-#if 0 // default PIE
-  set_pic("2", true);
+  set_fpie("2");
   opt_pie = true;
-#endif
 }
 
 void platform_stdinc_paths(StringArray *paths) {

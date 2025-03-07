@@ -7,7 +7,7 @@ void platform_init(void) {
 
   init_ty(ty_ulong, ty_long, ty_long);
 
-  set_pic("1", true);
+  set_fpie("1");
 }
 
 void platform_stdinc_paths(StringArray *paths) {

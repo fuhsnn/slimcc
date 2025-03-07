@@ -7,7 +7,7 @@ void platform_init(void) {
 
   init_ty(ty_ulong, ty_long, ty_long);
 
-  set_pic("2", true);
+  set_fpie("2");
   opt_pie = true;
 }
 

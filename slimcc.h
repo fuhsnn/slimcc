@@ -691,7 +691,8 @@ char *in_tree_hdr(void);
 char *find_dir_w_file(char *pattern);
 bool file_exists(char *path);
 void run_subprocess(char **argv);
-void set_pic(char *lvl, bool is_pie);
+void set_fpic(char *lvl);
+void set_fpie(char *lvl);
 void incpath_push(StringArray *arr, char *s);
 
 void link_defaultlibs_gnustyle(StringArray *arr);
@@ -705,6 +706,7 @@ extern StringArray incpaths;
 extern bool opt_E;
 extern bool opt_enable_universal_char;
 extern bool opt_fpic;
+extern bool opt_fpie;
 extern bool opt_fcommon;
 extern bool opt_optimize;
 extern bool opt_g;
