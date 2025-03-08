@@ -1504,29 +1504,26 @@ static void gen_return_jmp(void) {
   Printftn("jmp %s", rtn_label);
 }
 
-static char *gen_cond_opt(Node *node, bool need_result, bool jump_cond) {
+static char *gen_cond(Node *node, bool jump_cond) {
   if (!node)
     return NULL;
 
-  bool flip = false;
   if (opt_optimize) {
+    bool flip;
     Node *expr = bool_expr_opt(node, &flip);
-    if (expr)
+    if (expr) {
       node = expr;
-
+      jump_cond ^= flip;
+    }
     int64_t val;
     if (is_const_expr(node, &val)) {
-      val = !!val ^ flip;
       if (val != jump_cond)
         return NULL;
-      if (need_result)
-        load_val(ty_int, val);
       return "mp";
     }
 
     if (is_cmp(node) && is_gp_ty(node->lhs->ty)) {
       NodeKind kind = node->kind;
-      flip_cmp(&kind, flip);
       if (!gen_cmp_opt_gp(node, &kind)) {
         gen_expr(node->lhs);
         push();
@@ -1536,38 +1533,20 @@ static char *gen_cond_opt(Node *node, bool need_result, bool jump_cond) {
         char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
         Printftn("cmp %s, %s", regop_ax(node->lhs->ty), op);
       }
-      if (need_result)
-        gen_cmp_setcc(kind, node->lhs->ty->is_unsigned);
       flip_cmp(&kind, !jump_cond);
       return cmp_cc(kind, node->lhs->ty->is_unsigned);
     }
 
     if (node->kind == ND_CAST && node->ty->kind == TY_BOOL) {
       Node zero = {.kind = ND_NUM, .ty = node->lhs->ty, .tok = node->tok};
-      Node expr = {.kind = flip ? ND_EQ : ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
+      Node expr = {.kind = ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
       add_type(&expr);
-      return gen_cond_opt(&expr, need_result, jump_cond);
+      return gen_cond(&expr, jump_cond);
     }
   }
   gen_expr(node);
-
-  if (!need_result) {
-    Printstn("test %%al, %%al");
-    return (jump_cond ^ flip) ? "ne" : "e";
-  }
-  if (flip)
-    Printstn("xor $1, %%al");
-  else
-    Printstn("test %%al, %%al");
+  Printstn("test %%al, %%al");
   return jump_cond ? "ne" : "e";
-}
-
-static char *gen_cond(Node *node, bool jump_cond) {
-  return gen_cond_opt(node, false, jump_cond);
-}
-
-static char *gen_logical_cond(Node *node, bool jump_cond) {
-  return gen_cond_opt(node, true, jump_cond);
 }
 
 // Generate code for a given node.
@@ -1700,20 +1679,32 @@ static void gen_expr(Node *node) {
     return;
   case ND_LOGAND: {
     int c = count();
-    char *ins = gen_logical_cond(node->lhs, false);
-    if (ins)
+    char *ins;
+    if ((ins = gen_cond(node->lhs, false)))
       Printftn("j%s .L.false.%d", ins, c);
-    gen_expr(node->rhs);
+    if ((ins = gen_cond(node->rhs, false)))
+      Printftn("j%s .L.false.%d", ins, c);
+
+    Printstn("mov $1, %%eax");
+    Printftn("jmp .L.true.%d", c);
     Printfsn(".L.false.%d:", c);
+    Printstn("xor %%eax, %%eax");
+    Printfsn(".L.true.%d:", c);
     return;
   }
   case ND_LOGOR: {
     int c = count();
-    char *ins = gen_logical_cond(node->lhs, true);
-    if (ins)
+    char *ins;
+    if ((ins = gen_cond(node->lhs, true)))
       Printftn("j%s .L.true.%d", ins, c);
-    gen_expr(node->rhs);
+    if ((ins = gen_cond(node->rhs, true)))
+      Printftn("j%s .L.true.%d", ins, c);
+
+    Printstn("xor %%eax, %%eax");
+    Printftn("jmp .L.false.%d", c);
     Printfsn(".L.true.%d:", c);
+    Printstn("mov $1, %%eax");
+    Printfsn(".L.false.%d:", c);
     return;
   }
   case ND_SHL:
