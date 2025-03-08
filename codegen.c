@@ -1496,29 +1496,24 @@ static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
   gen_expr(new_cast(&expr, ty));
 }
 
-static char *gen_cond_opt(Node *node, bool need_result, bool jump_cond) {
-  if (!node)
-    return NULL;
-
-  bool flip = false;
+static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
   if (opt_optimize) {
+    bool flip;
     Node *expr = bool_expr_opt(node, &flip);
-    if (expr)
+    if (expr) {
       node = expr;
+      jump_cond ^= flip;
+    }
 
     int64_t val;
     if (is_const_expr(node, &val)) {
-      val = !!val ^ flip;
-      if (val != jump_cond)
-        return NULL;
-      if (need_result)
-        load_val(ty_int, val);
-      return "mp";
+      if (val == jump_cond)
+        Printftn("jmp %s", jump_label);
+      return;
     }
 
     if (is_cmp(node) && is_gp_ty(node->lhs->ty)) {
       NodeKind kind = node->kind;
-      flip_cmp(&kind, flip);
       if (!gen_cmp_opt_gp(node, &kind)) {
         gen_expr(node->lhs);
         push();
@@ -1528,38 +1523,60 @@ static char *gen_cond_opt(Node *node, bool need_result, bool jump_cond) {
         char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
         Printftn("cmp %s, %s", regop_ax(node->lhs->ty), op);
       }
-      if (need_result)
-        gen_cmp_setcc(kind, node->lhs->ty->is_unsigned);
       flip_cmp(&kind, !jump_cond);
-      return cmp_cc(kind, node->lhs->ty->is_unsigned);
+      char *ins = cmp_cc(kind, node->lhs->ty->is_unsigned);
+      Printftn("j%s %s", ins, jump_label);
+      return;
+    }
+
+    if (node->kind == ND_LOGAND || node->kind == ND_LOGOR) {
+      bool short_cond = (node->kind == ND_LOGOR);
+      if (short_cond == jump_cond) {
+        gen_cond(node->lhs, jump_cond, jump_label);
+        gen_cond(node->rhs, jump_cond, jump_label);
+        return;
+      }
+      char short_label[STRBUF_SZ];
+      snprintf(short_label, STRBUF_SZ, ".L.short.%"PRIi64, count());
+
+      gen_cond(node->lhs, short_cond, short_label);
+      gen_cond(node->rhs, short_cond, short_label);
+      Printftn("jmp %s", jump_label);
+      Printfsn("%s:", short_label);
+      return;
     }
 
     if (node->kind == ND_CAST && node->ty->kind == TY_BOOL) {
       Node zero = {.kind = ND_NUM, .ty = node->lhs->ty, .tok = node->tok};
-      Node expr = {.kind = flip ? ND_EQ : ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
+      Node expr = {.kind = ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
       add_type(&expr);
-      return gen_cond_opt(&expr, need_result, jump_cond);
+      gen_cond(&expr, jump_cond, jump_label);
+      return;
     }
   }
   gen_expr(node);
-
-  if (!need_result) {
-    Printstn("test %%al, %%al");
-    return (jump_cond ^ flip) ? "ne" : "e";
-  }
-  if (flip)
-    Printstn("xor $1, %%al");
-  else
-    Printstn("test %%al, %%al");
-  return jump_cond ? "ne" : "e";
+  Printstn("test %%al, %%al");
+  Printftn("j%s %s", (jump_cond ? "ne" : "e"), jump_label);
 }
 
-static char *gen_cond(Node *node, bool jump_cond) {
-  return gen_cond_opt(node, false, jump_cond);
-}
+static void gen_logical(Node *node, bool flip) {
+  int64_t c = count();
+  char short_label[STRBUF_SZ];
+  snprintf(short_label, STRBUF_SZ, ".L.short.%"PRIi64, c);
+  bool short_cond = (node->kind == ND_LOGOR);
 
-static char *gen_logical_cond(Node *node, bool jump_cond) {
-  return gen_cond_opt(node, true, jump_cond);
+  gen_cond(node->lhs, short_cond, short_label);
+  gen_cond(node->rhs, short_cond, short_label);
+
+  static char *set_zero = "xor %eax, %eax";
+  static char *set_one = "movl $1, %eax";
+
+  short_cond ^= flip;
+  Printftn("%s", short_cond ? set_zero : set_one);
+  Printftn("jmp .L.fall.%"PRIi64, c);
+  Printfsn("%s:", short_label);
+  Printftn("%s", short_cond ? set_one : set_zero);
+  Printfsn(".L.fall.%"PRIi64":", c);
 }
 
 // Generate code for a given node.
@@ -1672,12 +1689,13 @@ static void gen_expr(Node *node) {
     return;
   case ND_COND: {
     int64_t c = count();
-    char *ins = gen_cond(node->cond, false);
-    if (ins)
-      Printftn("j%s .L.else.%"PRIi64, ins, c);
+    char else_label[STRBUF_SZ];
+    snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, c);
+
+    gen_cond(node->cond, false, else_label);
     gen_expr(node->then);
     Printftn("jmp .L.end.%"PRIi64, c);
-    Printfsn(".L.else.%"PRIi64":", c);
+    Printfsn("%s:", else_label);
     gen_expr(node->els);
     Printfsn(".L.end.%"PRIi64":", c);
     return;
@@ -1690,24 +1708,10 @@ static void gen_expr(Node *node) {
     gen_expr(node->lhs);
     Printstn("not %%rax");
     return;
-  case ND_LOGAND: {
-    int64_t c = count();
-    char *ins = gen_logical_cond(node->lhs, false);
-    if (ins)
-      Printftn("j%s .L.false.%"PRIi64, ins, c);
-    gen_expr(node->rhs);
-    Printfsn(".L.false.%"PRIi64":", c);
+  case ND_LOGAND:
+  case ND_LOGOR:
+    gen_logical(node, false);
     return;
-  }
-  case ND_LOGOR: {
-    int64_t c = count();
-    char *ins = gen_logical_cond(node->lhs, true);
-    if (ins)
-      Printftn("j%s .L.true.%"PRIi64, ins, c);
-    gen_expr(node->rhs);
-    Printfsn(".L.true.%"PRIi64":", c);
-    return;
-  }
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
@@ -2093,16 +2097,17 @@ static void gen_stmt(Node *node) {
     return;
   case ND_IF: {
     int64_t c = count();
-    char *ins = gen_cond(node->cond, false);
-    if (ins)
-      Printftn("j%s .L.else.%"PRIi64, ins, c);
+    char else_label[STRBUF_SZ];
+    snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, c);
+
+    gen_cond(node->cond, false, else_label);
     gen_stmt(node->then);
     if (!node->els) {
-      Printfsn(".L.else.%"PRIi64":", c);
+      Printfsn("%s:", else_label);
       return;
     }
     Printftn("jmp .L.end.%"PRIi64, c);
-    Printfsn(".L.else.%"PRIi64":", c);
+    Printfsn("%s:", else_label);
     gen_stmt(node->els);
     Printfsn(".L.end.%"PRIi64":", c);
     return;
@@ -2112,9 +2117,8 @@ static void gen_stmt(Node *node) {
     if (node->init)
       gen_stmt(node->init);
     Printfsn(".L.begin.%"PRIi64":", c);
-    char *ins = gen_cond(node->cond, false);
-    if (ins)
-      Printftn("j%s %s", ins, node->brk_label);
+    if (node->cond)
+      gen_cond(node->cond, false, node->brk_label);
     gen_stmt(node->then);
     Printfsn("%s:", node->cont_label);
     if (node->inc)
@@ -2125,13 +2129,13 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_DO: {
-    int64_t c = count();
-    Printfsn(".L.begin.%"PRIi64":", c);
+    char begin_label[STRBUF_SZ];
+    snprintf(begin_label, STRBUF_SZ, ".L.begin.%"PRIi64, count());
+
+    Printfsn("%s:", begin_label);
     gen_stmt(node->then);
     Printfsn("%s:", node->cont_label);
-    char *ins = gen_cond(node->cond, true);
-    if (ins)
-      Printftn("j%s .L.begin.%"PRIi64, ins, c);
+    gen_cond(node->cond, true, begin_label);
     Printfsn("%s:", node->brk_label);
     return;
   }
@@ -2875,26 +2879,29 @@ static Node *bool_expr_opt(Node *node, bool *flip) {
 
 static bool gen_bool_opt(Node *node) {
   bool flip;
-  Node *expr = bool_expr_opt(node, &flip);
-  if (expr) {
-    if (expr->kind == ND_CAST && expr->ty->kind == TY_BOOL) {
-      gen_cmp_zero(expr->lhs, flip ? ND_EQ : ND_NE);
-      return true;
-    }
-    if (expr != node) {
-      if (is_cmp(expr)) {
-        Node n = *expr;
-        flip_cmp(&n.kind, flip);
-        gen_expr(&n);
-        return true;
-      }
-      gen_expr(expr);
-      if (flip)
-        Printstn("xor $1, %%al");
-      return true;
-    }
+  Node *boolexpr = bool_expr_opt(node, &flip);
+  if (!boolexpr || boolexpr == node)
+    return false;
+  node = boolexpr;
+
+  if (is_cmp(node)) {
+    Node n = *node;
+    flip_cmp(&n.kind, flip);
+    gen_expr(&n);
+    return true;
   }
-  return false;
+  if (node->kind == ND_LOGAND || node->kind == ND_LOGOR) {
+    gen_logical(node, flip);
+    return true;
+  }
+  if (node->kind == ND_CAST && node->ty->kind == TY_BOOL) {
+    gen_cmp_zero(node->lhs, flip ? ND_EQ : ND_NE);
+    return true;
+  }
+  gen_expr(node);
+  if (flip)
+    Printstn("xor $1, %%al");
+  return true;
 }
 
 static bool gen_expr_opt(Node *node) {
