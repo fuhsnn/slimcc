@@ -4200,8 +4200,61 @@ void *prepare_funcgen(void) {
 }
 
 void end_funcgen(void) {
+  fputc('\n', output_file);
+  fputc('\0', output_file);
   fclose(output_file);
   output_file = NULL;
+}
+
+static void peep_redunt_jmp(char *start) {
+  for (char *p = start; (p = strstr(p, "\n.L."));) {
+    char *label_p = p + 1;
+    size_t label_len = strcspn(p + 4, ":;\n") + 3;
+    if (label_p[label_len] == ':') {
+      if (label_p - start >= label_len + 6) {
+        char *jmp_p = p - (label_len + 6);
+        if (!strncmp(jmp_p, "\n\tjmp ", 6) &&
+          !strncmp(&jmp_p[6], label_p, label_len) && jmp_p[label_len + 6] == '\n')
+          memset(jmp_p, ' ', label_len + 6);
+      }
+
+      // If "labA:" is followed by "jmp labB", replace all usage of labA with labB.
+      // Code size will increase due to encoding of larger jmp interval.
+      char *nxt_p = label_p + label_len + 1;
+      if (!strncmp(nxt_p, "\n\tjmp ", 6)) {
+        char *nxt_label_p = nxt_p + 6;
+        size_t nxt_label_len = strcspn(nxt_label_p, ";\n");
+        if (nxt_label_p[nxt_label_len] != '\0' && nxt_label_len <= label_len) {
+          char *search_buf = malloc(label_len + 3);
+          snprintf(search_buf, label_len + 3, " %.*s\n", (int)label_len, label_p);
+
+          char *replace_buf = malloc(label_len + 1);
+          snprintf(replace_buf, label_len + 1, "%*.*s", (int)label_len, (int)nxt_label_len, nxt_label_p);
+
+          for (char *q = start; (q = strstr(q, search_buf)); q += label_len + 2)
+            memcpy(q + 1, replace_buf, label_len);
+
+          free(search_buf);
+          free(replace_buf);
+        }
+        p = nxt_label_p + nxt_label_len;
+        continue;
+      }
+    }
+    p = label_p + label_len;
+  }
+
+  // for (char *jp = start; (jp = strstr(jp, "\tjmp "));) {
+  //   char *lp = jp + 5;
+  //   char *np = strchr(lp, '\n');
+  //   if (np && !strncmp(lp, np + 1, np - lp) && !strncmp(&np[(np - lp) + 1], ":\n", 2)) {
+  //     *jp = '#';
+  //     jp = np + 1 + (np - lp) + 2;
+  //     printf("new\n");
+  //     continue;
+  //   }
+  //   jp = lp;
+  // }
 }
 
 int codegen(Obj *prog, FILE *out) {
@@ -4224,8 +4277,11 @@ int codegen(Obj *prog, FILE *out) {
       continue;
     }
     if (var->ty->kind == TY_FUNC) {
-      if (var->is_live)
-        fwrite(((FuncObj *)var->output)->buf, 1, ((FuncObj *)var->output)->buflen, out);
+      if (!var->is_live)
+        continue;
+      char *buf = ((FuncObj *)var->output)->buf;
+      peep_redunt_jmp(buf);
+      fwrite(buf, 1, ((FuncObj *)var->output)->buflen - 2, out);
       continue;
     }
     emit_data(var);
