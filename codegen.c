@@ -1496,6 +1496,70 @@ static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
   gen_expr(new_cast(&expr, ty));
 }
 
+static void gen_funcall(Node *node) {
+  if (node->lhs->kind == ND_VAR && !strcmp(asm_name(node->lhs->var), "alloca")) {
+    gen_expr(node->args->arg_expr);
+    builtin_alloca(node);
+    return;
+  }
+
+  // If the return type is a large struct/union, the caller passes
+  // a pointer to a buffer as if it were the first argument.
+  bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
+  int gp_count = rtn_by_stk;
+  int fp_count = 0;
+  int arg_stk_align;
+  int arg_stk_size = calling_convention(node->args, &gp_count, &fp_count, &arg_stk_align);
+  if (arg_stk_size)
+    if (arg_stk_align > 16)
+      push_from("%rsp");
+
+  bool use_fn_ptr = !(node->lhs->kind == ND_VAR && node->lhs->var->ty->kind == TY_FUNC);
+  if (use_fn_ptr) {
+    gen_expr(node->lhs);
+    push();
+  }
+
+  if (arg_stk_size) {
+    if (arg_stk_align > 16) {
+      Printftn("sub $%d, %%rsp", arg_stk_size);
+      Printftn("and $-%d, %%rsp", arg_stk_align);
+    } else {
+      Printftn("sub $%d, %%rsp", align_to(arg_stk_size, 16));
+    }
+  }
+
+  funcall_stk_args(node);
+  funcall_reg_args(node);
+
+  if (node->lhs->ty->is_variadic) {
+    if (fp_count)
+      Printftn("movb $%d, %%al", fp_count);
+    else
+      Printstn("xor %%al, %%al");
+  }
+
+  if (use_fn_ptr) {
+    switch (gp_count) {
+    case 0: break;
+    case 1: clobber_gp(1); break;  // %rdi
+    default: clobber_gp(4); break;
+    }
+    Printftn("call *%s", pop_inreg("%r10"));
+  } else {
+    Printftn("call \"%s\"%s", asm_name(node->lhs->var), opt_fpic ? "@PLT" : "");
+  }
+
+  clobber_all_regs();
+
+  if (arg_stk_size) {
+    if (arg_stk_align > 16)
+      pop("%rsp");
+    else
+      Printftn("add $%d, %%rsp", align_to(arg_stk_size, 16));
+  }
+}
+
 static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
   if (opt_optimize) {
     bool flip;
@@ -1554,7 +1618,11 @@ static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
       return;
     }
   }
-  gen_expr(node);
+
+  if (node->kind == ND_FUNCALL && node->ty->kind == TY_BOOL)
+    gen_funcall(node);
+  else
+    gen_expr(node);
   Printstn("test %%al, %%al");
   Printftn("j%s %s", (jump_cond ? "ne" : "e"), jump_label);
 }
@@ -1730,67 +1798,7 @@ static void gen_expr(Node *node) {
     }
     return;
   case ND_FUNCALL: {
-    if (node->lhs->kind == ND_VAR && !strcmp(asm_name(node->lhs->var), "alloca")) {
-      gen_expr(node->args->arg_expr);
-      builtin_alloca(node);
-      return;
-    }
-
-    // If the return type is a large struct/union, the caller passes
-    // a pointer to a buffer as if it were the first argument.
-    bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
-    int gp_count = rtn_by_stk;
-    int fp_count = 0;
-    int arg_stk_align;
-    int arg_stk_size = calling_convention(node->args, &gp_count, &fp_count, &arg_stk_align);
-    if (arg_stk_size)
-      if (arg_stk_align > 16)
-        push_from("%rsp");
-
-    bool use_fn_ptr = !(node->lhs->kind == ND_VAR && node->lhs->var->ty->kind == TY_FUNC);
-    if (use_fn_ptr) {
-      gen_expr(node->lhs);
-      push();
-    }
-
-    if (arg_stk_size) {
-      if (arg_stk_align > 16) {
-        Printftn("sub $%d, %%rsp", arg_stk_size);
-        Printftn("and $-%d, %%rsp", arg_stk_align);
-      } else {
-        Printftn("sub $%d, %%rsp", align_to(arg_stk_size, 16));
-      }
-    }
-
-    funcall_stk_args(node);
-    funcall_reg_args(node);
-
-    if (node->lhs->ty->is_variadic) {
-      if (fp_count)
-        Printftn("movb $%d, %%al", fp_count);
-      else
-        Printstn("xor %%al, %%al");
-    }
-
-    if (use_fn_ptr) {
-      switch (gp_count) {
-      case 0: break;
-      case 1: clobber_gp(1); break;  // %rdi
-      default: clobber_gp(4); break;
-      }
-      Printftn("call *%s", pop_inreg("%r10"));
-    } else {
-      Printftn("call \"%s\"%s", asm_name(node->lhs->var), opt_fpic ? "@PLT" : "");
-    }
-
-    clobber_all_regs();
-
-    if (arg_stk_size) {
-      if (arg_stk_align > 16)
-        pop("%rsp");
-      else
-        Printftn("add $%d, %%rsp", align_to(arg_stk_size, 16));
-    }
+    gen_funcall(node);
 
     // It looks like the most significant 48 or 56 bits in RAX may
     // contain garbage if a function return type is short or bool/char,
@@ -2406,6 +2414,9 @@ static void gen_void_expr(Node *node) {
   case ND_ARITH_ASSIGN:
   case ND_POST_INCDEC:
     gen_void_arith_assign(node);
+    return;
+  case ND_FUNCALL:
+    gen_funcall(node);
     return;
   }
   gen_expr(node);
