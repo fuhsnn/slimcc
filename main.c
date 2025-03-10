@@ -51,6 +51,15 @@ static void usage(int status) {
   exit(status);
 }
 
+static bool startswith(char *arg, char **ptr, char *str) {
+  size_t len = strlen(str);
+  if (!strncmp(arg, str, len)) {
+    *ptr = arg + len;
+    return true;
+  }
+  return false;
+}
+
 static char *take_arg(char **argv, int *i, char *opt) {
   if (strcmp(argv[*i], opt))
     return NULL;
@@ -102,6 +111,14 @@ static FileType parse_opt_x(char *s) {
   if (!strcmp(s, "none"))
     return FILE_NONE;
   error("<command line>: unknown argument for -x: %s", s);
+}
+
+static bool set_bool(char *p, bool val, char *str, bool *opt) {
+  if (!strcmp(p, str)) {
+    *opt = val;
+    return true;
+  }
+  return false;
 }
 
 static void set_std(int val) {
@@ -180,16 +197,6 @@ static void parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-S")) {
       opt_S = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fcommon")) {
-      opt_fcommon = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fno-common")) {
-      opt_fcommon = false;
       continue;
     }
 
@@ -420,31 +427,29 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-fenable-universal-char")) {
-      opt_enable_universal_char = true;
-      continue;
+    {
+      bool bval;
+      char *argp = NULL;
+      if (startswith(argv[i], &argp, "-fno-"))
+        bval = false;
+      else if (startswith(argv[i], &argp, "-f"))
+        bval = true;
+
+      if (argp &&
+        (set_bool(argp, bval, "common", &opt_fcommon) ||
+        set_bool(argp, bval, "function-sections", &opt_func_sections) ||
+        set_bool(argp, bval, "data-sections", &opt_data_sections) ||
+        set_bool(argp, bval, "enable-universal-char", &opt_enable_universal_char)))
+        continue;
     }
+
+    if (set_bool(argv[i], false, "-fsigned-char", &ty_pchar->is_unsigned) ||
+      set_bool(argv[i], true, "-funsigned-char", &ty_pchar->is_unsigned))
+      continue;
 
     if (!strncmp(argv[i], "-fstack-reuse=", 14)) {
       if (strncmp(argv[i] + 14, "all\0", 4))
         dont_reuse_stack = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fsigned-char"))
-      continue;
-    if (!strcmp(argv[i], "-funsigned-char")) {
-      ty_pchar->is_unsigned = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-ffunction-sections")) {
-      opt_func_sections = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-fdata-sections")) {
-      opt_data_sections = true;
       continue;
     }
 
