@@ -53,24 +53,41 @@ static void usage(int status) {
   exit(status);
 }
 
-static bool startswith(char *arg, char **ptr, char *str) {
+static bool startswith(char *arg, char **p, char *str) {
   size_t len = strlen(str);
   if (!strncmp(arg, str, len)) {
-    *ptr = arg + len;
+    *p = arg + len;
     return true;
   }
   return false;
 }
 
-static char *take_arg(char **argv, int *i, char *opt) {
+static bool take_arg(char **argv, int *i, char **arg, char *opt) {
   if (strcmp(argv[*i], opt))
-    return NULL;
-
-  if (!argv[++(*i)]) {
-    fprintf(stderr, "missing argument to %s\n", opt);
-    exit(1);
+    return false;
+  *i += 1;
+  if (argv[*i]) {
+    *arg = argv[*i];
+    return true;
   }
-  return argv[*i];
+  fprintf(stderr, "missing argument to %s\n", opt);
+  exit(1);
+}
+
+static bool take_arg_s(char **argv, int *i, char **p, char *str) {
+  return take_arg(argv, i, p, str) || startswith(argv[*i], p, str);
+}
+
+static bool comma_arg(char *arg, StringArray *arr, char *str) {
+  if (startswith(arg, &arg, str)) {
+    arg = strtok(strdup(arg), ",");
+    while (arg) {
+      strarray_push(arr, arg);
+      arg = strtok(NULL, ",");
+    }
+    return true;
+  }
+  return false;
 }
 
 static void add_include_path(char *p) {
@@ -205,13 +222,8 @@ static void parse_args(int argc, char **argv) {
     if (!strcmp(argv[i], "--help"))
       usage(0);
 
-    if ((arg = take_arg(argv, &i, "-o"))) {
+    if (take_arg_s(argv, &i, &arg, "-o")) {
       opt_o = arg;
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-o", 2)) {
-      opt_o = argv[i] + 2;
       continue;
     }
 
@@ -235,50 +247,29 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-I"))) {
+    if (take_arg_s(argv, &i, &arg, "-I")) {
       add_include_path(arg);
       continue;
     }
 
-    if (!strncmp(argv[i], "-I", 2)) {
-      add_include_path(argv[i] + 2);
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-D"))) {
+    if (take_arg_s(argv, &i, &arg, "-D")) {
       define_macro_cli(arg);
       continue;
     }
 
-    if (!strncmp(argv[i], "-D", 2)) {
-      define_macro_cli(argv[i] + 2);
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-U"))) {
+    if (take_arg_s(argv, &i, &arg, "-U")) {
       undef_macro(arg);
       continue;
     }
 
-    if (!strncmp(argv[i], "-U", 2)) {
-      undef_macro(argv[i] + 2);
-      continue;
-    }
-
-    if ((arg = take_arg(argv, &i, "-include"))) {
+    if (take_arg_s(argv, &i, &arg, "-include")) {
       strarray_push(&opt_include, arg);
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-x"))) {
+    if (take_arg_s(argv, &i, &arg, "-x")) {
       strarray_push(&input_paths, "-x");
       strarray_push(&input_paths, arg);
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-x", 2)) {
-      strarray_push(&input_paths, "-x");
-      strarray_push(&input_paths, argv[i] + 2);
       continue;
     }
 
@@ -287,22 +278,15 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strncmp(argv[i], "-Wa,", 4)) {
-      char *s = strdup(&argv[i][4]);
-      char *arg = strtok(s, ",");
-      while (arg) {
-        strarray_push(&as_args, arg);
-        arg = strtok(NULL, ",");
-      }
+    if (comma_arg(argv[i], &as_args, "-Wa,"))
       continue;
-    }
 
     if (!strcmp(argv[i], "-rdynamic")) {
       strarray_push(&input_paths, "-Wl,--export-dynamic");
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-Xlinker"))) {
+    if (take_arg(argv, &i, &arg, "-Xlinker")) {
       strarray_push(&ld_extra_args, arg);
       continue;
     }
@@ -317,7 +301,7 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-MF"))) {
+    if (take_arg(argv, &i, &arg, "-MF")) {
       opt_MF = arg;
       continue;
     }
@@ -327,7 +311,7 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-MT"))) {
+    if (take_arg(argv, &i, &arg, "-MT")) {
       if (opt_MT == NULL)
         opt_MT = arg;
       else
@@ -340,7 +324,7 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-MQ"))) {
+    if (take_arg(argv, &i, &arg, "-MQ")) {
       if (opt_MT == NULL)
         opt_MT = quote_makefile(arg);
       else
@@ -368,12 +352,12 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-cc1-input"))) {
+    if (take_arg(argv, &i, &arg, "-cc1-input")) {
       base_file = arg;
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-cc1-output"))) {
+    if (take_arg(argv, &i, &arg, "-cc1-output")) {
       output_file = arg;
       continue;
     }
@@ -384,7 +368,7 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-idirafter"))) {
+    if (take_arg_s(argv, &i, &arg, "-idirafter")) {
       strarray_push(&idirafter, arg);
       continue;
     }
@@ -407,15 +391,9 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if ((arg = take_arg(argv, &i, "-L"))) {
+    if (take_arg_s(argv, &i, &arg, "-L")) {
       strarray_push(&ld_extra_args, "-L");
       strarray_push(&ld_extra_args, arg);
-      continue;
-    }
-
-    if (!strncmp(argv[i], "-L", 2)) {
-      strarray_push(&ld_extra_args, "-L");
-      strarray_push(&ld_extra_args, argv[i] + 2);
       continue;
     }
 
@@ -424,19 +402,13 @@ static void parse_args(int argc, char **argv) {
       exit(0);
     }
 
-    if (!strncmp(argv[i], "-g", 2)) {
-      if (argv[i][2] == '0')
-        opt_g = false;
-      else
-        opt_g = true;
+    if (startswith(argv[i], &arg, "-g")) {
+      opt_g = strcmp(arg, "0");
       continue;
     }
 
-    if (!strncmp(argv[i], "-O", 2)) {
-      if (argv[i][2] == '0')
-        opt_optimize = false;
-      else
-        opt_optimize = true;
+    if (startswith(argv[i], &arg, "-O")) {
+      opt_optimize = strcmp(arg, "0");
       continue;
     }
 
@@ -444,17 +416,16 @@ static void parse_args(int argc, char **argv) {
       set_std(89);
       define_macro_cli("__STRICT_ANSI__");
       continue;
-    } else if (!strncmp(argv[i], "-std=c", 6)) {
-      set_std(strtoul(argv[i] + 6, NULL, 10));
-      continue;
-    } else if (!strncmp(argv[i], "--std=c", 7)) {
-      set_std(strtoul(argv[i] + 7, NULL, 10));
+    } else if (startswith(argv[i], &arg, "-std=c") ||
+      startswith(argv[i], &arg, "--std=c")) {
+      set_std(strtoul(arg, NULL, 10));
       continue;
     } else if (!strcmp(argv[i], "--std")) {
-      if (*argv[++i] != 'c')
-        error("unknown c standard");
-      set_std(strtoul(argv[i] + 1, NULL, 10));
-      continue;
+      if (startswith(argv[++i], &arg, "c")) {
+        set_std(strtoul(arg, NULL, 10));
+        continue;
+      }
+      error("unknown c standard");
     }
 
     {
@@ -478,14 +449,13 @@ static void parse_args(int argc, char **argv) {
       set_bool(argv[i], true, "-funsigned-char", &ty_pchar->is_unsigned))
       continue;
 
-    if (!strncmp(argv[i], "-fstack-reuse=", 14)) {
-      if (strncmp(argv[i] + 14, "all\0", 4))
-        dont_reuse_stack = true;
+    if (startswith(argv[i], &arg, "-fstack-reuse=")) {
+      dont_reuse_stack = strcmp(arg, "all");
       continue;
     }
 
-    if (!strncmp(argv[i], "-fvisibility=", 13)) {
-      opt_visibility = strdup(&argv[i][13]);
+    if (startswith(argv[i], &arg, "-fvisibility=")) {
+      opt_visibility = arg;
       continue;
     }
 
@@ -499,15 +469,14 @@ static void parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-Werror")) {
-      opt_werror = true;
+    if (set_bool(argv[i], true, "-Werror", &opt_werror) ||
+      set_bool(argv[i], false, "-Wno-error", &opt_werror))
       continue;
-    }
 
     // These options are ignored for now.
-    if (!strncmp(argv[i], "-W", 2) ||
-        !strncmp(argv[i], "-std=", 5) ||
-        !strncmp(argv[i], "-march=", 7) ||
+    if (startswith(argv[i], &arg, "-W") ||
+        startswith(argv[i], &arg, "-std=") ||
+        startswith(argv[i], &arg, "-march=") ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
         !strcmp(argv[i], "-fno-lto") ||
