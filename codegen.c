@@ -1426,11 +1426,10 @@ static void gen_funcall_args(Node *node) {
     if (var->ptr)
       gen_var_assign(var, var->arg_expr);
 
-  int gp = 0, fp = 0;
   bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
-  if (rtn_by_stk)
-    Printftn("lea %d(%s), %s", node->ret_buffer->ofs, node->ret_buffer->ptr, argreg64[gp++]);
+  int gp = rtn_by_stk, fp = 0;
 
+  int reg_arg_cnt = 0;
   for (Obj *var = node->args; var; var = var->param_next) {
     if (var->pass_by_stack)
       continue;
@@ -1439,6 +1438,7 @@ static void gen_funcall_args(Node *node) {
 
     if (opt_optimize) {
       Node *arg_expr = var->arg_expr;
+      reg_arg_cnt++;
 
       int64_t val;
       if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, &val)) {
@@ -1459,10 +1459,23 @@ static void gen_funcall_args(Node *node) {
         place_reg_arg(arg_expr->ty, ofs, ptr, &gp, &fp);
         continue;
       }
+      if (reg_arg_cnt == 1) {
+        gen_expr(arg_expr);
+        if (is_gp_ty(arg_expr->ty))
+          Printftn("mov %%rax, %s", argreg64[gp++]);
+        else if (is_flonum(arg_expr->ty))
+          fp++;
+        else
+          place_reg_arg(arg_expr->ty, "0", "%rax", &gp, &fp);
+        continue;
+      }
     }
     snprintf(ofs, STRBUF_SZ, "%d", var->ofs);
     place_reg_arg(var->ty, ofs, var->ptr, &gp, &fp);
   }
+
+  if (rtn_by_stk)
+    Printftn("lea %d(%s), %%rdi", node->ret_buffer->ofs, node->ret_buffer->ptr);
 }
 
 static void gen_funcall(Node *node) {
@@ -4152,6 +4165,7 @@ void prepare_funcall(Node *node, Scope *scope) {
   bool rtn_by_stk = node->ty->size > 16;
   calling_convention(node->args, &(int){rtn_by_stk}, &(int){0}, NULL);
 
+  int reg_arg_cnt = 0;
   for (Obj *var = node->args; var; var = var->param_next) {
     var->is_local = true;
     if (var->pass_by_stack) {
@@ -4161,6 +4175,7 @@ void prepare_funcall(Node *node, Scope *scope) {
     }
     if (opt_optimize) {
       Node *arg_expr = var->arg_expr;
+      reg_arg_cnt++;
 
       if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, &(int64_t){0}))
         continue;
@@ -4169,6 +4184,8 @@ void prepare_funcall(Node *node, Scope *scope) {
       if (gen_load_opt_gp(arg_expr, REG_NULL))
         continue;
       if (has_memop(var->arg_expr))
+        continue;
+      if (reg_arg_cnt == 1)
         continue;
     }
     var->next = scope->locals;
