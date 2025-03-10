@@ -80,6 +80,8 @@ static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 
+static Reg argreg[] = {REG_DI, REG_SI, REG_DX, REG_CX, REG_R8, REG_R9};
+
 static char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
 static char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
 
@@ -147,8 +149,7 @@ static void gen_void_assign(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
-static bool has_load_opt_gp(Node *node);
-static bool gen_load_opt_gp(Node *node, char *reg32, char *reg64);
+static bool gen_load_opt_gp(Node *node, Reg r);
 static Node *bool_expr_opt(Node *node, bool *flip);
 
 static void imm_add(char *op, char *tmp, int64_t val);
@@ -905,7 +906,7 @@ static void load_val(Type *ty, int64_t val) {
   load_val2(ty, val, "%eax", "%rax");
 }
 
-static void load_fval2(Type *ty, long double fval, int reg) {
+static void load_f32_f64(Type *ty, long double fval, int reg) {
   if (ty->kind == TY_FLOAT) {
     float pos_z = +0.0f;
     float fv = fval;
@@ -933,7 +934,7 @@ static void load_fval2(Type *ty, long double fval, int reg) {
 
 static void load_fval(Type *ty, long double fval) {
   if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE) {
-    load_fval2(ty, fval, 0);
+    load_f32_f64(ty, fval, 0);
     return;
   }
 
@@ -1237,115 +1238,6 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
   return stack;
 }
 
-static void funcall_stk_args(Node *node) {
-  for (Obj *var = node->args; var; var = var->param_next) {
-    if (var->ptr)
-      gen_var_assign(var, var->arg_expr);
-  }
-}
-
-static void funcall_reg_args2(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
-  switch (ty->kind) {
-  case TY_STRUCT:
-  case TY_UNION:
-    if (has_flonum1(ty))
-      Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
-    else
-      Printftn("mov %s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
-
-    if (ty->size > 8) {
-      if (has_flonum2(ty))
-        Printftn("movsd 8+%s(%s), %%xmm%d", ofs, ptr, (*fp)++);
-      else
-        Printftn("mov 8+%s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
-    }
-    return;
-  case TY_FLOAT:
-    Printftn("movss %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
-    return;
-  case TY_DOUBLE:
-    Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
-    return;
-  }
-
-  if (ty->size <= 4)
-    load_extend_int(ty, ofs, ptr, argreg32[(*gp)++]);
-  else
-    load_extend_int(ty, ofs, ptr, argreg64[(*gp)++]);
-}
-
-static bool is_trivial_arg(Node *node, bool test, int *gp, int *fp) {
-  Type *ty = node->ty;
-
-  int64_t val;
-  if (is_gp_ty(ty) && is_const_expr(node, &val)) {
-    if (!test) {
-      load_val2(ty, val, argreg32[*gp], argreg64[*gp]);
-      (*gp)++;
-    }
-    return true;
-  }
-
-  long double fval;
-  if (is_flonum(ty) && is_const_double(node, &fval)) {
-    if (!test)
-      load_fval2(ty, fval, (*fp)++);
-    return true;
-  }
-
-  if (has_load_opt_gp(node)) {
-    if (!test) {
-      gen_load_opt_gp(node, argreg32[*gp], argreg64[*gp]);
-      (*gp)++;
-    }
-    return true;
-  }
-
-  char ofs[STRBUF_SZ], *ptr;
-  if (is_memop(node, ofs, &ptr, true)) {
-    if (!test)
-      funcall_reg_args2(node->ty, ofs, ptr, gp, fp);
-    return true;
-  }
-
-  return false;
-}
-
-static void funcall_reg_args(Node *node) {
-  int gp = 0, fp = 0;
-  bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
-  if (rtn_by_stk)
-    Printftn("lea %d(%s), %s", node->ret_buffer->ofs, node->ret_buffer->ptr, argreg64[gp++]);
-
-  for (Obj *var = node->args; var; var = var->param_next) {
-    if (var->pass_by_stack)
-      continue;
-    if (is_trivial_arg(var->arg_expr, false, &gp, &fp))
-      continue;
-    char ofs[STRBUF_SZ];
-    snprintf(ofs, STRBUF_SZ, "%d", var->ofs);
-    funcall_reg_args2(var->ty, ofs, var->ptr, &gp, &fp);
-  }
-}
-
-void prepare_funcall(Node *node, Scope *scope) {
-  bool rtn_by_stk = node->ty->size > 16;
-  calling_convention(node->args, &(int){rtn_by_stk}, &(int){0}, NULL);
-
-  for (Obj *var = node->args; var; var = var->param_next) {
-    var->is_local = true;
-    if (var->pass_by_stack) {
-      var->ofs = var->stack_offset;
-      var->ptr = "%rsp";
-      continue;
-    }
-    if (is_trivial_arg(var->arg_expr, true, &(int){0}, &(int){0}))
-      continue;
-    var->next = scope->locals;
-    scope->locals = var;
-  }
-}
-
 static void copy_ret_buffer(Obj *var) {
   Type *ty = var->ty;
   int gp = 0, fp = 0;
@@ -1497,6 +1389,82 @@ static void print_loc(Token *tok) {
   line_no = tok->display_line_no;
 }
 
+static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
+  switch (ty->kind) {
+  case TY_STRUCT:
+  case TY_UNION:
+    if (has_flonum1(ty))
+      Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+    else
+      Printftn("mov %s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
+
+    if (ty->size > 8) {
+      if (has_flonum2(ty))
+        Printftn("movsd 8+%s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+      else
+        Printftn("mov 8+%s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
+    }
+    return;
+  case TY_FLOAT:
+    Printftn("movss %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+    return;
+  case TY_DOUBLE:
+    Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
+    return;
+  }
+
+  if (ty->size <= 4)
+    load_extend_int(ty, ofs, ptr, argreg32[(*gp)++]);
+  else
+    load_extend_int(ty, ofs, ptr, argreg64[(*gp)++]);
+}
+
+// Logic should be in sync with prepare_funcall()
+static void gen_funcall_args(Node *node) {
+  // Pass-by-stack or non-trival args that need spilling
+  for (Obj *var = node->args; var; var = var->param_next)
+    if (var->ptr)
+      gen_var_assign(var, var->arg_expr);
+
+  int gp = 0, fp = 0;
+  bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
+  if (rtn_by_stk)
+    Printftn("lea %d(%s), %s", node->ret_buffer->ofs, node->ret_buffer->ptr, argreg64[gp++]);
+
+  for (Obj *var = node->args; var; var = var->param_next) {
+    if (var->pass_by_stack)
+      continue;
+
+    char ofs[STRBUF_SZ], *ptr;
+
+    if (opt_optimize) {
+      Node *arg_expr = var->arg_expr;
+
+      int64_t val;
+      if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, &val)) {
+        load_val2(arg_expr->ty, val, argreg32[gp], argreg64[gp]);
+        gp++;
+        continue;
+      }
+      long double fval;
+      if (is_flonum(arg_expr->ty) && is_const_double(arg_expr, &fval)) {
+        load_f32_f64(arg_expr->ty, fval, fp++);
+        continue;
+      }
+      if (gen_load_opt_gp(arg_expr, (gp < 6 ? argreg[gp] : REG_NULL))) {
+        gp++;
+        continue;
+      }
+      if (is_memop(arg_expr, ofs, &ptr, true)) {
+        place_reg_arg(arg_expr->ty, ofs, ptr, &gp, &fp);
+        continue;
+      }
+    }
+    snprintf(ofs, STRBUF_SZ, "%d", var->ofs);
+    place_reg_arg(var->ty, ofs, var->ptr, &gp, &fp);
+  }
+}
+
 static void gen_funcall(Node *node) {
   if (node->lhs->kind == ND_VAR && !strcmp(asm_name(node->lhs->var), "alloca")) {
     gen_expr(node->args->arg_expr);
@@ -1530,8 +1498,7 @@ static void gen_funcall(Node *node) {
     }
   }
 
-  funcall_stk_args(node);
-  funcall_reg_args(node);
+  gen_funcall_args(node);
 
   if (node->lhs->ty->is_variadic) {
     if (fp_count)
@@ -2760,52 +2727,37 @@ static bool gen_gp_opt(Node *node) {
   return false;
 }
 
-static bool gen_load_opt_gp(Node *node, char *reg32, char *reg64) {
+static bool gen_load_opt_gp(Node *node, Reg r) {
   char ofs[STRBUF_SZ], *ptr;
   Node *lhs = node->lhs;
   Type *ty = node->ty;
+  bool gen = (r != REG_NULL);
 
   if (is_memop_ptr(node, ofs, &ptr)) {
-    if (!strcmp(ptr, "%rip") && !opt_fpic)
-      Printftn("movl $%s, %s", ofs, reg32);
-    else
-      Printftn("lea %s(%s), %s", ofs, ptr, reg64);
+    if (gen) {
+      if (!strcmp(ptr, "%rip") && !opt_fpic)
+        Printftn("movl $%s, %s", ofs, regs[r][2]);
+      else
+        Printftn("lea %s(%s), %s", ofs, ptr, regs[r][3]);
+    }
     return true;
   }
 
   if (is_int_to_int_cast(node) && is_memop(lhs, ofs, &ptr, true)) {
     if (ty->size > lhs->ty->size) {
       if (!lhs->ty->is_unsigned && ty->size == 8) {
-        load_extend_int64(lhs->ty, ofs, ptr, reg64);
+        if (gen)
+          load_extend_int64(lhs->ty, ofs, ptr, regs[r][3]);
         return true;
       }
       if (!(ty->size == 2 && ty->is_unsigned && !lhs->ty->is_unsigned)) {
-        load_extend_int(lhs->ty, ofs, ptr, reg32);
+        if (gen)
+          load_extend_int(lhs->ty, ofs, ptr, regs[r][2]);
         return true;
       }
     } else if (ty->kind != TY_BOOL) {
-      load_extend_int(ty, ofs, ptr, ty->size == 8 ? reg64 : reg32);
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool has_load_opt_gp(Node *node) {
-  char ofs[STRBUF_SZ], *ptr;
-  Node *lhs = node->lhs;
-  Type *ty = node->ty;
-
-  if (is_memop_ptr(node, ofs, &ptr))
-    return true;
-
-  if (is_int_to_int_cast(node) && is_memop(lhs, ofs, &ptr, true)) {
-    if (ty->size > lhs->ty->size) {
-      if (!lhs->ty->is_unsigned && ty->size == 8)
-        return true;
-      if (!(ty->size == 2 && ty->is_unsigned && !lhs->ty->is_unsigned))
-        return true;
-    } else if (ty->kind != TY_BOOL) {
+      if (gen)
+        load_extend_int(ty, ofs, ptr, regs[r][ty->size == 8 ? 3 : 2]);
       return true;
     }
   }
@@ -2938,7 +2890,7 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (gen_load_opt_gp(node, "%eax", "%rax"))
+  if (gen_load_opt_gp(node, REG_AX))
     return true;
 
   if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
@@ -4193,6 +4145,35 @@ void emit_text(Obj *fn) {
     emit_cdtor("init_array", fn->ctor_prior, fn);
   if (fn->is_dtor)
     emit_cdtor("fini_array", fn->dtor_prior, fn);
+}
+
+// Logic should be in sync with gen_funcall_args()
+void prepare_funcall(Node *node, Scope *scope) {
+  bool rtn_by_stk = node->ty->size > 16;
+  calling_convention(node->args, &(int){rtn_by_stk}, &(int){0}, NULL);
+
+  for (Obj *var = node->args; var; var = var->param_next) {
+    var->is_local = true;
+    if (var->pass_by_stack) {
+      var->ofs = var->stack_offset;
+      var->ptr = "%rsp";
+      continue;
+    }
+    if (opt_optimize) {
+      Node *arg_expr = var->arg_expr;
+
+      if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, &(int64_t){0}))
+        continue;
+      if (is_flonum(arg_expr->ty) && is_const_double(arg_expr, &(long double){0}))
+        continue;
+      if (gen_load_opt_gp(arg_expr, REG_NULL))
+        continue;
+      if (has_memop(var->arg_expr))
+        continue;
+    }
+    var->next = scope->locals;
+    scope->locals = var;
+  }
 }
 
 typedef struct {

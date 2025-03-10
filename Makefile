@@ -62,7 +62,7 @@ warn: $(SRCS)
 	$(CC) -fsyntax-only -Wall -Wpedantic -Wno-switch $(CFLAGS) $(SRCS)
 
 asan: clean
-	$(MAKE) CFLAGS="-O2 -fsanitize=address -Wno-switch" LDFLAGS=
+	$(MAKE) CFLAGS="-g -fsanitize=address -Wno-switch" LDFLAGS=
 
 lto: clean
 	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch"
