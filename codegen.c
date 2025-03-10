@@ -969,6 +969,27 @@ static void load_fval(Type *ty, long double fval) {
   return;
 }
 
+static void gen_cmp_zero(Node *node, NodeKind kind) {
+  Node zero = {.kind = ND_NUM, .ty = node->ty, .tok = node->tok};
+  Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .tok = node->tok};
+  add_type(&expr);
+  gen_expr(&expr);
+}
+
+static void gen_var_assign(Obj *var, Node *expr) {
+  Node var_node = {.kind = ND_VAR, .var = var, .tok = expr->tok};
+  Node node = {.kind = ND_ASSIGN, .lhs = &var_node, .rhs = expr, .tok = expr->tok};
+  add_type(&node);
+  gen_void_assign(&node);
+}
+
+static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
+  Node null = {.kind = ND_NULL_EXPR, .ty = ty, .tok = rhs->tok};
+  Node expr = {.kind = kind, .lhs = &null, .rhs = rhs,.tok = rhs->tok};
+  add_type(&expr);
+  gen_expr(new_cast(&expr, ty));
+}
+
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
 
 static int getTypeId(Type *ty) {
@@ -1091,14 +1112,6 @@ static char *cast_table[][11] = {
   {f64i8, f64i16, f64i32, f64i64, f64u8, f64u16, f64u32, f64u64, f64f32, NULL,   f64f80}, // f64
   {f80i8, f80i16, f80i32, f80i64, f80u8, f80u16, f80u32, f80u64, f80f32, f80f64, NULL},   // f80
 };
-
-static void gen_cmp_zero(Node *node, NodeKind kind) {
-  Node zero = {.kind = ND_NUM, .ty = node->ty, .tok = node->tok};
-  Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .tok = node->tok};
-  add_type(&expr);
-  gen_expr(&expr);
-  return;
-}
 
 static void gen_cast(Node *node) {
   if (node->ty->kind == TY_BOOL) {
@@ -1226,13 +1239,8 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
 
 static void funcall_stk_args(Node *node) {
   for (Obj *var = node->args; var; var = var->param_next) {
-    if (var->ptr) {
-      Node var_node = {.kind = ND_VAR, .var = var, .tok = var->arg_expr->tok};
-      Node assign_node = {
-        .kind = ND_ASSIGN, .lhs = &var_node, .rhs = var->arg_expr, .tok = var->arg_expr->tok};
-      add_type(&assign_node);
-      gen_void_expr(&assign_node);
-    }
+    if (var->ptr)
+      gen_var_assign(var, var->arg_expr);
   }
 }
 
@@ -1487,13 +1495,6 @@ static void print_loc(Token *tok) {
 
   file_no = tok->display_file_no;
   line_no = tok->display_line_no;
-}
-
-static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
-  Node null = {.kind = ND_NULL_EXPR, .ty = ty, .tok = rhs->tok};
-  Node expr = {.kind = kind, .lhs = &null, .rhs = rhs,.tok = rhs->tok};
-  add_type(&expr);
-  gen_expr(new_cast(&expr, ty));
 }
 
 static void gen_funcall(Node *node) {
@@ -3434,20 +3435,12 @@ static void asm_gen_operands(void) {
   for (int i = 0; i < asm_ops.cnt; i++) {
     AsmParam *ap = asm_ops.data[i];
     if (ap->ptr) {
-      Node var_node = {.kind = ND_VAR, .var = ap->ptr, .tok = ap->arg->tok};
       Node addr_node = {.kind = ND_ADDR, .lhs = ap->arg, .tok = ap->arg->tok};
-      Node assign_node = {
-        .kind = ND_ASSIGN, .lhs = &var_node, .rhs = &addr_node, .tok = ap->arg->tok};
-      add_type(&assign_node);
-      gen_void_expr(&assign_node);
+      gen_var_assign(ap->ptr, &addr_node);
       continue;
     }
     if (ap->var) {
-      Node var_node = {.kind = ND_VAR, .var = ap->var, .tok = ap->arg->tok};
-      Node assign_node = {
-        .kind = ND_ASSIGN, .lhs = &var_node, .rhs = ap->arg, .tok = ap->arg->tok};
-      add_type(&assign_node);
-      gen_void_expr(&assign_node);
+      gen_var_assign(ap->var, ap->arg);
       continue;
     }
   }
