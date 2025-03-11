@@ -44,7 +44,7 @@ static StringArray input_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
 
-static void cc1(char *input_file, char *output);
+static void cc1(char *input_file, char *output, bool is_asm_pp);
 
 static void usage(int status) {
   fprintf(stderr, "slimcc [ -o <path> ] <file>\n");
@@ -199,9 +199,10 @@ static char *quote_makefile(char *s) {
   return buf;
 }
 
-static void parse_args(int argc, char **argv) {
+static int parse_args(int argc, char **argv) {
   char *arg;
   StringArray idirafter = {0};
+  int input_cnt = 0;
 
   for (int i = 1; i < argc; i++) {
     if (*argv[i] == '\0')
@@ -476,13 +477,13 @@ static void parse_args(int argc, char **argv) {
       error("unknown argument: %s", argv[i]);
 
     strarray_push(&input_paths, argv[i]);
+    input_cnt++;
   }
 
   for (int i = 0; i < idirafter.len; i++)
     add_include_path(idirafter.data[i]);
 
-  if (input_paths.len == 0)
-    error("no input files");
+  return input_cnt;
 }
 
 static FILE *open_file(char *path) {
@@ -549,15 +550,17 @@ static void run_subprocess(char **argv) {
     exit(1);
 }
 
-static void run_cc1(char *input, char *output, bool is_asm_pp) {
+static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
   if (opt_hash_hash_hash)
     return;
 
-  if (fork() == 0) {
-    if (is_asm_pp)
-      opt_E = opt_cc1_asm_pp = true;
+  if (no_fork) {
+    cc1(input, output, is_asm_pp);
+    return;
+  }
 
-    cc1(input, output);
+  if (fork() == 0) {
+    cc1(input, output, is_asm_pp);
     _exit(0);
   }
 
@@ -662,9 +665,12 @@ static Token *must_tokenize_file(char *path, Token **end) {
   return tok;
 }
 
-static void cc1(char *input_file, char *output_file) {
+static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   Token head = {0};
   Token *cur = &head;
+
+  if (is_asm_pp)
+    opt_E = opt_cc1_asm_pp = true;
 
   if (!opt_E) {
     head.next = tokenize(add_input_file("slimcc_builtins",
@@ -888,12 +894,18 @@ static FileType get_file_type(char *filename) {
 int main(int argc, char **argv) {
   atexit(cleanup);
   init_macros();
-  parse_args(argc, argv);
+
+  int input_cnt = parse_args(argc, argv);
+  if (input_cnt < 1)
+    error("no input files");
+  else if (input_cnt > 1 && opt_o && (opt_c || opt_S || opt_E))
+    error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
+  bool no_fork = (input_cnt == 1);
+
   add_default_include_paths(argv[0]);
   init_ty(ty_ulong, ty_long, ty_long);
 
   StringArray ld_args = {0};
-  int file_count = 0;
   FileType opt_x = FILE_NONE;
   bool run_ld = false;
 
@@ -919,10 +931,6 @@ int main(int argc, char **argv) {
       }
       continue;
     }
-
-    if (opt_o && (opt_c || opt_S || opt_E))
-      if (++file_count > 1)
-        error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
 
     char *output;
     if (opt_o)
@@ -965,18 +973,18 @@ int main(int argc, char **argv) {
     // Handle .S
     if (type == FILE_PP_ASM) {
       if (opt_S || opt_E || opt_M) {
-        run_cc1(input, (opt_o ? opt_o : "-"), true);
+        run_cc1(input, (opt_o ? opt_o : "-"), no_fork, true);
         continue;
       }
       if (opt_c) {
         char *tmp = create_tmpfile();
-        run_cc1(input, tmp, true);
+        run_cc1(input, tmp, no_fork, true);
         assemble(tmp, output);
         continue;
       }
       char *tmp1 = create_tmpfile();
       char *tmp2 = create_tmpfile();
-      run_cc1(input, tmp1, true);
+      run_cc1(input, tmp1, no_fork, true);
       assemble(tmp1, tmp2);
       strarray_push(&ld_args, tmp2);
       run_ld = true;
@@ -987,20 +995,20 @@ int main(int argc, char **argv) {
 
     // Just preprocess
     if (opt_E || opt_M) {
-      run_cc1(input, (opt_o ? opt_o : "-"), false);
+      run_cc1(input, (opt_o ? opt_o : "-"), no_fork, false);
       continue;
     }
 
     // Compile
     if (opt_S) {
-      run_cc1(input, output, false);
+      run_cc1(input, output, no_fork, false);
       continue;
     }
 
     // Compile and assemble
     if (opt_c) {
       char *tmp = create_tmpfile();
-      run_cc1(input, tmp, false);
+      run_cc1(input, tmp, no_fork, false);
       assemble(tmp, output);
       continue;
     }
@@ -1008,7 +1016,7 @@ int main(int argc, char **argv) {
     // Compile, assemble and link
     char *tmp1 = create_tmpfile();
     char *tmp2 = create_tmpfile();
-    run_cc1(input, tmp1, false);
+    run_cc1(input, tmp1, no_fork, false);
     assemble(tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
     run_ld = true;
