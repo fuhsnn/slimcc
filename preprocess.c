@@ -68,6 +68,8 @@ static HashMap include_guards;
 Token *last_alloc_tok;
 Token *tok_freelist;
 
+static char *base_file;
+
 static Token *preprocess2(Token *tok);
 static Token *preprocess3(Token *tok);
 static Macro *find_macro(Token *tok);
@@ -1820,7 +1822,9 @@ static Token *preprocess3(Token *tok) {
 }
 
 // Entry point function of the preprocessor.
-Token *preprocess(Token *tok) {
+Token *preprocess(Token *tok, char *input_file) {
+  base_file = input_file;
+
   tok = preprocess2(tok);
 
   CondIncl *cond;

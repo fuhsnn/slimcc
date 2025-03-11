@@ -213,7 +213,7 @@ void init_macros(void);
 void define_macro(char *name, char *buf);
 void define_macro_cli(char *str);
 void undef_macro(char *name);
-Token *preprocess(Token *tok);
+Token *preprocess(Token *tok, char *input_file);
 extern Token *last_alloc_tok;
 extern Token *tok_freelist;
 
@@ -685,5 +685,4 @@ extern bool opt_data_sections;
 extern bool opt_werror;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
-extern char *base_file;
 extern StdVer opt_std;
