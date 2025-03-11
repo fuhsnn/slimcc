@@ -298,42 +298,31 @@ check '-MD -MF'
 grep -q 'out2\.h' $tmp/md-mf.d
 check '-MD -MF'
 
-echo 'extern int bar; int foo() { return bar; }' | $testcc -fPIC -xc -c -o $tmp/foo.o -
+echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
+echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
+
+# -fPIC
+$testcc -fPIC -c -o $tmp/foo.o $tmp/foo.c
 $refcc -shared -o $tmp/foo.so $tmp/foo.o
-echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/main.c
-$testcc -o $tmp/foo $tmp/main.c $tmp/foo.so
+$testcc -o $tmp/foo $tmp/bar.c $tmp/foo.so
 check -fPIC
 
-# #include_next
-mkdir -p $tmp/next1 $tmp/next2 $tmp/next3
-echo '#include "file1.h"' > $tmp/file.c
-echo '#include <stddef.h>' > $tmp/next1/file1.h
-echo '#include_next "file1.h"' >> $tmp/next1/file1.h
-echo '#include_next "file2.h"' > $tmp/next2/file1.h
-echo 'foo' > $tmp/next3/file2.h
-$testcc -I$tmp/next1 -I$tmp/next2 -I$tmp/next3 -Iinclude -E $tmp/file.c | grep -q foo
-check '#include_next'
+test_exec() {
+    $testcc $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c
+    check "$1 build"
+    $tmp/foo
+    check "$1 exec"
+}
 
-# -static
-echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
-echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
-$testcc -static -o $tmp/foo $tmp/foo.c $tmp/bar.c
-check -static
-$tmp/foo
-check -static
-ldd $tmp/foo 2>/dev/null | (! grep -q '\.so')
-check -static
+# -static / -pie
+test_exec '-static'
 
-# -shared
-echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
-echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
-$testcc -fPIC -shared -o $tmp/foo.so $tmp/foo.c $tmp/bar.c
-check -shared
+test_exec '-fPIE -pie'
+
+test_exec '-fno-PIE -no-pie'
 
 # -L
-echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
 $testcc -fPIC -shared -o $tmp/libfoobar.so $tmp/foo.c
-echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
 $testcc -o $tmp/foo $tmp/bar.c -L$tmp -lfoobar
 check -L
 
@@ -350,6 +339,16 @@ echo 'void foo() {}' | $testcc -c -o $tmp/bar.o -xc -
 echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
 $testcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Xlinker
+
+# #include_next
+mkdir -p $tmp/next1 $tmp/next2 $tmp/next3
+echo '#include "file1.h"' > $tmp/file.c
+echo '#include <stddef.h>' > $tmp/next1/file1.h
+echo '#include_next "file1.h"' >> $tmp/next1/file1.h
+echo '#include_next "file2.h"' > $tmp/next2/file1.h
+echo 'foo' > $tmp/next3/file2.h
+$testcc -I$tmp/next1 -I$tmp/next2 -I$tmp/next3 -Iinclude -E $tmp/file.c | grep -q foo
+check '#include_next'
 
 # constructor/destructor attribute
 echo "int putchar(int);" > $tmp/foo.c

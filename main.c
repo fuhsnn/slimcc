@@ -4,6 +4,15 @@ typedef enum {
   FILE_NONE, FILE_C, FILE_ASM, FILE_OBJ, FILE_AR, FILE_DSO, FILE_PP_ASM
 } FileType;
 
+typedef enum {
+  LT_RELO,
+  LT_SHARED,
+  LT_DYNAMIC,
+  LT_STATIC_PIE,
+  LT_STATIC,
+  LT_PIE,
+} LinkType;
+
 StringArray include_paths;
 bool opt_fcommon = true;
 bool opt_fpic;
@@ -29,13 +38,24 @@ static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
 static bool opt_hash_hash_hash;
+static bool opt_pie;
+static bool opt_nopie;
+static bool opt_pthread;
+static bool opt_r;
+static bool opt_rdynamic;
 static bool opt_static;
+static bool opt_static_pie;
+static bool opt_static_libgcc;
 static bool opt_shared;
-static bool opt_nostdlib;
+static bool opt_nostartfiles;
+static bool opt_nodefaultlibs;
+static bool opt_nolibc;
+static char *opt_use_ld;
 static char *opt_MF;
 static char *opt_MT;
 static char *opt_o;
 
+static StringArray ld_paths;
 static StringArray ld_extra_args;
 static StringArray sysincl_paths;
 static StringArray input_paths;
@@ -134,6 +154,10 @@ static bool set_bool(char *p, bool val, char *str, bool *opt) {
     return true;
   }
   return false;
+}
+
+static bool set_true(char *p, char *str, bool *opt) {
+  return set_bool(p, true, str, opt);
 }
 
 static void set_std(int val) {
@@ -276,16 +300,19 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strncmp(argv[i], "-l", 2) || !strncmp(argv[i], "-Wl,", 4)) {
-      strarray_push(&input_paths, argv[i]);
+    if (take_arg_s(argv, &i, &arg, "-L")) {
+      strarray_push(&ld_paths, "-L");
+      strarray_push(&ld_paths, arg);
       continue;
     }
 
-    if (comma_arg(argv[i], &as_args, "-Wa,"))
+    if (comma_arg(argv[i], &as_args, "-Wa,") ||
+      comma_arg(argv[i], &ld_extra_args, "-Wl,"))
       continue;
 
-    if (!strcmp(argv[i], "-rdynamic")) {
-      strarray_push(&input_paths, "-Wl,--export-dynamic");
+    if (take_arg_s(argv, &i, &arg, "-l")) {
+      strarray_push(&ld_extra_args, "-l");
+      strarray_push(&ld_extra_args, arg);
       continue;
     }
 
@@ -355,30 +382,6 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-pthread")) {
-      define_macro_cli("_REENTRANT");
-      strarray_push(&input_paths, "-lpthread");
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-static")) {
-      opt_static = true;
-      strarray_push(&ld_extra_args, "-static");
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-shared")) {
-      opt_shared = true;
-      strarray_push(&ld_extra_args, "-shared");
-      continue;
-    }
-
-    if (take_arg_s(argv, &i, &arg, "-L")) {
-      strarray_push(&ld_extra_args, "-L");
-      strarray_push(&ld_extra_args, arg);
-      continue;
-    }
-
     if (!strcmp(argv[i], "-hashmap-test")) {
       hashmap_test();
       exit(0);
@@ -436,8 +439,25 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (startswith(argv[i], &arg, "-fvisibility=")) {
-      opt_visibility = arg;
+    if (startswith(argv[i], &opt_visibility, "-fvisibility=") ||
+      startswith(argv[i], &opt_use_ld, "-fuse-ld="))
+      continue;
+
+    if (set_true(argv[i], "-r", &opt_r) ||
+      set_true(argv[i], "-rdynamic", &opt_rdynamic) ||
+      set_true(argv[i], "-static", &opt_static) ||
+      set_true(argv[i], "-static-pie", &opt_static_pie) ||
+      set_true(argv[i], "-static-libgcc", &opt_static_libgcc) ||
+      set_true(argv[i], "-shared", &opt_shared))
+      continue;
+
+    if (set_true(argv[i], "-pie", &opt_pie) ||
+      set_true(argv[i], "-nopie", &opt_nopie))
+      continue;
+
+    if (!strcmp(argv[i], "-no-pie")) {
+      opt_pie = false;
+      opt_nopie = true;
       continue;
     }
 
@@ -446,8 +466,19 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (set_true(argv[i], "-nostartfiles", &opt_nostartfiles) ||
+      set_true(argv[i], "-nodefaultlibs", &opt_nodefaultlibs) ||
+      set_true(argv[i], "-nolibc", &opt_nolibc))
+      continue;
+
     if (!strcmp(argv[i], "-nostdlib")) {
-      opt_nostdlib = true;
+      opt_nostartfiles = opt_nodefaultlibs = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-pthread")) {
+      opt_pthread = true;
+      define_macro_cli("_REENTRANT");
       continue;
     }
 
@@ -472,7 +503,6 @@ static int parse_args(int argc, char **argv) {
         !strcmp(argv[i], "-m64") ||
         !strcmp(argv[i], "-mfpmath=sse") ||
         !strcmp(argv[i], "-mno-red-zone") ||
-        !strcmp(argv[i], "-no-pie") ||
         !strcmp(argv[i], "-pedantic") ||
         !strcmp(argv[i], "-w"))
       continue;
@@ -800,46 +830,125 @@ static char *find_gcc_libpath(void) {
   error("gcc library path is not found");
 }
 
+static LinkType get_link_type(void) {
+  if (opt_r)
+    return LT_RELO;
+  if (opt_shared)
+    return LT_SHARED;
+  if (opt_static_pie)
+    return LT_STATIC_PIE;
+  if (opt_static)
+    return LT_STATIC;
+  if (opt_pie)
+    return LT_PIE;
+  return LT_DYNAMIC;
+}
+
+static LinkType link_type(StringArray *arr) {
+  LinkType type = get_link_type();
+
+  switch (type) {
+  case LT_RELO:
+    strarray_push(arr, "-r");
+    break;
+  case LT_SHARED:
+    strarray_push(arr, "-shared");
+    break;
+  case LT_STATIC_PIE:
+    strarray_push(arr, "-static");
+    strarray_push(arr, "-pie");
+    break;
+  case LT_STATIC:
+    strarray_push(arr, "-static");
+    break;
+  case LT_PIE:
+    strarray_push(arr, "-pie");
+    break;
+  }
+
+  switch (type) {
+  case LT_STATIC_PIE:
+    strarray_push(arr, "-no-dynamic-linker");
+    break;
+  case LT_DYNAMIC:
+  case LT_SHARED:
+  case LT_PIE:
+    if (opt_rdynamic)
+      strarray_push(arr, "--export-dynamic");
+
+    strarray_push(arr, "-dynamic-linker");
+    strarray_push(arr, "/lib64/ld-linux-x86-64.so.2");
+  }
+  return type;
+}
+
+static void link_libgcc(StringArray *arr, bool is_static) {
+  strarray_push(arr, "-lgcc");
+
+  if (is_static) {
+    strarray_push(arr, "-lgcc_eh");
+  } else {
+    strarray_push(arr, "--push-state");
+    strarray_push(arr, "--as-needed");
+    strarray_push(arr, "-lgcc_s");
+    strarray_push(arr, "--pop-state");
+  }
+}
+
+static void link_libc(StringArray *arr) {
+  if (opt_pthread)
+    strarray_push(arr, "-lpthread");
+  if (!opt_nolibc)
+    strarray_push(arr, "-lc");
+}
+
 static void run_linker(StringArray *inputs, char *output) {
   StringArray arr = {0};
 
-  strarray_push(&arr, "ld");
+  strarray_push(&arr, opt_use_ld ? opt_use_ld : "ld");
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
   strarray_push(&arr, "-m");
   strarray_push(&arr, "elf_x86_64");
+  strarray_push(&arr, "--eh-frame-hdr");
 
-  if (opt_nostdlib) {
-    if (!opt_static) {
-      strarray_push(&arr, "-dynamic-linker");
-      strarray_push(&arr, "/lib64/ld-linux-x86-64.so.2");
-    }
-    for (int i = 0; i < ld_extra_args.len; i++)
-      strarray_push(&arr, ld_extra_args.data[i]);
-
-    for (int i = 0; i < inputs->len; i++)
-      strarray_push(&arr, inputs->data[i]);
-
-    strarray_push(&arr, NULL);
-
-    run_subprocess(arr.data);
-    return;
-  }
+  LinkType lt = link_type(&arr);
 
   char *libpath = find_libpath();
   char *gcc_libpath = find_gcc_libpath();
 
-  if (opt_shared) {
+  if (!opt_nostartfiles && lt != LT_RELO) {
+    switch (lt) {
+    case LT_STATIC_PIE:
+      strarray_push(&arr, format("%s/rcrt1.o", libpath));
+      break;
+    case LT_PIE:
+      strarray_push(&arr, format("%s/Scrt1.o", libpath));
+      break;
+    case LT_STATIC:
+    case LT_DYNAMIC:
+      strarray_push(&arr, format("%s/crt1.o", libpath));
+      break;
+    }
     strarray_push(&arr, format("%s/crti.o", libpath));
-    strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath));
-  } else {
-    strarray_push(&arr, format("%s/crt1.o", libpath));
-    strarray_push(&arr, format("%s/crti.o", libpath));
-    strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath));
+
+    switch (lt) {
+    case LT_STATIC_PIE:
+    case LT_SHARED:
+    case LT_PIE:
+      strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath));
+      break;
+    case LT_STATIC:
+      strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath));
+      break;
+    case LT_DYNAMIC:
+      strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath));
+      break;
+    }
   }
 
-  for (int i = 0; i < ld_extra_args.len; i++)
-    strarray_push(&arr, ld_extra_args.data[i]);
+  for (int i = 0; i < ld_paths.len; i++)
+    strarray_push(&arr, ld_paths.data[i]);
 
   strarray_push(&arr, format("-L%s", gcc_libpath));
   strarray_push(&arr, "-L/usr/lib/x86_64-linux-gnu");
@@ -851,34 +960,39 @@ static void run_linker(StringArray *inputs, char *output) {
   strarray_push(&arr, "-L/usr/lib");
   strarray_push(&arr, "-L/lib");
 
-  if (!opt_static) {
-    strarray_push(&arr, "-dynamic-linker");
-    strarray_push(&arr, "/lib64/ld-linux-x86-64.so.2");
-  }
-
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);
 
-  if (opt_static) {
-    strarray_push(&arr, "--start-group");
-    strarray_push(&arr, "-lgcc");
-    strarray_push(&arr, "-lgcc_eh");
-    strarray_push(&arr, "-lc");
-    strarray_push(&arr, "--end-group");
-  } else {
-    strarray_push(&arr, "-lc");
-    strarray_push(&arr, "-lgcc");
-    strarray_push(&arr, "--as-needed");
-    strarray_push(&arr, "-lgcc_s");
-    strarray_push(&arr, "--no-as-needed");
+  for (int i = 0; i < ld_extra_args.len; i++)
+    strarray_push(&arr, ld_extra_args.data[i]);
+
+  if (!opt_nodefaultlibs && lt != LT_RELO) {
+    if (lt == LT_STATIC_PIE || lt == LT_STATIC) {
+      strarray_push(&arr, "--start-group");
+      link_libgcc(&arr, true);
+      link_libc(&arr);
+      strarray_push(&arr, "--end-group");
+    } else {
+      link_libgcc(&arr, opt_static_libgcc);
+      link_libc(&arr);
+      link_libgcc(&arr, opt_static_libgcc);
+    }
   }
 
-  if (opt_shared)
-    strarray_push(&arr, format("%s/crtendS.o", gcc_libpath));
-  else
-    strarray_push(&arr, format("%s/crtend.o", gcc_libpath));
+  if (!opt_nostartfiles && lt != LT_RELO) {
+    switch (lt) {
+    case LT_STATIC_PIE:
+    case LT_SHARED:
+    case LT_PIE:
+      strarray_push(&arr, format("%s/crtendS.o", gcc_libpath));
+      break;
+    case LT_STATIC:
+    case LT_DYNAMIC:
+      strarray_push(&arr, format("%s/crtend.o", gcc_libpath));
+    }
 
-  strarray_push(&arr, format("%s/crtn.o", libpath));
+    strarray_push(&arr, format("%s/crtn.o", libpath));
+  }
   strarray_push(&arr, NULL);
 
   run_subprocess(arr.data);
@@ -927,30 +1041,13 @@ int main(int argc, char **argv) {
   bool no_fork = (input_cnt == 1);
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
-  bool run_ld = false;
 
   for (int i = 0; i < input_paths.len; i++) {
     if (!strcmp(input_paths.data[i], "-x")) {
       opt_x = parse_opt_x(input_paths.data[++i]);
       continue;
     }
-
     char *input = input_paths.data[i];
-
-    if (!strncmp(input, "-l", 2)) {
-      strarray_push(&ld_args, input);
-      continue;
-    }
-
-    if (!strncmp(input, "-Wl,", 4)) {
-      char *s = strdup(input + 4);
-      char *arg = strtok(s, ",");
-      while (arg) {
-        strarray_push(&ld_args, arg);
-        arg = strtok(NULL, ",");
-      }
-      continue;
-    }
 
     char *output;
     if (opt_o)
@@ -969,7 +1066,6 @@ int main(int argc, char **argv) {
     // Handle .o or .a
     if (type == FILE_OBJ || type == FILE_AR || type == FILE_DSO) {
       strarray_push(&ld_args, input);
-      run_ld = true;
       continue;
     }
 
@@ -986,7 +1082,6 @@ int main(int argc, char **argv) {
       char *tmp = create_tmpfile();
       assemble(input, tmp);
       strarray_push(&ld_args, tmp);
-      run_ld = true;
       continue;
     }
 
@@ -1007,7 +1102,6 @@ int main(int argc, char **argv) {
       run_cc1(input, tmp1, no_fork, true);
       assemble(tmp1, tmp2);
       strarray_push(&ld_args, tmp2);
-      run_ld = true;
       continue;
     }
 
@@ -1039,11 +1133,10 @@ int main(int argc, char **argv) {
     run_cc1(input, tmp1, no_fork, false);
     assemble(tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
-    run_ld = true;
     continue;
   }
 
-  if (run_ld)
+  if (ld_args.len)
     run_linker(&ld_args, opt_o ? opt_o : "a.out");
   return 0;
 }
