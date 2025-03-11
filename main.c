@@ -31,15 +31,13 @@ static bool opt_c;
 static bool opt_hash_hash_hash;
 static bool opt_static;
 static bool opt_shared;
-static bool opt_nostdinc;
 static bool opt_nostdlib;
 static char *opt_MF;
 static char *opt_MT;
 static char *opt_o;
 
 static StringArray ld_extra_args;
-static StringArray std_include_paths;
-
+static StringArray sysincl_paths;
 static StringArray input_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
@@ -88,34 +86,34 @@ static bool comma_arg(char *arg, StringArray *arr, char *str) {
   return false;
 }
 
-static void add_include_path(char *p) {
-  char *str = strdup(p);
+static void add_include_path(StringArray *arr, char *path) {
+  size_t orig_len = strlen(path);
+  size_t len = orig_len;
 
-  for (int i = strlen(str) - 1; i >= 0 && str[i] == '/';)
-    str[i--] = '\0';
+  while (len > 1 && path[len - 1] == '/')
+    len--;
 
-  for (int i = 0; i < include_paths.len; i++) {
-    if (!strcmp(include_paths.data[i], str))
+  for (int i = 0; i < arr->len; i++) {
+    char *s2 = arr->data[i];
+    if (!strncmp(s2, path, len) && s2[len] == '\0')
       return;
   }
-  strarray_push(&include_paths, str);
+
+  if (len != orig_len)
+    path = strndup(path, len);
+
+  strarray_push(arr, path);
 }
 
 static void add_default_include_paths(char *argv0) {
-  if (opt_nostdinc)
-    return;
-
   // We expect that compiler-provided include files are installed
   // to ./include relative to argv[0].
-  strarray_push(&std_include_paths, format("%s/include", dirname(strdup(argv0))));
+  add_include_path(&sysincl_paths, format("%s/include", dirname(strdup(argv0))));
 
   // Add standard include paths.
-  strarray_push(&std_include_paths, "/usr/local/include");
-  strarray_push(&std_include_paths, "/usr/include/x86_64-linux-gnu");
-  strarray_push(&std_include_paths, "/usr/include");
-
-  for (int i = 0; i < std_include_paths.len; i++)
-    strarray_push(&include_paths, std_include_paths.data[i]);
+  add_include_path(&sysincl_paths, "/usr/local/include");
+  add_include_path(&sysincl_paths, "/usr/include/x86_64-linux-gnu");
+  add_include_path(&sysincl_paths, "/usr/include");
 }
 
 static FileType parse_opt_x(char *s) {
@@ -203,6 +201,7 @@ static int parse_args(int argc, char **argv) {
   char *arg;
   StringArray idirafter = {0};
   int input_cnt = 0;
+  bool opt_nostdinc = false;
 
   for (int i = 1; i < argc; i++) {
     if (*argv[i] == '\0')
@@ -242,7 +241,17 @@ static int parse_args(int argc, char **argv) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-I")) {
-      add_include_path(arg);
+      add_include_path(&include_paths, arg);
+      continue;
+    }
+
+    if (take_arg_s(argv, &i, &arg, "-isystem")) {
+      add_include_path(&sysincl_paths, arg);
+      continue;
+    }
+
+    if (take_arg_s(argv, &i, &arg, "-idirafter")) {
+      add_include_path(&idirafter, arg);
       continue;
     }
 
@@ -343,11 +352,6 @@ static int parse_args(int argc, char **argv) {
       undef_macro("__PIC__");
       undef_macro("__pie__");
       undef_macro("__PIE__");
-      continue;
-    }
-
-    if (take_arg_s(argv, &i, &arg, "-idirafter")) {
-      strarray_push(&idirafter, arg);
       continue;
     }
 
@@ -480,8 +484,26 @@ static int parse_args(int argc, char **argv) {
     input_cnt++;
   }
 
+  if (!opt_nostdinc)
+    add_default_include_paths(argv[0]);
+
   for (int i = 0; i < idirafter.len; i++)
-    add_include_path(idirafter.data[i]);
+    add_include_path(&sysincl_paths, idirafter.data[i]);
+
+  // Filter system directories passed as -I
+  int incl_cnt = 0;
+  for (int i = 0; i < include_paths.len; i++) {
+    bool match = false;
+    for (int j = 0; j < sysincl_paths.len; j++)
+      if ((match = !strcmp(sysincl_paths.data[j], include_paths.data[i])))
+        break;
+    if (!match)
+      include_paths.data[incl_cnt++] = include_paths.data[i];
+  }
+  include_paths.len = incl_cnt;
+
+  for (int i = 0; i < sysincl_paths.len; i++)
+    strarray_push(&include_paths, sysincl_paths.data[i]);
 
   return input_cnt;
 }
@@ -602,9 +624,9 @@ static void print_tokens(Token *tok, char *path) {
     fclose(out);
 }
 
-static bool in_std_include_path(char *path) {
-  for (int i = 0; i < std_include_paths.len; i++) {
-    char *dir = std_include_paths.data[i];
+static bool in_sysincl_path(char *path) {
+  for (int i = 0; i < sysincl_paths.len; i++) {
+    char *dir = sysincl_paths.data[i];
     int len = strlen(dir);
     if (strncmp(dir, path, len) == 0 && path[len] == '/')
       return true;
@@ -636,7 +658,7 @@ static void print_dependencies(char *input) {
 
   for (int i = 0; files[i]; i++) {
     char *name = files[i]->name;
-    if ((opt_MMD && in_std_include_path(name)) || !files[i]->is_input)
+    if ((opt_MMD && in_sysincl_path(name)) || !files[i]->is_input)
       continue;
     fprintf(out, " \\\n  %s", name);
   }
@@ -646,7 +668,7 @@ static void print_dependencies(char *input) {
   if (opt_MP) {
     for (int i = 1; files[i]; i++) {
       char *name = files[i]->name;
-      if ((opt_MMD && in_std_include_path(name)) || !files[i]->is_input)
+      if ((opt_MMD && in_sysincl_path(name)) || !files[i]->is_input)
         continue;
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
@@ -894,17 +916,15 @@ static FileType get_file_type(char *filename) {
 int main(int argc, char **argv) {
   atexit(cleanup);
   init_macros();
+  init_ty(ty_ulong, ty_long, ty_long);
 
   int input_cnt = parse_args(argc, argv);
   if (input_cnt < 1)
     error("no input files");
   else if (input_cnt > 1 && opt_o && (opt_c || opt_S || opt_E))
     error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
+
   bool no_fork = (input_cnt == 1);
-
-  add_default_include_paths(argv[0]);
-  init_ty(ty_ulong, ty_long, ty_long);
-
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
   bool run_ld = false;
