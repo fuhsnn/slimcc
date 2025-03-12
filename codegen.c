@@ -481,9 +481,16 @@ static void pop_copy(int sz, char *sptr) {
   Printftn("lea %d(%s), %s", pos, lvar_ptr, sptr);
 }
 
-// When we load a char or a short value to a register, we always
-// extend them to the size of int, so we can assume the lower half of
-// a register always contains a valid value.
+static void cast_extend_int32(Type *ty, char *from, char *to) {
+  char *insn = ty->is_unsigned ? "movz" : "movs";
+  switch (ty->size) {
+  case 1: Printftn("%sbl %s, %s", insn, from, to); return;
+  case 2: Printftn("%swl %s, %s", insn, from, to); return;
+  case 4: Printftn("movl %s, %s", from, to); return;
+  }
+  internal_error();
+}
+
 static void load_extend_int(Type *ty, char *ofs, char *ptr, char *reg) {
   char *insn = ty->is_unsigned ? "movz" : "movs";
   switch (ty->size) {
@@ -639,26 +646,22 @@ static void gen_bitfield_load(Node *node, int ofs) {
   load2(mem->ty, ofs, "%rax");
 
   char *ax = regop_ax(mem->ty);
-  if (mem->ty->is_unsigned) {
-    if (mem->bit_offset)
-      Printftn("shr $%d, %s", mem->bit_offset, ax);
-    imm_and(ax, "%rdx", (1LL << mem->bit_width) - 1);
-    return;
-  }
   int shft = ((mem->ty->size == 8) ? 64 : 32) - mem->bit_width;
-  Printftn("shl $%d, %s", shft - mem->bit_offset, ax);
-  Printftn("sar $%d, %s", shft, ax);
+  if (shft - mem->bit_offset)
+    Printftn("shl $%d, %s", shft - mem->bit_offset, ax);
+  Printftn("%s $%d, %s", (mem->ty->is_unsigned ? "shr" : "sar"), shft, ax);
   return;
 }
 
-static void gen_bitfield_store(Node *node) {
+static void gen_bitfield_store(Node *node, bool is_void) {
   Member *mem = node->member;
   Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
   if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
     char *reg = pop_inreg(tmpreg64[0]);
     store2(alt_ty, mem->bit_offset / 8, reg);
-    if (mem->bit_width < 32)
-      imm_and("%eax", NULL, (1L << mem->bit_width) - 1);
+
+    if (!is_void && alt_ty->size < 4)
+      cast_extend_int32(alt_ty, reg_ax(alt_ty->size), "%eax");
     return;
   }
 
@@ -674,22 +677,22 @@ static void gen_bitfield_store(Node *node) {
   char *ptr = pop_inreg(tmpreg64[0]);
   load2(mem->ty, 0, ptr);
 
-  imm_and(ax, dx, ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset));
+  uint64_t msk = ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset);
+  if (mem->ty->size == 4 && (mem->bit_width + mem->bit_offset == 32))
+    msk = (uint32_t)msk;
+  imm_and(ax, dx, msk);
 
-  if (mem->bit_offset) {
-    Printftn("mov %s, %s", cx, dx);
-    Printftn("shl $%d, %s", mem->bit_offset, dx);
-    Printftn("or %s, %s", dx, ax);
-  } else {
-    Printftn("or %s, %s", cx, ax);
-  }
+  if (mem->bit_offset)
+    Printftn("shl $%d, %s", mem->bit_offset, cx);
+  Printftn("or %s, %s", cx, ax);
+
   store2(mem->ty, 0, ptr);
 
-  Printftn("mov %s, %s", cx, ax);
-  if (!mem->ty->is_unsigned) {
+  if (!is_void) {
     int shft = ((mem->ty->size == 8) ? 64 : 32) - mem->bit_width;
-    Printftn("shl $%d, %s", shft, ax);
-    Printftn("sar $%d, %s", shft, ax);
+    if (shft - mem->bit_offset)
+      Printftn("shl $%d, %s", shft - mem->bit_offset, ax);
+    Printftn("%s $%d, %s", (mem->ty->is_unsigned ? "shr" : "sar"), shft, ax);
   }
 }
 
@@ -874,9 +877,9 @@ static void store2(Type *ty, int dofs, char *dptr) {
   store3(ty, ofs_buf, dptr);
 }
 
-static void store(Node *node) {
+static void store(Node *node, bool is_void) {
   if (is_bitfield(node)) {
-    gen_bitfield_store(node);
+    gen_bitfield_store(node, is_void);
     return;
   }
   char *reg = pop_inreg(tmpreg64[0]);
@@ -1629,7 +1632,7 @@ static void gen_logical(Node *node, bool flip) {
 }
 
 // Generate code for a given node.
-static void gen_expr(Node *node) {
+static void gen_expr2(Node *node, bool is_void) {
   if (opt_g)
     print_loc(node->tok);
 
@@ -1691,14 +1694,14 @@ static void gen_expr(Node *node) {
     gen_addr(node->lhs);
     push();
     gen_expr(node->rhs);
-    store(node->lhs);
+    store(node->lhs, is_void);
     return;
   case ND_ARITH_ASSIGN:
     gen_addr(node->lhs);
     push();
     load(node->lhs, 0);
     gen_expr_null_lhs(node->arith_kind, node->lhs->ty, node->rhs);
-    store(node->lhs);
+    store(node->lhs, is_void);
     return;
   case ND_POST_INCDEC:
     gen_addr(node->lhs);
@@ -1707,7 +1710,7 @@ static void gen_expr(Node *node) {
     push_by_ty(node->lhs->ty);
     push_from("%rcx");
     gen_expr_null_lhs(ND_ADD, node->lhs->ty, node->rhs);
-    store(node->lhs);
+    store(node->lhs, true);
     pop_by_ty(node->lhs->ty);
     return;
   case ND_STMT_EXPR:
@@ -1778,27 +1781,20 @@ static void gen_expr(Node *node) {
     case ND_SAR: Printftn("sar %%cl, %s", ax); break;
     }
     return;
-  case ND_FUNCALL: {
+  case ND_FUNCALL:
     gen_funcall(node);
 
-    // It looks like the most significant 48 or 56 bits in RAX may
-    // contain garbage if a function return type is short or bool/char,
-    // respectively. We clear the upper bits here.
-    if (is_integer(node->ty) && node->ty->size < 4) {
-      if (node->ty->kind == TY_BOOL)
-        Printftn("%s", cast_table[getTypeId(ty_int)][getTypeId(ty_uchar)]);
-      else
-        Printftn("%s", cast_table[getTypeId(ty_int)][getTypeId(node->ty)]);
-    }
-
-    // If the return type is a small struct, a value is returned
-    // using up to two registers.
-    if (node->ret_buffer && node->ty->size <= 16) {
-      copy_ret_buffer(node->ret_buffer);
-      Printftn("lea %d(%s), %%rax", node->ret_buffer->ofs, node->ret_buffer->ptr);
+    if (!is_void) {
+      if (is_integer(node->ty) && node->ty->size < 4) {
+        cast_extend_int32(node->ty, reg_ax(node->ty->size), "%eax");
+        return;
+      }
+      if (node->ret_buffer && node->ty->size <= 16) {
+        copy_ret_buffer(node->ret_buffer);
+        Printftn("lea %d(%s), %%rax", node->ret_buffer->ofs, node->ret_buffer->ptr);
+      }
     }
     return;
-  }
   case ND_LABEL_VAL:
     Printftn("lea %s(%%rip), %%rax", node->unique_label);
     return;
@@ -2077,6 +2073,11 @@ static void gen_expr(Node *node) {
   error_tok(node->tok, "invalid expression");
 }
 
+static void gen_expr(Node *node) {
+  gen_expr2(node, false);
+  return;
+}
+
 static void gen_stmt(Node *node) {
   if (opt_g)
     print_loc(node->tok);
@@ -2304,8 +2305,7 @@ static void gen_void_arith_assign(Node *node) {
       return;
     }
   }
-
-  gen_expr(node);
+  gen_expr2(node, true);
 }
 
 static void gen_void_assign(Node *node) {
@@ -2347,7 +2347,7 @@ static void gen_void_assign(Node *node) {
     }
   }
 
-  gen_expr(node);
+  gen_expr2(node, true);
 }
 
 static void gen_void_expr(Node *node) {
@@ -2396,11 +2396,8 @@ static void gen_void_expr(Node *node) {
   case ND_POST_INCDEC:
     gen_void_arith_assign(node);
     return;
-  case ND_FUNCALL:
-    gen_funcall(node);
-    return;
   }
-  gen_expr(node);
+  gen_expr2(node, true);
 }
 
 static char *arith_ins(NodeKind kind) {
