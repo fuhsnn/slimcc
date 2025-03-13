@@ -1675,11 +1675,6 @@ void init_macros(void) {
   define_macro("__unix", "1");
   define_macro("__unix__", "1");
 
-  define_macro("linux", "1");
-  define_macro("__linux", "1");
-  define_macro("__linux__", "1");
-  define_macro("__gnu_linux__", "1");
-
   define_macro("__BYTE_ORDER__", "1234");
   define_macro("__ORDER_BIG_ENDIAN__", "4321");
   define_macro("__ORDER_LITTLE_ENDIAN__", "1234");

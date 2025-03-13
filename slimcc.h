@@ -675,6 +675,15 @@ bool is_ident2(uint32_t c);
 int display_width(char *p, int len);
 
 //
+// platform.c
+//
+
+void platform_init(void);
+void platform_stdinc_paths(StringArray *paths);
+void run_assembler(StringArray *as_args, char *input, char *output);
+void run_linker(StringArray *paths, StringArray *inputs, char *output);
+
+//
 // main.c
 //
 typedef enum {
@@ -688,6 +697,16 @@ typedef enum {
 
 bool file_exists(char *path);
 bool in_sysincl_path(char *path);
+
+char *source_dir(void);
+char *find_dir_w_file(char *pattern);
+void run_subprocess(char **argv);
+void set_fpic(char *lvl);
+void set_fpie(char *lvl);
+void add_include_path(StringArray *arr, char *s);
+void run_assembler_gnustyle(StringArray *as_args, char *input, char *output);
+void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
+  char *ldso_path, char *libpath, char *gcclibpath);
 
 extern StringArray include_paths;
 extern bool opt_E;
@@ -705,3 +724,18 @@ extern bool opt_werror;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
+
+extern bool opt_pie;
+extern bool opt_nopie;
+extern bool opt_pthread;
+extern bool opt_r;
+extern bool opt_rdynamic;
+extern bool opt_static;
+extern bool opt_static_pie;
+extern bool opt_static_libgcc;
+extern bool opt_shared;
+extern bool opt_nostartfiles;
+extern bool opt_nodefaultlibs;
+extern bool opt_nolibc;
+extern char *opt_use_ld;
+extern char *opt_use_as;
