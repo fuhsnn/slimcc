@@ -1623,17 +1623,14 @@ void init_macros(void) {
   define_macro("__amd64", "1");
   define_macro("__amd64__", "1");
   define_macro("__const__", "const");
-  define_macro("__gnu_linux__", "1");
+  define_macro("__inline", "inline");
   define_macro("__inline__", "inline");
-  define_macro("__linux", "1");
-  define_macro("__linux__", "1");
   define_macro("__signed__", "signed");
   define_macro("__slimcc__", "1");
   define_macro("__unix", "1");
   define_macro("__unix__", "1");
   define_macro("__x86_64", "1");
   define_macro("__x86_64__", "1");
-  define_macro("linux", "1");
   define_macro("unix", "1");
 
   add_builtin("__FILE__", file_macro);
