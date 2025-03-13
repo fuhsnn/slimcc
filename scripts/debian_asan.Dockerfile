@@ -21,8 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
+RUN ln -s platform/linux-ci.c platform.c
 RUN gcc-12 -O2 -flto=auto -march=native *.c -fsanitize=address -o slimcc
 RUN apt-get -y autoremove gcc-12 && apt-get clean
+
+RUN ! command -v cc
+RUN ! command -v cpp
+RUN ! command -v gcc
+RUN ! command -v gcc-12
 
 ENV CC=/work/slimcc/slimcc
 
