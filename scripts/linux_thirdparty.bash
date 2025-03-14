@@ -63,7 +63,7 @@ test_curl() {
 }
 
 test_doom() {
- github_tar fuhsnn PureDOOM 20240331
+ git_fetch https://github.com/Daivuk/PureDOOM 48376ddd6bbdb70085dab91feb1c6ceef80fa9b7 puredoom
  mkdir -p examples/Tests/build && cd "$_"
  replace_line "project(pd_tests)" "project(pd_tests C)" ../CMakeLists.txt
  cmake ../ && make
@@ -71,7 +71,7 @@ test_doom() {
 }
 
 test_git() {
- github_tar git git v2.48.1
+ github_tar git git v2.49.0
  make CC="$CC" test -j2
 }
 
@@ -200,13 +200,21 @@ test_qbe_hare() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.49.0
+ github_tar sqlite sqlite version-3.49.1
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
 
+test_tcl() {
+ github_tar tcltk tcl core-9-0-1
+ ./unix/configure
+ rm ./tests/socket.test # fails under su
+ make test | tee __testlog
+ grep -P -q '^all.tcl.*Failed\t0$' __testlog
+}
+
 test_tinycc() {
- git_fetch https://github.com/TinyCC/tinycc f8bd136d198bdafe71342517fa325da2e243dc68 tinycc
+ git_fetch https://github.com/TinyCC/tinycc 8c4e67380e54296a6a1f9d242b7fc4bf9f16fddb tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
@@ -228,7 +236,7 @@ test_toybox() {
 }
 
 test_vim() {
- github_tar vim vim v9.1.0891
+ github_tar vim vim v9.1.1200
  ./configure
  make && make testtiny
 }
@@ -264,9 +272,7 @@ build_musl() {
 }
 
 build_nano() {
- url_tar https://git.savannah.gnu.org/cgit/nano.git/snapshot/nano-8.3.tar.gz nano
- sed -i 's/--depth=2222/--depth=1/g' autogen.sh
- bash autogen.sh
+ url_tar https://www.nano-editor.org/dist/v8/nano-8.3.tar.gz nano
  ./configure && make
 }
 

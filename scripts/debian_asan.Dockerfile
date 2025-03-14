@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  make cmake pkg-config \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates \
- python3 tcl-dev bison flex re2c \
+ tcl-dev bison flex re2c \
  libcurl4-openssl-dev libssl-dev libexpat1-dev zlib1g-dev libicu-dev \
  libncurses-dev libreadline-dev libpsl-dev libffi-dev libxml2-dev libsqlite3-dev \
  # build_gcc

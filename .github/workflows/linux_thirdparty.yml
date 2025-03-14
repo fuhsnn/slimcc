@@ -50,6 +50,7 @@ jobs:
           - thirdparty: test_python
           - thirdparty: test_qbe_hare
           - thirdparty: test_sqlite
+          - thirdparty: test_tcl
           - thirdparty: test_tinycc
           - thirdparty: test_toxcore
           - thirdparty: test_toybox
