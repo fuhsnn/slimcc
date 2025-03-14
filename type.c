@@ -39,11 +39,25 @@ Type *to_unsigned(TypeKind kind) {
   internal_error();
 }
 
-void init_ty(Type *t_size, Type *t_ptr, Type *first_64) {
-  ty_size_t = t_size;
-  ty_intptr_t = ty_ptrdiff_t = t_ptr;
-  ty_first_64bit_int = first_64;
-  ty_first_64bit_uint = to_unsigned(first_64->kind);
+void init_ty_lp64(void) {
+  define_macro("_LP64", "1");
+  define_macro("__LP64__", "1");
+  define_macro("__SIZEOF_DOUBLE__", "8");
+  define_macro("__SIZEOF_FLOAT__", "4");
+  define_macro("__SIZEOF_INT__", "4");
+  define_macro("__SIZEOF_LONG_DOUBLE__", "16");
+  define_macro("__SIZEOF_LONG_LONG__", "8");
+  define_macro("__SIZEOF_LONG__", "8");
+  define_macro("__SIZEOF_POINTER__", "8");
+  define_macro("__SIZEOF_PTRDIFF_T__", "8");
+  define_macro("__SIZEOF_SHORT__", "2");
+  define_macro("__SIZEOF_SIZE_T__", "8");
+  define_macro("__SIZE_TYPE__", "long unsigned int");
+
+  ty_size_t = ty_ulong;
+  ty_intptr_t = ty_ptrdiff_t = ty_long;
+  ty_first_64bit_int = ty_long;
+  ty_first_64bit_uint = ty_ulong;
 }
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {

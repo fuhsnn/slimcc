@@ -1030,7 +1030,7 @@ static FileType get_file_type(char *filename) {
 int main(int argc, char **argv) {
   atexit(cleanup);
   init_macros();
-  init_ty(ty_ulong, ty_long, ty_long);
+  init_ty_lp64();
 
   int input_cnt = parse_args(argc, argv);
   if (input_cnt < 1)
