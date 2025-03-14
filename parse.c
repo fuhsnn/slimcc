@@ -530,7 +530,7 @@ static void attr_aligned(Token *loc, int *align, TokenKind kind) {
   }
 }
 
-static void attr_cleanup(Token *loc, Obj **fn, TokenKind kind) {
+static void attr_cleanup(Token *loc, TokenKind kind, Obj **fn) {
   if (*fn)
     return;
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
@@ -556,7 +556,7 @@ static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor, uint16
   }
 }
 
-static void cdtor_attr(char *name, Token *loc, bool *is_cdtor, uint16_t *priority, TokenKind kind) {
+static void cdtor_attr(Token *loc, TokenKind kind, char *name, bool *is_cdtor, uint16_t *priority) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind != kind)
       continue;
@@ -570,7 +570,7 @@ static void cdtor_attr(char *name, Token *loc, bool *is_cdtor, uint16_t *priorit
   }
 }
 
-static void bool_attr(char *name, Token *loc, bool *b, TokenKind kind) {
+static void bool_attr(Token *loc, TokenKind kind, char *name, bool *b) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind == kind && equal_ext(tok, name)) {
       *b = true;
@@ -588,7 +588,7 @@ static void apply_str_attr(char *attr_name, Token *tok, char **var_str, char *at
     error_tok(tok, "conflict of attribute \'%s\'", attr_name);
 }
 
-static void str_attr(char *name, Token *loc, char **str, TokenKind kind) {
+static void str_attr(Token *loc, TokenKind kind, char *name, char **str) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind == kind && equal_ext(tok, name)) {
       Token *t;
@@ -601,45 +601,40 @@ static void str_attr(char *name, Token *loc, char **str, TokenKind kind) {
 
 static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
-  attr_cleanup(tok, &attr->cleanup_fn, kind);
-  bool_attr("weak", tok, &attr->is_weak, kind);
-  cdtor_attr("constructor", tok, &attr->is_ctor, &attr->ctor_prior, kind);
-  cdtor_attr("destructor", tok, &attr->is_dtor, &attr->dtor_prior, kind);
-  str_attr("alias", tok, &attr->alias, kind);
-  str_attr("section", tok, &attr->section, kind);
-  str_attr("visibility", tok, &attr->visibility, kind);
+  attr_cleanup(tok, kind, &attr->cleanup_fn);
+  bool_attr(tok, kind, "weak", &attr->is_weak);
+  cdtor_attr(tok, kind, "constructor", &attr->is_ctor, &attr->ctor_prior);
+  cdtor_attr(tok, kind, "destructor", &attr->is_dtor, &attr->dtor_prior);
+  str_attr(tok, kind, "alias", &attr->alias);
+  str_attr(tok, kind, "section", &attr->section);
+  str_attr(tok, kind, "visibility", &attr->visibility);
 }
 
-static void str_attr2(char *attr_name, Token *var_name, Token *var_end, char **str, char *attr_str) {
-  apply_str_attr(attr_name, var_name, str, attr_str);
-  str_attr(attr_name, var_name, str, TK_ATTR);
-  str_attr(attr_name, var_name->next, str, TK_BATTR);
-  str_attr(attr_name, var_end, str, TK_ATTR);
-}
+#define DeclAttr(Fn, ...)                \
+  Fn(name, TK_ATTR, __VA_ARGS__);        \
+  Fn(name->next, TK_BATTR, __VA_ARGS__); \
+  Fn(tok, TK_ATTR, __VA_ARGS__)
 
 static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
-  str_attr2("alias", name, tok, &var->alias_name, attr->alias);
-  str_attr2("section", name, tok, &var->section_name, attr->section);
-  str_attr2("visibility", name, tok, &var->visibility, attr->visibility);
+  apply_str_attr("alias", name, &var->alias_name, attr->alias);
+  DeclAttr(str_attr, "alias", &var->alias_name);
+
+  apply_str_attr("section", name, &var->section_name, attr->section);
+  DeclAttr(str_attr, "section", &var->section_name);
+
+  apply_str_attr("visibility", name, &var->visibility, attr->visibility);
+  DeclAttr(str_attr, "visibility", &var->visibility);
 
   var->is_weak |= attr->is_weak;
-  bool_attr("weak", name, &var->is_weak, TK_ATTR);
-  bool_attr("weak", name->next, &var->is_weak, TK_BATTR);
-  bool_attr("weak", tok, &var->is_weak, TK_ATTR);
+  DeclAttr(bool_attr, "weak", &var->is_weak);
 }
 
-static void attr_cdtor2(char *attr_name, Token *var_name, Token *var_end, bool *is_cdtor, uint16_t *priority) {
-  cdtor_attr(attr_name, var_name, is_cdtor, priority, TK_ATTR);
-  cdtor_attr(attr_name, var_name->next, is_cdtor, priority, TK_BATTR);
-  cdtor_attr(attr_name, var_end, is_cdtor, priority, TK_ATTR);
-}
+static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
+  apply_cdtor_attr("constructor", name, &fn->is_ctor, &fn->ctor_prior, attr->ctor_prior, attr->is_ctor);
+  DeclAttr(cdtor_attr, "constructor", &fn->is_ctor, &fn->ctor_prior);
 
-static void func_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
-  apply_cdtor_attr("constructor", name, &var->is_ctor, &var->ctor_prior, attr->ctor_prior, attr->is_ctor);
-  attr_cdtor2("constructor", name, tok, &var->is_ctor, &var->ctor_prior);
-
-  apply_cdtor_attr("destructor", name, &var->is_dtor, &var->dtor_prior, attr->dtor_prior, attr->is_dtor);
-  attr_cdtor2("destructor", name, tok, &var->is_dtor, &var->dtor_prior);
+  apply_cdtor_attr("destructor", name, &fn->is_dtor, &fn->dtor_prior, attr->dtor_prior, attr->is_dtor);
+  DeclAttr(cdtor_attr, "destructor", &fn->is_dtor, &fn->dtor_prior);
 }
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
@@ -1403,9 +1398,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       error_tok(tok, "variable name omitted");
 
     Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
-    attr_cleanup(name, &cleanup_fn, TK_ATTR);
-    attr_cleanup(name->next, &cleanup_fn, TK_BATTR);
-    attr_cleanup(tok, &cleanup_fn, TK_ATTR);
+    DeclAttr(attr_cleanup, &cleanup_fn);
 
     // Generate code for computing a VLA size. We need to do this
     // even if ty is not VLA because ty may be a pointer to VLA
@@ -3685,8 +3678,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *ty = new_type(kind, -1, 1);
 
-  bool_attr("packed", tok, &ty->is_packed, TK_ATTR);
-  bool_attr("packed", tok, &ty->is_packed, TK_BATTR);
+  bool_attr(tok, TK_ATTR, "packed", &ty->is_packed);
+  bool_attr(tok, TK_BATTR, "packed", &ty->is_packed);
 
   int alt_align = 0;
   attr_aligned(tok, &alt_align, TK_ATTR);
@@ -3716,7 +3709,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   struct_members(&tok, tok, ty);
 
   attr_aligned(tok, &alt_align, TK_ATTR);
-  bool_attr("packed", tok, &ty->is_packed, TK_ATTR);
+  bool_attr(tok, TK_ATTR, "packed", &ty->is_packed);
   *rest = tok;
 
   if (kind == TY_STRUCT)

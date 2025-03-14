@@ -1718,19 +1718,35 @@ static void join_adjacent_string_literals(Token *tok) {
   tok->next = end;
 }
 
+static bool is_gnu_attr(Token *tok) {
+#define PutAttr(str)                 \
+  hashmap_put(&map, str, (void *)1); \
+  hashmap_put(&map, "__" str "__", (void *)1)
+
+  static HashMap map;
+  if (map.capacity == 0) {
+    PutAttr("alias");
+    PutAttr("aligned");
+    PutAttr("cleanup");
+    PutAttr("constructor");
+    PutAttr("destructor");
+    PutAttr("packed");
+    PutAttr("section");
+    PutAttr("visibility");
+    PutAttr("weak");
+  }
+  return hashmap_get2(&map, tok->loc, tok->len);
+}
+
 static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
   bool gnu_if_battr = !is_bracket || (vendor && equal(vendor, "gnu"));
 
-  if (gnu_if_battr) {
-    if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
-      equal_ext(tok, "constructor") || equal_ext(tok, "destructor") ||
-      equal_ext(tok, "packed") || equal_ext(tok, "section") || equal_ext(tok, "visibility") ||
-      equal_ext(tok, "weak"))
-      return true;
-  }
+  if (gnu_if_battr && is_gnu_attr(tok))
+    return true;
+
   return false;
 }
 
