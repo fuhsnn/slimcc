@@ -268,6 +268,8 @@ struct Obj {
   // Function
   bool is_inline;
   bool only_inline;
+  bool returns_twice;
+  bool dont_reuse_stk;
   bool dealloc_vla;
   bool is_ctor;
   bool is_dtor;
@@ -647,7 +649,6 @@ void prepare_funcall(Node *node, Scope *scope);
 void prepare_inline_asm(Node *node);
 int align_to(int n, int align);
 bool va_arg_need_copy(Type *ty);
-extern bool dont_reuse_stack;
 void emit_text(Obj *fn);
 void *prepare_funcgen(void);
 void end_funcgen(void);
@@ -684,6 +685,7 @@ extern bool opt_fpie;
 extern bool opt_femulated_tls;
 extern bool opt_fcommon;
 extern bool opt_optimize;
+extern bool opt_reuse_stack;
 extern bool opt_g;
 extern bool opt_func_sections;
 extern bool opt_data_sections;

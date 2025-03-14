@@ -97,8 +97,6 @@ static int peak_stk_usage;
 static int64_t rtn_label;
 static long pre_epilog_pos;
 
-bool dont_reuse_stack;
-
 static struct {
   bool in[REG_END];
   bool out[REG_END];
@@ -357,7 +355,7 @@ static Slot *pop_tmpstack(int sz) {
   }
 
   if (sl->kind == SL_ST) {
-    if (dont_reuse_stack) {
+    if (!opt_reuse_stack || current_fn->dont_reuse_stk) {
       peak_stk_usage += sz * 8;
       sl->st_ofs = -peak_stk_usage;
     } else {
@@ -3861,7 +3859,7 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   int max_depth = bottom;
   for (Scope *sub = sc->children; sub; sub = sub->sibling_next) {
     int sub_depth= assign_lvar_offsets(sub, bottom);
-    if (dont_reuse_stack)
+    if (!opt_reuse_stack || current_fn->dont_reuse_stk)
       bottom = max_depth = sub_depth;
     else
       max_depth = MAX(max_depth, sub_depth);

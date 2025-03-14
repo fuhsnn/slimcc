@@ -38,6 +38,7 @@ typedef struct {
   bool is_constexpr;
   bool is_weak;
   bool is_gnu_inline;
+  bool is_returns_twice;
   bool local_only;
   bool is_ctor;
   bool is_dtor;
@@ -605,6 +606,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_cleanup(tok, kind, &attr->cleanup_fn);
   bool_attr(tok, kind, "weak", &attr->is_weak);
   bool_attr(tok, kind, "gnu_inline", &attr->is_gnu_inline);
+  bool_attr(tok, kind, "returns_twice", &attr->is_returns_twice);
   cdtor_attr(tok, kind, "constructor", &attr->is_ctor, &attr->ctor_prior);
   cdtor_attr(tok, kind, "destructor", &attr->is_dtor, &attr->dtor_prior);
   str_attr(tok, kind, "alias", &attr->alias);
@@ -637,6 +639,9 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
 
   apply_cdtor_attr("destructor", name, &fn->is_dtor, &fn->dtor_prior, attr->dtor_prior, attr->is_dtor);
   DeclAttr(cdtor_attr, "destructor", &fn->is_dtor, &fn->dtor_prior);
+
+  fn->returns_twice |= attr->is_returns_twice;
+  DeclAttr(bool_attr, "returns_twice", &fn->returns_twice);
 
   if (equal(tok, "{")) {
     bool is_gnu_inline = attr->is_gnu_inline;
@@ -1397,6 +1402,7 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
       if (!name)
         error_tok(tok, "function name omitted");
       Obj *fn = func_prototype(ty, attr, name);
+      func_attr(fn, attr, name, tok);
       symbol_attr(fn, attr, name, tok);
       continue;
     }
@@ -3971,6 +3977,9 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
       (fn->ty->kind != TY_PTR || fn->ty->base->kind != TY_FUNC))
     error_tok(fn->tok, "not a function");
 
+  if (fn->kind == ND_VAR && fn->var->returns_twice)
+    current_fn->dont_reuse_stk = true;
+
   Type *ty = (fn->ty->kind == TY_FUNC) ? fn->ty : fn->ty->base;
   Obj *param = ty->is_oldstyle ? NULL : ty->param_list;
 
@@ -4347,10 +4356,6 @@ static Node *primary(Token **rest, Token *tok) {
       char *name = sc->var->name;
       if (!strcmp(name, "alloca"))
         dont_dealloc_vla = true;
-
-      if (strstr(name, "setjmp") || strstr(name, "savectx") ||
-          strstr(name, "vfork") || strstr(name, "getcontext"))
-        dont_reuse_stack = true;
     }
 
     if (sc) {
@@ -4495,7 +4500,13 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
   Obj *fn = find_func(name_str);
   if (!fn) {
     fn = new_gvar(name_str, ty);
-    fn->is_static = attr->is_static || (attr->is_inline && !attr->is_extern);
+
+    if (attr->is_static || (attr->is_inline && !attr->is_extern))
+      fn->is_static = true;
+
+    if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
+      strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
+      fn->returns_twice = true;
   } else if (!fn->is_static && attr->is_static) {
     error_tok(name, "static declaration follows a non-static declaration");
   }
@@ -4531,7 +4542,8 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->body->body = calc;
   }
 
-  if (fn_use_vla && !dont_dealloc_vla && !dont_reuse_stack)
+  if (fn_use_vla && !dont_dealloc_vla &&
+    (opt_reuse_stack && !current_fn->dont_reuse_stk))
     fn->dealloc_vla = true;
 
   leave_scope();

@@ -1732,6 +1732,7 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("destructor");
     PutAttr("gnu_inline");
     PutAttr("packed");
+    PutAttr("returns_twice");
     PutAttr("section");
     PutAttr("visibility");
     PutAttr("weak");

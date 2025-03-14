@@ -19,6 +19,7 @@ bool opt_fpic;
 bool opt_fpie;
 bool opt_femulated_tls;
 bool opt_optimize = true;
+bool opt_reuse_stack = true;
 bool opt_g;
 bool opt_func_sections;
 bool opt_data_sections;
@@ -435,7 +436,7 @@ static int parse_args(int argc, char **argv) {
       continue;
 
     if (startswith(argv[i], &arg, "-fstack-reuse=")) {
-      dont_reuse_stack = strcmp(arg, "all");
+      opt_reuse_stack = !strcmp(arg, "all");
       continue;
     }
 
