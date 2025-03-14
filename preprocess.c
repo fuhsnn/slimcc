@@ -1730,6 +1730,7 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("cleanup");
     PutAttr("constructor");
     PutAttr("destructor");
+    PutAttr("gnu_inline");
     PutAttr("packed");
     PutAttr("section");
     PutAttr("visibility");

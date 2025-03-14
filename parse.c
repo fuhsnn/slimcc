@@ -37,6 +37,7 @@ typedef struct {
   bool is_tls;
   bool is_constexpr;
   bool is_weak;
+  bool is_gnu_inline;
   bool local_only;
   bool is_ctor;
   bool is_dtor;
@@ -603,6 +604,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, kind, &attr->cleanup_fn);
   bool_attr(tok, kind, "weak", &attr->is_weak);
+  bool_attr(tok, kind, "gnu_inline", &attr->is_gnu_inline);
   cdtor_attr(tok, kind, "constructor", &attr->is_ctor, &attr->ctor_prior);
   cdtor_attr(tok, kind, "destructor", &attr->is_dtor, &attr->dtor_prior);
   str_attr(tok, kind, "alias", &attr->alias);
@@ -635,6 +637,12 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
 
   apply_cdtor_attr("destructor", name, &fn->is_dtor, &fn->dtor_prior, attr->dtor_prior, attr->is_dtor);
   DeclAttr(cdtor_attr, "destructor", &fn->is_dtor, &fn->dtor_prior);
+
+  if (equal(tok, "{")) {
+    bool is_gnu_inline = attr->is_gnu_inline;
+    DeclAttr(bool_attr, "gnu_inline", &is_gnu_inline);
+    fn->only_inline = is_gnu_inline && attr->is_inline && attr->is_extern;
+  }
 }
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
@@ -4533,6 +4541,9 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   emit_text(fn);
   arena_off(&ast_arena);
   end_funcgen();
+
+  if (fn->only_inline)
+    fn->is_definition = false;
 }
 
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {

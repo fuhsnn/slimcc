@@ -267,6 +267,7 @@ struct Obj {
 
   // Function
   bool is_inline;
+  bool only_inline;
   bool dealloc_vla;
   bool is_ctor;
   bool is_dtor;
