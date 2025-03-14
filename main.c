@@ -14,7 +14,7 @@ typedef enum {
 } LinkType;
 
 StringArray include_paths;
-bool opt_fcommon = true;
+bool opt_fcommon;
 bool opt_fpic;
 bool opt_fpie;
 bool opt_femulated_tls;
