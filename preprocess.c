@@ -1732,7 +1732,7 @@ static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
     if (equal_ext(tok, "alias") || equal_ext(tok, "aligned") || equal_ext(tok, "cleanup") ||
       equal_ext(tok, "constructor") || equal_ext(tok, "destructor") ||
       equal_ext(tok, "packed") || equal_ext(tok, "section") || equal_ext(tok, "visibility") ||
-      equal_ext(tok, "weak"))
+      equal_ext(tok, "weak") || equal_ext(tok, "gnu_inline"))
       return true;
   }
   return false;

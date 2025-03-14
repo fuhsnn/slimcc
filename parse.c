@@ -37,6 +37,7 @@ typedef struct {
   bool is_tls;
   bool is_constexpr;
   bool is_weak;
+  bool is_gnu_inline;
   bool local_only;
   bool is_ctor;
   bool is_dtor;
@@ -603,6 +604,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, &attr->cleanup_fn, kind);
   bool_attr("weak", tok, &attr->is_weak, kind);
+  bool_attr("gnu_inline", tok, &attr->is_gnu_inline, kind);
   cdtor_attr("constructor", tok, &attr->is_ctor, &attr->ctor_prior, kind);
   cdtor_attr("destructor", tok, &attr->is_dtor, &attr->dtor_prior, kind);
   str_attr("alias", tok, &attr->alias, kind);
@@ -4560,6 +4562,8 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
       if (equal(tok, "{")) {
         if (!first || scope->parent)
           error_tok(tok, "function definition is not allowed here");
+        if (attr->is_gnu_inline && attr->is_extern && attr->is_inline)
+          continue;
         func_definition(&tok, tok, fn, ty);
         return tok;
       }
