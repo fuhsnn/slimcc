@@ -878,7 +878,9 @@ static LinkType link_type(StringArray *arr, char *ldso_path) {
   return type;
 }
 
-static void link_libgcc(StringArray *arr, bool is_static) {
+static void link_libgcc(StringArray *arr, bool link_libgcc, bool is_static) {
+  if (!link_libgcc)
+    return;
   strarray_push(arr, "-lgcc");
 
   if (is_static) {
@@ -926,18 +928,20 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
     }
     strarray_push(&arr, format("%s/crti.o", libpath));
 
-    switch (lt) {
-    case LT_STATIC_PIE:
-    case LT_SHARED:
-    case LT_PIE:
-      strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath));
-      break;
-    case LT_STATIC:
-      strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath));
-      break;
-    case LT_DYNAMIC:
-      strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath));
-      break;
+    if (gcc_libpath) {
+      switch (lt) {
+      case LT_STATIC_PIE:
+      case LT_SHARED:
+      case LT_PIE:
+        strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath));
+        break;
+      case LT_STATIC:
+        strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath));
+        break;
+      case LT_DYNAMIC:
+        strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath));
+        break;
+      }
     }
   }
 
@@ -950,28 +954,29 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
   if (!opt_nodefaultlibs && lt != LT_RELO) {
     if (lt == LT_STATIC_PIE || lt == LT_STATIC) {
       strarray_push(&arr, "--start-group");
-      link_libgcc(&arr, true);
+      link_libgcc(&arr, gcc_libpath, true);
       link_libc(&arr);
       strarray_push(&arr, "--end-group");
     } else {
-      link_libgcc(&arr, opt_static_libgcc);
+      link_libgcc(&arr, gcc_libpath, opt_static_libgcc);
       link_libc(&arr);
-      link_libgcc(&arr, opt_static_libgcc);
+      link_libgcc(&arr, gcc_libpath, opt_static_libgcc);
     }
   }
 
   if (!opt_nostartfiles && lt != LT_RELO) {
-    switch (lt) {
-    case LT_STATIC_PIE:
-    case LT_SHARED:
-    case LT_PIE:
-      strarray_push(&arr, format("%s/crtendS.o", gcc_libpath));
-      break;
-    case LT_STATIC:
-    case LT_DYNAMIC:
-      strarray_push(&arr, format("%s/crtend.o", gcc_libpath));
+    if (gcc_libpath) {
+      switch (lt) {
+      case LT_STATIC_PIE:
+      case LT_SHARED:
+      case LT_PIE:
+        strarray_push(&arr, format("%s/crtendS.o", gcc_libpath));
+        break;
+      case LT_STATIC:
+      case LT_DYNAMIC:
+        strarray_push(&arr, format("%s/crtend.o", gcc_libpath));
+      }
     }
-
     strarray_push(&arr, format("%s/crtn.o", libpath));
   }
   strarray_push(&arr, NULL);

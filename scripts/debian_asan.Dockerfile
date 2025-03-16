@@ -35,6 +35,6 @@ RUN bash scripts/linux_thirdparty.bash install_libtool
 RUN useradd -m non-root -s /bin/bash && \
  su non-root -c "git config --global advice.detachedHead false" && \
  su non-root -c "git config --global init.defaultBranch init" && \
- mv scripts/linux_thirdparty.bash /home/non-root
+ cp scripts/*sh /home/non-root
 
 WORKDIR /home/non-root

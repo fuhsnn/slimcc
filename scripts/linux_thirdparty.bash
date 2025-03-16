@@ -1,53 +1,8 @@
 set -eu
 set -o pipefail
 
-# utilities
-
-fix_configure() {
- sed -i 's/^\s*lt_prog_compiler_wl=$/lt_prog_compiler_wl=-Wl,/g' "$1"
- sed -i 's/^\s*lt_prog_compiler_pic=$/lt_prog_compiler_pic=-fPIC/g' "$1"
- sed -i 's/^\s*lt_prog_compiler_static=$/lt_prog_compiler_static=-static/g' "$1"
-}
-
-replace_line() {
- sed -i s/^"$1"$/"$2"/g "$3"
-}
-
-github_tar() {
-  mkdir -p "$2"
-  curl -fL https://github.com/"$1"/"$2"/archive/refs/tags/"$3".tar.gz | tar xz -C "$2" --strip-components=1
-  cd "$2"
-}
-
-github_clone() {
-  git clone --depth 1 --recurse-submodules --shallow-submodules --branch "$3" https://github.com/"$1"/"$2"
-  cd "$2"
-}
-
-git_fetch() {
- mkdir -p "$3" && cd "$3"
- git init
- git remote add origin "$1"
- git fetch --depth 1 origin "$2"
- git checkout FETCH_HEAD
-}
-
-url_tar() {
-  mkdir -p "$2"
-  curl -fL "$1" | tar xz -C "$2" --strip-components=1
-  cd "$2"
-}
-
-install_libtool() {
- url_tar https://ftp.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz __libtool
- fix_configure ./configure
- fix_configure libltdl/configure
- ./configure
- make -j2 install
- cd ../ && rm -rf __libtool
-}
-
-# tests
+. `dirname $0`/utils.sh
+. `dirname $0`/posix_tests.sh
 
 test_cello() {
  git_fetch https://github.com/orangeduck/Cello 61ee5c3d9bca98fd68af575e9704f5f02533ae26 cello
@@ -191,14 +146,6 @@ test_python() {
  ./python -m test -j4 --exclude "${skip_tests[@]}"
 }
 
-test_qbe_hare() {
- git_fetch git://c9x.me/qbe.git 90050202f57b22243f5d3dd434a81df2f89de9ed qbe
- make CC="$CC" check
- url_tar https://git.sr.ht/~sircmpwn/harec/archive/0.24.2.tar.gz harec
- mv configs/linux.mk config.mk
- make CC="$CC" QBE=../qbe check
-}
-
 test_sqlite() {
  github_tar sqlite sqlite version-3.49.1
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
@@ -239,12 +186,6 @@ test_vim() {
  github_tar vim vim v9.1.1200
  ./configure
  make && make testtiny
-}
-
-test_zlib() {
- github_tar madler zlib v1.3.1
- ./configure
- make test
 }
 
 test_zstd() {

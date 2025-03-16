@@ -27,7 +27,7 @@ $(TESTS): slimcc test/host/common.o
 
 test: $(TESTS)
 	for i in $(TESTS); do echo $$i; ./$$i || exit 1; echo; done
-	sh test/driver.sh $(PWD)/slimcc $(CC)
+	$(SHELL) test/driver.sh $(PWD)/slimcc $(CC)
 	./slimcc -hashmap-test
 
 # Stage 2
@@ -51,7 +51,7 @@ $(TESTS_S2): slimcc-stage2 test/host/common.o
 
 test-stage2: $(TESTS_S2)
 	for i in $(TESTS_S2); do echo $$i; ./$$i || exit 1; echo; done
-	sh test/driver.sh $(PWD)/slimcc-stage2 $(CC)
+	$(SHELL) test/driver.sh $(PWD)/slimcc-stage2 $(CC)
 	./slimcc-stage2 -hashmap-test
 
 # Misc.
@@ -74,8 +74,7 @@ lto-mi: clean
 	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch" LDFLAGS="-lmimalloc"
 
 clean:
-	rm -rf slimcc slimcc-stage2
-	find * -type f '(' -name '*~' -o -name '*.o' ')' -exec rm {} ';'
-	find test/* -type f '(' -name '*~' -o -name '*.exe' ')' -exec rm {} ';'
+	rm -f slimcc slimcc-stage2
+	rm -f *.o test/*.o test/*.exe
 
 .PHONY: test clean test-stage2
