@@ -2607,27 +2607,27 @@ static bool gen_cmp_opt_gp(Node *node, NodeKind *kind) {
   return false;
 }
 
-static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int ctrl, bool swap) {
+static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int pass) {
   int64_t val;
   char ofs[STRBUF_SZ], *ptr;
   char *ax = reg_ax(sz);
 
-  switch (abs(ctrl)) {
-  case 1:
+  switch (pass) {
+  case 0:
     if (is_const_expr(rhs, &val)) {
       gen_expr(lhs);
       imm_arith(kind, sz, limit_imm(val, sz));
       return true;
     }
     break;
-  case 2:
+  case 1:
     if (is_memop(rhs, ofs, &ptr, true)) {
       gen_expr(lhs);
       Printftn("%s %s(%s), %s", arith_ins(kind), ofs, ptr, ax);
       return true;
     }
     break;
-  case 3:
+  case 2:
     if (is_int_to_int_cast(rhs) && is_memop(rhs->lhs, ofs, &ptr, true) &&
       sz <= rhs->lhs->ty->size) {
       gen_expr(lhs);
@@ -2635,7 +2635,7 @@ static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int c
       return true;
     }
     break;
-  case 4:
+  case 3:
     if (is_int_to_int_cast(rhs) && is_memop(rhs->lhs, ofs, &ptr, true) &&
       sz > rhs->lhs->ty->size) {
       gen_expr(lhs);
@@ -2650,12 +2650,6 @@ static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int c
     }
     break;
   }
-  if (swap && gen_arith_opt_gp2(kind, sz, rhs, lhs, -ctrl, false))
-    return true;
-
-  if (ctrl > 0 && ctrl < 4 && gen_arith_opt_gp2(kind, sz, lhs, rhs, ctrl + 1, swap))
-    return true;
-
   return false;
 }
 
@@ -2666,11 +2660,15 @@ static bool gen_arith_opt_gp(Node *node, int sz) {
   case ND_BITAND:
   case ND_BITOR:
   case ND_BITXOR:
-    if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, 1, true))
-      return true;
+    for (int pass = 0; pass <= 3; pass++)
+      if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, pass) ||
+        gen_arith_opt_gp2(node->kind, sz, node->rhs, node->lhs, pass))
+        return true;
+    break;
   case ND_SUB:
-    if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, 1, false))
-      return true;
+    for (int pass = 0; pass <= 3; pass++)
+      if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, pass))
+        return true;
   }
   return false;
 }
