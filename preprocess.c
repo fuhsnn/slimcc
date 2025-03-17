@@ -982,10 +982,10 @@ char *search_include_paths(char *filename) {
   return search_include_paths3(filename, NULL);
 }
 
-static char *search_include_next(char *filename, int *idx) {
+static char *search_include_next(char *filename, char *cur_file, int *idx) {
   for (; *idx < include_paths.len; (*idx)++) {
     char *path = format("%s/%s", include_paths.data[*idx], filename);
-    if (file_exists(path))
+    if (file_exists(path) && strcmp(path, cur_file))
       return path;
   }
   return NULL;
@@ -1232,7 +1232,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
 
     int incl_no = tok->file->incl_no + 1;
     char *filename = read_include_filename(split_line(&tok, tok->next), &(bool){0});
-    char *path = search_include_next(filename, &incl_no);
+    char *path = search_include_next(filename, start->file->name, &incl_no);
     return include_file(tok, path, start->next->next, &incl_no);
   }
 
