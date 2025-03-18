@@ -444,22 +444,29 @@ static int parse_args(int argc, char **argv) {
       startswith(argv[i], &opt_use_ld, "-fuse-ld="))
       continue;
 
-    if (set_true(argv[i], "-r", &opt_r) ||
-      set_true(argv[i], "-rdynamic", &opt_rdynamic) ||
-      set_true(argv[i], "-static", &opt_static) ||
-      set_true(argv[i], "-static-pie", &opt_static_pie) ||
-      set_true(argv[i], "-static-libgcc", &opt_static_libgcc) ||
-      set_true(argv[i], "-shared", &opt_shared))
-      continue;
+    if (argv[i][0] == '-') {
+      arg = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
 
-    if (set_true(argv[i], "-pie", &opt_pie) ||
-      set_true(argv[i], "-nopie", &opt_nopie))
-      continue;
+      if (set_true(arg, "r", &opt_r) ||
+        set_true(arg, "rdynamic", &opt_rdynamic) ||
+        set_true(arg, "static", &opt_static) ||
+        set_true(arg, "static-pie", &opt_static_pie) ||
+        set_true(arg, "static-libgcc", &opt_static_libgcc) ||
+        set_true(arg, "shared", &opt_shared) ||
+        set_true(arg, "pie", &opt_pie) ||
+        set_true(arg, "nopie", &opt_nopie))
+        continue;
 
-    if (!strcmp(argv[i], "-no-pie")) {
-      opt_pie = false;
-      opt_nopie = true;
-      continue;
+      if (!strcmp(arg, "no-pie")) {
+        opt_pie = false;
+        opt_nopie = true;
+        continue;
+      }
+      if (!strcmp(arg, "pthread")) {
+        opt_pthread = true;
+        define_macro_cli("_REENTRANT");
+        continue;
+      }
     }
 
     if (!strcmp(argv[i], "-nostdinc")) {
@@ -474,12 +481,6 @@ static int parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-nostdlib")) {
       opt_nostartfiles = opt_nodefaultlibs = true;
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-pthread")) {
-      opt_pthread = true;
-      define_macro_cli("_REENTRANT");
       continue;
     }
 
