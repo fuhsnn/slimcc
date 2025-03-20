@@ -55,7 +55,7 @@ test_cello() {
 }
 
 test_curl() {
- github_tar curl curl curl-8_10_1
+ github_tar curl curl curl-8_11_1
  sed -i 's/^if(MSVC OR CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")$/if (TRUE)/g' tests/CMakeLists.txt
  mkdir build && cd "$_"
  cmake ../ -DCMAKE_C_FLAGS=-fPIC
@@ -76,7 +76,7 @@ test_git() {
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.46
+ github_tar pnggroup libpng v1.6.47
  fix_configure ./configure
  ./configure
  make test
@@ -100,11 +100,11 @@ test_lua() {
 }
 
 test_metalang99() {
- github_tar hirrolot datatype99 v1.6.4
+ github_tar hirrolot datatype99 v1.6.5
  sh scripts/test-all.sh
- github_tar hirrolot interface99 v1.0.1
+ github_tar hirrolot interface99 v1.0.2
  sh scripts/test-all.sh
- github_tar hirrolot metalang99 v1.13.3
+ github_tar hirrolot metalang99 v1.13.5
  sh scripts/test-all.sh
 }
 
@@ -171,7 +171,7 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_17_3
+ github_tar postgres postgres REL_17_4
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  ./configure && make && make check
@@ -248,7 +248,7 @@ test_zlib() {
 }
 
 test_zstd() {
- github_tar facebook zstd v1.5.6
+ github_tar facebook zstd v1.5.7
  replace_line "#if defined(__ELF__) && defined(__GNUC__)" "#if 1" lib/decompress/huf_decompress_amd64.S
  make check
 }
