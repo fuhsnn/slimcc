@@ -4507,8 +4507,12 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
     if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
       strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
       fn->returns_twice = true;
-  } else if (!fn->is_static && attr->is_static) {
-    error_tok(name, "static declaration follows a non-static declaration");
+  } else {
+    if (!fn->ty->is_oldstyle && !fn->ty->param_list && ty->param_list)
+      error_tok(name, "function prototype mismatch");
+
+    if (!fn->is_static && attr->is_static)
+      error_tok(name, "static declaration follows a non-static declaration");
   }
   fn->is_inline |= attr->is_inline;
   return fn;
