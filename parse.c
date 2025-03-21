@@ -297,6 +297,10 @@ Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
   ty = unqual(ty);
 
+  if ((expr->ty->kind == TY_VOID && ty->kind != TY_VOID) ||
+    (expr->ty->base && is_flonum(ty)))
+    error_tok(expr->tok, "invalid cast");
+
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .lhs = expr, .ty = ty};
   if (opt_optimize) {
     if ((is_integer(ty) && is_const_expr(&tmp_node, &tmp_node.val)) ||
