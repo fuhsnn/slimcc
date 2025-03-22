@@ -178,6 +178,7 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
+static Node *new_node(NodeKind kind, Token *tok);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -201,6 +202,27 @@ static void leave_scope(void) {
     free(scope->tags.buckets);
   }
   scope = scope->parent;
+}
+
+static DeferStmt *new_block_scope(void) {
+  enter_scope();
+  return current_defr;
+}
+
+static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
+  leave_scope();
+
+  if (stmt_node->kind == ND_RETURN || stmt_node->kind == ND_GOTO)
+    current_defr = defr;
+
+  if (defr == current_defr)
+    return stmt_node;
+
+  Node *blk = new_node(ND_BLOCK, stmt_node->tok);
+  blk->defr_start = current_defr;
+  blk->defr_end = current_defr = defr;
+  blk->body = stmt_node;
+  return blk;
 }
 
 static bool is_constant_context(void) {
@@ -2271,20 +2293,12 @@ static Node *asm_stmt(Token **rest, Token *tok) {
 }
 
 static Node *secondary_block(Token **rest, Token *tok) {
-  Node *node = new_node(ND_BLOCK, tok);
+  if (equal(tok, "{"))
+    return compound_stmt(rest, tok->next, ND_BLOCK);
 
-  node->defr_end = current_defr;
-  enter_scope();
-
-  node->body = stmt(rest, tok, true);
-
-  node->defr_start = current_defr;
-  current_defr = node->defr_end;
-  leave_scope();
-
-  if (node->body->kind == ND_RETURN || node->body->kind == ND_GOTO)
-    node->defr_start = node->defr_end;
-  return node;
+  DeferStmt *dfr = new_block_scope();
+  Node *node = stmt(rest, tok, true);
+  return leave_block_scope(dfr, node);
 }
 
 static void loop_body(Token **rest, Token *tok, Node *node) {
@@ -2577,11 +2591,11 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
 // compound-stmt = (typedef | declaration | stmt)* "}"
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   Node *node = new_node(kind, tok);
-  Node head = {0};
-  Node *cur = &head;
-
   node->defr_end = current_defr;
   enter_scope();
+
+  Node head = {0};
+  Node *cur = &head;
 
   while (!equal(tok, "}")) {
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
@@ -2621,13 +2635,12 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
     }
   }
 
+  if (cur->kind == ND_RETURN || cur->kind == ND_GOTO)
+    current_defr = node->defr_end;
+
   node->defr_start = current_defr;
   current_defr = node->defr_end;
   leave_scope();
-
-  if (kind == ND_BLOCK)
-    if (cur->kind == ND_RETURN || cur->kind == ND_GOTO)
-      node->defr_start = node->defr_end;
 
   if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
     add_type(cur->lhs);
