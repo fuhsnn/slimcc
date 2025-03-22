@@ -4,7 +4,7 @@ TEST_SRCS!=ls test/*.c
 
 TEST_FLAGS=-Itest -fenable-universal-char -fcommon -std=c23
 
-.SUFFIXES: .exe .stage2.o .stage2.exe
+.SUFFIXES: .exe .stage2.o .stage2.exe .asan.o .asan.exe
 
 # Stage 1
 
@@ -26,8 +26,8 @@ $(TESTS): slimcc test/host/common.o
 	./slimcc $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
 
 test: $(TESTS)
-	for i in $(TESTS); do echo $$i; ./$$i || exit 1; echo; done
-	sh test/driver.sh $(PWD)/slimcc $(CC)
+	for i in $(TESTS); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	$(SHELL) test/driver.sh $(PWD)/slimcc $(CC)
 	./slimcc -hashmap-test
 
 # Stage 2
@@ -50,9 +50,34 @@ $(TESTS_S2): slimcc-stage2 test/host/common.o
 	./slimcc-stage2 $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
 
 test-stage2: $(TESTS_S2)
-	for i in $(TESTS_S2); do echo $$i; ./$$i || exit 1; echo; done
-	sh test/driver.sh $(PWD)/slimcc-stage2 $(CC)
+	for i in $(TESTS_S2); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	$(SHELL) test/driver.sh $(PWD)/slimcc-stage2 $(CC)
 	./slimcc-stage2 -hashmap-test
+
+# Asan build
+
+OBJS_ASAN=$(SRCS:.c=.asan.o)
+
+$(OBJS_ASAN): slimcc.h
+
+.c.asan.o:
+	$(CC) $(CFLAGS) -fsanitize=address -g -o $@ -c $<
+
+slimcc-asan: $(OBJS_ASAN)
+	$(CC) $(CFLAGS) -fsanitize=address -g -o $@ $(OBJS_ASAN) $(LDFLAGS)
+
+TESTS_ASAN=$(TEST_SRCS:.c=.asan.exe)
+
+$(TESTS_ASAN): slimcc-asan test/host/common.o
+
+.c.asan.exe:
+	./slimcc-asan $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+
+test-asan: $(TESTS_ASAN)
+	for i in $(TESTS_ASAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	$(SHELL) test/driver.sh $(PWD)/slimcc-asan $(CC)
+	$(MAKE) slimcc CC=./slimcc-asan -B
+	./slimcc-asan -hashmap-test
 
 # Misc.
 
@@ -60,9 +85,6 @@ test-all: test test-stage2
 
 warn: $(SRCS)
 	$(CC) -fsyntax-only -Wall -Wpedantic -Wno-switch $(CFLAGS) $(SRCS)
-
-asan: clean
-	$(MAKE) CFLAGS="-g -fsanitize=address -Wno-switch" LDFLAGS=
 
 lto: clean
 	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch"
@@ -74,8 +96,7 @@ lto-mi: clean
 	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch" LDFLAGS="-lmimalloc"
 
 clean:
-	rm -rf slimcc slimcc-stage2
-	find * -type f '(' -name '*~' -o -name '*.o' ')' -exec rm {} ';'
-	find test/* -type f '(' -name '*~' -o -name '*.exe' ')' -exec rm {} ';'
+	rm -f slimcc slimcc-stage2 slimcc-asan
+	rm -f *.o test/*.o test/*.exe test/host/*.o
 
-.PHONY: test clean test-stage2
+.PHONY: test clean test-stage2 test-asan
