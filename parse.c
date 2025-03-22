@@ -143,7 +143,7 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
-static Node *stmt(Token **rest, Token *tok, bool is_labeled);
+static Node *stmt(Token **rest, Token *tok);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
@@ -175,7 +175,7 @@ static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
-static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
+static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 static Node *new_node(NodeKind kind, Token *tok);
@@ -215,7 +215,7 @@ static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
   if (stmt_node->kind == ND_RETURN || stmt_node->kind == ND_GOTO)
     current_defr = defr;
 
-  if (defr == current_defr)
+  if (defr == current_defr && !stmt_node->next)
     return stmt_node;
 
   Node *blk = new_node(ND_BLOCK, stmt_node->tok);
@@ -2336,13 +2336,79 @@ static Node *asm_stmt(Token **rest, Token *tok) {
   return node;
 }
 
+static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
+  for (;;) {
+    if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      Node *node = new_node(ND_LABEL, tok);
+      node->label = strndup(tok->loc, tok->len);
+      node->unique_label = new_unique_name();
+      node->defr_start = current_defr;
+      node->goto_next = labels;
+      (*cur_node) = (*cur_node)->next = labels = node;
+      tok = tok->next->next;
+      continue;
+    }
+
+    if (equal(tok, "case") || equal(tok, "default")) {
+      if (!current_switch)
+        error_tok(tok, "stray case");
+      if (current_defr != brk_defr)
+        error_tok(tok, "illegal jump");
+
+      Node *node = new_node(ND_CASE, tok);
+      node->label = new_unique_name();
+
+      if (equal(tok, "default")) {
+        tok = skip(tok->next, ":");
+        current_switch->default_case = node;
+        (*cur_node) = (*cur_node)->next = node;
+        continue;
+      }
+
+      int64_t begin = const_expr(&tok, tok->next);
+      int64_t end;
+
+      // [GNU] Case ranges, e.g. "case 1 ... 5:"
+      if (equal(tok, "..."))
+        end = const_expr(&tok, tok->next);
+      else
+        end = begin;
+
+      Type *cond_ty = current_switch->cond->ty;
+      if (cond_ty->size <= 4) {
+        if (!cond_ty->is_unsigned)
+          begin = (int32_t)begin, end = (int32_t)end;
+        else
+          begin = (uint32_t)begin, end = (uint32_t)end;
+      }
+      if ((!cond_ty->is_unsigned && (end < begin)) ||
+        ((cond_ty->is_unsigned && ((uint64_t)end < begin))))
+        error_tok(tok, "empty case range specified");
+
+      tok = skip(tok, ":");
+      node->begin = begin;
+      node->end = end;
+      node->case_next = current_switch->case_next;
+      current_switch->case_next = node;
+      (*cur_node) = (*cur_node)->next = node;
+      continue;
+    }
+
+    *rest = tok;
+    return;
+  }
+}
+
 static Node *secondary_block(Token **rest, Token *tok) {
   if (equal(tok, "{"))
     return compound_stmt(rest, tok->next, ND_BLOCK);
 
   DeferStmt *dfr = new_block_scope();
-  Node *node = stmt(rest, tok, true);
-  return leave_block_scope(dfr, node);
+  Node head = {0};
+  Node *cur = &head;
+  label_stmt(&cur, &tok, tok);
+  cur->next = stmt(rest, tok);
+  return leave_block_scope(dfr, head.next);
 }
 
 static void loop_body(Token **rest, Token *tok, Node *node) {
@@ -2378,7 +2444,7 @@ static void loop_body(Token **rest, Token *tok, Node *node) {
 //      | ident ":" stmt
 //      | "{" compound-stmt
 //      | expr-stmt
-static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
+static Node *stmt(Token **rest, Token *tok) {
   if (equal(tok, "return")) {
     Node *node = new_node(ND_RETURN, tok);
     node->defr_start = current_defr;
@@ -2435,65 +2501,6 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     brk_defr = defr;
 
     return leave_block_scope(dfr, node);
-  }
-
-  if (equal(tok, "case")) {
-    if (!current_switch)
-      error_tok(tok, "stray case");
-    if (current_defr != brk_defr)
-      error_tok(tok, "jump crosses VLA initialization");
-
-    Node *node = new_node(ND_CASE, tok);
-    node->label = new_unique_name();
-
-    int64_t begin = const_expr(&tok, tok->next);
-    int64_t end;
-
-    // [GNU] Case ranges, e.g. "case 1 ... 5:"
-    if (equal(tok, "..."))
-      end = const_expr(&tok, tok->next);
-    else
-      end = begin;
-
-    Type *cond_ty = current_switch->cond->ty;
-    if (cond_ty->size <= 4) {
-      if (!cond_ty->is_unsigned)
-        begin = (int32_t)begin, end = (int32_t)end;
-      else
-        begin = (uint32_t)begin, end = (uint32_t)end;
-    }
-    if ((!cond_ty->is_unsigned && (end < begin)) ||
-      ((cond_ty->is_unsigned && ((uint64_t)end < begin))))
-      error_tok(tok, "empty case range specified");
-
-    tok = skip(tok, ":");
-    if (is_labeled)
-      node->lhs = stmt(rest, tok, true);
-    else
-      *rest = tok;
-    node->begin = begin;
-    node->end = end;
-    node->case_next = current_switch->case_next;
-    current_switch->case_next = node;
-    return node;
-  }
-
-  if (equal(tok, "default")) {
-    if (!current_switch)
-      error_tok(tok, "stray default");
-    if (current_defr != brk_defr)
-      error_tok(tok, "jump crosses VLA initialization");
-
-    Node *node = new_node(ND_CASE, tok);
-    node->label = new_unique_name();
-
-    tok = skip(tok->next, ":");
-    if (is_labeled)
-      node->lhs = stmt(rest, tok, true);
-    else
-      *rest = tok;
-    current_switch->default_case = node;
-    return node;
   }
 
   if (equal(tok, "for")) {
@@ -2606,22 +2613,6 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     return node;
   }
 
-  if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-    Node *node = new_node(ND_LABEL, tok);
-    node->label = strndup(tok->loc, tok->len);
-
-    tok = tok->next->next;
-    if (is_labeled)
-      node->lhs = stmt(rest, tok, true);
-    else
-      *rest = tok;
-    node->unique_label = new_unique_name();
-    node->goto_next = labels;
-    node->defr_start = current_defr;
-    labels = node;
-    return node;
-  }
-
   if (equal(tok, "_Defer")) {
     DeferStmt *defr = new_defr(DF_DEFER_STMT);
     defr->stmt = secondary_block(rest, tok->next);
@@ -2644,41 +2635,37 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   Node head = {0};
   Node *cur = &head;
 
-  while (!equal(tok, "}")) {
+  for (;;) {
+    label_stmt(&cur, &tok, tok);
+
+    if (equal(tok, "}"))
+      break;
+
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       static_assertion(&tok, tok->next);
       continue;
     }
 
-    if (!is_typename(tok) || (tok->kind == TK_IDENT && equal(tok->next, ":"))) {
-      cur = cur->next = stmt(&tok, tok, false);
+    if (!is_typename(tok)) {
+      cur = cur->next = stmt(&tok, tok);
       add_type(cur);
       continue;
     }
 
-    {
-      VarAttr attr = {0};
-      Type *basety = declspec(&tok, tok, &attr);
+    VarAttr attr = {0};
+    Type *basety = declspec(&tok, tok, &attr);
 
-      if (attr.is_typedef) {
-        Node *expr = parse_typedef(&tok, tok, basety, &attr);
-        if (expr) {
-          cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
-          add_type(cur);
-        }
-        continue;
-      }
+    Node *init_expr = NULL;
+    if (attr.is_extern)
+      global_declaration(&tok, tok, basety, &attr);
+    else if (attr.is_typedef)
+      init_expr = parse_typedef(&tok, tok, basety, &attr);
+    else
+      init_expr = declaration(&tok, tok, basety, &attr);
 
-      if (attr.is_extern) {
-        tok = global_declaration(tok, basety, &attr);
-        continue;
-      }
-
-      Node *expr = declaration(&tok, tok, basety, &attr);
-      if (expr) {
-        cur = cur->next = new_unary(ND_EXPR_STMT, expr, tok);
-        add_type(cur);
-      }
+    if (init_expr) {
+      cur = cur->next = new_unary(ND_EXPR_STMT, init_expr, tok);
+      add_type(cur);
     }
   }
 
@@ -4528,7 +4515,7 @@ static void resolve_goto_labels(void) {
       if (defr == dest->defr_start)
         break;
     if (!defr)
-      error_tok(x->tok->next, "jump crosses defer statment");
+      error_tok(x->tok->next, "illegal jump");
 
     x->defr_end = defr;
   }
@@ -4626,7 +4613,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->is_definition = false;
 }
 
-static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
+static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
@@ -4645,7 +4632,8 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
         if (!first || scope->parent)
           error_tok(tok, "function definition is not allowed here");
         func_definition(&tok, tok, fn, ty);
-        return tok;
+        *rest = tok;
+        return;
       }
 
       if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
@@ -4696,7 +4684,7 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr) {
     else if (is_definition)
       var->is_tentative = true;
   }
-  return tok;
+  *rest = tok;
 }
 
 static Token *free_parsed_tok(Token *tok, Token *end) {
@@ -4758,7 +4746,7 @@ Obj *parse(Token *tok) {
     }
 
     // Global declarations
-    tok = global_declaration(tok, basety, &attr);
+    global_declaration(&tok, tok, basety, &attr);
     arena_off(&node_arena);
   }
 

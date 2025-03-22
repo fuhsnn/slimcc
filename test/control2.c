@@ -28,6 +28,15 @@ lab3:
   goto lab1;
 }
 
+int label_in_secondary_block(int i) {
+  if (i == 2)
+    goto labl;
+  if (i == 3)
+    labl:
+      return 1;
+  return 0;
+}
+
 int main(void){
   ASSERT(2, ({ uint32_t i=0; switch(i){case 0 ...0xFFFFFFFF: i=2;} i; }));
   ASSERT(2, ({ int32_t i=0; switch(i){case 0x80000000 ...0x7FFFFFFF: i=2;} i; }));
@@ -39,7 +48,9 @@ int main(void){
 
   ASSERT(2, ({ int64_t i=0; switch(0x123456789){case 0x123456789: i=2;} i; }));
 
-
+  ASSERT(0, label_in_secondary_block(1));
+  ASSERT(1, label_in_secondary_block(2));
+  ASSERT(1, label_in_secondary_block(3));
   ASSERT(77, c23_label());
 
   printf("OK\n");
