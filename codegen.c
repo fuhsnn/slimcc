@@ -2098,9 +2098,9 @@ static void gen_stmt(Node *node) {
     Printfsn("%s:", node->cont_label);
     if (node->inc)
       gen_void_expr(node->inc);
+    gen_defr(node);
     Printftn("jmp .L.begin.%"PRIi64, c);
     Printfsn("%s:", node->brk_label);
-    gen_defr(node);
     return;
   }
   case ND_DO: {

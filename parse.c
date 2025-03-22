@@ -1413,115 +1413,159 @@ static void defr_cleanup(Obj *var, Obj *fn, Token *tok) {
   defr2->cleanup_fn = n;
 }
 
+static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr, Obj **cond_var) {
+  Node *expr = NULL;
+  Token *name = NULL;
+  int alt_align = attr ? attr->align : 0;
+
+  Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
+
+  if (ty->kind == TY_FUNC) {
+    if (!name)
+      error_tok(tok, "function name omitted");
+    Obj *fn = func_prototype(ty, attr, name);
+    func_attr(fn, attr, name, tok);
+    symbol_attr(fn, attr, name, tok);
+    *rest = tok;
+    return expr;
+  }
+  if (ty->kind == TY_VOID)
+    error_tok(tok, "variable declared void");
+  if (!name)
+    error_tok(tok, "variable name omitted");
+
+  Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
+  DeclAttr(attr_cleanup, &cleanup_fn);
+
+  // Generate code for computing a VLA size. We need to do this
+  // even if ty is not VLA because ty may be a pointer to VLA
+  // (e.g. int (*foo)[n][m] where n and m are variables.)
+  chain_expr(&expr, compute_vla_size(ty, tok));
+
+  if (attr && attr->is_static) {
+    if (ty->kind == TY_VLA)
+      error_tok(tok, "variable length arrays cannot be 'static'");
+
+    // static local variable
+    Obj *var = new_static_lvar(ty);
+    var->is_tls = attr->is_tls;
+    if (alt_align)
+      var->align = alt_align;
+    push_scope(get_ident(name))->var = var;
+
+    if (attr->is_constexpr) {
+      if (!equal(tok, "="))
+        error_tok(tok, "constexpr variable not initialized");
+      constexpr_initializer(&tok, tok->next, var, var);
+      *rest = tok;
+      return expr;
+    }
+    if (equal(tok, "=")) {
+      bool ctx = is_global_init_context;
+      is_global_init_context = true;
+      gvar_initializer(&tok, tok->next, var);
+      is_global_init_context = ctx;
+    }
+    *rest = tok;
+    return expr;
+  }
+
+  if (ty->kind == TY_VLA) {
+    if (equal(tok, "="))
+      error_tok(tok, "variable-sized object may not be initialized");
+
+    fn_use_vla = true;
+    // Variable length arrays (VLAs) are translated to alloca() calls.
+    // For example, `int x[n+2]` is translated to `tmp = n + 2,
+    // x = alloca(tmp)`.
+    Obj *var = new_lvar(get_ident(name), ty);
+    if (alt_align)
+      var->align = alt_align;
+    chain_expr(&expr, new_vla(new_var_node(ty->vla_size, name), var));
+
+    DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
+    defr->vla = var;
+
+    if (cleanup_fn)
+      defr_cleanup(var, cleanup_fn, tok);
+    *rest = tok;
+    return expr;
+  }
+
+  Obj *var = new_lvar(get_ident(name), ty);
+  if (alt_align)
+    var->align = alt_align;
+
+  if (cleanup_fn)
+    defr_cleanup(var, cleanup_fn, tok);
+
+  if (attr->is_register &&
+    (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__"))) {
+    var->asm_str = str_tok(&tok, skip(tok->next, "("));
+    tok = skip(tok, ")");
+  }
+
+  if (attr && attr->is_constexpr) {
+    if (!equal(tok, "="))
+      error_tok(tok, "constexpr variable not initialized");
+    Obj *init_var = new_static_lvar(ty);
+    constexpr_initializer(&tok, tok->next, init_var, var);
+    chain_expr(&expr, new_binary(ND_ASSIGN,
+      new_var_node(var, tok), new_var_node(init_var, tok), tok));
+    *cond_var = var;
+    *rest = tok;
+    return expr;
+  }
+  if (equal(tok, "=")) {
+    chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
+    *cond_var = var;
+  }
+  if (var->ty->size < 0)
+    error_tok(name, "variable has incomplete type");
+  if (var->ty->kind == TY_VOID)
+    error_tok(name, "variable declared void");
+
+  *rest = tok;
+  return expr;
+}
+
+static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int clause) {
+  Node *n = NULL;
+  Obj *var = NULL;
+
+  for (; is_typename(tok); var = NULL) {
+    clause++;
+
+    VarAttr attr = {0};
+    Type *basety = declspec(&tok, tok, &attr);
+
+    chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
+    for (; consume(&tok, tok, ","); var = NULL)
+      chain_expr(&n, declaration2(&tok, tok, basety, &attr, &(Obj *){0}));
+
+    if (!(clause == 1 && consume(&tok, tok, ";")))
+      break;
+  }
+
+  if (clause < 2 && !equal(tok, stopper)) {
+    chain_expr(&n, expr(&tok, tok));
+  } else {
+    if (!var)
+      error_tok(tok, "invalid condition");
+    chain_expr(&n, new_var_node(var, tok));
+  }
+  *rest = skip(tok, stopper);
+  return n;
+}
+
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   Node *expr = NULL;
 
   bool first = true;
-  for (; comma_list(rest, &tok, ";", !first); first = false) {
-    Token *name = NULL;
-    int alt_align = attr ? attr->align : 0;
+  for (; comma_list(rest, &tok, ";", !first); first = false)
+    chain_expr(&expr, declaration2(&tok, tok, basety, attr, &(Obj *){0}));
 
-    Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
-
-    if (ty->kind == TY_FUNC) {
-      if (!name)
-        error_tok(tok, "function name omitted");
-      Obj *fn = func_prototype(ty, attr, name);
-      func_attr(fn, attr, name, tok);
-      symbol_attr(fn, attr, name, tok);
-      continue;
-    }
-    if (ty->kind == TY_VOID)
-      error_tok(tok, "variable declared void");
-    if (!name)
-      error_tok(tok, "variable name omitted");
-
-    Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
-    DeclAttr(attr_cleanup, &cleanup_fn);
-
-    // Generate code for computing a VLA size. We need to do this
-    // even if ty is not VLA because ty may be a pointer to VLA
-    // (e.g. int (*foo)[n][m] where n and m are variables.)
-    chain_expr(&expr, compute_vla_size(ty, tok));
-
-    if (attr && attr->is_static) {
-      if (ty->kind == TY_VLA)
-        error_tok(tok, "variable length arrays cannot be 'static'");
-
-      // static local variable
-      Obj *var = new_static_lvar(ty);
-      var->is_tls = attr->is_tls;
-      if (alt_align)
-        var->align = alt_align;
-      push_scope(get_ident(name))->var = var;
-
-      if (attr->is_constexpr) {
-        if (!equal(tok, "="))
-          error_tok(tok, "constexpr variable not initialized");
-        constexpr_initializer(&tok, tok->next, var, var);
-        continue;
-      }
-      if (equal(tok, "=")) {
-        bool ctx = is_global_init_context;
-        is_global_init_context = true;
-        gvar_initializer(&tok, tok->next, var);
-        is_global_init_context = ctx;
-      }
-      continue;
-    }
-
-    if (ty->kind == TY_VLA) {
-      if (equal(tok, "="))
-        error_tok(tok, "variable-sized object may not be initialized");
-
-      fn_use_vla = true;
-      // Variable length arrays (VLAs) are translated to alloca() calls.
-      // For example, `int x[n+2]` is translated to `tmp = n + 2,
-      // x = alloca(tmp)`.
-      Obj *var = new_lvar(get_ident(name), ty);
-      if (alt_align)
-        var->align = alt_align;
-      chain_expr(&expr, new_vla(new_var_node(ty->vla_size, name), var));
-
-      DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
-      defr->vla = var;
-
-      if (cleanup_fn)
-        defr_cleanup(var, cleanup_fn, tok);
-      continue;
-    }
-
-    Obj *var = new_lvar(get_ident(name), ty);
-    if (alt_align)
-      var->align = alt_align;
-
-    if (cleanup_fn)
-      defr_cleanup(var, cleanup_fn, tok);
-
-    if (attr->is_register &&
-      (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__"))) {
-      var->asm_str = str_tok(&tok, skip(tok->next, "("));
-      tok = skip(tok, ")");
-    }
-
-    if (attr && attr->is_constexpr) {
-      if (!equal(tok, "="))
-        error_tok(tok, "constexpr variable not initialized");
-      Obj *init_var = new_static_lvar(ty);
-      constexpr_initializer(&tok, tok->next, init_var, var);
-      chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
-                                   new_var_node(init_var, tok), tok));
-      continue;
-    }
-    if (equal(tok, "="))
-      chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
-
-    if (var->ty->size < 0)
-      error_tok(name, "variable has incomplete type");
-    if (var->ty->kind == TY_VOID)
-      error_tok(name, "variable declared void");
-  }
   return expr;
 }
 
@@ -2354,25 +2398,26 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   }
 
   if (equal(tok, "if")) {
+    DeferStmt *dfr = new_block_scope();
+
     Node *node = new_node(ND_IF, tok);
-    tok = skip(tok->next, "(");
-    node->cond = to_bool(expr(&tok, tok));
-    tok = skip(tok, ")");
+    node->cond = to_bool(cond_declaration(&tok, skip(tok->next, "("), ")", 0));
     node->then = secondary_block(&tok, tok);
-    if (equal(tok, "else"))
-      node->els = secondary_block(&tok, tok->next);
+    if (consume(&tok, tok, "else"))
+      node->els = secondary_block(&tok, tok);
+
     *rest = tok;
-    return node;
+    return leave_block_scope(dfr, node);
   }
 
   if (equal(tok, "switch")) {
+    DeferStmt *dfr = new_block_scope();
+
     Node *node = new_node(ND_SWITCH, tok);
-    tok = skip(tok->next, "(");
-    node->cond = expr(&tok, tok);
+    node->cond = cond_declaration(&tok, skip(tok->next, "("), ")", 0);
     add_type(node->cond);
     if (!is_integer(node->cond->ty))
       error_tok(tok, "controlling expression not integer");
-    tok = skip(tok, ")");
 
     Node *sw = current_switch;
     current_switch = node;
@@ -2388,7 +2433,8 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     current_switch = sw;
     brk_label = brk;
     brk_defr = defr;
-    return node;
+
+    return leave_block_scope(dfr, node);
   }
 
   if (equal(tok, "case")) {
@@ -2451,14 +2497,13 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   }
 
   if (equal(tok, "for")) {
+    DeferStmt *dfr = new_block_scope();
+
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
 
-    node->defr_end = current_defr;
-    enter_tmp_scope();
-
     if (is_typename(tok)) {
-      VarAttr attr = {.local_only = true};
+      VarAttr attr = {0};
       Type *basety = declspec(&tok, tok, &attr);
       Node *expr = declaration(&tok, tok, basety, &attr);
       if (expr)
@@ -2469,9 +2514,11 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
       node->init = expr_stmt(&tok, tok);
     }
 
-    if (!equal(tok, ";"))
-      node->cond = to_bool(expr(&tok, tok));
-    tok = skip(tok, ";");
+    if (!consume(&tok, tok, ";")) {
+      node->defr_end = current_defr;
+      node->cond = to_bool(cond_declaration(&tok, tok, ";", 1));
+      node->defr_start = current_defr;
+    }
 
     if (!equal(tok, ")"))
       node->inc = expr(&tok, tok);
@@ -2479,20 +2526,20 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
 
     loop_body(rest, tok, node);
 
-    node->defr_start = current_defr;
-    current_defr = node->defr_end;
-    leave_scope();
-    return node;
+    return leave_block_scope(dfr, node);
   }
 
   if (equal(tok, "while")) {
+    DeferStmt *dfr = new_block_scope();
+
     Node *node = new_node(ND_FOR, tok);
-    tok = skip(tok->next, "(");
-    node->cond = to_bool(expr(&tok, tok));
-    tok = skip(tok, ")");
+    node->defr_end = current_defr;
+    node->cond = to_bool(cond_declaration(&tok, skip(tok->next, "("), ")", 1));
+    node->defr_start = current_defr;
 
     loop_body(rest, tok, node);
-    return node;
+
+    return leave_block_scope(dfr, node);
   }
 
   if (equal(tok, "do")) {
