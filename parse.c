@@ -217,6 +217,27 @@ static void leave_block_scope(Node *blk) {
   leave_scope();
 }
 
+static DeferStmt *new_block_scope2(void) {
+  enter_scope();
+  return current_defr;
+}
+
+static Node *leave_block_scope2(DeferStmt *defr, Node *stmt_node) {
+  leave_scope();
+
+  if (stmt_node->kind == ND_RETURN || stmt_node->kind == ND_GOTO)
+    current_defr = defr;
+
+  if (defr == current_defr)
+    return stmt_node;
+
+  Node *blk = new_node(ND_BLOCK, stmt_node->tok);
+  blk->defr_start = current_defr;
+  blk->defr_end = current_defr = defr;
+  blk->body = stmt_node;
+  return blk;
+}
+
 static bool is_constant_context(void) {
   return scope->parent == NULL || is_global_init_context;
 }
@@ -2336,13 +2357,9 @@ static Node *secondary_block(Token **rest, Token *tok) {
   if (equal(tok, "{"))
     return compound_stmt(rest, tok->next, ND_BLOCK);
 
-  Node *node = new_block_scope(tok);
-  node->body = stmt(rest, tok, true);
-  leave_block_scope(node);
-
-  if (node->body->kind == ND_RETURN || node->body->kind == ND_GOTO)
-    node->defr_start = node->defr_end;
-  return node;
+  DeferStmt *d = new_block_scope2();
+  Node *node = stmt(rest, tok, true);
+  return leave_block_scope2(d, node);
 }
 
 static void loop_body(Token **rest, Token *tok, Node *node) {
@@ -2398,7 +2415,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   }
 
   if (equal(tok, "if")) {
-    Node *blk = new_block_scope(tok);
+    DeferStmt *d = new_block_scope2();
 
     Node *node = new_node(ND_IF, tok);
     node->cond = to_bool(cond_declaration(&tok, skip(tok->next, "("), ")", 0));
@@ -2407,13 +2424,11 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
       node->els = secondary_block(&tok, tok);
     *rest = tok;
 
-    blk->body = node;
-    leave_block_scope(blk);
-    return blk;
+    return leave_block_scope2(d, node);
   }
 
   if (equal(tok, "switch")) {
-    Node *blk = new_block_scope(tok);
+    DeferStmt *d = new_block_scope2();
 
     Node *node = new_node(ND_SWITCH, tok);
     node->cond = cond_declaration(&tok, skip(tok->next, "("), ")", 0);
@@ -2436,9 +2451,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     brk_label = brk;
     brk_defr = defr;
 
-    blk->body = node;
-    leave_block_scope(blk);
-    return blk;
+    return leave_block_scope2(d, node);
   }
 
   if (equal(tok, "case")) {
@@ -2501,7 +2514,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
   }
 
   if (equal(tok, "for")) {
-    Node *blk = new_block_scope(tok);
+    DeferStmt *d = new_block_scope2();
 
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
@@ -2530,13 +2543,11 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
 
     loop_body(rest, tok, node);
 
-    blk->body = node;
-    leave_block_scope(blk);
-    return blk;
+    return leave_block_scope2(d, node);
   }
 
   if (equal(tok, "while")) {
-    Node *blk = new_block_scope(tok);
+    DeferStmt *d = new_block_scope2();
 
     Node *node = new_node(ND_FOR, tok);
     node->defr_end = current_defr;
@@ -2545,9 +2556,7 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
 
     loop_body(rest, tok, node);
 
-    blk->body = node;
-    leave_block_scope(blk);
-    return blk;
+    return leave_block_scope2(d, node);
   }
 
   if (equal(tok, "do")) {
