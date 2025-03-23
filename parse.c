@@ -254,6 +254,12 @@ static bool in_ty_range(int64_t val, Type *ty) {
   return eval(&cast) == val;
 }
 
+static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
+  if (ty->is_unsigned && ty->size == 8)
+    return (uint64_t)lhs <= rhs;
+  return lhs <= rhs;
+}
+
 bool is_const_var(Obj *var) {
   Type *ty = var->ty;
   for (; ty && ty->kind == TY_ARRAY; ty = ty->base)
@@ -2337,11 +2343,15 @@ static Node *asm_stmt(Token **rest, Token *tok) {
 }
 
 static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
+  char *lbl = NULL;
+
   for (;;) {
     if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      if (!lbl)
+        lbl = new_unique_name();
       Node *node = new_node(ND_LABEL, tok);
       node->label = strndup(tok->loc, tok->len);
-      node->unique_label = new_unique_name();
+      node->unique_label = lbl;
       node->defr_start = current_defr;
       node->goto_next = labels;
       (*cur_node) = (*cur_node)->next = labels = node;
@@ -2350,50 +2360,87 @@ static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
     }
 
     if (equal(tok, "case") || equal(tok, "default")) {
+      if (!lbl)
+        lbl = new_unique_name();
+
       if (!current_switch)
         error_tok(tok, "stray case");
       if (current_defr != brk_defr)
         error_tok(tok, "illegal jump");
 
-      Node *node = new_node(ND_CASE, tok);
-      node->label = new_unique_name();
-
       if (equal(tok, "default")) {
+        if (current_switch->default_case)
+          error_tok(tok, "duplicated defualt");
+        current_switch->default_case = ast_arena_malloc(sizeof(CaseRange));
+        current_switch->default_case->label = lbl;
         tok = skip(tok->next, ":");
-        current_switch->default_case = node;
-        (*cur_node) = (*cur_node)->next = node;
         continue;
       }
 
-      int64_t begin = const_expr(&tok, tok->next);
-      int64_t end;
-
-      // [GNU] Case ranges, e.g. "case 1 ... 5:"
+      int64_t lo = const_expr(&tok, tok->next);
+      int64_t hi;
       if (equal(tok, "..."))
-        end = const_expr(&tok, tok->next);
+        hi = const_expr(&tok, tok->next);
       else
-        end = begin;
+        hi = lo;
 
-      Type *cond_ty = current_switch->cond->ty;
-      if (cond_ty->size <= 4) {
-        if (!cond_ty->is_unsigned)
-          begin = (int32_t)begin, end = (int32_t)end;
+      Type *ty = current_switch->cond->ty;
+      if (ty->size <= 4) {
+        if (!ty->is_unsigned)
+          lo = (int32_t)lo, hi = (int32_t)hi;
         else
-          begin = (uint32_t)begin, end = (uint32_t)end;
+          lo = (uint32_t)lo, hi = (uint32_t)hi;
       }
-      if ((!cond_ty->is_unsigned && (end < begin)) ||
-        ((cond_ty->is_unsigned && ((uint64_t)end < begin))))
+      if (hi != lo && less_eq(ty, hi, lo))
         error_tok(tok, "empty case range specified");
 
+      for (CaseRange *cr = current_switch->cases; cr; cr = cr->next)
+        if ((less_eq(ty, cr->lo, lo) && less_eq(ty, lo, cr->hi)) ||
+          (less_eq(ty, lo, cr->lo) && less_eq(ty, cr->lo, hi)))
+          error_tok(tok, "duplicated case");
+
       tok = skip(tok, ":");
-      node->begin = begin;
-      node->end = end;
-      node->case_next = current_switch->case_next;
-      current_switch->case_next = node;
-      (*cur_node) = (*cur_node)->next = node;
+
+      // Merge adjacent ranges
+      if (opt_optimize) {
+        CaseRange *lo_adj = NULL, *hi_adj = NULL;
+        for (CaseRange *cr = current_switch->cases; cr; cr = cr->next) {
+          if (!cr->label)
+            continue;
+          if (cr->label != lbl)
+            break;
+          if (less_eq(ty, cr->hi, lo) && (uint64_t)cr->hi + 1 == lo)
+            lo_adj = cr;
+          else if (less_eq(ty, hi, cr->lo) && (uint64_t)hi + 1 == cr->lo)
+            hi_adj = cr;
+        }
+        if (lo_adj && hi_adj) {
+          lo_adj->hi = hi_adj->hi;
+          hi_adj->label = NULL;
+          continue;
+        } else if (lo_adj) {
+          lo_adj->hi = hi;
+          continue;
+        } else if (hi_adj) {
+          hi_adj->lo = lo;
+          continue;
+        }
+      }
+
+      CaseRange *cr = ast_arena_malloc(sizeof(CaseRange));
+      cr->label = lbl;
+      cr->lo = lo;
+      cr->hi = hi;
+      cr->next = current_switch->cases;
+      current_switch->cases = cr;
       continue;
     }
 
+    if (lbl && (*cur_node)->unique_label != lbl) {
+      Node *node = new_node(ND_LABEL, tok);
+      node->unique_label = lbl;
+      (*cur_node) = (*cur_node)->next = node;
+    }
     *rest = tok;
     return;
   }

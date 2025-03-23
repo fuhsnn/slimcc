@@ -381,7 +381,6 @@ typedef enum {
   ND_FOR,       // "for" or "while"
   ND_DO,        // "do"
   ND_SWITCH,    // "switch"
-  ND_CASE,      // "case"
   ND_BLOCK,     // { ... }
   ND_GOTO,      // "goto"
   ND_GOTO_EXPR, // "goto" labels-as-values
@@ -405,6 +404,14 @@ typedef enum {
   ND_ARITH_ASSIGN,
   ND_POST_INCDEC
 } NodeKind;
+
+typedef struct CaseRange CaseRange;
+struct CaseRange {
+  CaseRange *next;
+  char *label;
+  int64_t lo;
+  int64_t hi;
+};
 
 // AST node type
 struct Node {
@@ -443,12 +450,8 @@ struct Node {
   Node *goto_next;
 
   // Switch
-  Node *case_next;
-  Node *default_case;
-
-  // Case
-  long begin;
-  long end;
+  CaseRange *cases;
+  CaseRange *default_case;
 
   DeferStmt *defr_start;
   DeferStmt *defr_end;

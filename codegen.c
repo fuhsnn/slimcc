@@ -2123,21 +2123,25 @@ static void gen_stmt(Node *node) {
     else
       ax = "%eax", cx = "%ecx", dx = "%edx";
 
-    for (Node *n = node->case_next; n; n = n->case_next) {
-      if (n->end == n->begin) {
-        imm_cmp(ax, dx, n->begin);
-        Printftn("je %s", n->label);
+    for (CaseRange *cr = node->cases; cr; cr = cr->next) {
+      if (!cr->label ||
+        (node->default_case && node->default_case->label == cr->label))
+        continue;
+
+      if (cr->hi == cr->lo) {
+        imm_cmp(ax, dx, cr->lo);
+        Printftn("je %s", cr->label);
         continue;
       }
-      if (n->begin == 0) {
-        imm_cmp(ax, dx, n->end);
-        Printftn("jbe %s", n->label);
+      if (cr->lo == 0) {
+        imm_cmp(ax, dx, cr->hi);
+        Printftn("jbe %s", cr->label);
         continue;
       }
       Printftn("mov %s, %s", ax, cx);
-      imm_sub(cx, dx, n->begin);
-      imm_cmp(cx, dx, n->end - n->begin);
-      Printftn("jbe %s", n->label);
+      imm_sub(cx, dx, cr->lo);
+      imm_cmp(cx, dx, cr->hi - cr->lo);
+      Printftn("jbe %s", cr->label);
     }
 
     if (node->default_case)
@@ -2148,9 +2152,6 @@ static void gen_stmt(Node *node) {
     Printfsn("%s:", node->brk_label);
     return;
   }
-  case ND_CASE:
-    Printfsn("%s:", node->label);
-    return;
   case ND_BLOCK:
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
@@ -2165,6 +2166,8 @@ static void gen_stmt(Node *node) {
     Printstn("jmp *%%rax");
     return;
   case ND_LABEL:
+    if (node->next && node->next->unique_label == node->unique_label)
+      return;
     Printfsn("%s:", node->unique_label);
     return;
   case ND_RETURN: {
