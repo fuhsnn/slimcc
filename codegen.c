@@ -2166,8 +2166,6 @@ static void gen_stmt(Node *node) {
     Printstn("jmp *%%rax");
     return;
   case ND_LABEL:
-    if (node->next && node->next->unique_label == node->unique_label)
-      return;
     Printfsn("%s:", node->unique_label);
     return;
   case ND_RETURN: {
@@ -3591,9 +3589,9 @@ static void asm_outputs(Node *node) {
   }
 }
 
-static bool named_op(char *p, int len, char *str, char **rest) {
-  if (len && !strncmp(&p[1], str, len) && p[1 + len] == ']') {
-    *rest = &p[2 + len];
+static bool named_op(char *p, Token *tok, char **rest) {
+  if (!strncmp(p, tok->loc, tok->len) && p[tok->len] == ']') {
+    *rest = &p[tok->len + 1];
     return true;
   }
   return false;
@@ -3603,13 +3601,15 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
   if (*p == '[') {
     for (int i = 0; i < asm_ops.cnt; i++) {
       AsmParam *op = asm_ops.data[i];
-      if (is_label && op->arg->label)
-        if (named_op(p, strlen(op->arg->label), op->arg->label, rest))
-          return op;
-
-      if (!is_label && op->name)
-        if (named_op(p, op->name->len, op->name->loc, rest))
-          return op;
+      if (is_label) {
+        for (Token *t = op->arg->labels; t; t = t->label_next)
+          if (named_op(p + 1, t, rest))
+            return op;
+      } else {
+        if (op->name)
+          if (named_op(p + 1, op->name, rest))
+            return op;
+      }
     }
   } else if (Isdigit(*p)) {
     unsigned long idx = strtoul(p, rest, 10);

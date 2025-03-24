@@ -184,6 +184,7 @@ ANON_UNION_END
 ANON_UNION_START
     int64_t ival;         // If kind is TK_INT_NUM, its value
     char *str;            // String literal contents including terminating '\0'
+    Token *label_next;
 ANON_UNION_END
 };
 
@@ -445,7 +446,7 @@ struct Node {
   Obj *args;
 
   // Goto or labeled statement, or labels-as-values
-  char *label;
+  Token *labels;
   char *unique_label;
   Node *goto_next;
 

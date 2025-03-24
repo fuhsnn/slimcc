@@ -268,6 +268,10 @@ bool is_const_var(Obj *var) {
   return ty->is_const;
 }
 
+static bool equal_tok(Token *a, Token *b) {
+  return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
+}
+
 static Node *new_node(NodeKind kind, Token *tok) {
   Node *node = arena_calloc(&node_arena, sizeof(Node));
   node->kind = kind;
@@ -497,6 +501,13 @@ static Type *find_typedef(Token *tok) {
       return sc->type_def;
   }
   return NULL;
+}
+
+static Token *ident_tok(Token **rest, Token *tok) {
+  if (tok->kind != TK_IDENT)
+    error_tok(tok, "expected an identifier");
+  *rest = tok->next;
+  return tok;
 }
 
 static Token *str_tok(Token **rest, Token *tok) {
@@ -2292,13 +2303,12 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
   AsmParam *cur = &head;
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *node = new_node(ND_GOTO, tok);
-    node->label = get_ident(tok);
+    node->labels = ident_tok(&tok, tok);
     node->goto_next = gotos;
     gotos = node;
 
     cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
     cur->arg = node;
-    tok = tok->next;
   }
   return head.next;
 }
@@ -2343,25 +2353,27 @@ static Node *asm_stmt(Token **rest, Token *tok) {
 }
 
 static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
-  char *lbl = NULL;
+  Node *node = NULL;
+
+  Token head = {0};
+  Token *cur = &head;
 
   for (;;) {
     if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-      if (!lbl)
-        lbl = new_unique_name();
-      Node *node = new_node(ND_LABEL, tok);
-      node->label = strndup(tok->loc, tok->len);
-      node->unique_label = lbl;
-      node->defr_start = current_defr;
-      node->goto_next = labels;
-      (*cur_node) = (*cur_node)->next = labels = node;
+      if (!node) {
+        node = new_node(ND_LABEL, tok);
+        node->unique_label = new_unique_name();;
+      }
+      cur = cur->label_next = tok;
       tok = tok->next->next;
       continue;
     }
 
     if (equal(tok, "case") || equal(tok, "default")) {
-      if (!lbl)
-        lbl = new_unique_name();
+      if (!node) {
+        node = new_node(ND_LABEL, tok);
+        node->unique_label = new_unique_name();;
+      }
 
       if (!current_switch)
         error_tok(tok, "stray case");
@@ -2372,7 +2384,7 @@ static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
         if (current_switch->default_case)
           error_tok(tok, "duplicated defualt");
         current_switch->default_case = ast_arena_malloc(sizeof(CaseRange));
-        current_switch->default_case->label = lbl;
+        current_switch->default_case->label = node->unique_label;
         tok = skip(tok->next, ":");
         continue;
       }
@@ -2407,7 +2419,7 @@ static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
         for (CaseRange *cr = current_switch->cases; cr; cr = cr->next) {
           if (!cr->label)
             continue;
-          if (cr->label != lbl)
+          if (cr->label != node->unique_label)
             break;
           if (less_eq(ty, cr->hi, lo) && (uint64_t)cr->hi + 1 == lo)
             lo_adj = cr;
@@ -2428,19 +2440,20 @@ static void label_stmt(Node **cur_node, Token **rest, Token *tok) {
       }
 
       CaseRange *cr = ast_arena_malloc(sizeof(CaseRange));
-      cr->label = lbl;
+      cr->label = node->unique_label;
       cr->lo = lo;
       cr->hi = hi;
       cr->next = current_switch->cases;
       current_switch->cases = cr;
       continue;
     }
-
-    if (lbl && (*cur_node)->unique_label != lbl) {
-      Node *node = new_node(ND_LABEL, tok);
-      node->unique_label = lbl;
-      (*cur_node) = (*cur_node)->next = node;
+    if (node) {
+      node->labels = head.label_next;
+      node->defr_start = current_defr;
+      node->goto_next = labels;
+      (*cur_node) = (*cur_node)->next = labels = node;
     }
+    cur->label_next = NULL;
     *rest = tok;
     return;
   }
@@ -2630,11 +2643,11 @@ static Node *stmt(Token **rest, Token *tok) {
     }
 
     Node *node = new_node(ND_GOTO, tok);
-    node->label = get_ident(tok->next);
+    node->labels = ident_tok(&tok, tok->next);
     node->goto_next = gotos;
     node->defr_start = current_defr;
     gotos = node;
-    *rest = skip(tok->next->next, ";");
+    *rest = skip(tok, ";");
     return node;
   }
 
@@ -3711,11 +3724,10 @@ static Node *unary(Token **rest, Token *tok) {
   // [GNU] labels-as-values
   if (equal(tok, "&&")) {
     Node *node = new_node(ND_LABEL_VAL, tok);
-    node->label = get_ident(tok->next);
+    node->labels = ident_tok(rest, tok->next);
     node->goto_next = gotos;
     gotos = node;
     dont_dealloc_vla = true;
-    *rest = tok->next->next;
     return node;
   }
 
@@ -4546,10 +4558,12 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
 // So, we need to do this after we parse the entire function.
 static void resolve_goto_labels(void) {
   for (Node *x = gotos; x; x = x->goto_next) {
-    Node *dest = labels;
-    for (; dest; dest = dest->goto_next)
-      if (!strcmp(x->label, dest->label))
-        break;
+    Node *dest = NULL;
+    for (Node *lbls = labels; lbls && !dest; lbls = lbls->goto_next)
+      for (Token *t = lbls->labels; t && !dest; t = t->label_next)
+        if (equal_tok(t, x->labels))
+          dest = lbls;
+
     if (!dest)
       error_tok(x->tok->next, "use of undeclared label");
 
