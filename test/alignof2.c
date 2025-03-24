@@ -20,5 +20,7 @@ int main(int argc, char**argv) {
   EASSERT(1, _Alignof s.c);
   EASSERT(1024, _Alignof s.i);
 
+  EASSERT(1, _Alignof (char){1});
+
   printf("OK\n");
 }

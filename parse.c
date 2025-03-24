@@ -2252,6 +2252,16 @@ static bool is_typename(Token *tok) {
   return tok->kind == TK_TYPEKW || find_typedef(tok);
 }
 
+static bool is_typename_paren(Token **rest, Token *tok, Type **ty) {
+  if (equal(tok, "(") && is_typename(tok->next) &&
+    !equal(skip_paren(tok->next->next), "{")) {
+    *ty = typename(&tok, tok->next);
+    *rest = skip(tok, ")");
+    return true;
+  }
+  return false;
+}
+
 static void static_assertion(Token **rest, Token *tok) {
   tok = skip(tok, "(");
   int64_t result = const_expr(&tok, tok);
@@ -3661,21 +3671,13 @@ static Node *mul(Token **rest, Token *tok) {
 
 // cast = "(" type-name ")" cast | unary
 static Node *cast(Token **rest, Token *tok) {
-  if (equal(tok, "(") && is_typename(tok->next)) {
-    Token *start = tok;
-    Type *ty = typename(&tok, tok->next);
-    tok = skip(tok, ")");
-
-    // compound literal
-    if (equal(tok, "{"))
-      return unary(rest, start);
-
-    // type cast
+  Token *start = tok;
+  Type *ty;
+  if (is_typename_paren(&tok, tok, &ty)) {
     Node *node = new_cast(cast(rest, tok), ty);
     node->tok = start;
     return node;
   }
-
   return unary(rest, tok);
 }
 
@@ -4260,10 +4262,7 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (equal(tok, "sizeof")) {
     Type *ty;
-    if (equal(tok->next, "(") && is_typename(tok->next->next)) {
-      ty = typename(&tok, tok->next->next);
-      *rest = skip(tok, ")");
-    } else {
+    if (!is_typename_paren(rest, tok->next, &ty)) {
       Node *node = unary(rest, tok->next);
       add_type(node);
       ty = node->ty;
@@ -4287,25 +4286,21 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
-    Token *start = tok;
     Type *ty;
-    if (equal(tok->next, "(") && is_typename(tok->next->next)) {
-      ty = typename(&tok, tok->next->next);
-      *rest = skip(tok, ")");
-    } else {
+    if (!is_typename_paren(rest, tok->next, &ty)) {
       Node *node = unary(rest, tok->next);
       switch (node->kind) {
       case ND_MEMBER:
-        return new_size(MAX(node->member->ty->align, node->member->alt_align), start);
+        return new_size(MAX(node->member->ty->align, node->member->alt_align), tok);
       case ND_VAR:
-        return new_size(node->var->align, start);
+        return new_size(node->var->align, tok);
       }
       add_type(node);
       ty = node->ty;
     }
     while (is_array(ty))
       ty = ty->base;
-    return new_size(ty->align, start);
+    return new_size(ty->align, tok);
   }
 
   if (equal(tok, "_Generic"))
