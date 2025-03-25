@@ -3044,14 +3044,13 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       !lhs->var->is_weak && (is_array(lhs->ty)))
       return true;
 
-    if (ty->size != sizeof(void *) && !lhs->has_no_ptr) {
+    if (ty->size != sizeof(void *)) {
       EvalContext ctx2= {.kind = EV_LABEL};
       if (eval_ctx(lhs, &ctx2, NULL) && ctx2.label) {
         if (ty->kind == TY_BOOL && !ctx2.var->is_weak)
           return true;
         return eval_error(node->tok, "pointer cast to different size");
       }
-      lhs->has_no_ptr = true;
     }
 
     int64_t val = eval2(lhs, ctx);
@@ -3165,26 +3164,26 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 bool is_const_expr(Node *node, int64_t *val) {
   add_type(node);
   bool failed = false;
-
-  assert(!eval_recover);
+  bool *prev = eval_recover;
   eval_recover = &failed;
+
   int64_t v = eval(node);
   if (val)
     *val = v;
-  eval_recover = NULL;
+  eval_recover = prev;
   return !failed;
 }
 
 bool is_const_double(Node *node, long double *fval) {
   add_type(node);
   bool failed = false;
-
-  assert(!eval_recover);
+  bool *prev = eval_recover;
   eval_recover = &failed;
+
   long double v = eval_double(node);
   if (fval)
     *fval = v;
-  eval_recover = NULL;
+  eval_recover = prev;
   return !failed;
 }
 

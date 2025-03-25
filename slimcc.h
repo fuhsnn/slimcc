@@ -480,9 +480,6 @@ struct Node {
   int64_t val;
   long double fval;
 
-  // Cast evaluation
-  bool has_no_ptr;
-
   // Arithmetic Assignment
   NodeKind arith_kind;
 };
