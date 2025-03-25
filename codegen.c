@@ -2702,10 +2702,12 @@ static bool gen_gp_opt(Node *node) {
   case ND_SAR:
     return gen_shift_opt_gp(node);
   case ND_DIV:
-  case ND_MOD:
-    if (rhs->kind == ND_NUM)
-      return divmod_opt(kind, ty, lhs, rhs->val);
+  case ND_MOD: {
+    int64_t val;
+    if (is_const_expr(rhs, &val))
+      return divmod_opt(kind, ty, lhs, val);
     return false;
+  }
   }
   if (gen_arith_opt_gp(node, node->ty->size))
     return true;
@@ -2762,12 +2764,13 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
     if (node->kind == ND_DEREF && node->ty->kind == TY_ARRAY)
       continue;
 
-    if (node->kind == ND_ADD && node->rhs->kind == ND_NUM) {
-      *ofs += node->rhs->val;
+    int64_t val;
+    if (node->kind == ND_ADD && is_const_expr(node->rhs, &val)) {
+      *ofs += val;
       continue;
     }
-    if (node->kind == ND_SUB && node->rhs->kind == ND_NUM) {
-      *ofs -= node->rhs->val;
+    if (node->kind == ND_SUB && is_const_expr(node->rhs, &val)) {
+      *ofs -= val;
       continue;
     }
     break;
@@ -2904,12 +2907,15 @@ static bool gen_expr_opt(Node *node) {
     if (gen_arith_opt_gp(lhs, ty->size))
       return true;
 
-  if (kind == ND_COND && node->cond->kind == ND_NUM) {
-    if (node->cond->val)
-      gen_expr(node->then);
-    else
-      gen_expr(node->els);
-    return true;
+  {
+    int64_t cond_val;
+    if (kind == ND_COND && is_const_expr(node->cond, &cond_val)) {
+      if (cond_val)
+        gen_expr(node->then);
+      else
+        gen_expr(node->els);
+      return true;
+    }
   }
 
   if (ty->kind == TY_ARRAY || ty->kind == TY_STRUCT || ty->kind == TY_UNION ||
