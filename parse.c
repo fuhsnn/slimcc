@@ -367,7 +367,19 @@ Node *new_cast(Node *expr, Type *ty) {
   return node;
 }
 
-Node *to_bool(Node *expr) {
+static Node *cond_cast(Node *expr) {
+  switch (expr->kind) {
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+  case ND_LOGAND:
+  case ND_LOGOR:
+  case ND_NOT:
+    return expr;
+  }
   return new_cast(expr, ty_bool);
 }
 
@@ -2561,7 +2573,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     DeferStmt *dfr = new_block_scope();
 
     Node *node = new_node(ND_IF, tok);
-    node->cond = to_bool(cond_declaration(&tok, skip(tok->next, "("), ")", 0));
+    node->cond = cond_cast(cond_declaration(&tok, skip(tok->next, "("), ")", 0));
     node->then = secondary_block(&tok, tok);
     if (consume(&tok, tok, "else"))
       node->els = secondary_block(&tok, tok);
@@ -2612,7 +2624,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     if (!consume(&tok, tok, ";")) {
       node->defr_end = current_defr;
-      node->cond = to_bool(cond_declaration(&tok, tok, ";", 1));
+      node->cond = cond_cast(cond_declaration(&tok, tok, ";", 1));
       node->defr_start = current_defr;
     }
 
@@ -2630,7 +2642,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     Node *node = new_node(ND_FOR, tok);
     node->defr_end = current_defr;
-    node->cond = to_bool(cond_declaration(&tok, skip(tok->next, "("), ")", 1));
+    node->cond = cond_cast(cond_declaration(&tok, skip(tok->next, "("), ")", 1));
     node->defr_start = current_defr;
 
     loop_body(rest, tok, node, label_list);
@@ -2645,7 +2657,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     tok = skip(tok, "while");
     tok = skip(tok, "(");
-    node->cond = to_bool(expr(&tok, tok));
+    node->cond = cond_cast(expr(&tok, tok));
     tok = skip(tok, ")");
     *rest = skip(tok, ";");
     return node;
@@ -3392,12 +3404,12 @@ static Node *conditional(Token **rest, Token *tok) {
 
     int64_t val;
     Node n = *cond;
-    if (!is_const_expr(to_bool(&n), &val)) {
+    if (!is_const_expr(cond_cast(&n), &val)) {
       enter_tmp_scope();
       Obj *var = new_lvar(NULL, cond->ty);
       Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
       Node *rhs = new_node(ND_COND, tok);
-      rhs->cond = to_bool(new_var_node(var, tok));
+      rhs->cond = cond_cast(new_var_node(var, tok));
       rhs->then = new_var_node(var, tok);
       rhs->els = conditional(rest, tok->next->next);
       leave_scope();
@@ -3411,7 +3423,7 @@ static Node *conditional(Token **rest, Token *tok) {
   }
 
   Node *node = new_node(ND_COND, tok);
-  node->cond = to_bool(cond);
+  node->cond = cond_cast(cond);
   node->then = expr(&tok, tok->next);
   tok = skip(tok, ":");
   node->els = conditional(rest, tok);
@@ -3423,7 +3435,7 @@ static Node *log_or(Token **rest, Token *tok) {
   Node *node = log_and(&tok, tok);
   while (equal(tok, "||")) {
     Token *start = tok;
-    node = new_binary(ND_LOGOR, to_bool(node), to_bool(log_and(&tok, tok->next)), start);
+    node = new_binary(ND_LOGOR, cond_cast(node), cond_cast(log_and(&tok, tok->next)), start);
   }
   *rest = tok;
   return node;
@@ -3434,7 +3446,7 @@ static Node *log_and(Token **rest, Token *tok) {
   Node *node = bit_or(&tok, tok);
   while (equal(tok, "&&")) {
     Token *start = tok;
-    node = new_binary(ND_LOGAND, to_bool(node), to_bool(bit_or(&tok, tok->next)), start);
+    node = new_binary(ND_LOGAND, cond_cast(node), cond_cast(bit_or(&tok, tok->next)), start);
   }
   *rest = tok;
   return node;
@@ -3719,7 +3731,7 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "!"))
-    return new_unary(ND_NOT, to_bool(cast(rest, tok->next)), tok);
+    return new_unary(ND_NOT, cond_cast(cast(rest, tok->next)), tok);
 
   if (equal(tok, "~"))
     return new_unary(ND_BITNOT, cast(rest, tok->next), tok);
