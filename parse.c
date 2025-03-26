@@ -2872,7 +2872,7 @@ static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
   if (!opt_optimize || !var->init_data || var->is_weak || !is_const_var(var))
     return false;
   for (Relocation *rel = var->rel; rel; rel = rel->next) {
-    if ((rel->offset + sizeof(void *)) <= ofs)
+    if ((rel->offset + ty_intptr_t->size) <= ofs)
       continue;
     if ((ofs + read_sz) <= rel->offset)
       break;
@@ -3044,7 +3044,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       !lhs->var->is_weak && (is_array(lhs->ty)))
       return true;
 
-    if (ty->size != sizeof(void *)) {
+    if (ty->size != ty_intptr_t->size) {
       EvalContext ctx2= {.kind = EV_LABEL};
       if (eval_ctx(lhs, &ctx2, NULL) && ctx2.label) {
         if (ty->kind == TY_BOOL && !ctx2.var->is_weak)
