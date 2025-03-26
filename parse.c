@@ -1726,7 +1726,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
     for (int i = begin; i <= end; i++)
       designation(&tok, start, &init->children[i]);
 
-    array_initializer2(rest, tok, init, begin + 1);
+    array_initializer2(rest, tok, init, end + 1);
     return;
   }
 
