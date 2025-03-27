@@ -189,6 +189,7 @@ ANON_UNION_END
 };
 
 void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
+void error_ice(char *file, int32_t line) NORETURN;
 void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void error_tok(Token *tok, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
@@ -207,7 +208,7 @@ Type *convert_pp_number(Token *tok, int64_t *res_val, long double *res_fval);
 TokenKind ident_keyword(Token *tok);
 
 #define internal_error() \
-  error("internal error at %s:%d", __FILE__, __LINE__)
+  error_ice(__FILE__, __LINE__)
 
 //
 // preprocess.c

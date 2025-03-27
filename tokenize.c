@@ -25,6 +25,10 @@ void error(char *fmt, ...) {
   exit(1);
 }
 
+void error_ice(char *file, int32_t line) {
+  error("internal error at %s:%"PRIi32, file, line);
+}
+
 // Reports an error message in the following format.
 //
 // foo.c:10: x = y + 1;
