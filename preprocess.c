@@ -1068,6 +1068,9 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
     start->next->next->kind == TK_IDENT && equal(end, "endif"))
     start->next->is_incl_guard = end->is_incl_guard = true;
 
+  if (tok->file->is_syshdr || in_sysincl_path(end->file->name))
+    end->file->is_syshdr = true;
+
   end->next = tok;
   return start;
 }

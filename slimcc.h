@@ -155,6 +155,7 @@ struct File {
   File *display_file;
   int line_delta;
   bool is_input;
+  bool is_syshdr;
 };
 
 // Token type
@@ -678,6 +679,7 @@ typedef enum {
 } StdVer;
 
 bool file_exists(char *path);
+bool in_sysincl_path(char *path);
 
 extern StringArray include_paths;
 extern bool opt_E;

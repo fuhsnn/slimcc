@@ -656,7 +656,7 @@ static void print_tokens(Token *tok, char *path) {
     fclose(out);
 }
 
-static bool in_sysincl_path(char *path) {
+bool in_sysincl_path(char *path) {
   for (int i = 0; i < sysincl_paths.len; i++) {
     char *dir = sysincl_paths.data[i];
     int len = strlen(dir);
@@ -690,7 +690,7 @@ static void print_dependencies(char *input) {
 
   for (int i = 0; files[i]; i++) {
     char *name = files[i]->name;
-    if ((opt_MMD && in_sysincl_path(name)) || !files[i]->is_input)
+    if ((opt_MMD && files[i]->is_syshdr) || !files[i]->is_input)
       continue;
     fprintf(out, " \\\n  %s", name);
   }
@@ -700,7 +700,7 @@ static void print_dependencies(char *input) {
   if (opt_MP) {
     for (int i = 1; files[i]; i++) {
       char *name = files[i]->name;
-      if ((opt_MMD && in_sysincl_path(name)) || !files[i]->is_input)
+      if ((opt_MMD && files[i]->is_syshdr) || !files[i]->is_input)
         continue;
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
