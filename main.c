@@ -34,7 +34,7 @@ bool opt_enable_universal_char;
 static bool opt_P;
 static bool opt_M;
 static bool opt_MD;
-static bool opt_MMD;
+static bool opt_MM;
 static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
@@ -332,6 +332,21 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (!strcmp(argv[i], "-MM")) {
+      opt_M = opt_MM = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-MD")) {
+      opt_MD = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-MMD")) {
+      opt_MD = opt_MM = true;
+      continue;
+    }
+
     if (take_arg(argv, &i, &arg, "-MF")) {
       opt_MF = arg;
       continue;
@@ -350,21 +365,11 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-MD")) {
-      opt_MD = true;
-      continue;
-    }
-
     if (take_arg(argv, &i, &arg, "-MQ")) {
       if (opt_MT == NULL)
         opt_MT = quote_makefile(arg);
       else
         opt_MT = format("%s %s", opt_MT, quote_makefile(arg));
-      continue;
-    }
-
-    if (!strcmp(argv[i], "-MMD")) {
-      opt_MD = opt_MMD = true;
       continue;
     }
 
@@ -690,7 +695,7 @@ static void print_dependencies(char *input) {
 
   for (int i = 0; files[i]; i++) {
     char *name = files[i]->name;
-    if ((opt_MMD && files[i]->is_syshdr) || !files[i]->is_input)
+    if ((opt_MM && files[i]->is_syshdr) || !files[i]->is_input)
       continue;
     fprintf(out, " \\\n  %s", name);
   }
@@ -700,7 +705,7 @@ static void print_dependencies(char *input) {
   if (opt_MP) {
     for (int i = 1; files[i]; i++) {
       char *name = files[i]->name;
-      if ((opt_MMD && files[i]->is_syshdr) || !files[i]->is_input)
+      if ((opt_MM && files[i]->is_syshdr) || !files[i]->is_input)
         continue;
       fprintf(out, "%s:\n\n", quote_makefile(name));
     }
