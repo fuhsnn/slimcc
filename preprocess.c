@@ -921,7 +921,7 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   if (*rest != stop_tok) {
     push_macro_lock(m, stop_tok);
     align_token(*rest, tok);
-  } else if (!m->is_objlike) {
+  } else {
     (*rest)->at_bol |= tok->at_bol;
     (*rest)->has_space |= tok->has_space;
   }
