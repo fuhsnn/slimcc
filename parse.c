@@ -328,12 +328,26 @@ static Node *new_var_node(Obj *var, Token *tok) {
   return node;
 }
 
+static bool invalid_cast(Type *from, Type *to) {
+  if (to->kind != TY_VOID) {
+    switch (from->kind) {
+    case TY_VOID:
+    case TY_STRUCT:
+    case TY_UNION:
+      return true;
+    }
+  }
+  if (from->base && is_flonum(to))
+    return true;
+
+  return false;
+}
+
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
   ty = unqual(ty);
 
-  if ((expr->ty->kind == TY_VOID && ty->kind != TY_VOID) ||
-    (expr->ty->base && is_flonum(ty)))
+  if (invalid_cast(expr->ty, ty))
     error_tok(expr->tok, "invalid cast");
 
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .lhs = expr, .ty = ty};
@@ -1941,7 +1955,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
     // Handle that case first.
     Node *expr = assign(rest, tok);
     add_type(expr);
-    if (expr->ty->kind == TY_STRUCT) {
+    if (is_compatible(expr->ty, init->ty)) {
       init->expr = expr;
       return;
     }
@@ -1961,7 +1975,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
 
     Node *expr = assign(rest, tok);
     add_type(expr);
-    if (expr->ty->kind == TY_UNION) {
+    if (is_compatible(expr->ty, init->ty)) {
       init->expr = expr;
       return;
     }

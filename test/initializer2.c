@@ -63,6 +63,21 @@ int main(void) {
     int ans[] = {4,4,2,3,7,1,1,9};
     ASSERT(0, memcmp(&i, &ans, sizeof(ans)));
   }
+  {
+    struct Sub {
+      int i;
+    };
+    struct S {
+      struct Sub b;
+      int j;
+    };
+    struct Sub b = {3};
+    struct S s[] = {b, 6, 7};
+    ASSERT(3, s[0].b.i);
+    ASSERT(6, s[0].j);
+    ASSERT(7, s[1].b.i);
+    ASSERT(0, s[1].j);
+  }
 
   printf("OK\n");
 }
