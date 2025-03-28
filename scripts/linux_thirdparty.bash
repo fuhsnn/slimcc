@@ -55,11 +55,10 @@ test_cello() {
 }
 
 test_curl() {
- github_tar curl curl curl-8_11_1
- sed -i 's/^if(MSVC OR CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")$/if (TRUE)/g' tests/CMakeLists.txt
- mkdir build && cd "$_"
- cmake ../ -DCMAKE_C_FLAGS=-fPIC
- make && make test-quiet
+ url_tar https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.gz curl
+ fix_configure ./configure
+ ./configure --with-openssl
+ make && make test
 }
 
 test_doom() {
@@ -75,11 +74,33 @@ test_git() {
  make CC="$CC" test -j2
 }
 
+test_gmake() {
+ url_tar https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
+ fix_configure ./configure
+ ./configure
+ make check
+}
+
+test_gzip() {
+ url_tar https://ftp.gnu.org/gnu/gzip/gzip-1.13.tar.gz gzip
+ fix_configure ./configure
+ ./configure
+ make check
+}
+
 test_libpng() {
  github_tar pnggroup libpng v1.6.47
  fix_configure ./configure
  ./configure
  make test
+}
+
+test_libressl() {
+ url_tar https://github.com/libressl/portable/releases/download/v4.0.0/libressl-4.0.0.tar.gz libressl
+ replace_line "#if defined(__GNUC__)" "#if 1" crypto/bn/arch/amd64/bn_arch.h
+ fix_configure ./configure
+ ./configure
+ make check
 }
 
 test_libuev() {
@@ -106,6 +127,13 @@ test_metalang99() {
  sh scripts/test-all.sh
  github_tar hirrolot metalang99 v1.13.5
  sh scripts/test-all.sh
+}
+
+test_ocaml() {
+ github_tar ocaml ocaml 5.3.0
+ fix_configure ./configure
+ ./configure --enable-ocamltest --disable-ocamldoc --disable-debugger --disable-native-compiler
+ make && make -C testsuite parallel -j 4
 }
 
 test_oniguruma_jq() {
@@ -142,7 +170,7 @@ test_openssl() {
  github_tar openssl openssl openssl-3.4.0
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
- make test -j2
+ make test -j4
 }
 
 test_perl() {
@@ -230,6 +258,10 @@ test_toxcore() {
 test_toybox() {
  github_tar landley toybox 0.8.12
  replace_line "#define QUIET" "#define QUIET = 0" lib/portability.h
+ replace_line "  default n" "  default y" toys/pending/awk.c
+ replace_line "  default n" "  default y" toys/pending/expr.c
+ replace_line "  default n" "  default y" toys/pending/diff.c
+ replace_line "  default n" "  default y" toys/pending/tr.c
  make CC="$CC" HOSTCC="$CC" defconfig
  make CC="$CC" HOSTCC="$CC"
  make CC="$CC" HOSTCC="$CC" tests

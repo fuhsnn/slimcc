@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # test_toxcore
  libsodium-dev \
  # test_perl:cpan/Socket/t/getaddrinfo.t
- netbase
+ netbase \
+ # for ocaml testsuite
+ parallel
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
