@@ -1408,6 +1408,14 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
   return ty;
 }
 
+static Node *count_of_vla(Type *ty, Token *tok) {
+  if (ty->vla_count)
+    return new_var_node(ty->vla_count, tok);
+
+  ty->vla_count = new_lvar(NULL, ty_size_t);
+  return new_binary(ND_ASSIGN, new_var_node(ty->vla_count, tok), ty->vla_len, tok);
+}
+
 // Generate code for computing a VLA size.
 static Node *compute_vla_size(Type *ty, Token *tok) {
   if (ty->vla_size)
@@ -1428,7 +1436,7 @@ static Node *compute_vla_size(Type *ty, Token *tok) {
 
   ty->vla_size = new_lvar(NULL, ty_size_t);
   chain_expr(&node, new_binary(ND_ASSIGN, new_var_node(ty->vla_size, tok),
-                               new_binary(ND_MUL, ty->vla_len, base_sz, tok),
+                               new_binary(ND_MUL, count_of_vla(ty, tok), base_sz, tok),
                                tok));
   add_type(node);
   return node;
@@ -4252,6 +4260,21 @@ static Node *primary(Token **rest, Token *tok) {
       ty = ty->base;
     return new_size(ty->align, tok);
   }
+
+  if (equal(tok, "_Countof")) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+    }
+    if (ty->kind == TY_VLA)
+      return count_of_vla(ty, start);
+    if (ty->kind == TY_ARRAY)
+      return new_size(ty->size, start);
+    error_tok(tok, "countof not array");
+  }
+
 
   if (equal(tok, "_Generic"))
     return generic_selection(rest, tok->next);

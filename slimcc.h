@@ -562,6 +562,7 @@ struct Type {
   // Variable-length array
   Node *vla_len; // # of elements
   Obj *vla_size; // sizeof() value
+  Obj *vla_count;
 
   // Struct
   Member *members;
