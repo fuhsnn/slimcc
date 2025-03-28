@@ -37,10 +37,14 @@ jobs:
           - thirdparty: test_curl
           - thirdparty: test_doom
           - thirdparty: test_git
+          - thirdparty: test_gmake
+          - thirdparty: test_gzip
           - thirdparty: test_libpng
+          - thirdparty: test_libressl
           - thirdparty: test_libuev
           - thirdparty: test_lua
           - thirdparty: test_metalang99
+          - thirdparty: test_ocaml
           - thirdparty: test_oniguruma_jq
           - thirdparty: test_openssh
           - thirdparty: test_openssl
