@@ -170,6 +170,7 @@ struct Token {
   bool is_root : 1;
   bool is_live : 1;
   bool is_generated : 1;
+  bool is_macro_body : 1;
   int len;                // Token length
   char *loc;              // Token location
   File *file;             // Source location

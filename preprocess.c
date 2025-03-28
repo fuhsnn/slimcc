@@ -73,8 +73,8 @@ static char *base_file;
 static Token *preprocess2(Token *tok);
 static Token *preprocess3(Token *tok);
 static Macro *find_macro(Token *tok);
-static bool expand_macro(Token **rest, Token *tok, bool is_root);
-static Token *directives(Token **cur, Token *start, bool is_root);
+static bool expand_macro(Token **rest, Token *tok);
+static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok);
 
@@ -103,17 +103,6 @@ static void to_freelist(Token *tok, Token *end) {
   }
 }
 
-static void to_freelist_cont(Token *tok, Token *end) {
-  Token *pre_end = NULL;
-  for (Token *t = tok; t != end && t->next->alloc_next == t; t = t->next)
-    pre_end = t;
-  if (pre_end) {
-    pre_end->next->alloc_next = tok->alloc_next;
-    pre_end->next = tok_freelist;
-    tok_freelist = tok;
-  }
-}
-
 static Token *copy_token(Token *tok) {
   Token *t;
   if ((t = tok_freelist))
@@ -122,6 +111,7 @@ static Token *copy_token(Token *tok) {
     t = malloc(sizeof(Token));
 
   *t = *tok;
+  t->is_macro_body = false;
   t->alloc_next = last_alloc_tok;
   last_alloc_tok = t;
   return t;
@@ -186,7 +176,7 @@ static Token *skip_cond_incl2(Token *tok) {
 
 // Skip until next `#else`, `#elif` or `#endif`.
 // Nested `#if` and `#endif` are skipped.
-static Token *skip_cond_incl(Token *tok, bool is_root) {
+static Token *skip_cond_incl(Token *tok) {
   Token *start = tok;
   while (tok->kind != TK_EOF) {
     if (is_hash(tok) &&
@@ -202,8 +192,8 @@ static Token *skip_cond_incl(Token *tok, bool is_root) {
       break;
     tok = tok->next;
   }
-  if (is_root)
-    to_freelist_cont(start, tok);
+  tok->alloc_next = start->alloc_next;
+  to_freelist(start, tok);
   return tok;
 }
 
@@ -340,7 +330,7 @@ static Token *read_const_expr(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok, false))
+    if (expand_macro(&tok, tok))
       continue;
 
     // "defined(foo)" or "defined foo" becomes "1" if macro "foo"
@@ -474,6 +464,15 @@ static void read_macro_definition(Token **rest, Token *tok, bool is_opt_d) {
 
   if (!is_opt_d) {
     m->body = split_line(rest, tok);
+
+    if (m->body) {
+      Token *t = m->body;
+      for (; t->kind != TK_EOF; t = t->next)
+        t->is_macro_body = true;
+      t->is_macro_body = true;
+    }
+    for (Token *t = m->params; t; t = t->next)
+      t->is_macro_body = true;
     return;
   }
 
@@ -512,7 +511,7 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
     }
 
     if (is_hash(tok) && !locked_macros) {
-      tok = directives(&cur, tok, false);
+      tok = directives(&cur, tok);
       continue;
     }
 
@@ -563,7 +562,7 @@ static Token *expand_tok(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok, false))
+    if (expand_macro(&tok, tok))
       continue;
 
     cur = cur->next = copy_token(tok);
@@ -867,7 +866,7 @@ static Token *insert_funclike(Token *tok, Token *stop_tok, Token *orig) {
 
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
-static bool expand_macro(Token **rest, Token *tok, bool is_root) {
+static bool expand_macro(Token **rest, Token *tok) {
   if (tok->dont_expand)
     return false;
 
@@ -912,8 +911,6 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
     pop_macro_lock(tok->next->next);
 
     MacroContext ctx = read_macro_args(&stop_tok, tok->next->next, m);
-    if (is_root)
-      to_freelist_cont(tok->next, stop_tok);
     *rest = insert_funclike(subst(m->body, &ctx), stop_tok, tok);
     free(ctx.args);
   }
@@ -929,16 +926,15 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   {
     Token head = {.alloc_next = last_alloc_tok};
     Token *cur = &head;
-    for (Token *t = last_alloc_tok; t != free_alloc_end;) {
-      Token *nxt = t->alloc_next;
-      if (t->is_root) {
+
+    for (Token *t = last_alloc_tok; t != free_alloc_end; t = t->alloc_next) {
+      if (t->is_root || t->is_macro_body) {
         t->is_root = false;
         cur = cur->alloc_next = t;
-      } else {
-        t->next = tok_freelist;
-        tok_freelist = t;
+        continue;
       }
-      t = nxt;
+      t->next = tok_freelist;
+      tok_freelist = t;
     }
     cur->alloc_next = free_alloc_end;
     last_alloc_tok = head.alloc_next;
@@ -1182,11 +1178,11 @@ static Token *preprocess2(Token *tok) {
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
     // If it is a macro, expand it.
-    if (expand_macro(&tok, tok, true))
+    if (expand_macro(&tok, tok))
       continue;
 
     if (is_hash(tok) && !locked_macros) {
-      tok = directives(&cur, tok, true);
+      tok = directives(&cur, tok);
       continue;
     }
 
@@ -1210,7 +1206,7 @@ static Token *preprocess2(Token *tok) {
   return head.next;
 }
 
-static Token *directives(Token **cur, Token *start, bool is_root) {
+static Token *directives(Token **cur, Token *start) {
   Token *tok = start->next;
 
   if (equal(tok, "embed")) {
@@ -1257,7 +1253,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     bool val = eval_const_expr(split_line(&tok, tok->next));
     push_cond_incl(start, val);
     if (!val)
-      tok = skip_cond_incl(tok, is_root);
+      tok = skip_cond_incl(tok);
     return tok;
   }
 
@@ -1266,7 +1262,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     push_cond_incl(tok, defined);
     tok = skip_line(tok->next->next);
     if (!defined)
-      tok = skip_cond_incl(tok, is_root);
+      tok = skip_cond_incl(tok);
     return tok;
   }
 
@@ -1275,7 +1271,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     push_cond_incl(tok, !defined);
     tok = skip_line(tok->next->next);
     if (defined)
-      tok = skip_cond_incl(tok, is_root);
+      tok = skip_cond_incl(tok);
     return tok;
   }
 
@@ -1289,7 +1285,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     if (!cond->included && eval_const_expr(split_line(&tok, tok->next)))
       cond->included = true;
     else
-      tok = skip_cond_incl(tok, is_root);
+      tok = skip_cond_incl(tok);
     return tok;
   }
 
@@ -1302,7 +1298,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     tok = skip_line(tok->next);
 
     if (cond->included)
-      tok = skip_cond_incl(tok, is_root);
+      tok = skip_cond_incl(tok);
     return tok;
   }
 
@@ -1471,7 +1467,7 @@ static Token *pragma_macro(Token *start) {
       error_tok(start, "unterminated _Pragma sequence");
 
     pop_macro_lock(tok);
-    if (expand_macro(&tok, tok, false))
+    if (expand_macro(&tok, tok))
       continue;
 
     switch (progress++) {
