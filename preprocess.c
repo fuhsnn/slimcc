@@ -187,7 +187,8 @@ static Token *skip_cond_incl(Token *tok) {
         continue;
       }
       if (lvl == 0 && (equal(tok->next, "endif") ||
-        equal(tok->next, "elif") || equal(tok->next, "else")))
+        equal(tok->next, "else") || equal(tok->next, "elif") ||
+        equal(tok->next, "elifdef") || equal(tok->next, "elifndef")))
         break;
     }
   }
@@ -1287,6 +1288,32 @@ static Token *directives(Token **cur, Token *start) {
     if (!cond->been_active && eval_const_expr(split_line(&tok, tok->next))) {
       cond->been_active = true;
       return tok;
+    }
+    return skip_cond_incl(tok);
+  }
+
+  if (equal(tok, "elifdef")) {
+    CondIncl *cond;
+    if (!get_cond_incl(&cond) || cond->is_else)
+      error_tok(start, "stray #elifdef");
+    cond->tok->is_incl_guard = false;
+
+    if (!cond->been_active && find_macro(tok->next)) {
+      cond->been_active = true;
+      return skip_line(tok->next->next);
+    }
+    return skip_cond_incl(tok);
+  }
+
+  if (equal(tok, "elifndef")) {
+    CondIncl *cond;
+    if (!get_cond_incl(&cond) || cond->is_else)
+      error_tok(start, "stray #elifndef");
+    cond->tok->is_incl_guard = false;
+
+    if (!cond->been_active && !find_macro(tok->next)) {
+      cond->been_active = true;
+      return skip_line(tok->next->next);
     }
     return skip_cond_incl(tok);
   }
