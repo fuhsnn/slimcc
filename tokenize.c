@@ -58,6 +58,10 @@ static void verror_at(char *filename, char *input, int line_no,
 }
 
 void verror_at_tok(Token *tok, char *fmt, va_list ap) {
+  if (tok->is_generated) {
+    vfprintf(stderr, fmt, ap);
+    return;
+  }
   if (tok->file->file_no != tok->display_file_no) {
     File **files = get_input_files();
     if (files)
@@ -65,11 +69,8 @@ void verror_at_tok(Token *tok, char *fmt, va_list ap) {
         if (tok->display_file_no == files[i]->file_no)
           fprintf(stderr, "#line %d \"%s\"\n", tok->display_line_no, files[i]->name);
   }
-  if (tok->is_generated) {
-    vfprintf(stderr, fmt, ap);
-    return;
-  }
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
+
   if (tok->origin)
     warn_tok(tok->origin, "in expansion of macro");
 }

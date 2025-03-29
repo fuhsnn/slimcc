@@ -431,7 +431,7 @@ static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
 
     if (tok->kind != TK_IDENT) {
       *rest = skip(skip(tok, "..."), ")");
-      static Token va_args = {.loc = "__VA_ARGS__", .len = 11};
+      static Token va_args = {.loc = "__VA_ARGS__", .len = 11, .is_generated = true};
       cur = cur->next = &va_args;
       m->has_va_arg = true;
       break;
