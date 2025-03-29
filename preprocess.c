@@ -46,8 +46,8 @@ typedef struct {
 // `#if` can be nested, so we use a stack to manage nested `#if`s.
 typedef struct {
   Token *tok;
-  enum { IN_THEN, IN_ELIF, IN_ELSE } ctx;
-  bool included;
+  bool is_else;
+  bool been_active;
 } CondIncl;
 
 static struct {
@@ -389,15 +389,15 @@ static int64_t eval_const_expr(Token *tok) {
   return val;
 }
 
-static void push_cond_incl(Token *tok, bool included) {
+static void push_cond_incl(Token *tok, bool active) {
   int idx = cond_incl.cnt++;
   if (idx >= cond_incl.capacity) {
     cond_incl.capacity = idx + 8;
     cond_incl.data = realloc(cond_incl.data, sizeof(CondIncl) * cond_incl.capacity);
   }
-  cond_incl.data[idx].ctx = IN_THEN;
   cond_incl.data[idx].tok = tok;
-  cond_incl.data[idx].included = included;
+  cond_incl.data[idx].is_else = false;
+  cond_incl.data[idx].been_active = active;
 }
 
 static bool get_cond_incl(CondIncl **cond) {
@@ -1253,54 +1253,54 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "if")) {
-    bool val = eval_const_expr(split_line(&tok, tok->next));
-    push_cond_incl(start, val);
-    if (!val)
+    bool active = eval_const_expr(split_line(&tok, tok->next));
+    push_cond_incl(start, active);
+    if (!active)
       tok = skip_cond_incl(tok);
     return tok;
   }
 
   if (equal(tok, "ifdef")) {
-    bool defined = find_macro(tok->next);
-    push_cond_incl(tok, defined);
+    bool active = find_macro(tok->next);
+    push_cond_incl(tok, active);
     tok = skip_line(tok->next->next);
-    if (!defined)
+    if (!active)
       tok = skip_cond_incl(tok);
     return tok;
   }
 
   if (equal(tok, "ifndef")) {
-    bool defined = find_macro(tok->next);
-    push_cond_incl(tok, !defined);
+    bool active = !find_macro(tok->next);
+    push_cond_incl(tok, active);
     tok = skip_line(tok->next->next);
-    if (defined)
+    if (!active)
       tok = skip_cond_incl(tok);
     return tok;
   }
 
   if (equal(tok, "elif")) {
     CondIncl *cond;
-    if (!get_cond_incl(&cond) || cond->ctx == IN_ELSE)
+    if (!get_cond_incl(&cond) || cond->is_else)
       error_tok(start, "stray #elif");
-    cond->ctx = IN_ELIF;
     cond->tok->is_incl_guard = false;
 
-    if (!cond->included && eval_const_expr(split_line(&tok, tok->next)))
-      cond->included = true;
-    else
-      tok = skip_cond_incl(tok);
-    return tok;
+    if (!cond->been_active && eval_const_expr(split_line(&tok, tok->next))) {
+      cond->been_active = true;
+      return tok;
+    }
+    return skip_cond_incl(tok);
   }
 
   if (equal(tok, "else")) {
     CondIncl *cond;
-    if (!get_cond_incl(&cond) || cond->ctx == IN_ELSE)
+    if (!get_cond_incl(&cond) || cond->is_else)
       error_tok(start, "stray #else");
-    cond->ctx = IN_ELSE;
     cond->tok->is_incl_guard = false;
+    cond->is_else = true;
+
     tok = skip_line(tok->next);
 
-    if (cond->included)
+    if (cond->been_active)
       tok = skip_cond_incl(tok);
     return tok;
   }
