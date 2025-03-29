@@ -17,6 +17,14 @@
 #include <time.h>
 #include <unistd.h>
 
+#if defined(__SANITIZE_ADDRESS__)
+#define USE_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define USE_ASAN 1
+#endif
+#endif
+
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wswitch"
 #endif
