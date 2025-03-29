@@ -71,7 +71,7 @@ test_doom() {
 
 test_git() {
  github_tar git git v2.49.0
- make CC="$CC" test -j2
+ make CC="$CC" test
 }
 
 test_gmake() {
@@ -170,7 +170,7 @@ test_openssl() {
  github_tar openssl openssl openssl-3.4.0
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
- make test -j2
+ make test
 }
 
 test_perl() {
@@ -181,7 +181,7 @@ test_perl() {
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
    -Alibpth="/usr/local/lib /lib /usr/lib /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu"
- make -j4 test_prep && HARNESS_OPTIONS=j4 make test_harness
+ make test_prep && make test_harness
 }
 
 test_php() {
@@ -216,7 +216,7 @@ test_python() {
   # don't work in CI https://github.com/python/cpython/blob/6d3b5206cfaf5a85c128b671b1d9527ed553c930/.github/workflows/build.yml#L408
   test_asyncio test_socket
  )
- ./python -m test -j4 --exclude "${skip_tests[@]}"
+ ./python -m test --exclude "${skip_tests[@]}"
 }
 
 test_qbe_hare() {
