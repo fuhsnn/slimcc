@@ -93,15 +93,23 @@ static Token *skip_line(Token *tok) {
   return tok;
 }
 
-static void to_freelist(Token *tok, Token *end) {
-  Token *pre_end = NULL;
-  for (Token *t = tok; t != end; t = t->next)
-    pre_end = t;
-  if (pre_end) {
-    pre_end->next = tok_freelist;
-    tok_freelist = tok;
-  }
-}
+#if USE_ASAN
+#define to_freelist(first, last) \
+  do {                           \
+    Token *x = first;            \
+    Token *y = last->next;       \
+    for (; x != y;) {            \
+      Token *nxt = x->next;      \
+      free(x);                   \
+      x = nxt;                   \
+    }                            \
+  } while (0)
+#else
+#define to_freelist(first, last) do { \
+    last->next = tok_freelist;        \
+    tok_freelist = first;             \
+  } while (0)
+#endif
 
 static Token *copy_token(Token *tok) {
   Token *t;
@@ -159,41 +167,34 @@ static void pop_macro_lock_until(Token *tok, Token *end) {
     pop_macro_lock(tok);
 }
 
-static Token *skip_cond_incl2(Token *tok) {
-  while (tok->kind != TK_EOF) {
-    if (is_hash(tok) &&
-        (equal(tok->next, "if") || equal(tok->next, "ifdef") ||
-         equal(tok->next, "ifndef"))) {
-      tok = skip_cond_incl2(tok->next->next);
-      continue;
-    }
-    if (is_hash(tok) && equal(tok->next, "endif"))
-      return tok->next->next;
-    tok = tok->next;
-  }
-  return tok;
-}
-
 // Skip until next `#else`, `#elif` or `#endif`.
 // Nested `#if` and `#endif` are skipped.
 static Token *skip_cond_incl(Token *tok) {
   Token *start = tok;
-  while (tok->kind != TK_EOF) {
-    if (is_hash(tok) &&
-        (equal(tok->next, "if") || equal(tok->next, "ifdef") ||
-         equal(tok->next, "ifndef"))) {
-      tok = skip_cond_incl2(tok->next->next);
-      continue;
+  Token *last = NULL;
+  int lvl = 0;
+  for (; tok->kind != TK_EOF; last = tok, tok = tok->next) {
+    if (is_hash(tok)) {
+      if ((equal(tok->next, "if") || equal(tok->next, "ifdef") ||
+           equal(tok->next, "ifndef"))) {
+        lvl++;
+        tok = tok->next;
+        continue;
+      }
+      if (lvl && equal(tok->next, "endif"))  {
+        lvl--;
+        tok = tok->next;
+        continue;
+      }
+      if (lvl == 0 && (equal(tok->next, "endif") ||
+        equal(tok->next, "elif") || equal(tok->next, "else")))
+        break;
     }
-
-    if (is_hash(tok) &&
-        (equal(tok->next, "elif") || equal(tok->next, "else") ||
-         equal(tok->next, "endif")))
-      break;
-    tok = tok->next;
   }
-  tok->alloc_next = start->alloc_next;
-  to_freelist(start, tok);
+  if (last) {
+    tok->alloc_next = start->alloc_next;
+    to_freelist(start, last);
+  }
   return tok;
 }
 
@@ -927,14 +928,16 @@ static bool expand_macro(Token **rest, Token *tok) {
     Token head = {.alloc_next = last_alloc_tok};
     Token *cur = &head;
 
-    for (Token *t = last_alloc_tok; t != free_alloc_end; t = t->alloc_next) {
+    for (Token *t = last_alloc_tok; t != free_alloc_end;) {
       if (t->is_root || t->is_macro_body) {
         t->is_root = false;
         cur = cur->alloc_next = t;
+        t = t->alloc_next;
         continue;
       }
-      t->next = tok_freelist;
-      tok_freelist = t;
+      Token *nxt = t->alloc_next;
+      to_freelist(t, t);
+      t = nxt;
     }
     cur->alloc_next = free_alloc_end;
     last_alloc_tok = head.alloc_next;
@@ -1797,19 +1800,21 @@ static Token *preprocess3(Token *tok) {
       tok = skip(tok->next, "(");
       tok = skip(tok, "(");
       Token *list = split_paren(&tok, tok);
-      tok = skip(tok, ")");
-
       filter_attr(list, &attr_cur, false);
-      to_freelist(start, tok);
+
+      Token *free_end = tok;
+      tok = skip(tok, ")");
+      to_freelist(start, free_end);
       continue;
     }
 
     if (equal(tok, "[") && consume(&tok, tok->next, "[")) {
       Token *list = split_bracket(&tok, tok);
-      tok = skip(tok, "]");
-
       filter_attr(list, &attr_cur, true);
-      to_freelist(start, tok);
+
+      Token *free_end = tok;
+      tok = skip(tok, "]");
+      to_freelist(start, free_end);
       continue;
     }
 

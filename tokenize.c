@@ -135,7 +135,7 @@ bool consume(Token **rest, Token *tok, char *str) {
 static Token *new_token(TokenKind kind, char *start, char *end) {
   Token *tok;
   if ((tok = tok_freelist)) {
-    tok_freelist = tok_freelist->next;
+    tok_freelist = tok->next;
     memset(tok, 0, sizeof(Token));
   } else {
     tok = calloc(1, sizeof(Token));
