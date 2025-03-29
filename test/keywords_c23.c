@@ -1,3 +1,21 @@
+#define A
+
+#ifndef A
+#error
+#elifndef B
+#define B
+#else
+#error
+#endif
+
+#ifndef A
+#error
+#elifdef B
+#else
+#error
+#endif
+
+
 #if true
 #define true_is_1
 #endif
