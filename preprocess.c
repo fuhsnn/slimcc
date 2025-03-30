@@ -926,7 +926,7 @@ static bool expand_macro(Token **rest, Token *tok) {
   }
 
   {
-    Token head = {.alloc_next = last_alloc_tok};
+    Token head = {0};
     Token *cur = &head;
 
     for (Token *t = last_alloc_tok; t != free_alloc_end;) {
