@@ -445,9 +445,17 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (startswith(argv[i], &opt_visibility, "-fvisibility=") ||
-      startswith(argv[i], &opt_use_ld, "-fuse-ld="))
+    if (startswith(argv[i], &opt_visibility, "-fvisibility="))
       continue;
+
+    if (startswith(argv[i], &arg, "-fuse-ld=")) {
+      if (!strcmp(arg, "lld")) {
+        opt_use_ld = "ld.lld";
+        continue;
+      }
+      opt_use_ld = arg;
+      continue;
+    }
 
     if (argv[i][0] == '-') {
       arg = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
