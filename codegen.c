@@ -1851,7 +1851,8 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->lhs);
 
     Type *ty = node->ty->base;
-    if (ty->size <= 16 && ty->kind != TY_LDOUBLE) {
+    bool use_reg_save = ty->size <= 16 && ty->kind != TY_LDOUBLE;
+    if (use_reg_save) {
       if (va_arg_need_copy(ty)) {
         // Structs with FP member are split into 8-byte chunks in the
         // reg save area, we reconstruct the layout with a local copy.
@@ -1882,7 +1883,7 @@ static void gen_expr2(Node *node, bool is_void) {
       Printftn("lea %d(%%rdx), %%rcx", align_to(ty->size, 8));
       Printstn("movq %%rcx, 8(%%rax)");
     }
-    if (ty->size <= 16)
+    if (use_reg_save)
       Printssn("2:");
     Printstn("mov %%rdx, %%rax");
     return;
