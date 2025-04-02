@@ -73,7 +73,7 @@ static char *base_file;
 static Token *preprocess2(Token *tok);
 static Token *preprocess3(Token *tok);
 static Macro *find_macro(Token *tok);
-static bool expand_macro(Token **rest, Token *tok);
+static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok);
@@ -119,7 +119,6 @@ static Token *copy_token(Token *tok) {
     t = malloc(sizeof(Token));
 
   *t = *tok;
-  t->is_macro_body = false;
   t->alloc_next = last_alloc_tok;
   last_alloc_tok = t;
   return t;
@@ -332,7 +331,7 @@ static Token *read_const_expr(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, false))
       continue;
 
     // "defined(foo)" or "defined foo" becomes "1" if macro "foo"
@@ -466,15 +465,6 @@ static void read_macro_definition(Token **rest, Token *tok, bool is_opt_d) {
 
   if (!is_opt_d) {
     m->body = split_line(rest, tok);
-
-    if (m->body) {
-      Token *t = m->body;
-      for (; t->kind != TK_EOF; t = t->next)
-        t->is_macro_body = true;
-      t->is_macro_body = true;
-    }
-    for (Token *t = m->params; t; t = t->next)
-      t->is_macro_body = true;
     return;
   }
 
@@ -505,30 +495,18 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   Token *start = tok;
 
   for (;;) {
-    pop_macro_lock(tok);
-    if (locked_macros && tok->kind == TK_IDENT) {
-      Macro *m = find_macro(tok);
-      if (m && m->is_locked)
-        tok->dont_expand = true;
-    }
-
-    if (is_hash(tok) && !locked_macros) {
-      tok = directives(&cur, tok);
-      continue;
-    }
-
     if (level == 0 && equal(tok, ")"))
       break;
     if (level == 0 && !read_rest && equal(tok, ","))
       break;
 
-    if (tok->kind == TK_EOF)
-      error_tok(start, "unterminated list");
-
     if (equal(tok, "("))
       level++;
     else if (equal(tok, ")"))
       level--;
+
+    if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated list");
 
     cur = cur->next = copy_token(tok);
     tok = tok->next;
@@ -538,7 +516,7 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   return head.next;
 }
 
-static MacroContext read_macro_args(Token **rest, Token *tok, Macro *m) {
+static MacroContext read_macro_args(Token *tok, Macro *m) {
   MacroContext ctx = {.m = m};
   ctx.args = calloc(m->arg_cnt, sizeof(MacroArg));
 
@@ -554,7 +532,7 @@ static MacroContext read_macro_args(Token **rest, Token *tok, Macro *m) {
     ap->tok = read_macro_arg_one(&tok, tok, is_va_arg);
   }
 
-  *rest = skip(tok, ")");
+  skip(tok, ")");
   return ctx;
 }
 
@@ -564,7 +542,7 @@ static Token *expand_tok(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, false))
       continue;
 
     cur = cur->next = copy_token(tok);
@@ -806,7 +784,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       Token *tail_arg_tok = copy_line(&(Token *){0}, vaarg->expanded);
       find_last_tok(tail_arg_tok)->next = rparen;
 
-      MacroContext tail_ctx = read_macro_args(&(Token *){0}, tail_arg_tok, tail_m);
+      MacroContext tail_ctx = read_macro_args(tail_arg_tok, tail_m);
       for (int i = 0; i < tail_m->arg_cnt; i++)
         tail_ctx.args[i].expanded = tail_ctx.args[i].tok;
 
@@ -866,9 +844,60 @@ static Token *insert_funclike(Token *tok, Token *stop_tok, Token *orig) {
   return head.next;
 }
 
+static Token *prepare_funclike_args(Token *start) {
+  pop_macro_lock(start);
+
+  Token *cur = start;
+  int lvl = 0;
+  for (Token *tok = start->next;;) {
+    if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated list");
+
+    if (!locked_macros && is_hash(tok)) {
+      tok = directives(&cur, tok);
+      continue;
+    }
+    if (locked_macros) {
+      pop_macro_lock(tok);
+      Macro *m = find_macro(tok);
+      if (m && m->is_locked)
+        tok->dont_expand = true;
+    }
+    cur = cur->next = tok;
+
+    if (lvl == 0 && equal(tok, ")"))
+      break;
+
+    if (equal(tok, "("))
+      lvl++;
+    else if (equal(tok, ")"))
+      lvl--;
+
+    tok = tok->next;
+  }
+  return cur->next;
+}
+
+static void free_funclike_args(Token *tok, Token *stop_tok) {
+  while (tok != stop_tok) {
+    Token *start = tok;
+    Token *last = NULL;
+    while (tok != stop_tok && tok->next->alloc_next == tok) {
+      last = tok;
+      tok = tok->next;
+    }
+    if (last) {
+      tok->alloc_next = start->alloc_next;
+      to_freelist(start, last);
+      continue;
+    }
+    tok = tok->next;
+  }
+}
+
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
-static bool expand_macro(Token **rest, Token *tok) {
+static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   if (tok->dont_expand)
     return false;
 
@@ -901,18 +930,22 @@ static bool expand_macro(Token **rest, Token *tok) {
     }
   }
 
-  // The token right after the macro. For funclike, after parentheses.
-  Token *stop_tok;
-  Token *free_alloc_end = last_alloc_tok;
+  Token *stop_tok, *free_alloc_end;
 
   if (m->is_objlike) {
     stop_tok = tok->next;
+    free_alloc_end = last_alloc_tok;
+
     *rest = insert_objlike(m->body, stop_tok, tok);
   } else {
-    pop_macro_lock(tok->next);
-    pop_macro_lock(tok->next->next);
+    stop_tok = prepare_funclike_args(tok->next);
+    free_alloc_end = last_alloc_tok;
 
-    MacroContext ctx = read_macro_args(&stop_tok, tok->next->next, m);
+    MacroContext ctx = read_macro_args(tok->next->next, m);
+
+    if (is_root)
+      free_funclike_args(tok->next, stop_tok);
+
     *rest = insert_funclike(subst(m->body, &ctx), stop_tok, tok);
     free(ctx.args);
   }
@@ -930,7 +963,7 @@ static bool expand_macro(Token **rest, Token *tok) {
     Token *cur = &head;
 
     for (Token *t = last_alloc_tok; t != free_alloc_end;) {
-      if (t->is_root || t->is_macro_body) {
+      if (t->is_root) {
         t->is_root = false;
         cur = cur->alloc_next = t;
         t = t->alloc_next;
@@ -1182,7 +1215,7 @@ static Token *preprocess2(Token *tok) {
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
     // If it is a macro, expand it.
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, true))
       continue;
 
     if (is_hash(tok) && !locked_macros) {
@@ -1497,7 +1530,7 @@ static Token *pragma_macro(Token *start) {
       error_tok(start, "unterminated _Pragma sequence");
 
     pop_macro_lock(tok);
-    if (expand_macro(&tok, tok))
+    if (expand_macro(&tok, tok, false))
       continue;
 
     switch (progress++) {
