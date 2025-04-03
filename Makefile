@@ -27,7 +27,7 @@ $(TESTS): slimcc test/host/common.o
 
 test: $(TESTS)
 	for i in $(TESTS); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
-	$(SHELL) test/driver.sh $(PWD)/slimcc $(CC)
+	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc $(CC)
 	./slimcc -hashmap-test
 
 # Stage 2
@@ -51,7 +51,7 @@ $(TESTS_S2): slimcc-stage2 test/host/common.o
 
 test-stage2: $(TESTS_S2)
 	for i in $(TESTS_S2); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
-	$(SHELL) test/driver.sh $(PWD)/slimcc-stage2 $(CC)
+	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-stage2 $(CC)
 	./slimcc-stage2 -hashmap-test
 
 # Asan build
@@ -75,7 +75,7 @@ $(TESTS_ASAN): slimcc-asan test/host/common.o
 
 test-asan: $(TESTS_ASAN)
 	for i in $(TESTS_ASAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
-	$(SHELL) test/driver.sh $(PWD)/slimcc-asan $(CC)
+	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-asan $(CC)
 	$(MAKE) slimcc CC=./slimcc-asan -B
 	./slimcc-asan -hashmap-test
 

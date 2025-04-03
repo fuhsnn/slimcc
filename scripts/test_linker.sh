@@ -1,11 +1,11 @@
 tmp=`mktemp -d /tmp/testcc-test-XXXXXX`
 trap 'rm -rf $tmp' INT TERM HUP EXIT
 
-# OpenBSD built-in 'file' is less informative, use https://www.darwinsys.com/file
-if [ `uname` = 'OpenBSD' ]; then
-FILE_UTIL="$HOME/file/src/file -m $HOME/file/magic/Magdir"
-else
-FILE_UTIL=file
+"$FILE" --help | grep astron -q
+
+if [ ! $? -eq 0 ]; then
+    echo 'please set FILE to Fine Free File Command from https://www.darwinsys.com/file'
+    exit 1
 fi
 
 if [ -z "$CC" ]; then
@@ -29,7 +29,7 @@ test_obj() {
     $CC $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c
     check "$1 build"
 
-    STR=`$FILE_UTIL $tmp/foo`
+    STR=`$FILE $tmp/foo`
 
     if [ -n "$2" ]; then
       echo "$STR" | grep -q "$2"
