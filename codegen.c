@@ -95,7 +95,6 @@ static int rtn_ptr_ofs;
 static int lvar_stk_sz;
 static int peak_stk_usage;
 static int64_t rtn_label;
-static long pre_epilog_pos;
 
 static struct {
   bool in[REG_END];
@@ -4032,13 +4031,26 @@ static void emit_cdtor(char *sec, uint16_t priority, Obj *fn) {
   Printssn(",\"aw\"");
   Printstn(".align 8");
   Printftn(".quad \"%s\"", asm_name(fn));
-
-  fn->is_referenced = true;
 }
 
+typedef struct {
+  char *buf;
+  size_t buflen;
+} FuncObj;
+
 void emit_text(Obj *fn) {
+  FuncObj *fnobj = fn->output = malloc(sizeof(FuncObj));
+  output_file = open_memstream(&fnobj->buf, &fnobj->buflen);
+
   for (Obj *var = fn->static_lvars; var; var = var->next)
     emit_data(var);
+
+  if (fn->is_ctor || fn->is_dtor)
+    fn->is_referenced = true;
+  if (fn->is_ctor)
+    emit_cdtor("init_array", fn->ctor_prior, fn);
+  if (fn->is_dtor)
+    emit_cdtor("fini_array", fn->dtor_prior, fn);
 
   emit_symbol(fn);
 
@@ -4160,7 +4172,7 @@ void emit_text(Obj *fn) {
   if (!strcmp(fn->name, "main"))
     Printstn("xor %%eax, %%eax");
 
-  pre_epilog_pos = ftell(output_file);
+  long pre_epilog_pos = ftell(output_file);
 
   // Epilogue
   Printfsn(".L.rtn.%"PRIi64":", rtn_label);
@@ -4170,10 +4182,24 @@ void emit_text(Obj *fn) {
   Printstn("ret");
   Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
 
-  if (fn->is_ctor)
-    emit_cdtor("init_array", fn->ctor_prior, fn);
-  if (fn->is_dtor)
-    emit_cdtor("fini_array", fn->dtor_prior, fn);
+  fclose(output_file);
+  output_file = NULL;
+
+  {
+    char fmtbuf[STRBUF_SZ];
+    int len;
+    if (!strcmp(fn->name, "main"))
+      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n\txor %%eax, %%eax\n", rtn_label);
+    else
+      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n", rtn_label);
+
+    if (len < MIN(pre_epilog_pos, STRBUF_SZ)) {
+      char *p = &fnobj->buf[pre_epilog_pos - len];
+      if (!strncmp(p, fmtbuf, len))
+        memset(p, ' ', len - 1);
+    }
+  }
+  current_fn = NULL;
 }
 
 // Logic should be in sync with gen_funcall_args()
@@ -4207,38 +4233,6 @@ void prepare_funcall(Node *node, Scope *scope) {
     var->next = scope->locals;
     scope->locals = var;
   }
-}
-
-typedef struct {
-  char *buf;
-  size_t buflen;
-} FuncObj;
-
-void *prepare_funcgen(void) {
-  FuncObj *obj = malloc(sizeof(FuncObj));
-  output_file = open_memstream(&obj->buf, &obj->buflen);
-  return obj;
-}
-
-void end_funcgen(void) {
-  fclose(output_file);
-  output_file = NULL;
-
-  {
-    char fmtbuf[STRBUF_SZ];
-    int len;
-    if (!strcmp(current_fn->name, "main"))
-      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n\txor %%eax, %%eax\n", rtn_label);
-    else
-      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n", rtn_label);
-
-    if (len < MIN(pre_epilog_pos, STRBUF_SZ)) {
-      char *p = &((FuncObj *)current_fn->output)->buf[pre_epilog_pos - len];
-      if (!strncmp(p, fmtbuf, len))
-        memset(p, ' ', len - 1);
-    }
-  }
-  current_fn = NULL;
 }
 
 int codegen(Obj *prog, FILE *out) {
