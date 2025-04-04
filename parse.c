@@ -4590,7 +4590,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fn->is_definition = true;
   fn->ty = ty;
 
-  fn->output = prepare_funcgen();
   arena_on(&ast_arena);
 
   current_fn = fn;
@@ -4622,7 +4621,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   emit_text(fn);
   arena_off(&ast_arena);
-  end_funcgen();
 
   if (fn->only_inline)
     fn->is_definition = false;

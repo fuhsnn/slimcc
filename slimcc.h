@@ -661,8 +661,6 @@ void prepare_inline_asm(Node *node);
 int align_to(int n, int align);
 bool va_arg_need_copy(Type *ty);
 void emit_text(Obj *fn);
-void *prepare_funcgen(void);
-void end_funcgen(void);
 
 //
 // unicode.c
