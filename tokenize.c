@@ -279,6 +279,8 @@ TokenKind ident_keyword(Token *tok) {
       hashmap_put(&map, "thread_local", (void *)TK_TYPEKW);
       hashmap_put(&map, "typeof_unqual", (void *)TK_TYPEKW);
     }
+    if (opt_fdefer_ts)
+      hashmap_put(&map, "defer", (void *)TK_KEYWORD);
   }
   void *val = hashmap_get2(&map, tok->loc, tok->len);
   return val ? (TokenKind)(intptr_t)val : TK_IDENT;

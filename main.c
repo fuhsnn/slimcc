@@ -27,6 +27,7 @@ bool opt_werror;
 bool opt_cc1_asm_pp;
 char *opt_visibility;
 StdVer opt_std;
+bool opt_fdefer_ts;
 
 static StringArray opt_include;
 bool opt_E;
@@ -426,6 +427,11 @@ static int parse_args(int argc, char **argv) {
         set_bool(argp, bval, "emulated-tls", &opt_femulated_tls) ||
         set_bool(argp, bval, "enable-universal-char", &opt_enable_universal_char)))
         continue;
+    }
+
+    if (set_true(argv[i], "-fdefer-ts", &opt_fdefer_ts)) {
+      define_macro("__STDC_DEFER_TS25755__", "1");
+      continue;
     }
 
     if (set_bool(argv[i], false, "-fsigned-char", &ty_pchar->is_unsigned) ||

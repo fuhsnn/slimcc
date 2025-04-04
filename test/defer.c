@@ -2,12 +2,6 @@
 
 // Adapted from https://www.open-std.org/JTC1/SC22/WG14/www/docs/n3199.htm
 
-#ifdef defer
-#error
-#endif
-
-#define defer _Defer
-
 int n3199_ex2(void) {
   int r = 4;
   int* p = &r;

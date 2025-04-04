@@ -3,7 +3,7 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
  - C11 features: `_Static_assert()`, over-aligned locals, `_Generic` with qualifiers.
  - C23 features: `constexpr`, `enum:T{}`, `#embed`, `auto` type-inference, etc.
  - C2y features: labeled loop/switch, if/switch declaration
- - TS features: `defer`(as `_Defer`), `__VA_TAIL__`
+ - TS features: `defer`(enable with `-fdefer-ts`), `__VA_TAIL__`
  - GNU features: inline assembly, symbol attributes, `cleanup`, `cons/destructor`
  - Basic codegen optimizations: const folding, reg-alloc for temporaries, instruction selection.
 

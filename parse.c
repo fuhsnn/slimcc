@@ -2643,7 +2643,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     return node;
   }
 
-  if (equal(tok, "_Defer")) {
+  if (equal_kw(tok, "defer") || equal(tok, "_Defer")) {
     Node *node = secondary_block(rest, tok->next);
     add_type(node);
     new_defr(DF_DEFER_STMT)->stmt = node;

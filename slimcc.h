@@ -724,6 +724,7 @@ extern bool opt_werror;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
+extern bool opt_fdefer_ts;
 
 extern bool opt_pie;
 extern bool opt_nopie;
