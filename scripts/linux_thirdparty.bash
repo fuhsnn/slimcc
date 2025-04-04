@@ -49,6 +49,13 @@ install_libtool() {
 
 # tests
 
+test_bash() {
+ url_tar https://ftp.gnu.org/gnu/bash/bash-5.3-beta.tar.gz bash
+ fix_configure ./configure
+ ./configure
+ make test
+}
+
 test_cello() {
  git_fetch https://github.com/orangeduck/Cello 61ee5c3d9bca98fd68af575e9704f5f02533ae26 cello
  make check
@@ -293,13 +300,6 @@ build_gcc() {
  mkdir buildonly && cd "$_"
  export MAKEINFO=missing
  ../configure --enable-languages=c,c++ --disable-multilib --disable-bootstrap
- make
-}
-
-build_musl() {
- github_tar bminor musl v1.2.5
- rm -rf src/complex/
- AR=ar RANLIB=ranlib ../musl/configure --target=x86_64-linux-musl
  make
 }
 
