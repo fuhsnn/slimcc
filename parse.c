@@ -762,6 +762,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     OTHER    = 1 << 16,
     SIGNED   = 1 << 17,
     UNSIGNED = 1 << 18,
+    BITINT   = 1 << 19,
   };
 
   if (attr)
@@ -923,7 +924,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       counter |= SIGNED;
     else if (equal(tok, "unsigned"))
       counter |= UNSIGNED;
-    else
+    else if (equal(tok, "_BitInt")) {
+      counter |= BITINT;
+      tok = skip(tok->next, "(");
+      ty = new_bitint(const_expr(&tok, tok));
+      skip(tok, ")");
+    } else
       internal_error();
 
     switch (counter) {
@@ -989,6 +995,16 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       break;
     case LONG + DOUBLE:
       ty = ty_ldouble;
+      break;
+    case BITINT:
+    case BITINT + SIGNED:
+      if (ty->bitint_width < 2)
+        error_tok(tok, "signed _BitInt must be at least 2 bits");
+      break;
+    case BITINT + UNSIGNED:
+      if (ty->bitint_width < 1)
+        error_tok(tok, "unsigned _BitInt must be at least 1 bits");
+      ty->is_unsigned = true;
       break;
     default:
       error_tok(tok, "invalid type");

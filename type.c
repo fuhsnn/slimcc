@@ -68,6 +68,25 @@ Type *new_type(TypeKind kind, int64_t size, int32_t align) {
   return ty;
 }
 
+Type *new_bitint(int64_t width) {
+  int sz, align;
+
+  if (width <= 8)
+    sz = align = 1;
+  else if (width <= 16)
+    sz = align = 2;
+  else if (width <= 32)
+    sz = align = 4;
+  else if (width <= 64)
+    sz = align = 8;
+  else
+    sz = align_to(width, 64) / 8, align = 8; // ARM64 align to 16
+
+  Type *ty = new_type(TY_BITINT, sz, align);
+  ty->bitint_width = width;
+  return ty;
+}
+
 Type *copy_type(Type *ty) {
   Type *ret = ast_arena_malloc(sizeof(Type));
   *ret = *ty;
@@ -120,7 +139,7 @@ bool is_flonum(Type *ty) {
 }
 
 bool is_numeric(Type *ty) {
-  return is_integer(ty) || is_flonum(ty);
+  return is_integer(ty) || is_flonum(ty) || ty->kind == TY_BITINT;
 }
 
 bool is_array(Type *ty) {
@@ -223,6 +242,9 @@ bool is_compatible(Type *t1, Type *t2) {
   case TY_LONG:
   case TY_LONGLONG:
     return t1->is_unsigned == t2->is_unsigned;
+  case TY_BITINT:
+    return (t1->is_unsigned == t2->is_unsigned) &&
+      (t1->bitint_width == t2->bitint_width);
   case TY_FLOAT:
   case TY_DOUBLE:
   case TY_LDOUBLE:
@@ -291,6 +313,7 @@ Type *vla_of(Type *base, Node *len) {
 
 int int_rank(Type *t) {
   switch (t->kind) {
+    case TY_BITINT:
     case TY_BOOL:
     case TY_CHAR:
     case TY_SHORT:
@@ -321,17 +344,18 @@ static void int_promotion(Node **node) {
   int bit_width;
 
   if (is_bitfield2(*node, &bit_width)) {
-    int int_width = ty_int->size * 8;
-
-    if (bit_width == int_width && ty->is_unsigned) {
-      *node = new_cast(*node, ty_uint);
-    } else if (bit_width <= int_width) {
-      *node = new_cast(*node, ty_int);
-    } else {
-      *node = new_cast(*node, ty);
+    if (ty->kind != TY_BITINT) {
+      if (bit_width == (ty_int->size * 8) && ty->is_unsigned)
+        ty = ty_uint;
+      else if (bit_width <= (ty_int->size * 8))
+        ty = ty_int;
     }
+    *node = new_cast(*node, ty);
     return;
   }
+
+  if (ty->kind == TY_BITINT)
+    return;
 
   if (ty->size < ty_int->size) {
     *node = new_cast(*node, ty_int);
@@ -384,17 +408,22 @@ static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
   ty1 = (*lhs)->ty;
   ty2 = (*rhs)->ty;
 
-  if (ty1->size != ty2->size)
-    return (ty1->size < ty2->size) ? ty2 : ty1;
+  int32_t wid1 = ty1->kind == TY_BITINT ? ty1->bitint_width : ty1->size * 8;
+  int32_t wid2 = ty2->kind == TY_BITINT ? ty2->bitint_width : ty2->size * 8;
+  if (wid1 != wid2)
+    return wid1 > wid2 ? ty1 : ty2;
 
-  Type *ranked_ty = int_rank(ty1) > int_rank(ty2) ? ty1 : ty2;
+  int rnk1 = int_rank(ty1);
+  int rnk2 = int_rank(ty2);
+  Type *rnk_ty = rnk1 > rnk2 ? ty1 : ty2;
 
   if (ty1->is_unsigned == ty2->is_unsigned)
-    return ranked_ty;
+    return rnk_ty;
 
-  // If same size but different sign, the common type is unsigned
-  // variant of the highest-ranked type between the two.
-  return to_unsigned(ranked_ty->kind);
+  if (rnk1 == rnk2)
+    return ty1->is_unsigned ? ty1 : ty2;
+
+  return to_unsigned(rnk_ty->kind);
 }
 
 // For many binary operators, we implicitly promote operands so that
