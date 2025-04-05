@@ -68,6 +68,28 @@ Type *new_type(TypeKind kind, int64_t size, int32_t align) {
   return ty;
 }
 
+Type *new_bitint(int64_t width, Token *tok) {
+  if (width < 0 || width > 65535)
+    error_tok(tok, "unsupported _BitInt size");
+
+  int sz, align;
+
+  if (width <= 8)
+    sz = align = 1;
+  else if (width <= 16)
+    sz = align = 2;
+  else if (width <= 32)
+    sz = align = 4;
+  else if (width <= 64)
+    sz = align = 8;
+  else
+    sz = align_to(width, 64) / 8, align = 8; // ARM64 align to 16
+
+  Type *ty = new_type(TY_BITINT, sz, align);
+  ty->bit_cnt = width;
+  return ty;
+}
+
 Type *copy_type(Type *ty) {
   Type *ret = ast_arena_malloc(sizeof(Type));
   *ret = *ty;

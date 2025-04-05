@@ -546,6 +546,7 @@ typedef enum {
   TY_VLA, // variable-length array
   TY_STRUCT,
   TY_UNION,
+  TY_BITINT
 } TypeKind;
 
 struct Type {
@@ -570,6 +571,9 @@ struct Type {
   // naturally handled as if it were "pointer to T", as required by
   // the C spec.
   Type *base;
+
+  // _BitInt
+  int64_t bit_cnt;
 
   // Array
   int64_t array_len;
@@ -653,6 +657,7 @@ Type *func_type(Type *return_ty, Token *tok);
 Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr);
 Type *new_type(TypeKind kind, int64_t size, int align);
+Type *new_bitint(int64_t width, Token *tok);
 void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);

@@ -762,6 +762,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     OTHER    = 1 << 16,
     SIGNED   = 1 << 17,
     UNSIGNED = 1 << 18,
+    BITINT   = 1 << 19,
   };
 
   if (attr)
@@ -923,8 +924,14 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       counter |= SIGNED;
     else if (equal(tok, "unsigned"))
       counter |= UNSIGNED;
-    else
+    else if (equal(tok, "_BitInt")) {
+      counter |= BITINT;
+      int64_t width = const_expr(&tok, skip(tok->next, "("));
+      ty = new_bitint(width, tok);
+      skip(tok, ")");
+    } else {
       internal_error();
+    }
 
     switch (counter) {
     case VOID:
@@ -990,6 +997,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     case LONG + DOUBLE:
       ty = ty_ldouble;
       break;
+    case BITINT:
+    case BITINT + SIGNED:
+      break;
+    case BITINT + UNSIGNED:
+      ty->is_unsigned = true;
+      break;
     default:
       error_tok(tok, "invalid type");
     }
@@ -1011,6 +1024,10 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
 
   if (!ty)
     ty = ty_int;
+
+  if (ty->kind == TY_BITINT)
+    if (ty->bit_cnt < (1 + !ty->is_unsigned))
+      error_tok(tok, "invalid bit width for _BitInt");
 
   if (is_atomic || is_const || is_volatile || is_restrict) {
     Type *ty2 = new_qualified_type(ty);

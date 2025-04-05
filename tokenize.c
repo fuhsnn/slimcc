@@ -258,7 +258,8 @@ TokenKind ident_keyword(Token *tok) {
       "const", "auto", "register", "restrict", "__restrict", "__restrict__",
       "_Noreturn", "float", "double", "inline", "__auto_type",
       "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__",
-      "volatile", "__volatile", "__volatile__"
+      "volatile", "__volatile", "__volatile__",
+      "_BitInt"
     };
     for (int i = 0; i < sizeof(ty_kw) / sizeof(*ty_kw); i++)
       hashmap_put(&map, ty_kw[i], (void *)TK_TYPEKW);
