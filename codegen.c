@@ -94,6 +94,7 @@ static int vla_base_ofs;
 static int rtn_ptr_ofs;
 static int lvar_stk_sz;
 static int peak_stk_usage;
+static int tmpbuf_sz;
 static int64_t rtn_label;
 
 static struct {
@@ -191,6 +192,11 @@ static char *asm_name(Obj *var) {
 static int64_t count(void) {
   static int64_t i = 1;
   return i++;
+}
+
+static char *tmpbuf(int sz) {
+  tmpbuf_sz = MAX(tmpbuf_sz, sz);
+  return "__BUF";
 }
 
 static bool is_gp_ty(Type *ty) {
@@ -447,8 +453,8 @@ static void push_x87(void) {
 
 static bool pop_x87(void) {
   Slot *sl = pop_tmpstack(2);
-  insrtln("fstpt %d(%s)", sl->loc, sl->st_ofs, lvar_ptr);
-  Printftn("fldt %d(%s)", sl->st_ofs, lvar_ptr);
+  insrtln("fldt %s(%s); fstpt %d(%s)", sl->loc, tmpbuf(10), lvar_ptr, sl->st_ofs, lvar_ptr);
+  Printftn("fldt %d(%s); fstpt %s(%s)", sl->st_ofs, lvar_ptr, tmpbuf(10), lvar_ptr);
   return true;
 }
 
@@ -792,7 +798,7 @@ static void load3(Type *ty, char *sofs, char *sptr) {
     Printftn("movsd %s(%s), %%xmm0", sofs, sptr);
     return;
   case TY_LDOUBLE:
-    Printftn("fninit; fldt %s(%s)", sofs, sptr);
+    gen_mem_copy2(sofs, sptr, tmpbuf(10), lvar_ptr, 10);
     return;
   }
   load_extend_int(ty, sofs, sptr, regop_ax(ty));
@@ -844,8 +850,7 @@ static void store3(Type *ty, char *dofs, char *dptr) {
     Printftn("movsd %%xmm0, %s(%s)", dofs, dptr);
     return;
   case TY_LDOUBLE:
-    Printftn("fstpt %s(%s)", dofs, dptr);
-    Printftn("fninit; fldt %s(%s)", dofs, dptr);
+    gen_mem_copy2(tmpbuf(10), lvar_ptr, dofs, dptr, 10);
     return;
   }
 
@@ -922,35 +927,12 @@ static void load_fval(Type *ty, long double fval) {
     return;
   }
 
-  long double pos_z = +0.0L;
-  if (!memcmp(&pos_z, &fval, 10)) {
-    Printstn("fninit; fldz");
-    return;
-  }
-  long double neg_z = -0.0L;
-  if (!memcmp(&neg_z, &fval, 10)) {
-    Printstn("fninit; fldz");
-    Printstn("fchs");
-    return;
-  }
-  if (fval == 1) {
-    Printstn("fninit; fld1");
-    return;
-  }
-  if (fval == -1) {
-    Printstn("fninit; fld1");
-    Printstn("fchs");
-    return;
-  }
-  union { long double f80; uint64_t u64[2]; } u;
+  union { long double f80; int32_t i32[3]; } u;
   memset(&u, 0, sizeof(u));
   u.f80 = fval;
-  Printftn("movq $%"PRIu64", %%rax", u.u64[0]);
-  Printftn("movw $%"PRIu16", %%dx", (uint16_t)u.u64[1]);
-  Printstn("push %%rdx");
-  Printstn("push %%rax");
-  Printstn("fninit; fldt (%%rsp)");
-  Printstn("add $16, %%rsp");
+  Printftn("movl $%"PRIi32", %s(%s)", u.i32[0], tmpbuf(10), lvar_ptr);
+  Printftn("movl $%"PRIi32", 4+%s(%s)", u.i32[1], tmpbuf(10), lvar_ptr);
+  Printftn("movw $%"PRIu16", 8+%s(%s)", (uint16_t)u.i32[2], tmpbuf(10), lvar_ptr);
   return;
 }
 
@@ -1110,8 +1092,15 @@ static void gen_cast(Node *node) {
 
   int t1 = getTypeId(node->lhs->ty);
   int t2 = getTypeId(node->ty);
-  if (cast_table[t1][t2])
+  if (cast_table[t1][t2]) {
+    if (t1 == F80)
+      Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
+
     Printftn("%s", cast_table[t1][t2]);
+
+    if (t2 == F80)
+      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+  }
 }
 
 // Structs or unions equal or smaller than 16 bytes are passed
@@ -1652,7 +1641,9 @@ static void gen_expr2(Node *node, bool is_void) {
       Printstn("xorpd %%xmm1, %%xmm0");
       return;
     case TY_LDOUBLE:
+      Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
       Printstn("fchs");
+      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
       return;
     }
 
@@ -1767,6 +1758,13 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   case ND_FUNCALL:
     gen_funcall(node);
+
+    if (node->ty->kind == TY_LDOUBLE) {
+      if (is_void)
+        Printstn("fstp %%st(0)");
+      else
+        Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+    }
 
     if (!is_void) {
       if (is_integer(node->ty) && node->ty->size < 4) {
@@ -1950,20 +1948,26 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->lhs);
     push_x87();
     gen_expr(node->rhs);
+    Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
     pop_x87();
+    Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
 
     switch (node->kind) {
     case ND_ADD:
       Printstn("faddp");
+      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
       return;
     case ND_SUB:
       Printstn("fsubp");
+      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
       return;
     case ND_MUL:
       Printstn("fmulp");
+      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
       return;
     case ND_DIV:
       Printstn("fdivp");
+      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
       return;
     case ND_EQ:
     case ND_NE:
@@ -2203,6 +2207,8 @@ static void gen_stmt(Node *node) {
       gen_defr(node);
       pop_by_ty(ty);
     }
+    if (ty->kind == TY_LDOUBLE)
+      Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
     Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
     return;
   }
@@ -4082,7 +4088,7 @@ void emit_text(Obj *fn) {
 
   long stack_alloc_loc = resrvln();
 
-  lvar_stk_sz = 0;
+  lvar_stk_sz = tmpbuf_sz = 0;
 
   // Save arg registers if function is variadic
   if (fn->ty->is_variadic) {
@@ -4166,9 +4172,11 @@ void emit_text(Obj *fn) {
   gen_stmt(fn->body);
   assert(tmp_stack.depth == 0);
 
-  if (peak_stk_usage)
-    insrtln("sub $%d, %%rsp", stack_alloc_loc, align_to(peak_stk_usage, 16));
-
+  peak_stk_usage += tmpbuf_sz;
+  if (peak_stk_usage) {
+    peak_stk_usage = align_to(peak_stk_usage, 16);
+    insrtln(".set __BUF, -%d; sub $%d, %%rsp", stack_alloc_loc, peak_stk_usage, peak_stk_usage);
+  }
   if (!strcmp(fn->name, "main"))
     Printstn("xor %%eax, %%eax");
 
