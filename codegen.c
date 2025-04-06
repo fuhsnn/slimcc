@@ -1604,6 +1604,204 @@ static void gen_logical(Node *node, bool flip) {
   Printfsn(".L.fall.%"PRIi64":", c);
 }
 
+static void gen_xmm_arith(Node *node) {
+  gen_expr(node->lhs);
+  pushf();
+  gen_expr(node->rhs);
+
+  bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
+  int reg = popf_inreg(is_xmm64, 1);
+  char *sz = is_xmm64 ? "sd" : "ss";
+
+  switch (node->kind) {
+  case ND_ADD:
+    Printftn("add%s %%xmm%d, %%xmm0", sz, reg);
+    return;
+  case ND_SUB:
+    Printftn("sub%s %%xmm0, %%xmm%d", sz, reg);
+    Printftn("movaps %%xmm%d, %%xmm0", reg);
+    return;
+  case ND_MUL:
+    Printftn("mul%s %%xmm%d, %%xmm0", sz, reg);
+    return;
+  case ND_DIV:
+    Printftn("div%s %%xmm0, %%xmm%d", sz, reg);
+    Printftn("movaps %%xmm%d, %%xmm0", reg);
+    return;
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+    if (node->kind == ND_GT || node->kind == ND_GE)
+      Printftn("ucomi%s %%xmm0, %%xmm%d", sz, reg);
+    else
+      Printftn("ucomi%s %%xmm%d, %%xmm0", sz, reg);
+
+    if (node->kind == ND_EQ) {
+      Printstn("sete %%al");
+      Printstn("setnp %%dl");
+      Printstn("and %%dl, %%al");
+    } else if (node->kind == ND_NE) {
+      Printstn("setne %%al");
+      Printstn("setp %%dl");
+      Printstn("or %%dl, %%al");
+    } else if (node->kind == ND_LT || node->kind == ND_GT) {
+      Printstn("seta %%al");
+    } else if (node->kind == ND_LE || node->kind == ND_GE) {
+      Printstn("setae %%al");
+    }
+
+    Printstn("movzbl %%al, %%eax");
+    return;
+  }
+
+  error_tok(node->tok, "invalid expression");
+}
+
+static void gen_x87_arith(Node *node) {
+  gen_expr(node->lhs);
+  push_x87();
+  gen_expr(node->rhs);
+  Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
+  pop_x87();
+  Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
+
+  switch (node->kind) {
+  case ND_ADD:
+    Printstn("faddp");
+    Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+    return;
+  case ND_SUB:
+    Printstn("fsubp");
+    Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+    return;
+  case ND_MUL:
+    Printstn("fmulp");
+    Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+    return;
+  case ND_DIV:
+    Printstn("fdivp");
+    Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+    return;
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+    if (node->kind == ND_LT || node->kind == ND_LE)
+      Printstn("fxch %%st(1)");
+
+    Printstn("fucomip");
+    Printstn("fstp %%st(0)");
+
+    if (node->kind == ND_EQ) {
+      Printstn("sete %%al");
+      Printstn("setnp %%dl");
+      Printstn("and %%dl, %%al");
+    } else if (node->kind == ND_NE) {
+      Printstn("setne %%al");
+      Printstn("setp %%dl");
+      Printstn("or %%dl, %%al");
+    } else if (node->kind == ND_LT || node->kind == ND_GT) {
+      Printstn("seta %%al");
+    } else if (node->kind == ND_LE || node->kind == ND_GE) {
+      Printstn("setae %%al");
+    }
+
+    Printstn("movzbl %%al, %%eax");
+    return;
+  }
+
+  error_tok(node->tok, "invalid expression");
+}
+
+static void gen_gp_arith(Node *node) {
+  switch (node->kind) {
+  case ND_BITNOT:
+    gen_expr(node->lhs);
+    Printstn("not %%rax");
+    return;
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR:
+    gen_expr(node->lhs);
+    push();
+    gen_expr(node->rhs);
+    Printstn("mov %%al, %%cl");
+
+    char *ax = regop_ax(node->ty);
+    pop2((node->ty->size == 8), ax);
+
+    switch (node->kind) {
+    case ND_SHL: Printftn("shl %%cl, %s", ax); break;
+    case ND_SHR: Printftn("shr %%cl, %s", ax); break;
+    case ND_SAR: Printftn("sar %%cl, %s", ax); break;
+    }
+    return;
+  }
+
+  gen_expr(node->lhs);
+  push();
+  gen_expr(node->rhs);
+
+  bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
+  char *ax = is_r64 ? "%rax" : "%eax";
+  char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
+
+  switch (node->kind) {
+  case ND_ADD:
+    Printftn("add %s, %s", op, ax);
+    return;
+  case ND_SUB:
+    Printftn("sub %s, %s", ax, op);
+    Printftn("mov %s, %s", op, ax);
+    return;
+  case ND_MUL:
+    Printftn("imul %s, %s", op, ax);
+    return;
+  case ND_DIV:
+  case ND_MOD:
+    Printftn("xchg %s, %s", op, ax);
+    if (node->ty->is_unsigned) {
+      Printstn("xor %%edx, %%edx");
+      Printftn("div %s", op);
+    } else {
+      if (node->lhs->ty->size == 8)
+        Printstn("cqo");
+      else
+        Printstn("cdq");
+      Printftn("idiv %s", op);
+    }
+
+    if (node->kind == ND_MOD)
+      Printstn("mov %%rdx, %%rax");
+    return;
+  case ND_BITAND:
+    Printftn("and %s, %s", op, ax);
+    return;
+  case ND_BITOR:
+    Printftn("or %s, %s", op, ax);
+    return;
+  case ND_BITXOR:
+    Printftn("xor %s, %s", op, ax);
+    return;
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+    Printftn("cmp %s, %s", ax, op);
+    gen_cmp_setcc(node->kind, node->lhs->ty->is_unsigned);
+    return;
+  }
+
+  error_tok(node->tok, "invalid expression");
+}
+
 // Generate code for a given node.
 static void gen_expr2(Node *node, bool is_void) {
   if (opt_g)
@@ -1731,30 +1929,9 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->lhs);
     Printstn("xor $1, %%al");
     return;
-  case ND_BITNOT:
-    gen_expr(node->lhs);
-    Printstn("not %%rax");
-    return;
   case ND_LOGAND:
   case ND_LOGOR:
     gen_logical(node, false);
-    return;
-  case ND_SHL:
-  case ND_SHR:
-  case ND_SAR:
-    gen_expr(node->lhs);
-    push();
-    gen_expr(node->rhs);
-    Printstn("mov %%al, %%cl");
-
-    char *ax = regop_ax(node->ty);
-    pop2((node->ty->size == 8), ax);
-
-    switch (node->kind) {
-    case ND_SHL: Printftn("shl %%cl, %s", ax); break;
-    case ND_SHR: Printftn("shr %%cl, %s", ax); break;
-    case ND_SAR: Printftn("sar %%cl, %s", ax); break;
-    }
     return;
   case ND_FUNCALL:
     gen_funcall(node);
@@ -1889,177 +2066,14 @@ static void gen_expr2(Node *node, bool is_void) {
 
   switch (node->lhs->ty->kind) {
   case TY_FLOAT:
-  case TY_DOUBLE: {
-    gen_expr(node->lhs);
-    pushf();
-    gen_expr(node->rhs);
-
-    bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
-    int reg = popf_inreg(is_xmm64, 1);
-    char *sz = is_xmm64 ? "sd" : "ss";
-
-    switch (node->kind) {
-    case ND_ADD:
-      Printftn("add%s %%xmm%d, %%xmm0", sz, reg);
-      return;
-    case ND_SUB:
-      Printftn("sub%s %%xmm0, %%xmm%d", sz, reg);
-      Printftn("movaps %%xmm%d, %%xmm0", reg);
-      return;
-    case ND_MUL:
-      Printftn("mul%s %%xmm%d, %%xmm0", sz, reg);
-      return;
-    case ND_DIV:
-      Printftn("div%s %%xmm0, %%xmm%d", sz, reg);
-      Printftn("movaps %%xmm%d, %%xmm0", reg);
-      return;
-    case ND_EQ:
-    case ND_NE:
-    case ND_LT:
-    case ND_LE:
-    case ND_GT:
-    case ND_GE:
-      if (node->kind == ND_GT || node->kind == ND_GE)
-        Printftn("ucomi%s %%xmm0, %%xmm%d", sz, reg);
-      else
-        Printftn("ucomi%s %%xmm%d, %%xmm0", sz, reg);
-
-      if (node->kind == ND_EQ) {
-        Printstn("sete %%al");
-        Printstn("setnp %%dl");
-        Printstn("and %%dl, %%al");
-      } else if (node->kind == ND_NE) {
-        Printstn("setne %%al");
-        Printstn("setp %%dl");
-        Printstn("or %%dl, %%al");
-      } else if (node->kind == ND_LT || node->kind == ND_GT) {
-        Printstn("seta %%al");
-      } else if (node->kind == ND_LE || node->kind == ND_GE) {
-        Printstn("setae %%al");
-      }
-
-      Printstn("movzbl %%al, %%eax");
-      return;
-    }
-
-    error_tok(node->tok, "invalid expression");
-  }
-  case TY_LDOUBLE: {
-    gen_expr(node->lhs);
-    push_x87();
-    gen_expr(node->rhs);
-    Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
-    pop_x87();
-    Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
-
-    switch (node->kind) {
-    case ND_ADD:
-      Printstn("faddp");
-      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
-      return;
-    case ND_SUB:
-      Printstn("fsubp");
-      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
-      return;
-    case ND_MUL:
-      Printstn("fmulp");
-      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
-      return;
-    case ND_DIV:
-      Printstn("fdivp");
-      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
-      return;
-    case ND_EQ:
-    case ND_NE:
-    case ND_LT:
-    case ND_LE:
-    case ND_GT:
-    case ND_GE:
-      if (node->kind == ND_LT || node->kind == ND_LE)
-        Printstn("fxch %%st(1)");
-
-      Printstn("fucomip");
-      Printstn("fstp %%st(0)");
-
-      if (node->kind == ND_EQ) {
-        Printstn("sete %%al");
-        Printstn("setnp %%dl");
-        Printstn("and %%dl, %%al");
-      } else if (node->kind == ND_NE) {
-        Printstn("setne %%al");
-        Printstn("setp %%dl");
-        Printstn("or %%dl, %%al");
-      } else if (node->kind == ND_LT || node->kind == ND_GT) {
-        Printstn("seta %%al");
-      } else if (node->kind == ND_LE || node->kind == ND_GE) {
-        Printstn("setae %%al");
-      }
-
-      Printstn("movzbl %%al, %%eax");
-      return;
-    }
-
-    error_tok(node->tok, "invalid expression");
-  }
-  }
-
-  gen_expr(node->lhs);
-  push();
-  gen_expr(node->rhs);
-
-  bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
-  char *ax = is_r64 ? "%rax" : "%eax";
-  char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
-
-  switch (node->kind) {
-  case ND_ADD:
-    Printftn("add %s, %s", op, ax);
+  case TY_DOUBLE:
+    gen_xmm_arith(node);
     return;
-  case ND_SUB:
-    Printftn("sub %s, %s", ax, op);
-    Printftn("mov %s, %s", op, ax);
-    return;
-  case ND_MUL:
-    Printftn("imul %s, %s", op, ax);
-    return;
-  case ND_DIV:
-  case ND_MOD:
-    Printftn("xchg %s, %s", op, ax);
-    if (node->ty->is_unsigned) {
-      Printstn("xor %%edx, %%edx");
-      Printftn("div %s", op);
-    } else {
-      if (node->lhs->ty->size == 8)
-        Printstn("cqo");
-      else
-        Printstn("cdq");
-      Printftn("idiv %s", op);
-    }
-
-    if (node->kind == ND_MOD)
-      Printstn("mov %%rdx, %%rax");
-    return;
-  case ND_BITAND:
-    Printftn("and %s, %s", op, ax);
-    return;
-  case ND_BITOR:
-    Printftn("or %s, %s", op, ax);
-    return;
-  case ND_BITXOR:
-    Printftn("xor %s, %s", op, ax);
-    return;
-  case ND_EQ:
-  case ND_NE:
-  case ND_LT:
-  case ND_LE:
-  case ND_GT:
-  case ND_GE:
-    Printftn("cmp %s, %s", ax, op);
-    gen_cmp_setcc(node->kind, node->lhs->ty->is_unsigned);
+  case TY_LDOUBLE:
+    gen_x87_arith(node);
     return;
   }
-
-  error_tok(node->tok, "invalid expression");
+  gen_gp_arith(node);
 }
 
 static void gen_expr(Node *node) {
