@@ -451,7 +451,7 @@ static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
   return m;
 }
 
-static void read_macro_definition(Token **rest, Token *tok, bool is_opt_d) {
+static Macro *read_macro_name(Token **rest, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "macro name must be an identifier");
   char *name = strndup(tok->loc, tok->len);
@@ -462,30 +462,13 @@ static void read_macro_definition(Token **rest, Token *tok, bool is_opt_d) {
     m = read_macro_params(name, &tok, tok->next);
   else
     m = new_macro(name, true);
+  *rest = tok;
+  return m;
+}
 
-  if (!is_opt_d) {
-    m->body = split_line(rest, tok);
-    return;
-  }
-
-  Token head = {0};
-  Token *cur = &head;
-  bool has_eq = false;
-  for (; tok->kind != TK_EOF;) {
-    if (!has_eq && consume(&tok, tok, "=")) {
-      tok->has_space = true;
-      has_eq = true;
-      continue;
-    }
-    cur = cur->next = tok;
-    tok = tok->next;
-  }
-  if (!has_eq) {
-    cur = cur->next = make_token("1", tok);
-    cur->has_space = true;
-  }
-  cur->next = tok;
-  m->body = head.next;
+static void read_macro_definition(Token **rest, Token *tok) {
+  Macro *m = read_macro_name(&tok, tok);
+  m->body = split_line(rest, tok);
 }
 
 static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
@@ -1273,7 +1256,7 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "define")) {
-    read_macro_definition(&tok, tok->next, false);
+    read_macro_definition(&tok, tok->next);
     return tok;
   }
 
@@ -1442,7 +1425,26 @@ static Token *directives(Token **cur, Token *start) {
 
 void define_macro_cli(char *str) {
   Token *tok = tokenize(new_file("<built-in>", 1, str), NULL);
-  read_macro_definition(&tok, tok, true);
+  Macro *m = read_macro_name(&tok, tok);
+
+  Token head = {0};
+  Token *cur = &head;
+  bool has_eq = false;
+  for (; tok->kind != TK_EOF;) {
+    if (!has_eq && consume(&tok, tok, "=")) {
+      tok->has_space = true;
+      has_eq = true;
+      continue;
+    }
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
+  if (!has_eq) {
+    cur = cur->next = make_token("1", tok);
+    cur->has_space = true;
+  }
+  cur->next = tok;
+  m->body = head.next;
 }
 
 void define_macro(char *name, char *buf) {
