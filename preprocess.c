@@ -471,6 +471,25 @@ static void read_macro_definition(Token **rest, Token *tok) {
   m->body = split_line(rest, tok);
 }
 
+static void read_macro_definition2(Token **rest, Token *tok) {
+  Token *start = tok;
+  Macro *m = read_macro_name(&tok, tok);
+  tok = skip_line(tok);
+
+  Token head = {0};
+  Token *cur = &head;
+  for (;; tok = tok->next) {
+    if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated list");
+    if (is_hash(tok) && equal(tok->next, "enddef"))
+      break;
+    cur = cur->next = tok;
+  }
+  cur->next = new_eof(start);
+  m->body = head.next;
+  *rest = skip_line(tok->next->next);
+}
+
 static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   Token head = {0};
   Token *cur = &head;
@@ -1257,6 +1276,11 @@ static Token *directives(Token **cur, Token *start) {
 
   if (equal(tok, "define")) {
     read_macro_definition(&tok, tok->next);
+    return tok;
+  }
+
+  if (equal(tok, "def")) {
+    read_macro_definition2(&tok, tok->next);
     return tok;
   }
 
