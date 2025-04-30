@@ -484,6 +484,7 @@ static void read_macro_definition2(Token **rest, Token *tok) {
     if (is_hash(tok) && equal(tok->next, "enddef"))
       break;
     cur = cur->next = tok;
+    cur->at_bol = false;
   }
   cur->next = new_eof(start);
   m->body = head.next;
