@@ -458,11 +458,11 @@ static Token *new_pp_number(char *start, char *p) {
     if (*p == '.') {
       p++;
       continue;
-    } else if (*p == '\'' && Isalnum(p[1])) {
+    } else if (*p == '\'' && Isalnum(p[1]) && opt_std >= STD_C23) {
       p += 2;
       continue;
-    } else if (p[0] && p[1] && strchr("eEpP", p[0]) && strchr("+-", p[1])) {
-      p += 2;
+    } else if ((*p == '+' || *p == '-') && (Casecmp(p[-1], 'e') || Casecmp(p[-1], 'p'))) {
+      p++;
       continue;
     }
     if (*p == '$') {
@@ -581,30 +581,37 @@ void convert_pp_number(Token *tok, Node *node) {
     return;
   }
 
-  // Remove digit seperators
-  static size_t buflen;
-  static char *buf;
-
-  if (tok->len >= buflen) {
-    buflen = tok->len + 1;
-    buf = realloc(buf, buflen);
-  }
-
+  char *p;
   int len = 0;
-  for (int i = 0; i < tok->len; i++) {
-    if (tok->loc[i] == '\'')
-      continue;
-    buf[len++] = tok->loc[i];
+  if (opt_std >= STD_C23) {
+    // Remove digit seperators
+    static size_t buflen;
+    static char *buf;
+
+    if (tok->len >= buflen) {
+      buflen = tok->len + 1;
+      buf = realloc(buf, buflen);
+    }
+
+    for (int i = 0; i < tok->len; i++) {
+      if (tok->loc[i] == '\'')
+        continue;
+      buf[len++] = tok->loc[i];
+    }
+    buf[len] = '\0';
+    p = buf;
+  } else {
+    len = tok->len;
+    p = tok->loc;
   }
-  buf[len] = '\0';
 
   // Try to parse as an integer constant.
-  if (convert_pp_int(buf, len, node))
+  if (convert_pp_int(p, len, node))
     return;
 
   // If it's not an integer, it must be a floating point constant.
   char *end;
-  long double val = strtold(buf, &end);
+  long double val = strtold(p, &end);
   Type *ty;
 
   if (*end == 'f' || *end == 'F') {
@@ -619,7 +626,7 @@ void convert_pp_number(Token *tok, Node *node) {
     ty = ty_double;
   }
 
-  if (&buf[len] != end)
+  if (&p[len] != end)
     error_tok(tok, "invalid numeric constant");
 
   node->fval = val;
