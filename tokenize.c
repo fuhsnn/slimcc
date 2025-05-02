@@ -488,6 +488,65 @@ static Token *new_pp_number(char *start, char *p) {
   return new_token(TK_PP_NUM, start, p);
 }
 
+static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
+  uint32_t *buf = *data;
+  size_t cnt = *limb_cnt;
+
+  uint64_t accum = 0;
+  for (size_t i = 0; i < cnt; i++) {
+    uint64_t prod = (uint64_t)base * buf[i];
+    accum += prod;
+
+    buf[i] = (uint32_t)accum;
+    accum >>= 32;
+  }
+  if (accum) {
+    buf = realloc(buf, (++cnt) * sizeof(uint32_t));
+    buf[cnt - 1] = (uint32_t)accum;
+  }
+  buf[0] += digit;
+
+  *data = buf;
+  *limb_cnt = cnt;
+}
+
+static bool convert_pp_bitint(char *begin, char *end, Node *node, int base, bool is_unsigned) {
+  uint32_t *data = calloc(1, sizeof(uint64_t));
+  size_t limb32 = 1;
+
+  for (char *p = begin; p != end; p++) {
+    int digit;
+    if (*p >= 'a')
+      digit = *p - 'a' + 10;
+    else if (*p >= 'A')
+      digit = *p - 'A' + 10;
+    else
+      digit = *p - '0';
+
+    if (digit >= base)
+      return false;
+
+    push_digit(&data, &limb32, base, digit);
+  }
+
+  int64_t bit_width = 0;
+  for (int i = 0; i < 32; i++)
+    if (data[limb32 - 1] & (1ULL << i))
+      bit_width = i + 1;
+  bit_width += (limb32 - 1) * 32;
+  bit_width = MAX(bit_width, 1) + !is_unsigned;
+
+  size_t limb64 = (bit_width + 63) / 64;
+  if (limb64 * 2 != limb32) {
+    data = realloc(data, limb64 * sizeof(uint64_t));
+    data[limb32] = 0;
+  }
+  node->bitint_data = (uint64_t *)data;
+  node->ty = new_bitint(bit_width, node->tok);
+  node->ty->is_unsigned = is_unsigned;
+  return true;
+}
+
 static bool convert_pp_int(char *loc, int len, Node *node) {
   char *p = loc;
   char *p_end = loc + len;
@@ -510,11 +569,14 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
 #error
 #endif
 
+  char *digit_begin = p;
   int64_t val = strtoull(p, &p, base);
+  char *digit_end = p;
 
   bool u = false;
   bool ll = false;
   bool l = false;
+  bool wb = false;
 
   if (Casecmp(*p, 'u'))
     u = true, p++;
@@ -524,6 +586,8 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
       ll = true, p += 2;
     else
       l = true, p += 1;
+  } else if ((*p == 'w' && p[1] == 'b') || (*p == 'W' && p[1] == 'B')) {
+    wb = true, p += 2;
   }
 
   if (!u && Casecmp(*p, 'u'))
@@ -531,6 +595,8 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
 
   if (p != p_end)
     return false;
+  if (wb)
+    return convert_pp_bitint(digit_begin, digit_end, node, base, u);
 
   // Infer a type.
   Type *ty;

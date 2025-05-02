@@ -496,6 +496,7 @@ struct Node {
   // Numeric literal
   int64_t val;
   long double fval;
+  uint64_t *bitint_data;
 
   // Arithmetic Assignment
   NodeKind arith_kind;
