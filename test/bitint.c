@@ -51,6 +51,17 @@ void bitint_bitfiled(void) {
   ASSERT(1, ({struct { _BitInt(W+1)i:W-1;} s; _Generic(0+s.i, _BitInt(W+1):1);}));
 }
 
+SASSERT(_Generic(0wb, _BitInt(2):1));
+SASSERT(_Generic(0uwb, _BitInt(1) unsigned:1));
+SASSERT(_Generic(0b11wb, _BitInt(3):1));
+SASSERT(_Generic(0b10wbu, _BitInt(2) unsigned:1));
+SASSERT(_Generic(012WBu, _BitInt(4) unsigned:1));
+SASSERT(_Generic(0x0B2fUwb, _BitInt(12) unsigned:1));
+SASSERT(_Generic(0xFFFF'FFFF'FFFF'FFFFwb, _BitInt(65):1));
+SASSERT(_Generic(8989898989898989898989898989898989898WB, _BitInt(124):1));
+SASSERT(_Generic(077777777777776666666666666666666667777777777uwb, _BitInt(132)unsigned:1));
+SASSERT(_Generic(0x7fffffffffffffffEEEEEEEEABCabcfeeeeeeeFFFFFFFFFF555555wb, _BitInt(216):1));
+
 int main() {
   bitint_bitfiled();
 
