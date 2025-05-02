@@ -213,7 +213,7 @@ Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end, int *incl_no);
 File *add_input_file(char *path, char *content, int *incl_no);
-Type *convert_pp_number(Token *tok, int64_t *res_val, long double *res_fval);
+void convert_pp_number(Token *tok, Node *node);
 TokenKind ident_keyword(Token *tok);
 
 #define internal_error() \

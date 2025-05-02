@@ -487,8 +487,9 @@ static Token *new_pp_number(char *start, char *p) {
   return new_token(TK_PP_NUM, start, p);
 }
 
-static bool convert_pp_int(char *loc, int len, Type **res_ty, int64_t *res_val) {
+static bool convert_pp_int(char *loc, int len, Node *node) {
   char *p = loc;
+  char *p_end = loc + len;
 
   // Read a binary, octal, decimal or hexadecimal number.
   int base = 10;
@@ -500,30 +501,36 @@ static bool convert_pp_int(char *loc, int len, Type **res_ty, int64_t *res_val) 
       p += 2;
       base = 2;
     } else {
+      p += 1;
       base = 8;
     }
   }
 
-  int64_t val = strtoul(p, &p, base);
+#if __SIZEOF_LONG_LONG__ != 8
+#error
+#endif
 
-  // Read U, L or LL suffixes.
+  int64_t val = strtoull(p, &p, base);
+
   bool u = false;
-  int l_cnt = 0;
-  if (Casecmp(*p, 'u')) {
-    if (Casecmp(p[1], 'l'))
-      l_cnt = 1 + (p[1] == p[2]);
-    u = true;
-  } else if (Casecmp(*p, 'l')) {
-    l_cnt = 1 + (*p == p[1]);
-    u = Casecmp(p[l_cnt], 'u');
+  bool ll = false;
+  bool l = false;
+
+  if (Casecmp(*p, 'u'))
+    u = true, p++;
+
+  if (Casecmp(*p, 'l')) {
+    if (*p == p[1])
+      ll = true, p += 2;
+    else
+      l = true, p += 1;
   }
-  p += l_cnt + u;
 
-  if (p != loc + len)
+  if (!u && Casecmp(*p, 'u'))
+    u = true, p++;
+
+  if (p != p_end)
     return false;
-
-  bool ll = l_cnt == 2;
-  bool l = l_cnt == 1;
 
   // Infer a type.
   Type *ty;
@@ -561,42 +568,44 @@ static bool convert_pp_int(char *loc, int len, Type **res_ty, int64_t *res_val) 
       ty = ty_int;
   }
 
-  *res_val = val;
-  *res_ty = ty;
+  node->val = val;
+  node->ty = ty;
   return true;
 }
 
 // Converts a pp-number token to a regular number token.
-Type *convert_pp_number(Token *tok, int64_t *res_val, long double *res_fval) {
+void convert_pp_number(Token *tok, Node *node) {
   if (tok->kind == TK_INT_NUM) {
-    *res_val = tok->ival;
-    return tok->ty;
+    node->val = tok->ival;
+    node->ty = tok->ty;
+    return;
   }
 
   // Remove digit seperators
+  static size_t buflen;
+  static char *buf;
+
+  if (tok->len >= buflen) {
+    buflen = tok->len + 1;
+    buf = realloc(buf, buflen);
+  }
+
   int len = 0;
-  char buf[227];
-
-  if (tok->len >= 227)
-    error_tok(tok, "numeric literal exceeds static buffer size");
-
   for (int i = 0; i < tok->len; i++) {
     if (tok->loc[i] == '\'')
       continue;
-
     buf[len++] = tok->loc[i];
   }
-
   buf[len] = '\0';
 
-  Type *ty;
   // Try to parse as an integer constant.
-  if (convert_pp_int(buf, len, &ty, res_val))
-    return ty;
+  if (convert_pp_int(buf, len, node))
+    return;
 
   // If it's not an integer, it must be a floating point constant.
   char *end;
   long double val = strtold(buf, &end);
+  Type *ty;
 
   if (*end == 'f' || *end == 'F') {
     val = (float)val;
@@ -613,8 +622,8 @@ Type *convert_pp_number(Token *tok, int64_t *res_val, long double *res_fval) {
   if (&buf[len] != end)
     error_tok(tok, "invalid numeric constant");
 
-  *res_fval = val;
-  return ty;
+  node->fval = val;
+  node->ty = ty;
 }
 
 // Initialize line info for all tokens.

@@ -1193,11 +1193,12 @@ static void read_line_marker(Token **rest, Token *tok) {
   Token *start = tok;
   tok = expand_tok(split_line(rest, tok));
 
-  int64_t val;
-  if (convert_pp_number(tok, &val, &(long double){0})->kind != TY_INT)
+  Node node = {.tok = start};
+  convert_pp_number(tok, &node);
+  if (node.ty->kind != TY_INT)
     error_tok(tok, "invalid line marker");
 
-  start->file->line_delta = val - start->line_no - 1;
+  start->file->line_delta = node.val - start->line_no - 1;
 
   tok = tok->next;
   if (tok->kind == TK_EOF)

@@ -1948,7 +1948,7 @@ static Node *init_desg_expr(InitDesg *desg, Token *tok) {
 
 static Node *init_num_tok(Initializer *init, Node *node) {
   if (init->kind == INIT_TOK) {
-    node->ty = convert_pp_number(init->tok, &node->val, &node->fval);
+    convert_pp_number(init->tok, node);
     return node;
   }
   add_type(init->expr);
@@ -4477,7 +4477,7 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) {
     Node *node = new_node(ND_NUM, tok);
-    node->ty = convert_pp_number(tok, &node->val, &node->fval);
+    convert_pp_number(tok, node);
     *rest = tok->next;
     return node;
   }
