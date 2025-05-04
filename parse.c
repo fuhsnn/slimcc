@@ -155,6 +155,11 @@ static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
 static Node *log_or(Token **rest, Token *tok);
 static long double eval_double(Node *node);
+static uint64_t *eval_bitint(Node *node);
+int eval_bitint_cmp(uint64_t *lh, uint64_t *rh, size_t bits, bool is_unsigned);
+void eval_bitint_shl(uint64_t *sptr, uint64_t *dptr, size_t bits, int64_t amount);
+void eval_bitint_shr(uint64_t *sptr, uint64_t *dptr, size_t bits, int64_t amount, bool is_unsigned);
+void eval_bitint_sign_ext(uint64_t *data, size_t width, size_t width2, bool is_unsigned);
 static Node *conditional(Token **rest, Token *tok);
 static Node *log_and(Token **rest, Token *tok);
 static Node *bit_or(Token **rest, Token *tok);
@@ -2174,6 +2179,14 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     case TY_LDOUBLE:
       *(long double *)(buf + offset) = eval_double(node);
       return cur;
+    case TY_BITINT: {
+      uint64_t *data = eval_bitint(node);
+      if (ty->bitint_width < ty->size * 8)
+        eval_bitint_sign_ext(data, ty->bitint_width, ty->size * 8, ty->is_unsigned);
+      memcpy(buf + offset, data, ty->size);
+      free(data);
+      return cur;
+    }
     }
     if (is_integer(ty)) {
       memcpy(buf + offset, &(int64_t){eval(node)}, ty->size);
@@ -2868,19 +2881,39 @@ static int64_t eval_sign_extend(Type *ty, int64_t val) {
 static void eval_void(Node *node) {
   if (node->kind == ND_VAR)
     return;
-
-  if (is_flonum(node->ty)) {
+  if (node->ty->kind == TY_BITINT) {
+    uint64_t *v = eval_bitint(node);
+    free(v);
+  } else if (is_flonum(node->ty)) {
     eval_double(node);
-    return;
+  } else {
+    eval(node);
   }
-  eval(node);
 }
 
 static int64_t eval_cmp(Node *node) {
   Node *lhs = node->lhs;
   Node *rhs = node->rhs;
 
-  if (is_flonum(lhs->ty)) {
+  if (lhs->ty->kind == TY_BITINT) {
+    uint64_t *ldata = eval_bitint(lhs);
+    uint64_t *rdata = eval_bitint(rhs);
+
+    if (eval_recover && *eval_recover) {
+      free(ldata), free(rdata);
+      return 0;
+    }
+    int res = eval_bitint_cmp(ldata, rdata, lhs->ty->bitint_width, lhs->ty->is_unsigned);
+
+    switch (node->kind) {
+    case ND_EQ: return res == 0;
+    case ND_NE: return res != 0;
+    case ND_LT: return res == 1;
+    case ND_LE: return res != 2;
+    case ND_GT: return res == 2;
+    case ND_GE: return res != 1;
+    }
+  } else if (is_flonum(lhs->ty)) {
     switch (node->kind) {
     case ND_EQ: return eval_double(lhs) == eval_double(rhs);
     case ND_NE: return eval_double(lhs) != eval_double(rhs);
@@ -2999,6 +3032,24 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_LOGOR:
     return eval(lhs) || eval(rhs);
   case ND_CAST: {
+    if (lhs->ty->kind == TY_BITINT) {
+      uint64_t *val = eval_bitint(lhs);
+      if (eval_recover && *eval_recover)
+        return 0;
+      if (ty->kind == TY_BOOL) {
+        eval_bitint_sign_ext(val, lhs->ty->bitint_width, lhs->ty->bitint_width, lhs->ty->is_unsigned);
+        int64_t accum = 0;
+        for (int i = 0; i < (lhs->ty->bitint_width + 63) / 64; i++)
+          accum |= val[i];
+        return !!accum;
+      }
+      if (lhs->ty->bitint_width < 64)
+        eval_bitint_sign_ext(val, lhs->ty->bitint_width, 64, lhs->ty->is_unsigned);
+      int64_t lsl = val[0];
+      free(val);
+      return eval_sign_extend(ty, lsl);
+    }
+
     if (is_flonum(lhs->ty)) {
       if (ty->kind == TY_BOOL)
         return !!eval_double(lhs);
@@ -3006,6 +3057,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return (uint64_t)eval_double(lhs);
       return eval_sign_extend(ty, eval_double(lhs));
     }
+
     if (ty->kind == TY_BOOL && lhs->kind == ND_VAR &&
       !lhs->var->is_weak && (is_array(lhs->ty)))
       return true;
@@ -3203,7 +3255,9 @@ static long double eval_double(Node *node) {
       return eval_fp_cast(eval_double(lhs), ty);
     if (lhs->ty->size == 8 && lhs->ty->is_unsigned)
       return (uint64_t)eval(lhs);
-    return eval(lhs);
+    if (is_integer(lhs->ty))
+      return eval(lhs);
+    error_tok(node->tok, "unimplemented cast");
   case ND_NUM:
     return node->fval;
   }
@@ -3213,6 +3267,391 @@ static long double eval_double(Node *node) {
     return read_double_buf(data, ty);
 
   return eval_error(node->tok, "not a compile-time constant");
+}
+
+void eval_bitint_add(const uint64_t *restrict lh, uint64_t *restrict rh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+
+  uint64_t carry = 0;
+  for (size_t i = 0; i < cnt; i++) {
+    uint64_t tmp;
+    carry = (tmp = rh[i] + carry) < carry;
+    carry |= (rh[i] = lh[i] + tmp) < tmp;
+  }
+}
+
+void eval_bitint_sub(const uint64_t *restrict lh, uint64_t *restrict rh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+
+  uint64_t borrow = 0;
+  for (size_t i = 0; i < cnt; i++) {
+    uint64_t tmp;
+    borrow = (tmp = rh[i] + borrow) < borrow;
+    borrow |= (rh[i] = lh[i] - tmp) > lh[i];
+  }
+}
+
+void eval_bitint_neg(uint64_t *lh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+
+  uint64_t borrow = 0;
+  for (size_t i = 0; i < cnt; i++) {
+    uint64_t tmp;
+    borrow = (tmp = lh[i] + borrow) < borrow;
+    borrow |= (lh[i] = 0 - tmp) > 0;
+  }
+}
+
+void eval_bitint_mul(const uint32_t *lh, uint32_t *rh, size_t bits) {
+  size_t cnt = (bits + 31) / 32;
+
+  uint32_t buf[cnt];
+
+  uint64_t accum = 0;
+  for (size_t i = 0; i < cnt; i++) {
+    uint64_t ovf_cnt = 0;
+    for (size_t j = 0; j <= i; j++) {
+      uint64_t prod = (uint64_t)lh[j] * rh[i - j];
+      ovf_cnt += (accum += prod) < prod;
+    }
+    buf[i] = (uint32_t)accum;
+    accum = ovf_cnt << 32 | accum >> 32;
+  }
+  for (size_t i = 0; i < cnt; i++)
+    rh[i] = buf[i];
+}
+
+int32_t eval_bitint_first_set(uint64_t *lh, size_t bits) {
+  size_t top = (bits - 1) / 64;
+
+  int clr_shft = 63 - (bits - 1) % 64;
+  lh[top] = (lh[top] << clr_shft) >> clr_shft;
+
+  for (int64_t i = top; i >= 0; i--)
+    if (lh[i])
+      for (int64_t shft = 0; shft < 64; shft++)
+        if (0 > (int64_t)(lh[i] << shft))
+          return (64 - shft) + i * 64;
+
+  return 0;
+}
+
+void eval_bitint_bitand(const uint64_t *restrict lh, uint64_t *restrict rh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+  for (int i = 0; i < cnt; i++)
+    rh[i] &= lh[i];
+}
+
+void eval_bitint_bitor(const uint64_t *restrict lh, uint64_t *restrict rh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+  for (int i = 0; i < cnt; i++)
+    rh[i] |= lh[i];
+}
+
+void eval_bitint_bitxor(const uint64_t *restrict lh, uint64_t *restrict rh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+  for (int i = 0; i < cnt; i++)
+    rh[i] ^= lh[i];
+}
+
+void eval_bitint_bitnot(uint64_t *data, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+  for (int i = 0; i < cnt; i++)
+    data[i] = ~data[i];
+}
+
+void eval_bitint_shl(uint64_t *sptr, uint64_t *dptr, size_t bits, int64_t amount) {
+  if (amount < 0 || amount >= bits)
+    return;
+
+  int32_t dst = (bits - 1) / 64;
+  int32_t src = dst - amount / 64;
+  int32_t shft = amount % 64;
+
+  uint64_t hi = sptr[src--];
+  while (dst >= 0) {
+    uint64_t lo = src >= 0 ? sptr[src--] : 0;
+    dptr[dst--] = !shft ? hi : (hi << shft) | (lo >> (64 - shft));
+    hi = lo;
+  }
+}
+
+void eval_bitint_shr(uint64_t *sptr, uint64_t *dptr, size_t bits, int64_t amount, bool is_unsigned) {
+  if (amount < 0 || amount >= bits)
+    return;
+
+  int32_t src = amount / 64;
+  int32_t src_end = (bits - 1) / 64;
+  int32_t dst_end = (bits - amount - 1) / 64;
+  int32_t shft = amount % 64;
+
+  uint64_t lo = sptr[src++];
+  for (int32_t dst = 0; dst <= dst_end;) {
+    uint64_t hi = src <= src_end ? sptr[src++] : 0;
+    dptr[dst++] = !shft ? lo : (hi << (64 - shft)) | (lo >> shft);
+    lo = hi;
+  }
+  eval_bitint_sign_ext(dptr, bits - amount, bits, is_unsigned);
+}
+
+bool eval_bitint_eq(uint64_t *lh, uint64_t *rh, size_t bits) {
+  size_t cnt = (bits + 63) / 64;
+  for (int i = 0; i < cnt; i++)
+    if (lh[i] != rh[i])
+      return false;
+  return true;
+}
+
+int eval_bitint_cmp(uint64_t *lh, uint64_t *rh, size_t bits, bool is_unsigned) {
+  int32_t idx = (bits - 1) / 64;
+
+  int clr_shft = 63 - (bits - 1) % 64;
+  uint64_t signbit = is_unsigned ? 0 : 1ULL << 63;
+  uint64_t lv = (lh[idx] << clr_shft) + signbit;
+  uint64_t rv = (rh[idx] << clr_shft) + signbit;
+
+  for (;;) {
+    if (lv > rv)
+      return 2;
+    else if (lv < rv)
+      return 1;
+
+    if (--idx < 0)
+      break;
+    lv = lh[idx];
+    rv = rh[idx];
+  }
+  return 0;
+}
+
+void eval_bitint_sign_ext(uint64_t *data, size_t width, size_t width2, bool is_unsigned) {
+  size_t idx = (width - 1) / 64;
+  uint64_t fill = data[idx];
+  int shft = width % 64;
+  if (shft) {
+    fill <<= 64 - shft;
+    if (is_unsigned)
+      data[idx] = (uint64_t)fill >> (64 - shft);
+    else
+      data[idx] = (int64_t)fill >> (64 - shft);
+  }
+  fill = is_unsigned ? 0 : (int64_t)fill >> 63;
+
+  size_t idx2 = (width2 - 1) / 64;
+  while (++idx <= idx2)
+    data[idx] = fill;
+}
+
+void eval_bitint_div(uint32_t *lh, uint32_t *rh, size_t bits, bool is_unsigned, bool is_div, Token *tok) {
+  size_t cnt = (bits + 63) / 64 * 2;
+
+  uint32_t r_buf[cnt + 2];
+  uint32_t q_buf[cnt];
+
+  for (size_t i = 0; i < cnt; i++) {
+    r_buf[i] = lh[i];
+    q_buf[i] = 0;
+  }
+  r_buf[cnt] = r_buf[cnt + 1] = 0;
+
+  int32_t msl = (bits - 1) / 32;
+  int32_t sign_shft = (bits - 1) % 32;
+
+  bool l_neg = is_unsigned ? 0 : (r_buf[msl] >> sign_shft) & 1;
+  bool r_neg = is_unsigned ? 0 : (rh[msl] >> sign_shft) & 1;
+
+  if (l_neg)
+    eval_bitint_neg((uint64_t *)r_buf, bits);
+  if (r_neg)
+    eval_bitint_neg((uint64_t *)rh, bits);
+
+  int32_t l_fsb = eval_bitint_first_set((uint64_t *)r_buf, bits);
+  int32_t r_fsb = eval_bitint_first_set((uint64_t *)rh, bits);
+
+  if (!r_fsb)
+    eval_error(tok, "%s by zero during constant evaluation", is_div ? "division" : "remainder");
+
+  int32_t r_ofs = r_fsb % 32;
+  int32_t r_shft = r_ofs ? 32 - r_ofs : 0;
+  int32_t ln = (l_fsb + 31) / 32;
+  int32_t rn = (r_fsb + 31) / 32;
+
+  if (r_shft) {
+    eval_bitint_shl((uint64_t *)r_buf, (uint64_t *)r_buf, bits + 64, r_shft);
+    eval_bitint_shl((uint64_t *)rh, (uint64_t *)rh, bits, r_shft);
+  }
+
+  // Modified form of Donald Knuth's Algorithm D based on Hacker's Delight implementation
+  for (int32_t qi = ln - rn; qi >= 0; qi--) {
+    uint32_t quo;
+    if (r_buf[qi + rn] == rh[rn - 1]) {
+      quo = -1;
+    } else {
+      uint64_t top = (uint64_t)r_buf[qi + rn] << 32 | r_buf[qi + rn - 1];
+      uint64_t q = top / rh[rn - 1];
+      uint64_t r = top % rh[rn - 1];
+
+      if (rn > 1) {
+        r = r << 32 | r_buf[qi + rn - 2];
+        uint64_t r_inc = (uint64_t)rh[rn - 1] << 32;
+        while (r < q * rh[rn - 2]) {
+          q--;
+          if ((r += r_inc) < r_inc)
+            break;
+        }
+      }
+      quo = q;
+    }
+
+    uint32_t sub = 0;
+    for (int32_t i = 0; i < rn; i++) {
+      uint64_t prod = (uint64_t)quo * rh[i];
+
+      uint32_t tmp = (uint32_t)prod + sub;
+      sub = (tmp < sub) + (r_buf[qi + i] < tmp) + (prod >> 32);
+      r_buf[qi + i] -= tmp;
+    }
+
+    uint32_t rem = r_buf[qi + rn] - sub;
+    if (rem > r_buf[qi + rn]) {
+      uint64_t carry = 0;
+      for (size_t i = 0; i < rn; i++) {
+        uint64_t tmp;
+        carry = (tmp = rh[i] + carry) < carry;
+        carry |= (r_buf[qi + i] = r_buf[qi + i] + tmp) < tmp;
+      }
+      rem += carry;
+      quo -= 1;
+    }
+    r_buf[qi + rn] = rem;
+    q_buf[qi] = quo;
+  }
+
+  uint32_t *res;
+  if (is_div) {
+    if (l_neg + r_neg == 1)
+      eval_bitint_neg((uint64_t *)q_buf, bits);
+    res = q_buf;
+  } else {
+    if (r_shft)
+      eval_bitint_shr((uint64_t *)r_buf, (uint64_t *)r_buf, bits + 64, r_shft, true);
+    if (l_neg)
+      eval_bitint_neg((uint64_t *)r_buf, bits);
+    res = r_buf;
+  }
+  for (int32_t i = 0; i < cnt; i++)
+    rh[i] = res[i];
+}
+
+static uint64_t *eval_bitint(Node *node) {
+  if (eval_recover && *eval_recover)
+    return NULL;
+
+  Type *ty = node->ty;
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
+  switch (node->kind) {
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+  case ND_ADD:
+  case ND_SUB:
+  case ND_MUL:
+  case ND_DIV:
+  case ND_MOD: {
+    uint64_t *lval = eval_bitint(lhs);
+    uint64_t *rval = eval_bitint(rhs);
+
+    if (eval_recover && *eval_recover) {
+      free(lval), free(rval);
+      return NULL;
+    }
+    switch (node->kind) {
+    case ND_BITAND: eval_bitint_bitand(lval, rval, ty->bitint_width); break;
+    case ND_BITOR: eval_bitint_bitor(lval, rval, ty->bitint_width); break;
+    case ND_BITXOR: eval_bitint_bitxor(lval, rval, ty->bitint_width); break;
+    case ND_ADD: eval_bitint_add(lval, rval, ty->bitint_width); break;
+    case ND_SUB: eval_bitint_sub(lval, rval, ty->bitint_width); break;
+    case ND_MUL:
+      eval_bitint_mul((uint32_t *)lval, (uint32_t *)rval, ty->bitint_width);
+      break;
+    case ND_DIV:
+      eval_bitint_div((uint32_t *)lval, (uint32_t *)rval, ty->bitint_width,
+        ty->is_unsigned, true, node->tok);
+      break;
+    case ND_MOD:
+      eval_bitint_div((uint32_t *)lval, (uint32_t *)rval, ty->bitint_width,
+        ty->is_unsigned, false, node->tok);
+      break;
+    }
+    free(lval);
+    return rval;
+  }
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR: {
+    uint64_t *val = eval_bitint(lhs);
+    uint64_t amount = eval(rhs);
+
+    if (eval_recover && *eval_recover) {
+      free(val);
+      return NULL;
+    }
+    if (amount < 0 || amount >= ty->bitint_width)
+      return (void *)eval_error(rhs->tok, "invalid shift amount");
+
+    if (node->kind == ND_SHL)
+      eval_bitint_shl(val, val, ty->bitint_width, amount);
+    else
+      eval_bitint_shr(val, val, ty->bitint_width, amount, ty->is_unsigned);
+    return val;
+  }
+  case ND_BITNOT:
+  case ND_POS:
+  case ND_NEG: {
+    uint64_t *val = eval_bitint(lhs);
+    if (eval_recover && *eval_recover)
+      return NULL;
+    switch (node->kind) {
+    case ND_BITNOT: eval_bitint_bitnot(val, ty->bitint_width); break;
+    case ND_NEG: eval_bitint_neg(val, ty->bitint_width); break;
+    }
+    return val;
+  }
+  case ND_COND:
+    return eval(node->cond) ? eval_bitint(node->then) : eval_bitint(node->els);
+  case ND_COMMA:
+    eval_void(lhs);
+    return eval_bitint(rhs);
+  case ND_CAST:
+    if (lhs->ty->kind == TY_BITINT) {
+      uint64_t *val = eval_bitint(lhs);
+      if (eval_recover && *eval_recover)
+        return NULL;
+
+      val = realloc(val, MAX(8, ty->size));
+      if (ty->bitint_width > lhs->ty->bitint_width)
+        eval_bitint_sign_ext(val, lhs->ty->bitint_width, ty->bitint_width, lhs->ty->is_unsigned);
+      return val;
+    }
+    if (is_integer(lhs->ty)) {
+      uint64_t *val = malloc(MAX(8, ty->size));
+      val[0] = eval(lhs);
+
+      if (ty->bitint_width > lhs->ty->size * 8)
+        eval_bitint_sign_ext(val, lhs->ty->size * 8, ty->bitint_width, lhs->ty->is_unsigned);
+      return val;
+    }
+    error_tok(node->tok, "unimplemented cast");
+  case ND_NUM: {
+    size_t sz = (ty->bitint_width + 63) / 64 * sizeof(uint64_t);
+    uint64_t *val = malloc(sz);
+    memcpy(val, node->bitint_data, sz);
+    return val;
+  }
+  }
+  return (void *)eval_error(node->tok, "not a compile-time constant");
 }
 
 static Node *atomic_op(Node *binary, bool return_old) {
