@@ -512,7 +512,7 @@ void add_type(Node *node) {
     node->ty = ty_int;
     return;
   case ND_BITNOT:
-    if (!is_integer(node->lhs->ty))
+    if (!(is_integer(node->lhs->ty) || node->lhs->ty->kind == TY_BITINT))
       error_tok(node->lhs->tok, "invalid operand");
     int_promotion(&node->lhs);
     node->ty = node->lhs->ty;
@@ -520,10 +520,12 @@ void add_type(Node *node) {
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
-    if (!is_integer(node->lhs->ty))
+    if (!(is_integer(node->lhs->ty) || node->lhs->ty->kind == TY_BITINT))
       error_tok(node->lhs->tok, "invalid operand");
-    if (!is_integer(node->rhs->ty))
+    if (!(is_integer(node->rhs->ty) || node->rhs->ty->kind == TY_BITINT))
       error_tok(node->rhs->tok, "invalid operand");
+    if (node->rhs->ty->kind == TY_BITINT)
+      node->rhs = new_cast(node->rhs, ty_ullong);
     int_promotion(&node->lhs);
     node->ty = node->lhs->ty;
     return;

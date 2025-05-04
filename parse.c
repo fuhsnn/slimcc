@@ -155,6 +155,7 @@ static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
 static Node *log_or(Token **rest, Token *tok);
 static long double eval_double(Node *node);
+static uint64_t *eval_bitint(Node *node);
 static Node *conditional(Token **rest, Token *tok);
 static Node *log_and(Token **rest, Token *tok);
 static Node *bit_or(Token **rest, Token *tok);
@@ -255,6 +256,10 @@ static bool in_ty_range(int64_t val, Type *ty) {
   Node num = {.kind = ND_NUM, .ty = ty_llong, .val = val};
   Node cast = {.kind = ND_CAST, .ty = ty, .lhs = &num};
   return eval(&cast) == val;
+}
+
+static int32_t bitfield_footprint(Member *mem) {
+  return align_to(mem->bit_width + mem->bit_offset, 8) / 8;
 }
 
 static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
@@ -2092,6 +2097,13 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
           Node init_expr = {.kind = ND_CAST, .tok = node->tok, .lhs = node, .ty = mem->ty};
 
           char *loc = buf + offset + mem->offset;
+
+          if (mem->ty->kind == TY_BITINT) {
+            uint64_t *val = eval_bitint(&init_expr);
+            eval_bitint_bitfield_save(mem->ty->bit_cnt, val, loc, mem->bit_width, mem->bit_offset);
+            free(val);
+            continue;
+          }
           uint64_t oldval = read_buf(loc, mem->ty->size);
           uint64_t newval = eval(&init_expr);
           uint64_t mask = (1L << mem->bit_width) - 1;
@@ -2174,6 +2186,14 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     case TY_LDOUBLE:
       BUFF_CAST(long double, (buf + offset)) = eval_double(node);
       return cur;
+    case TY_BITINT: {
+      uint64_t *data = eval_bitint(node);
+      if (ty->bit_cnt < ty->size * 8)
+        eval_bitint_sign_ext(ty->bit_cnt, data, ty->size * 8, ty->is_unsigned);
+      memcpy(buf + offset, data, ty->size);
+      free(data);
+      return cur;
+    }
     }
     if (is_integer(ty)) {
       memcpy(buf + offset, &(int64_t){eval(node)}, ty->size);
@@ -2838,13 +2858,15 @@ static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
 }
 
 static char *eval_constexpr_data(Node *node) {
-  int ofs;
+  int32_t ofs;
   Obj *var = eval_var(node, &ofs, false);
 
   if (!var || !(var->constexpr_data || is_static_const_var(var, ofs, node->ty->size)))
     return (char *)eval_error(node->tok, "not a compile-time constant");
 
-  if (ofs < 0 || (var->ty->size < (ofs + node->ty->size)))
+  int32_t access_sz = !is_bitfield(node) ? node->ty->size : bitfield_footprint(node->member);
+
+  if (ofs < 0 || (var->ty->size < (ofs + access_sz)))
     return (char *)eval_error(node->tok, "constexpr access out of bounds");
 
   if (var->constexpr_data)
@@ -2868,19 +2890,36 @@ static int64_t eval_sign_extend(Type *ty, int64_t val) {
 static void eval_void(Node *node) {
   if (node->kind == ND_VAR)
     return;
-
-  if (is_flonum(node->ty)) {
+  if (node->ty->kind == TY_BITINT)
+    free(eval_bitint(node));
+  else if (is_flonum(node->ty))
     eval_double(node);
-    return;
-  }
-  eval(node);
+  else
+    eval(node);
 }
 
 static int64_t eval_cmp(Node *node) {
   Node *lhs = node->lhs;
   Node *rhs = node->rhs;
 
-  if (is_flonum(lhs->ty)) {
+  if (lhs->ty->kind == TY_BITINT) {
+    uint64_t *ldata = eval_bitint(lhs);
+    uint64_t *rdata = eval_bitint(rhs);
+    if (eval_recover && *eval_recover)
+      return free(ldata), free(rdata), 0;
+
+    int res = eval_bitint_cmp(lhs->ty->bit_cnt, ldata, rdata, lhs->ty->is_unsigned);
+    free(ldata), free(rdata);
+
+    switch (node->kind) {
+    case ND_EQ: return res == 0;
+    case ND_NE: return res != 0;
+    case ND_LT: return res == 1;
+    case ND_LE: return res != 2;
+    case ND_GT: return res == 2;
+    case ND_GE: return res != 1;
+    }
+  } else if (is_flonum(lhs->ty)) {
     switch (node->kind) {
     case ND_EQ: return eval_double(lhs) == eval_double(rhs);
     case ND_NE: return eval_double(lhs) != eval_double(rhs);
@@ -2999,6 +3038,28 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_LOGOR:
     return eval(lhs) || eval(rhs);
   case ND_CAST: {
+    if (lhs->ty->kind == TY_BITINT) {
+      uint64_t *val = eval_bitint(lhs);
+      if (eval_recover && *eval_recover)
+        return free(val), 0;
+
+      if (ty->kind == TY_BOOL) {
+        bool res = eval_bitint_to_bool(lhs->ty->bit_cnt, val);
+        free(val);
+        return res;
+      }
+      int64_t ival = val[0];
+      free(val);
+      if (lhs->ty->bit_cnt < ty->size * 8) {
+        int shft = 64 - lhs->ty->bit_cnt;
+        if (lhs->ty->is_unsigned)
+          ival = (uint64_t)(ival << shft) >> shft;
+        else
+          ival = (int64_t)(ival << shft) >> shft;
+      }
+      return eval_sign_extend(ty, ival);
+    }
+
     if (is_flonum(lhs->ty)) {
       if (ty->kind == TY_BOOL)
         return !!eval_double(lhs);
@@ -3006,6 +3067,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return (uint64_t)eval_double(lhs);
       return eval_sign_extend(ty, eval_double(lhs));
     }
+
     if (ty->kind == TY_BOOL && lhs->kind == ND_VAR &&
       !lhs->var->is_weak && (is_array(lhs->ty)))
       return true;
@@ -3203,7 +3265,9 @@ static long double eval_double(Node *node) {
       return eval_fp_cast(eval_double(lhs), ty);
     if (lhs->ty->size == 8 && lhs->ty->is_unsigned)
       return (uint64_t)eval(lhs);
-    return eval(lhs);
+    if (is_integer(lhs->ty))
+      return eval(lhs);
+    error_tok(node->tok, "unimplemented cast");
   case ND_NUM:
     return node->fval;
   }
@@ -3213,6 +3277,123 @@ static long double eval_double(Node *node) {
     return read_double_buf(data, ty);
 
   return eval_error(node->tok, "not a compile-time constant");
+}
+
+static uint64_t *eval_bitint(Node *node) {
+  if (eval_recover && *eval_recover)
+    return NULL;
+
+  Type *ty = node->ty;
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
+  switch (node->kind) {
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+  case ND_ADD:
+  case ND_SUB:
+  case ND_MUL:
+  case ND_DIV:
+  case ND_MOD: {
+    uint64_t *lval = eval_bitint(lhs);
+    uint64_t *rval = eval_bitint(rhs);
+    if (eval_recover && *eval_recover)
+      return free(lval), free(rval), NULL;
+
+    switch (node->kind) {
+    case ND_BITAND: eval_bitint_bitand(ty->bit_cnt, lval, rval); break;
+    case ND_BITOR: eval_bitint_bitor(ty->bit_cnt, lval, rval); break;
+    case ND_BITXOR: eval_bitint_bitxor(ty->bit_cnt, lval, rval); break;
+    case ND_ADD: eval_bitint_add(ty->bit_cnt, lval, rval); break;
+    case ND_SUB: eval_bitint_sub(ty->bit_cnt, lval, rval); break;
+    case ND_MUL: eval_bitint_mul(ty->bit_cnt, lval, rval); break;
+    case ND_DIV:
+    case ND_MOD: {
+      bool res = eval_bitint_to_bool(ty->bit_cnt, rval);
+      if (!res)
+        return (void *)eval_error(node->tok, "division by zero during constant evaluation");
+      eval_bitint_div(ty->bit_cnt, lval, rval, ty->is_unsigned, node->kind == ND_DIV);
+      break;
+    }
+    }
+    return free(lval), rval;
+  }
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR: {
+    uint64_t *val = eval_bitint(lhs);
+    uint64_t amount = eval(rhs);
+    if (eval_recover && *eval_recover)
+      return free(val), NULL;
+
+    if (amount < 0 || amount >= ty->bit_cnt)
+      return (void *)eval_error(rhs->tok, "invalid shift amount");
+
+    if (node->kind == ND_SHL)
+      eval_bitint_shl(ty->bit_cnt, val, val, amount);
+    else
+      eval_bitint_shr(ty->bit_cnt, val, val, amount, ty->is_unsigned);
+    return val;
+  }
+  case ND_BITNOT:
+  case ND_POS:
+  case ND_NEG: {
+    uint64_t *val = eval_bitint(lhs);
+    if (eval_recover && *eval_recover)
+      return NULL;
+    switch (node->kind) {
+    case ND_BITNOT: eval_bitint_bitnot(ty->bit_cnt, val); break;
+    case ND_NEG: eval_bitint_neg(ty->bit_cnt, val); break;
+    }
+    return val;
+  }
+  case ND_COND:
+    return eval(node->cond) ? eval_bitint(node->then) : eval_bitint(node->els);
+  case ND_COMMA:
+    eval_void(lhs);
+    return eval_bitint(rhs);
+  case ND_CAST:
+    if (lhs->ty->kind == TY_BITINT) {
+      uint64_t *val = eval_bitint(lhs);
+      if (eval_recover && *eval_recover)
+        return NULL;
+
+      val = realloc(val, MAX(ty->size, 8));
+      if (ty->bit_cnt > lhs->ty->bit_cnt)
+        eval_bitint_sign_ext(lhs->ty->bit_cnt, val, ty->bit_cnt, lhs->ty->is_unsigned);
+      return val;
+    }
+    if (is_integer(lhs->ty)) {
+      uint64_t *val = malloc(MAX(ty->size, 8));
+      val[0] = eval(lhs);
+
+      if (ty->bit_cnt > lhs->ty->size * 8)
+        eval_bitint_sign_ext(lhs->ty->size * 8, val, ty->bit_cnt, lhs->ty->is_unsigned);
+      return val;
+    }
+    error_tok(node->tok, "unimplemented cast");
+  case ND_NUM: {
+    uint64_t *val = malloc(MAX(ty->size, 8));
+    memcpy(val, node->bitint_data, ty->size);
+    return val;
+  }
+  }
+
+  char *data = eval_constexpr_data(node);
+  if (data) {
+    uint64_t *val = malloc(MAX(ty->size, 8));
+    if (is_bitfield(node)) {
+      memcpy(val, data, bitfield_footprint(node->member));
+      eval_bitint_bitfield_load(ty->bit_cnt, val, val,
+        node->member->bit_width, node->member->bit_offset, ty->is_unsigned);
+      return val;
+    }
+    memcpy(val, data, ty->size);
+    return val;
+  }
+
+  return (void *)eval_error(node->tok, "not a compile-time constant");
 }
 
 static Node *atomic_op(Node *binary, bool return_old) {
