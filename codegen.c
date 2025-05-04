@@ -3994,9 +3994,9 @@ static void emit_data(Obj *var) {
 
     while (rem > 0) {
       if (rem >= 8)
-        Printftn(".quad 0x%"PRIx64, *(uint64_t *)&var->init_data[pos]), pos += 8, rem -= 8;
+        Printftn(".quad %"PRIi64, *(int64_t *)&var->init_data[pos]), pos += 8, rem -= 8;
       else if (rem >= 4)
-        Printftn(".int 0x%"PRIx32, *(uint32_t *)&var->init_data[pos]), pos += 4, rem -= 4;
+        Printftn(".long %"PRIi32, *(int32_t *)&var->init_data[pos]), pos += 4, rem -= 4;
       else if (rem >= 2)
         Printftn(".word %"PRIi16, *(int16_t *)&var->init_data[pos]), pos += 2, rem -= 2;
       else
