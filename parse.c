@@ -2859,6 +2859,41 @@ static void eval_void(Node *node) {
   eval(node);
 }
 
+static int64_t eval_cmp(Node *node) {
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+
+  if (is_flonum(lhs->ty)) {
+    switch (node->kind) {
+    case ND_EQ: return eval_double(lhs) == eval_double(rhs);
+    case ND_NE: return eval_double(lhs) != eval_double(rhs);
+    case ND_LT: return eval_double(lhs) < eval_double(rhs);
+    case ND_LE: return eval_double(lhs) <= eval_double(rhs);
+    case ND_GT: return eval_double(lhs) > eval_double(rhs);
+    case ND_GE: return eval_double(lhs) >= eval_double(rhs);
+    }
+  } else if (lhs->ty->is_unsigned) {
+    switch (node->kind) {
+    case ND_EQ: return (uint64_t)eval(lhs) == (uint64_t)eval(rhs);
+    case ND_NE: return (uint64_t)eval(lhs) != (uint64_t)eval(rhs);
+    case ND_LT: return (uint64_t)eval(lhs) < (uint64_t)eval(rhs);
+    case ND_LE: return (uint64_t)eval(lhs) <= (uint64_t)eval(rhs);
+    case ND_GT: return (uint64_t)eval(lhs) > (uint64_t)eval(rhs);
+    case ND_GE: return (uint64_t)eval(lhs) >= (uint64_t)eval(rhs);
+    }
+  } else {
+    switch (node->kind) {
+    case ND_EQ: return eval(lhs) == eval(rhs);
+    case ND_NE: return eval(lhs) != eval(rhs);
+    case ND_LT: return eval(lhs) < eval(rhs);
+    case ND_LE: return eval(lhs) <= eval(rhs);
+    case ND_GT: return eval(lhs) > eval(rhs);
+    case ND_GE: return eval(lhs) >= eval(rhs);
+    }
+  }
+  internal_error();
+}
+
 static int64_t eval(Node *node) {
   return eval2(node, &(EvalContext){.kind = EV_CONST});
 }
@@ -2927,37 +2962,12 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return (int32_t)eval(lhs) >> eval(rhs);
     return eval(lhs) >> eval(rhs);
   case ND_EQ:
-    if (is_flonum(lhs->ty))
-      return eval_double(lhs) == eval_double(rhs);
-    return eval(lhs) == eval(rhs);
   case ND_NE:
-    if (is_flonum(lhs->ty))
-      return eval_double(lhs) != eval_double(rhs);
-    return eval(lhs) != eval(rhs);
   case ND_LT:
-    if (is_flonum(lhs->ty))
-      return eval_double(lhs) < eval_double(rhs);
-    if (lhs->ty->is_unsigned)
-      return (uint64_t)eval(lhs) < eval(rhs);
-    return eval(lhs) < eval(rhs);
   case ND_LE:
-    if (is_flonum(lhs->ty))
-      return eval_double(lhs) <= eval_double(rhs);
-    if (lhs->ty->is_unsigned)
-      return (uint64_t)eval(lhs) <= eval(rhs);
-    return eval(lhs) <= eval(rhs);
   case ND_GT:
-    if (is_flonum(lhs->ty))
-      return eval_double(lhs) > eval_double(rhs);
-    if (lhs->ty->is_unsigned)
-      return (uint64_t)eval(lhs) > eval(rhs);
-    return eval(lhs) > eval(rhs);
   case ND_GE:
-    if (is_flonum(lhs->ty))
-      return eval_double(lhs) >= eval_double(rhs);
-    if (lhs->ty->is_unsigned)
-      return (uint64_t)eval(lhs) >= eval(rhs);
-    return eval(lhs) >= eval(rhs);
+    return eval_cmp(node);
   case ND_COND:
     return eval(node->cond) ? eval2(node->then, ctx) : eval2(node->els, ctx);
   case ND_COMMA:
