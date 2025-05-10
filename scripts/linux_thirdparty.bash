@@ -50,7 +50,7 @@ install_libtool() {
 # tests
 
 test_bash() {
- url_tar https://ftp.gnu.org/gnu/bash/bash-5.3-beta.tar.gz bash
+ url_tar https://ftp.gnu.org/gnu/bash/bash-5.3-rc1.tar.gz bash
  fix_configure ./configure
  ./configure
  make test
@@ -62,7 +62,7 @@ test_cello() {
 }
 
 test_curl() {
- url_tar https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.gz curl
+ url_tar https://github.com/curl/curl/releases/download/curl-8_13_0/curl-8.13.0.tar.gz curl
  fix_configure ./configure
  ./configure --with-openssl
  make && make test
@@ -89,21 +89,31 @@ test_gmake() {
 }
 
 test_gzip() {
- url_tar https://ftp.gnu.org/gnu/gzip/gzip-1.13.tar.gz gzip
+ url_tar https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
  fix_configure ./configure
  ./configure
  make check
 }
 
+test_janet() {
+ git_fetch https://github.com/janet-lang/janet 3d3e880f52e4b40540b7722b6fc0f58aa5bd7443 janet
+ # Use C11 concurrency features
+ sed -i "s|/\* #define JANET_THREAD_LOCAL _Thread_local \*/|#define JANET_THREAD_LOCAL _Thread_local|g" src/conf/janetconf.h
+ sed -i "s|/\* #define JANET_USE_STDATOMIC \*/|#define JANET_USE_STDATOMIC|g" src/conf/janetconf.h
+ # Enable computed goto
+ replace_line "#if defined(__GNUC__) && !defined(__EMSCRIPTEN__)" "#if 1" src/core/vm.c
+ make test
+}
+
 test_libpng() {
- github_tar pnggroup libpng v1.6.47
+ github_tar pnggroup libpng v1.6.48
  fix_configure ./configure
  ./configure
  make test
 }
 
 test_libressl() {
- url_tar https://github.com/libressl/portable/releases/download/v4.0.0/libressl-4.0.0.tar.gz libressl
+ url_tar https://github.com/libressl/portable/releases/download/v4.1.0/libressl-4.1.0.tar.gz libressl
  replace_line "#if defined(__GNUC__)" "#if 1" crypto/bn/arch/amd64/bn_arch.h
  fix_configure ./configure
  ./configure
@@ -181,9 +191,7 @@ test_openssl() {
 }
 
 test_perl() {
- github_tar perl perl5 v5.40.0
- sed -i "187i push(@file, '/usr/include/asm-generic/errno-base.h');" ext/Errno/Errno_pm.PL
- sed -i "188i push(@file, '/usr/include/asm-generic/errno.h');" ext/Errno/Errno_pm.PL
+ github_tar perl perl5 v5.40.2
  # https://github.com/Perl/perl5/blob/80f266d3fc15255d56d2bebebceba52614f04943/.github/workflows/testsuite.yml#L810
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
@@ -192,7 +200,7 @@ test_perl() {
 }
 
 test_php() {
- github_tar php php-src php-8.1.31
+ github_tar php php-src php-8.1.32
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
 
@@ -206,14 +214,14 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_17_4
+ github_tar postgres postgres REL_17_5
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  ./configure && make && make check
 }
 
 test_python() {
- github_tar python cpython v3.13.2
+ github_tar python cpython v3.13.3
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
  ./configure && make
@@ -227,15 +235,23 @@ test_python() {
 }
 
 test_qbe_hare() {
- git_fetch git://c9x.me/qbe.git 90050202f57b22243f5d3dd434a81df2f89de9ed qbe
+ git_fetch git://c9x.me/qbe.git 8d5b86ac4c24e24802a60e5e9df2dd5902fe0a5c qbe
  make CC="$CC" check
  url_tar https://git.sr.ht/~sircmpwn/harec/archive/0.24.2.tar.gz harec
  mv configs/linux.mk config.mk
  make CC="$CC" QBE=../qbe check
 }
 
+test_scrapscript() {
+ git_fetch https://github.com/tekknolagi/scrapscript 467a577f1fa389f91b0ecda180b23daaa2b43fa2 scrapscript
+ curl -LsSf https://astral.sh/uv/install.sh | sh
+ ~/.local/bin/uv python install 3.10
+ ~/.local/bin/uv python pin 3.010
+ ~/.local/bin/uv run python compiler_tests.py
+}
+
 test_sqlite() {
- github_tar sqlite sqlite version-3.49.1
+ github_tar sqlite sqlite version-3.49.2
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
@@ -249,7 +265,7 @@ test_tcl() {
 }
 
 test_tinycc() {
- git_fetch https://github.com/TinyCC/tinycc 8c4e67380e54296a6a1f9d242b7fc4bf9f16fddb tinycc
+ git_fetch https://github.com/TinyCC/tinycc 6ca228339cbae14203b255e3e27f56586d2b10dc tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
@@ -286,6 +302,16 @@ test_zlib() {
  make test
 }
 
+test_zsh() {
+ github_tar zsh-users zsh zsh-5.9.0.2-test
+ libtoolize
+ autoreconf -fi
+ ./configure
+ sed -i 's/stat.mdd link=no/stat.mdd link=static/g' config.modules # Required to pass D07multibyte.ztst
+ rm Test/A08time.ztst # Fail in CI
+ make && make check
+}
+
 test_zstd() {
  github_tar facebook zstd v1.5.7
  replace_line "#if defined(__ELF__) && defined(__GNUC__)" "#if 1" lib/decompress/huf_decompress_amd64.S
@@ -304,15 +330,15 @@ build_gcc() {
 }
 
 build_nano() {
- url_tar https://www.nano-editor.org/dist/v8/nano-8.3.tar.gz nano
+ url_tar https://www.nano-editor.org/dist/v8/nano-8.4.tar.gz nano
  ./configure && make
 }
 
 build_sdl() {
- github_tar libsdl-org SDL release-2.30.9
- fix_configure ./configure
+ github_tar libsdl-org SDL release-3.2.12
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
- ./configure
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DSDL_UNIX_CONSOLE_BUILD=ON
  make
 }
 

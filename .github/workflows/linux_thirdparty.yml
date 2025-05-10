@@ -40,6 +40,7 @@ jobs:
           - thirdparty: test_git
           - thirdparty: test_gmake
           - thirdparty: test_gzip
+          - thirdparty: test_janet
           - thirdparty: test_libpng
           - thirdparty: test_libressl
           - thirdparty: test_libuev
@@ -54,6 +55,7 @@ jobs:
           - thirdparty: test_postgres
           - thirdparty: test_python
           - thirdparty: test_qbe_hare
+          - thirdparty: test_scrapscript
           - thirdparty: test_sqlite
           - thirdparty: test_tcl
           - thirdparty: test_tinycc
@@ -61,6 +63,7 @@ jobs:
           - thirdparty: test_toybox
           - thirdparty: test_vim
           - thirdparty: test_zlib
+          - thirdparty: test_zsh
           - thirdparty: test_zstd
           - thirdparty: build_gcc
           - thirdparty: build_nano

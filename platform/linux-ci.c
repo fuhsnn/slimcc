@@ -11,6 +11,9 @@ void platform_init(void) {
   define_macro("__gnu_linux__", "1");
 
   init_ty_lp64();
+
+  set_fpie("2");
+  opt_pie = true;
 }
 
 void platform_stdinc_paths(StringArray *paths) {
