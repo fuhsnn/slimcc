@@ -146,6 +146,7 @@ typedef enum {
   TK_STR,     // String literals
   TK_INT_NUM, // Integer Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
+  TK_FMARK,   // Filemarkers for -E
   TK_PMARK,   // Placermarkers
   TK_ATTR,    // GNU attribute
   TK_BATTR,   // C23 attribute

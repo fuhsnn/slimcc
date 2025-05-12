@@ -140,6 +140,14 @@ static Token *to_eof(Token *tok) {
   return tok;
 }
 
+static Token *new_fmark(Token *tok){
+  Token *t = copy_token(tok);
+  t->kind = TK_FMARK;
+  t->len = 0;
+  t->line_no = 1;
+  return t;
+}
+
 static Token *new_pmark(Token *tok){
   Token *t = copy_token(tok);
   t->kind = TK_PMARK;
@@ -1097,8 +1105,16 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
   Token *start = tokenize_file(path, &end, incl_no);
   if (!start)
     error_tok(filename_tok, "%s: cannot open file: %s", path, strerror(errno));
-  if (!end)
+
+  Token *fmark = opt_E ? new_fmark(start) : NULL;
+
+  if (!end) {
+    if (fmark) {
+      fmark->next = tok;
+      return fmark;
+    }
     return tok;
+  }
 
   if (is_hash(start) && equal(start->next, "ifndef") &&
     start->next->next->kind == TK_IDENT && equal(end, "endif"))
@@ -1108,6 +1124,11 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
     end->file->is_syshdr = true;
 
   end->next = tok;
+
+  if (fmark) {
+    fmark->next = start;
+    return fmark;
+  }
   return start;
 }
 
