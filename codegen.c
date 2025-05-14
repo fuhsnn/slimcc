@@ -3951,7 +3951,7 @@ static void emit_data(Obj *var) {
     return;
   }
 
-  bool use_rodata = is_const_var(var) && !((opt_fpic || opt_fpie) && var->rel);
+  bool use_rodata = is_const_var(var) && !((opt_fpic || opt_fpie) && (var->rel || var->section_name));
 
   if (var->section_name)
     Printfts(".section \"%s\"", var->section_name);
@@ -3964,7 +3964,7 @@ static void emit_data(Obj *var) {
   else
     Printfts(".section .%s", var->init_data ? "data" : "bss");
 
-  if (opt_data_sections)
+  if (opt_data_sections && !var->section_name)
     Printf(".\"%s\"", asm_name(var));
 
   if (var->is_tls)
