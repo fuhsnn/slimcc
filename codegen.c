@@ -156,6 +156,8 @@ static void imm_and(char *op, char *tmp, int64_t val);
 static void imm_cmp(char *op, char *tmp, int64_t val);
 static char *arith_ins(NodeKind kind);
 
+static bool is_asm_symbolic_arg(Node *node, char *punct);
+
 #define Prints(str) fprintf(output_file, str)
 #define Printsts(str) fprintf(output_file, "\t" str)
 #define Printssn(str) fprintf(output_file, str "\n")
@@ -3215,7 +3217,7 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       ap->kind = ASMOP_NUM;
       continue;
     }
-    if (is_symbolic) {
+    if (is_symbolic && is_asm_symbolic_arg(ap->arg, NULL)) {
       ap->kind = ASMOP_SYMBOLIC;
       continue;
     }
@@ -3645,6 +3647,22 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
   error_tok(tok, "operand not found");
 }
 
+static bool is_asm_symbolic_arg(Node *node, char *punct) {
+  if (node->kind == ND_VAR && node->var->ty->kind == TY_FUNC && use_rip(node->var)) {
+    if (punct)
+      fprintf(output_file, "%s\"%s\"", punct, asm_name(node->var));
+    return true;
+  }
+  char ofs[STRBUF_SZ], *ptr;
+  if (node->kind == ND_ADDR &&
+    is_memop(node->lhs, ofs, &ptr, true) && !strcmp(ptr, "%rip")) {
+    if (punct)
+      Printf("%s%s", punct, ofs);
+    return true;
+  }
+  return false;
+}
+
 static void asm_body(Node *node) {
   char *p = node->asm_str->str;
   for (;;) {
@@ -3694,19 +3712,10 @@ static void asm_body(Node *node) {
       case ASMOP_NUM:
         Printf("%s%"PRIi64, punct, ap->val);
         continue;
-      case ASMOP_SYMBOLIC:{
-        if (ap->arg->kind == ND_VAR && ap->arg->var->ty->kind == TY_FUNC && use_rip(ap->arg->var)) {
-          fprintf(output_file, "%s\"%s\"", punct, asm_name(ap->arg->var));
+      case ASMOP_SYMBOLIC:
+        if (is_asm_symbolic_arg(ap->arg, punct))
           continue;
-        }
-        char ofs[STRBUF_SZ], *ptr;
-        if (ap->arg->kind == ND_ADDR &&
-          is_memop(ap->arg->lhs, ofs, &ptr, true) && !strcmp(ptr, "%rip")) {
-          Printf("%s%s", punct, ofs);
-          continue;
-        }
         break;
-      }
       case ASMOP_MEM: {
         char ofs[STRBUF_SZ], *ptr;
         if (is_memop(ap->arg, ofs, &ptr, true)) {

@@ -44,11 +44,12 @@ void reg_label() {
            : "=r"(i), "=r"(j) : "r"(k));
 }
 
-void i_constraint(void) {
+void i_constraint(int var) {
   static int v = 22;
   static struct { char c; long long i; } s = {.i = 33};
   __asm__ volatile (
-    "movabsq %[imm], %%rdi;"
+    "movl %[lvar], %%edi;"
+    "addl %[imm], %%edi;"
 #if !defined(__PIC__)
     "movabsq %[ptr], %%rsi; movl (%%rsi), %%esi;"
     "movabsq %[agg], %%rdx; movl (%%rdx), %%edx;"
@@ -59,11 +60,11 @@ void i_constraint(void) {
     "call verify_123"
 #endif
     :
-    : [imm]"i"(11)
+    : [imm]"i"(6), [lvar]"ir"(var)
 #if !defined(__PIC__)
       , [ptr]"i"(&v), [agg]"i"(&s.i), [fun]"i"(verify_123)
 #endif
-    : "ax"
+    : "rsi", "rdi", "rdx", "rax"
   );
 }
 
@@ -285,7 +286,7 @@ void x87(void) {
 int main(void) {
   mem_operand_triival();
   reg_label();
-  i_constraint();
+  i_constraint(5);
   reg_assign();
   x87();
   x87_clobber();
