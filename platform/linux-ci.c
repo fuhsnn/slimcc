@@ -17,7 +17,7 @@ void platform_init(void) {
 }
 
 void platform_stdinc_paths(StringArray *paths) {
-  add_include_path(paths, "/work/slimcc/include");
+  add_include_path(paths, "/work/slimcc/slimcc_headers/include");
   add_include_path(paths, "/usr/include/x86_64-linux-gnu");
   add_include_path(paths, "/usr/include");
 }
