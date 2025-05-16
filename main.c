@@ -366,21 +366,6 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (!strcmp(argv[i], "-fpic")) { set_fpic("1"); continue; }
-    if (!strcmp(argv[i], "-fPIC")) { set_fpic("2"); continue; }
-    if (!strcmp(argv[i], "-fpie")) { set_fpie("1"); continue; }
-    if (!strcmp(argv[i], "-fPIE")) { set_fpie("2"); continue; }
-
-    if (!strcmp(argv[i], "-fno-pic") || !strcmp(argv[i], "-fno-PIC") ||
-      !strcmp(argv[i], "-fno-pie") || !strcmp(argv[i], "-fno-PIE")) {
-      opt_fpic = opt_fpie = false;
-      undef_macro("__pic__");
-      undef_macro("__PIC__");
-      undef_macro("__pie__");
-      undef_macro("__PIE__");
-      continue;
-    }
-
     if (!strcmp(argv[i], "-hashmap-test")) {
       hashmap_test();
       exit(0);
@@ -412,48 +397,60 @@ static int parse_args(int argc, char **argv) {
       error("unknown c standard");
     }
 
-    {
-      bool bval;
-      char *argp = NULL;
-      if (startswith(argv[i], &argp, "-fno-"))
-        bval = false;
-      else if (startswith(argv[i], &argp, "-f"))
-        bval = true;
+    if (startswith(argv[i], &arg, "-f")) {
+      bool b = !startswith(arg, &arg, "no-");
 
-      if (argp &&
-        (set_bool(argp, bval, "common", &opt_fcommon) ||
-        set_bool(argp, bval, "function-sections", &opt_func_sections) ||
-        set_bool(argp, bval, "data-sections", &opt_data_sections) ||
-        set_bool(argp, bval, "emulated-tls", &opt_femulated_tls) ||
-        set_bool(argp, bval, "enable-universal-char", &opt_enable_universal_char)))
+      if (set_bool(arg, b, "common", &opt_fcommon) ||
+        set_bool(arg, b, "function-sections", &opt_func_sections) ||
+        set_bool(arg, b, "data-sections", &opt_data_sections) ||
+        set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
+        set_bool(arg, b, "enable-universal-char", &opt_enable_universal_char))
         continue;
-    }
 
-    if (set_true(argv[i], "-fdefer-ts", &opt_fdefer_ts)) {
-      define_macro("__STDC_DEFER_TS25755__", "1");
-      continue;
-    }
-
-    if (set_bool(argv[i], false, "-fsigned-char", &ty_pchar->is_unsigned) ||
-      set_bool(argv[i], true, "-funsigned-char", &ty_pchar->is_unsigned))
-      continue;
-
-    if (startswith(argv[i], &arg, "-fstack-reuse=")) {
-      opt_reuse_stack = !strcmp(arg, "all");
-      continue;
-    }
-
-    if (startswith(argv[i], &opt_visibility, "-fvisibility=") ||
-      startswith(argv[i], &opt_use_as, "-fuse-as="))
-      continue;
-
-    if (startswith(argv[i], &arg, "-fuse-ld=")) {
-      if (!strcmp(arg, "lld")) {
-        opt_use_ld = "ld.lld";
-        continue;
+      if (b) {
+        if (!strcmp(arg, "pic")) { set_fpic("1"); continue; }
+        if (!strcmp(arg, "PIC")) { set_fpic("2"); continue; }
+        if (!strcmp(arg, "pie")) { set_fpie("1"); continue; }
+        if (!strcmp(arg, "PIE")) { set_fpie("2"); continue; }
+      } else {
+        if (!strcmp(arg, "pic") || !strcmp(arg, "PIC") ||
+          !strcmp(arg, "pie") || !strcmp(arg, "PIE")) {
+          opt_fpic = opt_fpie = false;
+          undef_macro("__pic__");
+          undef_macro("__PIC__");
+          undef_macro("__pie__");
+          undef_macro("__PIE__");
+          continue;
+        }
       }
-      opt_use_ld = arg;
-      continue;
+
+      // -f only options
+      if (b) {
+        if (set_true(arg, "defer-ts", &opt_fdefer_ts)) {
+          define_macro("__STDC_DEFER_TS25755__", "1");
+          continue;
+        }
+        if (set_bool(arg, false, "signed-char", &ty_pchar->is_unsigned) ||
+          set_bool(arg, true, "unsigned-char", &ty_pchar->is_unsigned))
+          continue;
+
+        if (startswith(arg, &arg, "stack-reuse=")) {
+          opt_reuse_stack = !strcmp(arg, "all");
+          continue;
+        }
+        if (startswith(arg, &opt_visibility, "visibility=") ||
+          startswith(arg, &opt_use_as, "use-as="))
+          continue;
+
+        if (startswith(arg, &arg, "use-ld=")) {
+          if (!strcmp(arg, "lld")) {
+            opt_use_ld = "ld.lld";
+            continue;
+          }
+          opt_use_ld = arg;
+          continue;
+        }
+      }
     }
 
     if (argv[i][0] == '-') {
