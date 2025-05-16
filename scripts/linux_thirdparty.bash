@@ -228,8 +228,8 @@ test_python() {
 
  rm Lib/test/test_ctypes/test_dlerror.py #https://github.com/python/cpython/issues/127626
  skip_tests=(
-  # don't work in CI https://github.com/python/cpython/blob/6d3b5206cfaf5a85c128b671b1d9527ed553c930/.github/workflows/build.yml#L408
-  test_asyncio test_socket
+  test_asyncio test_socket # Fail in CI
+  test_os # https://github.com/python/cpython/issues/126112
  )
  ./python -m test -j4 --exclude "${skip_tests[@]}"
 }
