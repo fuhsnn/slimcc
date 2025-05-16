@@ -501,7 +501,6 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
       p += 2;
       base = 2;
     } else {
-      p += 1;
       base = 8;
     }
   }

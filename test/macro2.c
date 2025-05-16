@@ -1,5 +1,8 @@
 #include "test.h"
 
+#if 0
+7
+#endif
 
 #define AAA
 #define MACRO_WITH_DEFINED_INSIDE   (defined(AAA) && !defined(BBB))
