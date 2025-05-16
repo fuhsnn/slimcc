@@ -713,6 +713,7 @@ extern bool opt_enable_universal_char;
 extern bool opt_fpic;
 extern bool opt_fpie;
 extern bool opt_femulated_tls;
+extern bool opt_use_plt;
 extern bool opt_fcommon;
 extern bool opt_optimize;
 extern bool opt_reuse_stack;

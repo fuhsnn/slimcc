@@ -735,15 +735,19 @@ static void gen_addr(Node *node) {
       if (opt_femulated_tls) {
         clobber_all_regs();
         Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", asm_name(node->var));
-        Printstn("call __emutls_get_address@PLT");
+        if (opt_use_plt)
+          Printstn("call __emutls_get_address@PLT");
+        else
+          Printstn("call *__emutls_get_address@GOTPCREL(%%rip)");
         return;
       }
       if (opt_fpic) {
         clobber_all_regs();
-        Printftn("data16 lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
-        Printstn(".value 0x6666");
-        Printstn("rex64");
-        Printstn("call __tls_get_addr@PLT");
+        Printftn(".byte 0x66; lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
+        if (opt_use_plt)
+          Printstn(".value 0x6666; rex64 call __tls_get_addr@PLT");
+        else
+          Printstn(".byte 0x66; rex64 call *__tls_get_addr@GOTPCREL(%%rip)");
         return;
       }
 
@@ -1505,8 +1509,10 @@ static void gen_funcall(Node *node) {
   } else {
     if (use_rip(node->lhs->var))
       Printftn("call \"%s\"", asm_name(node->lhs->var));
-    else
+    else if (opt_use_plt)
       Printftn("call \"%s\"@PLT", asm_name(node->lhs->var));
+    else
+      Printftn("call *\"%s\"@GOTPCREL(%%rip)", asm_name(node->lhs->var));
   }
 
   clobber_all_regs();

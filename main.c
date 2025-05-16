@@ -18,6 +18,7 @@ bool opt_fcommon;
 bool opt_fpic;
 bool opt_fpie;
 bool opt_femulated_tls;
+bool opt_use_plt = true;
 bool opt_optimize = true;
 bool opt_reuse_stack = true;
 bool opt_g;
@@ -401,6 +402,7 @@ static int parse_args(int argc, char **argv) {
       bool b = !startswith(arg, &arg, "no-");
 
       if (set_bool(arg, b, "common", &opt_fcommon) ||
+        set_bool(arg, b, "plt", &opt_use_plt) ||
         set_bool(arg, b, "function-sections", &opt_func_sections) ||
         set_bool(arg, b, "data-sections", &opt_data_sections) ||
         set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
