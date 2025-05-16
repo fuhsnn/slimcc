@@ -697,7 +697,6 @@ typedef enum {
 bool file_exists(char *path);
 bool in_sysincl_path(char *path);
 
-char *source_dir(void);
 char *find_dir_w_file(char *pattern);
 void run_subprocess(char **argv);
 void set_fpic(char *lvl);
@@ -707,6 +706,7 @@ void run_assembler_gnustyle(StringArray *as_args, char *input, char *output);
 void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
   char *ldso_path, char *libpath, char *gcclibpath);
 
+extern char *argv0;
 extern StringArray include_paths;
 extern bool opt_E;
 extern bool opt_enable_universal_char;

@@ -65,7 +65,7 @@ static StringArray input_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
 
-static char *argv0;
+char *argv0;
 
 static void cc1(char *input_file, char *output, bool is_asm_pp);
 
@@ -851,13 +851,6 @@ char *find_dir_w_file(char *pattern) {
 bool file_exists(char *path) {
   struct stat st;
   return !stat(path, &st);
-}
-
-char *source_dir(void) {
-  static char *path;
-  if (!path)
-    path = format("%s", dirname(strdup(argv0)));
-  return path;
 }
 
 static LinkType get_link_type(void) {

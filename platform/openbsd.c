@@ -19,13 +19,16 @@ void platform_init(void) {
 void platform_stdinc_paths(StringArray *paths) {
   // Replace this block with absolute path if you intend to
   // execute the compiler outside of source directory.
+  // If you are thinking of just removing the error while keeping
+  // the relative search path, please read:
+  // https://github.com/rui314/chibicc/issues/162
   {
-    char *src_dir = source_dir();
-    if (!file_exists(format("%s/include/.slimcc_incl_dir", src_dir)))
+    char *hdr_dir = format("%s/slimcc_headers", dirname(strdup(argv0)));
+    if (!file_exists(hdr_dir))
       error("can't find built-in headers");
 
-    add_include_path(paths, format("%s/platform_include/openbsd", src_dir));
-    add_include_path(paths, format("%s/include", src_dir));
+    add_include_path(paths, format("%s/platform_fix/openbsd", hdr_dir));
+    add_include_path(paths, format("%s/include", hdr_dir));
   }
 
   add_include_path(paths, "/usr/include");
