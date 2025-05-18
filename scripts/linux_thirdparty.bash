@@ -81,6 +81,18 @@ test_git() {
  make CC="$CC" test -j2
 }
 
+test_glib() {
+ github_clone fuhsnn glib main
+ libtoolize
+ sh autogen.sh
+ fix_configure ./configure
+ ./configure
+ replace_line "#if  __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)" "#if 1" glib/gconstructor.h
+ replace_line "#ifdef __GNUC__" "#if 1" glib/gmacros.h
+ replace_line "#elif defined(__GNUC__) && (__GNUC__ >= 4)" "#elif 1" gio/tests/modules/symbol-visibility.h
+ make -j2 check
+}
+
 test_gmake() {
  url_tar https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
  fix_configure ./configure
@@ -90,6 +102,13 @@ test_gmake() {
 
 test_gzip() {
  url_tar https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
+ fix_configure ./configure
+ ./configure
+ make check
+}
+
+test_imagemagick() {
+ github_tar ImageMagick ImageMagick 7.1.0-47
  fix_configure ./configure
  ./configure
  make check
@@ -316,6 +335,15 @@ test_zstd() {
  github_tar facebook zstd v1.5.7
  replace_line "#if defined(__ELF__) && defined(__GNUC__)" "#if 1" lib/decompress/huf_decompress_amd64.S
  make check
+}
+
+build_erlang() {
+ github_tar erlang otp OTP-27.3.4
+ replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
+ replace_line "#if defined(__GNUC__)" "#if 1" erts/include/internal/ethread_inline.h
+ sed -i 's|-funroll-loops||g' lib/megaco/src/flex/Makefile.in
+ CFLAGS='-O -fPIC' ./configure --enable-bootstrap-only
+ OTP_TINY_BUILD=true make
 }
 
 build_gcc() {

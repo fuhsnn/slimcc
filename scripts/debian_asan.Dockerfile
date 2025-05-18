@@ -16,7 +16,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # test_perl:cpan/Socket/t/getaddrinfo.t
  netbase \
  # for ocaml testsuite
- parallel
+ parallel \
+ # glib
+ libpcre3-dev libmount-dev desktop-file-utils shared-mime-info \
+ python3.11-minimal python3-distutils
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
