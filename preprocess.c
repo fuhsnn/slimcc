@@ -936,7 +936,7 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   if (!m->is_objlike && m->body->kind == TK_EOF && equal(tok, "__attribute__")) {
     char *slash = strrchr(m->body->file->name, '/');
     if (slash && !strcmp(slash + 1, "cdefs.h")) {
-      push_macro_lock(m, skip_paren(skip(tok->next, "(")));
+      push_macro_lock(m, prepare_funclike_args(tok->next));
       return true;
     }
   }
