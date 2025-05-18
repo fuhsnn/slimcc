@@ -3994,6 +3994,7 @@ static void emit_data(Obj *var) {
   else
     Printssn(",@progbits");
 
+  Printftn(".type \"%s\", @object", asm_name(var));
   Printftn(".size \"%s\", %"PRIi64, asm_name(var), sz);
   Printftn(".align %d", align);
   Printfsn("\"%s\":", asm_name(var));
