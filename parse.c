@@ -374,6 +374,11 @@ Node *new_cast(Node *expr, Type *ty) {
         expr->ty = ty;
         return expr;
       }
+
+      if (expr->ty->kind == TY_BITINT && ty->kind == TY_BITINT &&
+        expr->ty->is_unsigned == ty->is_unsigned &&
+        expr->ty->bit_cnt == ty->bit_cnt)
+        return expr;
     }
 
     if (is_redundant_cast(expr, ty)) {
@@ -4305,7 +4310,8 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   // If a function returns a struct, it is caller's responsibility
   // to allocate a space for the return value.
-  if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION)
+  if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION ||
+    (node->ty->kind == TY_BITINT && bitint_rtn_need_copy(node->ty->bit_cnt)))
     node->ret_buffer = new_lvar(NULL, node->ty);
   return node;
 }

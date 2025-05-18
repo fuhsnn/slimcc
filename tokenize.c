@@ -874,7 +874,7 @@ Token *tokenize(File *file, Token **end) {
 }
 
 // Returns the contents of a given file.
-static char *read_file(char *path) {
+char *read_file(char *path) {
   FILE *fp;
 
   if (strcmp(path, "-") == 0) {

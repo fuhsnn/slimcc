@@ -1,0 +1,329 @@
+
+
+static inline int __slimcc_bitint_first_set(int bits, void *lp) {
+  int idx = (bits - 1) / 64;
+  unsigned long long *lh = lp;
+
+  int clr_shft = 63 - (bits - 1) % 64;
+  lh[idx] = (lh[idx] << clr_shft) >> clr_shft;
+
+  for (; idx >= 0; idx--)
+    if (lh[idx])
+      for (int shft = 0; shft < 64; shft++)
+        if (0 > (long long)(lh[idx] << shft))
+          return (64 - shft) + idx * 64;
+  return 0;
+}
+
+static inline _Bool __slimcc_bitint_to_bool(int bits, void *lp) {
+  int idx = (bits - 1) / 64;
+  unsigned long long *lh = lp;
+
+  int clr_shft = 63 - (bits - 1) % 64;
+  lh[idx] = (lh[idx] << clr_shft) >> clr_shft;
+
+  while (idx >= 0)
+    if (lh[idx--])
+      return 1;
+  return 0;
+}
+
+static inline int __slimcc_bitint_cmp(int bits, void *lp, void *rp, _Bool is_unsigned) {
+  int idx = (bits - 1) / 64;
+  unsigned long long *lh = lp, *rh = rp;
+
+  int clr_shft = 63 - (bits - 1) % 64;
+  unsigned long long signbit = is_unsigned ? 0 : 1ULL << 63;
+  unsigned long long lv = (lh[idx] << clr_shft) + signbit;
+  unsigned long long rv = (rh[idx] << clr_shft) + signbit;
+
+  for (;;) {
+    if (lv > rv)
+      return 2;
+    else if (lv < rv)
+      return 1;
+
+    if (--idx < 0)
+      break;
+    lv = lh[idx];
+    rv = rh[idx];
+  }
+  return 0;
+}
+
+static inline void __slimcc_bitint_sign_ext(int bits, void *lp, int bits2, _Bool is_unsigned) {
+  int idx = (bits - 1) / 64;
+  unsigned long long *lh = lp;
+
+  unsigned long long fill = lh[idx];
+  int shft = bits % 64;
+  if (shft) {
+    fill <<= 64 - shft;
+    if (is_unsigned)
+      lh[idx] = (unsigned long long)fill >> (64 - shft);
+    else
+      lh[idx] = (long long)fill >> (64 - shft);
+  }
+  fill = is_unsigned ? 0 : (long long)fill >> 63;
+
+  int top = (bits2 - 1) / 64;
+  while (++idx <= top)
+    lh[idx] = fill;
+}
+
+static inline void __slimcc_bitint_neg(int bits, void *lp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp;
+
+  unsigned long long borrow = 0;
+  for (int i = 0; i < cnt; i++) {
+    unsigned long long tmp;
+    borrow = (tmp = lh[i] + borrow) < borrow;
+    borrow |= (lh[i] = 0 - tmp) > 0;
+  }
+}
+
+static inline void __slimcc_bitint_bitnot(int bits, void *lp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp;
+
+  for (int i = 0; i < cnt; i++)
+    lh[i] = ~lh[i];
+}
+
+static inline void __slimcc_bitint_bitand(int bits, void *lp, void *rp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp, *rh = rp;
+
+  for (int i = 0; i < cnt; i++)
+    rh[i] &= lh[i];
+}
+
+static inline void __slimcc_bitint_bitor(int bits, void *lp, void *rp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp, *rh = rp;
+
+  for (int i = 0; i < cnt; i++)
+    rh[i] |= lh[i];
+}
+
+static inline void __slimcc_bitint_bitxor(int bits, void *lp, void *rp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp, *rh = rp;
+
+  for (int i = 0; i < cnt; i++)
+    rh[i] ^= lh[i];
+}
+
+static inline void __slimcc_bitint_shl(int bits, void *sp, void *dp, int amount) {
+  if (amount < 0 || amount >= bits)
+    return;
+
+  unsigned long long *src = sp, *dst = dp;
+  int idx = (bits - 1) / 64;
+  int src_idx = idx - amount / 64;
+  int shft = amount % 64;
+
+  unsigned long long hi = src[src_idx--];
+  for (; idx >= 0; idx--) {
+    unsigned long long lo = src_idx >= 0 ? src[src_idx--] : 0;
+    dst[idx] = !shft ? hi : (hi << shft) | (lo >> (64 - shft));
+    hi = lo;
+  }
+}
+
+static inline void __slimcc_bitint_shr(int bits, void *sp, void *dp, int amount, _Bool is_unsigned) {
+  if (amount < 0 || amount >= bits)
+    return;
+
+  unsigned long long *src = sp, *dst = dp;
+  int src_idx = amount / 64;
+  int src_top = (bits - 1) / 64;
+  int top = (bits - 1 - amount) / 64;
+  int shft = amount % 64;
+
+  unsigned long long lo = src[src_idx++];
+  for (int idx = 0; idx <= top; idx++) {
+    unsigned long long hi = src_idx <= src_top ? src[src_idx++] : 0;
+    dst[idx] = !shft ? lo : (hi << (64 - shft)) | (lo >> shft);
+    lo = hi;
+  }
+  __slimcc_bitint_sign_ext(bits - amount, dp, bits, is_unsigned);
+}
+
+static inline void *__slimcc_bitint_bitfield_load(int bits, void *sp, void *dp, int width, int ofs, _Bool is_unsigned) {
+  char *src = sp, *dst = dp;
+  int sz = (bits + 7) / 8;
+
+  for (int i = 0; i < sz; i++)
+    dst[i] = src[i];
+
+  __slimcc_bitint_shl(bits, dp, dp, bits - width - ofs);
+  __slimcc_bitint_shr(bits, dp, dp, bits - width, is_unsigned);
+  return sp;
+}
+
+static inline void __slimcc_bitint_bitfield_save(int bits, void *sp, void *dp, int width, int ofs) {
+  int cnt = (bits + 63) / 64;
+  int full_bits = cnt * 64;
+
+  unsigned long long mb[cnt], sb[cnt];
+  for (int i = 0; i < cnt; i++)
+    mb[i] = -1;
+
+  __slimcc_bitint_shl(full_bits, mb, mb, full_bits - width);
+  __slimcc_bitint_shl(full_bits, sp, sb, full_bits - width);
+
+  __slimcc_bitint_shr(full_bits, mb, mb, full_bits - width - ofs, 1);
+  __slimcc_bitint_shr(full_bits, sb, sb, full_bits - width - ofs, 1);
+
+  __slimcc_bitint_bitnot(full_bits, mb);
+
+  char *dst = dp, *src = (char *)sb, *msk = (char *)mb;
+  int top = (width + ofs - 1) / 8;
+
+  for (int i = ofs / 8; i <= top; i++)
+    dst[i] = (dst[i] & msk[i]) | src[i];
+}
+
+static inline void __slimcc_bitint_add(int bits, void *lp, void *rp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp, *rh = rp;
+
+  unsigned long long carry = 0;
+  for (int i = 0; i < cnt; i++) {
+    unsigned long long tmp;
+    carry = (tmp = rh[i] + carry) < carry;
+    carry |= (rh[i] = lh[i] + tmp) < tmp;
+  }
+}
+
+static inline void __slimcc_bitint_sub(int bits, void *lp, void *rp) {
+  int cnt = (bits + 63) / 64;
+  unsigned long long *lh = lp, *rh = rp;
+
+  unsigned long long borrow = 0;
+  for (int i = 0; i < cnt; i++) {
+    unsigned long long tmp;
+    borrow = (tmp = rh[i] + borrow) < borrow;
+    borrow |= (rh[i] = lh[i] - tmp) > lh[i];
+  }
+}
+
+static inline void __slimcc_bitint_mul(int bits, void *lp, void *rp) {
+  int cnt = (bits + 31) / 32;
+  unsigned *lh = lp, *rh = rp;
+
+  unsigned buf[cnt];
+
+  unsigned long long accum = 0;
+  for (int i = 0; i < cnt; i++) {
+    unsigned long long ovf_cnt = 0;
+    for (int j = 0; j <= i; j++) {
+      unsigned long long prod = (unsigned long long)lh[j] * rh[i - j];
+      ovf_cnt += (accum += prod) < prod;
+    }
+    buf[i] = (unsigned)accum;
+    accum = ovf_cnt << 32 | accum >> 32;
+  }
+  for (int i = 0; i < cnt; i++)
+    rh[i] = buf[i];
+}
+
+static inline void __slimcc_bitint_div(int bits, void *lp, void *rp, _Bool is_unsigned, _Bool is_div) {
+  int cnt = (bits + 63) / 64 * 2;
+  unsigned *lh = lp, *rh = rp;
+
+  unsigned r_buf[cnt + 2];
+  unsigned q_buf[cnt];
+
+  for (int i = 0; i < cnt; i++) {
+    r_buf[i] = lh[i];
+    q_buf[i] = 0;
+  }
+  r_buf[cnt] = r_buf[cnt + 1] = 0;
+
+  int msl = (bits - 1) / 32;
+  int sign_shft = (bits - 1) % 32;
+
+  _Bool l_neg = is_unsigned ? 0 : (r_buf[msl] >> sign_shft) & 1;
+  _Bool r_neg = is_unsigned ? 0 : (rh[msl] >> sign_shft) & 1;
+
+  if (l_neg)
+    __slimcc_bitint_neg(bits, r_buf);
+  if (r_neg)
+    __slimcc_bitint_neg(bits, rh);
+
+  int l_fsb = __slimcc_bitint_first_set(bits, r_buf);
+  int r_fsb = __slimcc_bitint_first_set(bits, rh);
+
+  int r_ofs = r_fsb % 32;
+  int r_shft = r_ofs ? 32 - r_ofs : 0;
+  int ln = (l_fsb + 31) / 32;
+  int rn = (r_fsb + 31) / 32;
+
+  if (r_shft) {
+    __slimcc_bitint_shl(bits + 64, r_buf, r_buf, r_shft);
+    __slimcc_bitint_shl(bits, rh, rh, r_shft);
+  }
+
+  for (int qi = ln - rn; qi >= 0; qi--) {
+    unsigned quo;
+    if (r_buf[qi + rn] == rh[rn - 1]) {
+      quo = -1;
+    } else {
+      unsigned long long top = (unsigned long long)r_buf[qi + rn] << 32 | r_buf[qi + rn - 1];
+      unsigned long long q = top / rh[rn - 1];
+      unsigned long long r = top % rh[rn - 1];
+
+      if (rn > 1) {
+        r = r << 32 | r_buf[qi + rn - 2];
+        unsigned long long r_inc = (unsigned long long)rh[rn - 1] << 32;
+        while (r < q * rh[rn - 2]) {
+          q -= 1;
+          if ((r += r_inc) < r_inc)
+            break;
+        }
+      }
+      quo = q;
+    }
+
+    unsigned sub = 0;
+    for (int i = 0; i < rn; i++) {
+      unsigned long long prod = (unsigned long long)quo * rh[i];
+
+      unsigned tmp = (unsigned)prod + sub;
+      sub = (tmp < sub) + (r_buf[qi + i] < tmp) + (prod >> 32);
+      r_buf[qi + i] -= tmp;
+    }
+
+    unsigned rem = r_buf[qi + rn] - sub;
+    if (rem > r_buf[qi + rn]) {
+      unsigned long long carry = 0;
+      for (int i = 0; i < rn; i++) {
+        unsigned long long tmp;
+        carry = (tmp = rh[i] + carry) < carry;
+        carry |= (r_buf[qi + i] = r_buf[qi + i] + tmp) < tmp;
+      }
+      rem += carry;
+      quo -= 1;
+    }
+    r_buf[qi + rn] = rem;
+    q_buf[qi] = quo;
+  }
+
+  unsigned *res;
+  if (is_div) {
+    if (l_neg + r_neg == 1)
+      __slimcc_bitint_neg(bits, q_buf);
+    res = q_buf;
+  } else {
+    if (r_shft)
+      __slimcc_bitint_shr(bits + 64, r_buf, r_buf, r_shft, 1);
+    if (l_neg)
+      __slimcc_bitint_neg(bits, r_buf);
+    res = r_buf;
+  }
+  for (int i = 0; i < cnt; i++)
+    rh[i] = res[i];
+}

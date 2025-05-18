@@ -215,6 +215,7 @@ bool equal_ext(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);
 File **get_input_files(void);
+char *read_file(char *path);
 File *new_file(char *name, int file_no, char *contents);
 Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
@@ -695,7 +696,9 @@ void prepare_funcall(Node *node, Scope *scope);
 void prepare_inline_asm(Node *node);
 int align_to(int n, int align);
 bool va_arg_need_copy(Type *ty);
+bool bitint_rtn_need_copy(size_t width);
 void emit_text(Obj *fn);
+
 
 //
 // unicode.c

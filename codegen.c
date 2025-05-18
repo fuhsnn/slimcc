@@ -149,12 +149,15 @@ static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
 static bool gen_load_opt_gp(Node *node, Reg r);
 static Node *bool_expr_opt(Node *node, bool *flip);
+static void gen_mem_copy2(char *sofs, char *sptr, char *dofs, char *dptr, int sz);
+static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64);
 
 static void imm_add(char *op, char *tmp, int64_t val);
 static void imm_sub(char *op, char *tmp, int64_t val);
 static void imm_and(char *op, char *tmp, int64_t val);
 static void imm_cmp(char *op, char *tmp, int64_t val);
 static char *arith_ins(NodeKind kind);
+static void imm_tmpl(char *ins, char *op, int64_t val);
 
 static bool is_asm_symbolic_arg(Node *node, char *punct);
 
@@ -206,7 +209,7 @@ static bool is_gp_ty(Type *ty) {
 }
 
 static bool is_scalar(Type *ty) {
-  return is_numeric(ty) || ty->kind == TY_PTR;
+  return is_gp_ty(ty) || is_flonum(ty) || ty->kind == TY_BITINT;
 }
 
 static bool is_pow_of_two(uint64_t val) {
@@ -460,11 +463,28 @@ static bool pop_x87(void) {
   return true;
 }
 
+static void push_bitint(int sz) {
+  for (int ofs = align_to(sz, 8) - 8; ofs >= 0; ofs -= 8)
+    push_tmpstack(SL_ST);
+}
+
+static int pop_bitint(int sz) {
+  int pos;
+  for (int ofs = align_to(sz, 8) - 8; ofs >= 0; ofs -= 8) {
+    Slot *sl = pop_tmpstack(1);
+    pos = sl->st_ofs;
+    insrtln("mov %d+%s(%s), %%rdx; mov %%rdx, %d(%s)", sl->loc,
+      ofs, tmpbuf(sz), lvar_ptr, sl->st_ofs, lvar_ptr);
+  }
+  return pos;
+}
+
 static void push_by_ty(Type *ty) {
   switch (ty->kind) {
   case TY_LDOUBLE: push_x87(); return;
   case TY_DOUBLE:
   case TY_FLOAT: pushf(); return;
+  case TY_BITINT: push_bitint(ty->size); return;
   default: push(); return;
   }
 }
@@ -474,6 +494,13 @@ static void pop_by_ty(Type *ty) {
   case TY_LDOUBLE: pop_x87(); return;
   case TY_DOUBLE:
   case TY_FLOAT: popf(0); return;
+  case TY_BITINT: {
+    int pos = pop_bitint(ty->size);
+    char sofs_buf[STRBUF_SZ];
+    snprintf(sofs_buf, STRBUF_SZ, "%d", pos);
+    gen_mem_copy2(sofs_buf, lvar_ptr, tmpbuf(ty->size), lvar_ptr, ty->size);
+    return;
+  }
   default: pop("%rax"); return;
   }
 }
@@ -650,8 +677,46 @@ static void gen_cmp_setcc(NodeKind kind, bool is_unsigned) {
   Printstn("movzbl %%al, %%eax");
 }
 
+static void gen_bitint_builtin_call2(char *fn) {
+  strarray_push(&current_fn->refs, fn);
+  Printftn("call %s", fn);
+  clobber_all_regs();
+}
+
+static void gen_bitint_builtin_call(NodeKind kind) {
+  static char *fn[] = {
+    [ND_NEG] = "__slimcc_bitint_neg",
+    [ND_BITNOT] = "__slimcc_bitint_bitnot",
+    [ND_BITAND] = "__slimcc_bitint_bitand",
+    [ND_BITOR] = "__slimcc_bitint_bitor",
+    [ND_BITXOR] = "__slimcc_bitint_bitxor",
+    [ND_SHL] = "__slimcc_bitint_shl",
+    [ND_SHR] = "__slimcc_bitint_shr",
+    [ND_SAR] = "__slimcc_bitint_shr",
+    [ND_ADD] = "__slimcc_bitint_add",
+    [ND_SUB] = "__slimcc_bitint_sub",
+    [ND_MUL] = "__slimcc_bitint_mul",
+    [ND_DIV] = "__slimcc_bitint_div",
+    [ND_MOD] = "__slimcc_bitint_div",
+  };
+  gen_bitint_builtin_call2(fn[kind]);
+}
+
 static void gen_bitfield_load(Node *node, int ofs) {
   Member *mem = node->member;
+
+  if (mem->ty->kind == TY_BITINT) {
+    Printftn("mov %%rax, %s", argreg64[1]);
+    Printftn("movl $%"PRIi32", %s", (int32_t)mem->ty->bit_cnt, argreg32[0]);
+    Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[2]);
+    load_val2(ty_int, mem->bit_width, argreg32[3], NULL);
+    load_val2(ty_int, mem->bit_offset, argreg32[4], NULL);
+    load_val2(ty_int, mem->ty->is_unsigned, argreg32[5], NULL);
+    gen_bitint_builtin_call2("__slimcc_bitint_bitfield_load");
+    Printstn("mov %%rax, %%rcx");
+    return;
+  }
+
   Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
   if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
     load2(alt_ty, ofs + mem->bit_offset / 8, "%rax");
@@ -669,6 +734,24 @@ static void gen_bitfield_load(Node *node, int ofs) {
 
 static void gen_bitfield_store(Node *node, bool is_void) {
   Member *mem = node->member;
+
+  if (mem->ty->kind == TY_BITINT) {
+    pop(argreg64[2]);
+    Printftn("movl $%"PRIi32", %s", (int32_t)mem->ty->bit_cnt, argreg32[0]);
+    Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[1]);
+    load_val2(ty_int, mem->bit_width, argreg32[3], NULL);
+    load_val2(ty_int, mem->bit_offset, argreg32[4], NULL);
+    gen_bitint_builtin_call2("__slimcc_bitint_bitfield_save");
+    if (!is_void) {
+      Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[1]);
+      Printftn("movl $%"PRIi32", %s", (int32_t)mem->bit_width, argreg32[0]);
+      Printftn("movl $%"PRIi32", %s", (int32_t)mem->ty->bit_cnt, argreg32[2]);
+      load_val2(ty_int, mem->ty->is_unsigned, argreg32[3], NULL);
+      gen_bitint_builtin_call2("__slimcc_bitint_sign_ext");
+    }
+    return;
+  }
+
   Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
   if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
     char *reg = pop_inreg(tmpreg64[0]);
@@ -806,7 +889,11 @@ static void load3(Type *ty, char *sofs, char *sptr) {
   case TY_LDOUBLE:
     gen_mem_copy2(sofs, sptr, tmpbuf(10), lvar_ptr, 10);
     return;
+  case TY_BITINT:
+    gen_mem_copy2(sofs, sptr, tmpbuf(ty->size), lvar_ptr, ty->size);
+    return;
   }
+
   load_extend_int(ty, sofs, sptr, regop_ax(ty));
 }
 
@@ -857,6 +944,9 @@ static void store3(Type *ty, char *dofs, char *dptr) {
     return;
   case TY_LDOUBLE:
     gen_mem_copy2(tmpbuf(10), lvar_ptr, dofs, dptr, 10);
+    return;
+  case TY_BITINT:
+    gen_mem_copy2(tmpbuf(ty->size), lvar_ptr, dofs, dptr, ty->size);
     return;
   }
 
@@ -942,7 +1032,26 @@ static void load_fval(Type *ty, long double fval) {
   return;
 }
 
+static void load_bitint_val(Type *ty, uint64_t *buf) {
+  char memop[STRBUF_SZ];
+  int32_t cnt = (ty->bit_cnt + 63) / 64;
+  for (int32_t i = 0; i < cnt; i++) {
+    snprintf(memop, STRBUF_SZ, "%"PRIi32"+%s(%s)", i * 8, tmpbuf(ty->size), lvar_ptr);
+    imm_tmpl("movq", memop, buf[i]);
+  }
+}
+
 static void gen_cmp_zero(Node *node, NodeKind kind) {
+  if (node->ty->kind == TY_BITINT) {
+    gen_expr(node);
+
+    Printftn("movl $%"PRIi32", %s", (int32_t)node->ty->bit_cnt, argreg32[0]);
+    Printftn("lea %s(%s), %s", tmpbuf(node->ty->size), lvar_ptr, argreg64[1]);
+    gen_bitint_builtin_call2("__slimcc_bitint_to_bool");
+    if (kind == ND_EQ)
+      Printstn("xor $1, %%al");
+    return;
+  }
   Node zero = {.kind = ND_NUM, .ty = node->ty, .tok = node->tok};
   Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .tok = node->tok};
   add_type(&expr);
@@ -1096,6 +1205,43 @@ static void gen_cast(Node *node) {
   if (node->ty->kind == TY_VOID)
     return;
 
+  if (node->ty->kind == TY_BITINT) {
+    int64_t from_sz;
+    if (node->lhs->ty->kind == TY_BITINT) {
+      if (node->lhs->ty->bit_cnt >= node->ty->bit_cnt)
+        return;
+      from_sz = node->lhs->ty->bit_cnt;
+    } else if (is_gp_ty(node->lhs->ty)) {
+      Printftn("mov %%rax, %s(%s)", tmpbuf(node->ty->size), lvar_ptr);
+      if (node->lhs->ty->size * 8 >= node->ty->bit_cnt)
+        return;
+      from_sz = node->lhs->ty->size * 8;
+    } else {
+      error_tok(node->tok, "Unimplemented cast to _BitInt");
+    }
+    Printftn("lea %s(%s), %s", tmpbuf(node->ty->size), lvar_ptr, argreg64[1]);
+    Printftn("movl $%"PRIi32", %s", (int32_t)from_sz, argreg32[0]);
+    Printftn("movl $%"PRIi32", %s", (int32_t)node->ty->bit_cnt, argreg32[2]);
+    load_val2(ty_int, node->lhs->ty->is_unsigned, argreg32[3], NULL);
+    gen_bitint_builtin_call2("__slimcc_bitint_sign_ext");
+    return;
+  }
+
+  if (node->lhs->ty->kind == TY_BITINT) {
+    if (!is_gp_ty(node->ty))
+      error_tok(node->tok, "Unimplemented cast from _BitInt");
+    Printftn("mov %s(%s), %%rax", tmpbuf(node->ty->size), lvar_ptr);
+    int64_t shft = 64 - node->lhs->ty->bit_cnt;
+    if (shft > 0) {
+      Printftn("shl $%d, %%rax", (int)shft);
+      if (node->lhs->ty->is_unsigned)
+        Printftn("shr $%d, %%rax", (int)shft);
+      else
+        Printftn("sar $%d, %%rax", (int)shft);
+    }
+    return;
+  }
+
   int t1 = getTypeId(node->lhs->ty);
   int t2 = getTypeId(node->ty);
   if (cast_table[t1][t2]) {
@@ -1201,6 +1347,10 @@ bool va_arg_need_copy(Type *ty) {
   return false;
 }
 
+bool bitint_rtn_need_copy(size_t width) {
+  return width > 128;
+}
+
 static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack_align) {
   int stack = 0;
   int max_align = 16;
@@ -1210,6 +1360,7 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
     assert(ty->size != 0);
 
     switch (ty->kind) {
+    case TY_BITINT:
     case TY_STRUCT:
     case TY_UNION:
       if (is_by_reg_agg(ty)) {
@@ -1409,6 +1560,7 @@ static void print_loc(Token *tok) {
 
 static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
   switch (ty->kind) {
+  case TY_BITINT:
   case TY_STRUCT:
   case TY_UNION:
     if (is_fp_class_lo(ty))
@@ -1483,6 +1635,8 @@ static void gen_funcall_args(Node *node) {
           Printftn("mov %%rax, %s", argreg64[gp++]);
         else if (is_flonum(arg_expr->ty))
           fp++;
+        else if (arg_expr->ty->kind == TY_BITINT)
+          place_reg_arg(arg_expr->ty, tmpbuf(arg_expr->ty->size), lvar_ptr, &gp, &fp);
         else
           place_reg_arg(arg_expr->ty, "0", "%rax", &gp, &fp);
         continue;
@@ -1612,7 +1766,8 @@ static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
       return;
     }
 
-    if (node->kind == ND_CAST && node->ty->kind == TY_BOOL) {
+    if (node->kind == ND_CAST && node->ty->kind == TY_BOOL &&
+      node->lhs->ty->kind != TY_BITINT) {
       Node zero = {.kind = ND_NUM, .ty = node->lhs->ty, .tok = node->tok};
       Node expr = {.kind = ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
       add_type(&expr);
@@ -1784,6 +1939,78 @@ static void gen_x87_arith(Node *node) {
   error_tok(node->tok, "invalid expression");
 }
 
+static void gen_bitint_arith(Node *node) {
+  Type *ty = node->lhs->ty;
+
+  switch (node->kind) {
+  case ND_NEG:
+  case ND_BITNOT:
+    gen_expr(node->lhs);
+
+    Printftn("movl $%"PRIi32", %s", (int32_t)ty->bit_cnt, argreg32[0]);
+    Printftn("lea %s(%s), %s", tmpbuf(ty->size), lvar_ptr, argreg64[1]);
+    gen_bitint_builtin_call(node->kind);
+    return;
+  }
+
+  gen_expr(node->lhs);
+  push_bitint(ty->size);
+  gen_expr(node->rhs);
+
+  Printftn("movl $%"PRIi32", %s", (int32_t)ty->bit_cnt, argreg32[0]);
+  Printftn("lea %d(%s), %s", pop_bitint(ty->size), lvar_ptr, argreg64[1]);
+  Printftn("lea %s(%s), %s", tmpbuf(ty->size), lvar_ptr, argreg64[2]);
+
+  switch (node->kind) {
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+  case ND_ADD:
+  case ND_SUB:
+  case ND_MUL:
+    gen_bitint_builtin_call(node->kind);
+    return;
+  case ND_DIV:
+  case ND_MOD:
+    load_val2(ty_int, ty->is_unsigned, argreg32[3], NULL);
+    load_val2(ty_int, node->kind == ND_DIV, argreg32[4], NULL);
+    gen_bitint_builtin_call(node->kind);
+    return;
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR:
+    Printftn("movl %%eax, %s", argreg32[3]);
+    if (node->kind != ND_SHL)
+      load_val2(ty_int, ty->is_unsigned, argreg32[4], NULL);
+    gen_bitint_builtin_call(node->kind);
+    return;
+  case ND_EQ:
+  case ND_NE:
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE: {
+    load_val2(ty_int, ty->is_unsigned, argreg32[3], NULL);
+    gen_bitint_builtin_call2("__slimcc_bitint_cmp");
+
+    NodeKind kind;
+    int val;
+    switch (node->kind) {
+    case ND_EQ: val = 0; kind = ND_EQ; break;
+    case ND_NE: val = 0; kind = ND_NE; break;
+    case ND_LT: val = 1; kind = ND_EQ; break;
+    case ND_LE: val = 2; kind = ND_NE; break;
+    case ND_GT: val = 2; kind = ND_EQ; break;
+    case ND_GE: val = 1; kind = ND_NE; break;
+    }
+    imm_cmp("%eax", NULL, val);
+    gen_cmp_setcc(kind, false);
+    return;
+  }
+  }
+  error_tok(node->tok, "invalid expression");
+}
+
 static void gen_gp_arith(Node *node) {
   switch (node->kind) {
   case ND_NEG:
@@ -1884,10 +2111,10 @@ static void gen_expr2(Node *node, bool is_void) {
   case ND_NULL_EXPR:
     return;
   case ND_NUM: {
-    if (is_flonum(node->ty)) {
+    if (node->ty->kind == TY_BITINT)
+      load_bitint_val(node->ty, node->bitint_data);
+    else if (is_flonum(node->ty))
       load_fval(node->ty, node->fval);
-      return;
-    }
     load_val(node->ty, node->val);
     return;
   }
@@ -1994,7 +2221,19 @@ static void gen_expr2(Node *node, bool is_void) {
       }
       return;
     }
-
+    if (node->ty->kind == TY_BITINT) {
+      if (bitint_rtn_need_copy(node->ty->bit_cnt)) {
+        char sofs[STRBUF_SZ];
+        snprintf(sofs, STRBUF_SZ, "%d", node->ret_buffer->ofs);
+        gen_mem_copy2(sofs, node->ret_buffer->ptr,
+          tmpbuf(node->ty->size), lvar_ptr, node->ty->size);
+      } else {
+        Printftn("mov %%rax, %s(%s)", tmpbuf(node->ty->size), lvar_ptr);
+        if (node->ty->bit_cnt > 64)
+          Printftn("mov %%rdx, 8+%s(%s)", tmpbuf(node->ty->size), lvar_ptr);
+      }
+      return;
+    }
     if (!is_void) {
       if (is_integer(node->ty) && node->ty->size < 4) {
         cast_extend_int32(node->ty, reg_ax(node->ty->size), "%eax");
@@ -2023,13 +2262,13 @@ static void gen_expr2(Node *node, bool is_void) {
     char *ax = reg_ax(ty->size);
     char *dx = reg_dx(ty->size);
 
-    if (!is_scalar(ty) || ty->kind == TY_LDOUBLE)
-      error_tok(node->tok, "unsupported type for atomic CAS");
-
     switch (ty->kind) {
     case TY_DOUBLE: Printftn("movq %%xmm0, %s", dx); break;
     case TY_FLOAT: Printftn("movd %%xmm0, %s", dx); break;
-    default: Printftn("mov %s, %s", ax, dx); break;
+    default:
+      if (!is_gp_ty(ty))
+        error_tok(node->tok, "unsupported type for atomic CAS");
+      Printftn("mov %s, %s", ax, dx);
     }
 
     Printftn("mov (%s), %s", old, ax);
@@ -2123,6 +2362,9 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   case TY_LDOUBLE:
     gen_x87_arith(node);
+    return;
+  case TY_BITINT:
+    gen_bitint_arith(node);
     return;
   }
   if (is_gp_ty(node->ty)) {
@@ -2252,7 +2494,10 @@ static void gen_stmt(Node *node) {
     gen_expr(node->lhs);
     Type *ty = node->lhs->ty;
 
-    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
+    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION || ty->kind == TY_BITINT) {
+      if (ty->kind == TY_BITINT)
+        Printftn("lea %s(%s), %%rax", tmpbuf(ty->size), lvar_ptr);
+
       if (!is_mem_class(ty)) {
         if (has_defr(node)) {
           push_copy(ty->size);
@@ -4222,6 +4467,7 @@ void emit_text(Obj *fn) {
     Type *ty = var->ty;
 
     switch (ty->kind) {
+    case TY_BITINT:
     case TY_STRUCT:
     case TY_UNION:
       if (is_fp_class_lo(ty))

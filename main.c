@@ -754,13 +754,23 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
     opt_E = opt_cc1_asm_pp = true;
 
   if (!opt_E) {
-    head.next = tokenize(add_input_file("slimcc_builtins",
+    Token *last;
+    cur->next = tokenize(add_input_file("slimcc_builtins",
     "typedef struct {"
     "  unsigned int gp_offset;"
     "  unsigned int fp_offset;"
     "  void *overflow_arg_area;"
     "  void *reg_save_area;"
-    "} __builtin_va_list[1];", NULL), &cur);
+    "} __builtin_va_list[1];"
+    , NULL), &last);
+    cur = last;
+
+    char *path = search_include_paths("bitint_builtins");
+    char *contents;
+    if (path && (contents = read_file(path))) {
+      cur->next = tokenize(add_input_file(path, contents, NULL), &last);
+      cur = last;
+    }
   }
 
   // Process -include option
