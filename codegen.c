@@ -1613,6 +1613,20 @@ static void gen_logical(Node *node, bool flip) {
 }
 
 static void gen_xmm_arith(Node *node) {
+  if (node->kind == ND_NEG) {
+    gen_expr(node->lhs);
+
+    if (node->ty->kind == TY_FLOAT) {
+      Printstn("mov $0x80000000, %%eax");
+      Printstn("movd %%eax, %%xmm1");
+      Printstn("xorps %%xmm1, %%xmm0");
+    } else {
+      Printstn("mov $0x8000000000000000, %%rax");
+      Printstn("movq %%rax, %%xmm1");
+      Printstn("xorpd %%xmm1, %%xmm0");
+    }
+    return;
+  }
   gen_expr(node->lhs);
   pushf();
   gen_expr(node->rhs);
@@ -1669,6 +1683,13 @@ static void gen_xmm_arith(Node *node) {
 }
 
 static void gen_x87_arith(Node *node) {
+  if (node->kind == ND_NEG) {
+    gen_expr(node->lhs);
+    Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
+    Printstn("fchs");
+    Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+    return;
+  }
   gen_expr(node->lhs);
   push_x87();
   gen_expr(node->rhs);
@@ -1728,6 +1749,10 @@ static void gen_x87_arith(Node *node) {
 
 static void gen_gp_arith(Node *node) {
   switch (node->kind) {
+  case ND_NEG:
+    gen_expr(node->lhs);
+    Printftn("neg %s", regop_ax(node->lhs->ty));
+    return;
   case ND_BITNOT:
     gen_expr(node->lhs);
     Printstn("not %%rax");
@@ -1831,29 +1856,6 @@ static void gen_expr2(Node *node, bool is_void) {
   }
   case ND_POS:
     gen_expr(node->lhs);
-    return;
-  case ND_NEG:
-    gen_expr(node->lhs);
-
-    switch (node->ty->kind) {
-    case TY_FLOAT:
-      Printstn("mov $0x80000000, %%eax");
-      Printstn("movd %%eax, %%xmm1");
-      Printstn("xorps %%xmm1, %%xmm0");
-      return;
-    case TY_DOUBLE:
-      Printstn("mov $0x8000000000000000, %%rax");
-      Printstn("movq %%rax, %%xmm1");
-      Printstn("xorpd %%xmm1, %%xmm0");
-      return;
-    case TY_LDOUBLE:
-      Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
-      Printstn("fchs");
-      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
-      return;
-    }
-
-    Printftn("neg %s", regop_ax(node->lhs->ty));
     return;
   case ND_VAR:
     gen_addr(node);
@@ -2081,7 +2083,11 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_x87_arith(node);
     return;
   }
-  gen_gp_arith(node);
+  if (is_gp_ty(node->ty)) {
+    gen_gp_arith(node);
+    return;
+  }
+  error_tok(node->tok, "invalid expression");
 }
 
 static void gen_expr(Node *node) {
