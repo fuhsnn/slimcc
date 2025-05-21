@@ -136,6 +136,42 @@ int struct_test160(int cnt,...) {
   return ret;
 }
 
+typedef struct {
+    union {
+        long double ld[1];
+        long double ld2;
+    } u[1];
+} struct170;
+
+struct170 struct_test171(struct170 t1,...);
+struct170 struct_test170(struct170 t1,...) {
+  va_list ap;
+  va_start(ap, t1);
+  struct170 t = t1;
+
+  t.u[0].ld2 += va_arg(ap, struct170).u[0].ld[0];
+
+  va_end(ap);
+  return t;
+}
+
+typedef union {
+  long double ld;
+  long i;
+} struct180;
+
+struct180 struct_test181(struct180 t1,...);
+struct180 struct_test180(struct180 t1,...) {
+  va_list ap;
+  va_start(ap, t1);
+  struct180 t = t1;
+
+  t.ld += va_arg(ap, struct180).ld;
+
+  va_end(ap);
+  return t;
+}
+
 static int add_all2(int n, ...) {
   va_list ap;
   va_start(ap, n);
@@ -265,6 +301,19 @@ Aligned1024 s = {.c = 77};
 
   ASSERT(6, add_all2(3,1,2,3));
   ASSERT(5, add_all2(4,1,2,3,-1));
+
+    {
+      struct170 t1 = {13};
+      struct170 t2 = {24};
+      ASSERT(37, struct_test170(t1, t2).u[0].ld[0]);
+      ASSERT(37, struct_test171(t1, t2).u[0].ld[0]);
+    }
+    {
+      struct180 t1 = {31};
+      struct180 t2 = {42};
+      ASSERT(73, struct_test180(t1, t2).ld);
+      ASSERT(73, struct_test181(t1, t2).ld);
+    }
 
   printf("OK\n");
 

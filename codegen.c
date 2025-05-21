@@ -1109,30 +1109,39 @@ static void gen_cast(Node *node) {
   }
 }
 
-// Structs or unions equal or smaller than 16 bytes are passed
-// using up to two registers.
-//
-// If the first 8 bytes contains only floating-point type members,
-// they are passed in an XMM register. Otherwise, they are passed
-// in a general-purpose register.
-//
-// If a struct/union is larger than 8 bytes, the same rule is
-// applied to the the next 8 byte chunk.
-//
-// This function returns true if `ty` has only floating-point
-// members in its byte range [lo, hi).
-static bool has_flonum(Type *ty, int lo, int hi, int offset) {
+typedef enum {
+  CLASS_NO,
+  CLASS_INT,
+  CLASS_SSE,
+  CLASS_X87,
+  CLASS_MEM,
+} ArgClass;
+
+static ArgClass calc_class(ArgClass a, ArgClass b) {
+  if (a == b)
+    return a;
+  if (a == CLASS_NO || b == CLASS_NO)
+    return a == CLASS_NO ? b : a;
+  if (a == CLASS_MEM || b == CLASS_MEM)
+    return CLASS_MEM;
+  if (a == CLASS_X87 || b == CLASS_X87)
+    return CLASS_MEM;
+  if (a == CLASS_INT || b == CLASS_INT)
+    return CLASS_INT;
+  return CLASS_SSE;
+}
+
+static ArgClass get_class(Type *ty, int lo, int hi, int offset, ArgClass ac) {
   if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
     for (Member *mem = ty->members; mem; mem = mem->next) {
       int ofs = offset + mem->offset;
       if ((ofs + mem->ty->size) <= lo)
         continue;
-      if (hi <= ofs)
+      if (ofs >= hi)
         break;
-      if (!has_flonum(mem->ty, lo, hi, ofs))
-        return false;
+      ac = get_class(mem->ty, lo, hi, ofs, ac);
     }
-    return true;
+    return ac;
   }
 
   if (ty->kind == TY_ARRAY) {
@@ -1140,29 +1149,55 @@ static bool has_flonum(Type *ty, int lo, int hi, int offset) {
       int ofs = offset + ty->base->size * i;
       if ((ofs + ty->base->size) <= lo)
         continue;
-      if (hi <= ofs)
+      if (ofs >= hi)
         break;
-      if (!has_flonum(ty->base, lo, hi, ofs))
-        return false;
+      ac = get_class(ty->base, lo, hi, ofs, ac);
     }
-    return true;
+    return ac;
   }
 
-  return ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE;
+  switch (ty->kind) {
+  case TY_FLOAT:
+  case TY_DOUBLE:
+    return calc_class(ac, CLASS_SSE);
+  case TY_LDOUBLE:
+    return calc_class(ac, CLASS_X87);
+  }
+  return calc_class(ac, CLASS_INT);
 }
 
-static bool has_flonum1(Type *ty) {
-  return has_flonum(ty, 0, 8, 0);
+static bool is_fp_class_lo(Type *ty) {
+  return get_class(ty, 0, 8, 0, CLASS_NO) == CLASS_SSE;
 }
 
-static bool has_flonum2(Type *ty) {
-  return has_flonum(ty, 8, 16, 0);
+static bool is_fp_class_hi(Type *ty) {
+  return get_class(ty, 8, 16, 0, CLASS_NO) == CLASS_SSE;
+}
+
+static bool is_x87_class(Type *ty) {
+  return get_class(ty, 0, 16, 0, CLASS_NO) == CLASS_X87;
+}
+
+static bool is_mem_class(Type *ty) {
+  if (ty->size > 16)
+    return true;
+  return get_class(ty, 0, 16, 0, CLASS_NO) == CLASS_MEM;
+}
+
+static bool is_by_reg_agg(Type *ty) {
+  if (ty->size > 16)
+    return false;
+  switch (get_class(ty, 0, 16, 0, CLASS_NO)) {
+  case CLASS_X87:
+  case CLASS_MEM:
+    return false;
+  }
+  return true;
 }
 
 bool va_arg_need_copy(Type *ty) {
-  if (ty->size > 8 && ty->size <= 16) {
-    return has_flonum1(ty) || has_flonum2(ty);
-  }
+  if (ty->size > 8 && ty->size <= 16)
+    return is_fp_class_lo(ty) || is_fp_class_hi(ty);
   return false;
 }
 
@@ -1177,9 +1212,9 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
     switch (ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
-      if (ty->size <= 16) {
-        int fp_inc = has_flonum1(ty) + (ty->size > 8 && has_flonum2(ty));
-        int gp_inc = !has_flonum1(ty) + (ty->size > 8 && !has_flonum2(ty));
+      if (is_by_reg_agg(ty)) {
+        int fp_inc = is_fp_class_lo(ty) + (ty->size > 8 && is_fp_class_hi(ty));
+        int gp_inc = !is_fp_class_lo(ty) + (ty->size > 8 && !is_fp_class_hi(ty));
 
         if ((!fp_inc || (fp + fp_inc <= FP_MAX)) &&
           (!gp_inc || (gp + gp_inc <= GP_MAX))) {
@@ -1224,7 +1259,7 @@ static void copy_ret_buffer(Obj *var) {
   for (int ofs = 0; ofs < ty->size; ofs += 8) {
     int chunk_sz = MIN(8, ty->size - ofs);
 
-    if ((ofs == 0) ? has_flonum1(ty) : has_flonum2(ty)) {
+    if ((ofs == 0) ? is_fp_class_lo(ty) : is_fp_class_hi(ty)) {
       if (chunk_sz == 4)
         Printftn("movss %%xmm%d, %d(%s)", fp, ofs + var->ofs, var->ptr);
       else
@@ -1247,10 +1282,14 @@ static void copy_struct_reg(void) {
   int gp = 0, fp = 0;
   char *sptr = "%rax";
 
+  if (is_x87_class(ty)) {
+    Printftn("fldt (%s)", sptr);
+    return;
+  }
   for (int ofs = 0; ofs < ty->size; ofs += 8) {
     int chunk_sz = MIN(8, ty->size - ofs);
 
-    if ((ofs == 0) ? has_flonum1(ty) : has_flonum2(ty)) {
+    if ((ofs == 0) ? is_fp_class_lo(ty) : is_fp_class_hi(ty)) {
       if (chunk_sz == 4)
         Printftn("movss %d(%s), %%xmm%d", ofs, sptr, fp);
       else
@@ -1280,17 +1319,17 @@ static void copy_struct_mem(void) {
 }
 
 static void gen_vaarg_reg_copy(Type *ty, Obj *var) {
-  int gp_inc = !has_flonum1(ty) + !has_flonum2(ty);
+  int gp_inc = !is_fp_class_lo(ty) + !is_fp_class_hi(ty);
   if (gp_inc) {
     Printftn("cmpl $%d, (%%rax)", 48 - gp_inc * 8);
     Printstn("ja 1f");
   }
-  int fp_inc = has_flonum1(ty) + has_flonum2(ty);
+  int fp_inc = is_fp_class_lo(ty) + is_fp_class_hi(ty);
   Printftn("cmpl $%d, 4(%%rax)", 176 - fp_inc * 16);
   Printstn("ja 1f");
 
   for (int ofs = 0; ofs < ty->size; ofs += 8) {
-    if ((ofs == 0) ? has_flonum1(ty) : has_flonum2(ty)) {
+    if ((ofs == 0) ? is_fp_class_lo(ty) : is_fp_class_hi(ty)) {
       Printstn("movl 4(%%rax), %%ecx");  // fp_offset
       Printstn("addq 16(%%rax), %%rcx"); // reg_save_area
       Printstn("addq $16, 4(%%rax)");
@@ -1372,13 +1411,13 @@ static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
   switch (ty->kind) {
   case TY_STRUCT:
   case TY_UNION:
-    if (has_flonum1(ty))
+    if (is_fp_class_lo(ty))
       Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, (*fp)++);
     else
       Printftn("mov %s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
 
     if (ty->size > 8) {
-      if (has_flonum2(ty))
+      if (is_fp_class_hi(ty))
         Printftn("movsd 8+%s(%s), %%xmm%d", ofs, ptr, (*fp)++);
       else
         Printftn("mov 8+%s(%s), %s",  ofs, ptr, argreg64[(*gp)++]);
@@ -1405,7 +1444,7 @@ static void gen_funcall_args(Node *node) {
     if (var->ptr)
       gen_var_assign(var, var->arg_expr);
 
-  bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
+  bool rtn_by_stk = is_mem_class(node->ty);
   int gp = rtn_by_stk, fp = 0;
 
   int reg_arg_cnt = 0;
@@ -1464,9 +1503,7 @@ static void gen_funcall(Node *node) {
     return;
   }
 
-  // If the return type is a large struct/union, the caller passes
-  // a pointer to a buffer as if it were the first argument.
-  bool rtn_by_stk = node->ret_buffer && node->ty->size > 16;
+  bool rtn_by_stk = is_mem_class(node->ty);
   int gp_count = rtn_by_stk;
   int fp_count = 0;
   int arg_stk_align;
@@ -1946,11 +1983,16 @@ static void gen_expr2(Node *node, bool is_void) {
   case ND_FUNCALL:
     gen_funcall(node);
 
-    if (node->ty->kind == TY_LDOUBLE) {
-      if (is_void)
+    if (is_x87_class(node->ty)) {
+      if (is_void) {
         Printstn("fstp %%st(0)");
-      else
+      } else if (node->ret_buffer) {
+        Printftn("lea %d(%s), %%rax", node->ret_buffer->ofs, node->ret_buffer->ptr);
+        Printstn("fstpt (%%rax)");
+      } else {
         Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+      }
+      return;
     }
 
     if (!is_void) {
@@ -1958,7 +2000,7 @@ static void gen_expr2(Node *node, bool is_void) {
         cast_extend_int32(node->ty, reg_ax(node->ty->size), "%eax");
         return;
       }
-      if (node->ret_buffer && node->ty->size <= 16) {
+      if (node->ret_buffer && !is_mem_class(node->ty)) {
         copy_ret_buffer(node->ret_buffer);
         Printftn("lea %d(%s), %%rax", node->ret_buffer->ofs, node->ret_buffer->ptr);
       }
@@ -2035,13 +2077,13 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->lhs);
 
     Type *ty = node->ty->base;
-    bool use_reg_save = ty->size <= 16 && ty->kind != TY_LDOUBLE;
+    bool use_reg_save = is_by_reg_agg(ty);
     if (use_reg_save) {
       if (va_arg_need_copy(ty)) {
         // Structs with FP member are split into 8-byte chunks in the
         // reg save area, we reconstruct the layout with a local copy.
         gen_vaarg_reg_copy(ty, node->var);
-      } else if (has_flonum1(ty)) {
+      } else if (is_fp_class_lo(ty)) {
         Printftn("cmpl $%d, 4(%%rax)", 160);
         Printstn("ja 1f");
         Printstn("movl 4(%%rax), %%edx");  // fp_offset
@@ -2211,7 +2253,7 @@ static void gen_stmt(Node *node) {
     Type *ty = node->lhs->ty;
 
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      if (ty->size <= 16) {
+      if (!is_mem_class(ty)) {
         if (has_defr(node)) {
           push_copy(ty->size);
           gen_defr(node);
@@ -4103,7 +4145,7 @@ void emit_text(Obj *fn) {
   Printftn(".type \"%s\", @function", asm_name(fn));
   Printfsn("\"%s\":", asm_name(fn));
 
-  bool rtn_by_stk = fn->ty->return_ty->size > 16;
+  bool rtn_by_stk = is_mem_class(fn->ty->return_ty);
   int gp_count = rtn_by_stk;
   int fp_count = 0;
   int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
@@ -4182,14 +4224,13 @@ void emit_text(Obj *fn) {
     switch (ty->kind) {
     case TY_STRUCT:
     case TY_UNION:
-      assert(ty->size <= 16);
-      if (has_flonum1(ty))
+      if (is_fp_class_lo(ty))
         store_fp(fp++, MIN(8, ty->size), var->ofs, var->ptr);
       else
         store_gp(gp++, MIN(8, ty->size), var->ofs, var->ptr);
 
       if (ty->size > 8) {
-        if (has_flonum2(ty))
+        if (is_fp_class_hi(ty))
           store_fp(fp++, ty->size - 8, var->ofs + 8, var->ptr);
         else
           store_gp(gp++, ty->size - 8, var->ofs + 8, var->ptr);
@@ -4248,7 +4289,7 @@ void emit_text(Obj *fn) {
 
 // Logic should be in sync with gen_funcall_args()
 void prepare_funcall(Node *node, Scope *scope) {
-  bool rtn_by_stk = node->ty->size > 16;
+  bool rtn_by_stk = is_mem_class(node->ty);
   calling_convention(node->args, &(int){rtn_by_stk}, &(int){0}, NULL);
 
   int reg_arg_cnt = 0;

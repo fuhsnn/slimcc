@@ -236,3 +236,37 @@ int struct_test161(int cnt,...) {
   va_end(ap);
   return ret;
 }
+
+typedef struct {
+    union {
+        long double ld[1];
+        long double ld2;
+    } u[1];
+} struct170;
+
+struct170 struct_test171(struct170 t1,...) {
+  va_list ap;
+  va_start(ap, t1);
+  struct170 t = t1;
+
+  t.u[0].ld2 += va_arg(ap, struct170).u[0].ld[0];
+
+  va_end(ap);
+  return t;
+}
+
+typedef union {
+  long double ld;
+  long i;
+} struct180;
+
+struct180 struct_test181(struct180 t1,...) {
+  va_list ap;
+  va_start(ap, t1);
+  struct180 t = t1;
+
+  t.ld += va_arg(ap, struct180).ld;
+
+  va_end(ap);
+  return t;
+}
