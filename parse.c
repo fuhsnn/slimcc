@@ -2030,23 +2030,23 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
 
 static uint64_t read_buf(char *buf, int sz) {
   if (sz == 1)
-    return *(uint8_t *)buf;
+    return BUFF_CAST(uint8_t, buf);
   if (sz == 2)
-    return *(uint16_t *)buf;
+    return BUFF_CAST(uint16_t, buf);
   if (sz == 4)
-    return *(uint32_t *)buf;
+    return BUFF_CAST(uint32_t, buf);
   if (sz == 8)
-    return *(uint64_t *)buf;
+    return BUFF_CAST(uint64_t, buf);
   internal_error();
 }
 
-static long double read_double_buf(char *buf, Type *ty){
+static long double read_double_buf(char *buf, Type *ty) {
   if (ty->kind == TY_FLOAT)
-    return *(float *)buf;
+    return BUFF_CAST(float, buf);
   if (ty->kind == TY_DOUBLE)
-    return *(double *)buf;
+    return BUFF_CAST(double, buf);
   if (ty->kind == TY_LDOUBLE)
-    return *(long double *)buf;
+    return BUFF_CAST(long double, buf);
   internal_error();
 }
 
@@ -2149,13 +2149,13 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
 
     switch (ty->kind) {
     case TY_FLOAT:
-      *(float *)(buf + offset) = eval_double(node);
+      BUFF_CAST(float, (buf + offset)) = eval_double(node);
       return cur;
     case TY_DOUBLE:
-      *(double *)(buf + offset) = eval_double(node);
+      BUFF_CAST(double, (buf + offset)) = eval_double(node);
       return cur;
     case TY_LDOUBLE:
-      *(long double *)(buf + offset) = eval_double(node);
+      BUFF_CAST(long double, (buf + offset)) = eval_double(node);
       return cur;
     }
     if (is_integer(ty)) {

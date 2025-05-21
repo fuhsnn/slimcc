@@ -58,6 +58,12 @@
 #define NORETURN
 #endif
 
+#if defined(__GNUC__)
+#define BUFF_CAST(__t, __ptr) (((union{char __m1; __t __m2;}*)(__ptr))->__m2)
+#else
+#define BUFF_CAST(__t, __ptr) (*((__t*)(__ptr)))
+#endif
+
 #if __STDC_VERSION__ >= 201112L
 #define ANON_UNION_START union {
 #define ANON_UNION_END };
