@@ -54,15 +54,17 @@ int main() {
        struct {
          long double d;
        };
+       bool b : 1;
      };
    };
-  constexpr struct S s = { 11,22,33,-44,55 };
+  constexpr struct S s = { 11,22,33,-44,55,6};
 
   DASSERT(s.c == 11);
   DASSERT(s.a.f == 22);
   DASSERT(s.w == 33);
   DASSERT(s.x == -44);
   DASSERT(s.d == 55);
+  DASSERT(s.b == true);
 
   {
     struct S { int i; };

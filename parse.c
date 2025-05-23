@@ -2072,7 +2072,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         if (mem->is_bitfield &&
           ((init2->kind == INIT_EXPR || init2->kind == INIT_TOK))) {
           Node *node = init_num_tok(init2, &(Node){.kind = ND_NUM, .tok = init2->tok});
-          Node init_expr = {.kind = ND_CAST, .tok = node->tok, .lhs = node, .ty = ty};
+          Node init_expr = {.kind = ND_CAST, .tok = node->tok, .lhs = node, .ty = mem->ty};
 
           char *loc = buf + offset + mem->offset;
           uint64_t oldval = read_buf(loc, mem->ty->size);
