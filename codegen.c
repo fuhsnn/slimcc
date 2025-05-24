@@ -4226,6 +4226,9 @@ static void emit_data(Obj *var) {
       align = MAX(16, align);
   }
 
+  if (sz < 0)
+    error("object \'%s\' has incomplete type", asm_name(var));
+
   if (opt_femulated_tls && var->is_tls) {
     char name_t[STRBUF_SZ], name_v[STRBUF_SZ];
     snprintf(name_t, STRBUF_SZ, "__emutls_t.%s", asm_name(var));
