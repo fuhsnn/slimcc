@@ -31,6 +31,22 @@ struct {
     _Bool b;
 } bs = {4};
 
+long long z10 = {};
+static long long z11 = {};
+
+int c23_zinit(void) {
+  long long z20 = {};
+  static long long z21 = {};
+
+  ASSERT(0, z10);
+  ASSERT(0, z11);
+
+  ASSERT(0, z20);
+  ASSERT(0, z21);
+
+  return 1;
+}
+
 int main(void) {
   ASSERT(3, *p1);
 
@@ -78,6 +94,8 @@ int main(void) {
     ASSERT(7, s[1].b.i);
     ASSERT(0, s[1].j);
   }
+
+  ASSERT(1, c23_zinit());
 
   printf("OK\n");
 }

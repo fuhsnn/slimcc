@@ -2230,7 +2230,7 @@ static void gen_expr2(Node *node, bool is_void) {
   case ND_CAST:
     gen_cast(node);
     return;
-  case ND_INIT_AGG:
+  case ND_INIT_SEQ:
     gen_mem_zero(node->var->ofs, node->var->ptr, node->var->ty->size);
     for (Node *n = node->lhs; n; n = n->next)
       gen_void_assign(n);

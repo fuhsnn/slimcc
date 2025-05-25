@@ -1922,13 +1922,12 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
   }
 
   if (equal(tok, "{")) {
-    // An initializer for a scalar variable can be surrounded by
-    // braces. E.g. `int x = {3};`. Handle that case.
+    if (consume(rest, tok->next, "}"))
+      return;
     initializer2(&tok, tok->next, init);
     *rest = skip(tok, "}");
     return;
   }
-
 
   if ((tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) && equal(tok->next, ",")) {
     init->kind = INIT_TOK;
@@ -2055,7 +2054,7 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   // that unspecified elements are set to 0. Here, we simply
   // zero-initialize the entire memory region of a variable before
   // initializing it with user-supplied values.
-  Node *node = new_node(ND_INIT_AGG, tok);
+  Node *node = new_node(ND_INIT_SEQ, tok);
   node->var = var;
   node->lhs = head.next;
   node->ty = ty_void;
