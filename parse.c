@@ -180,7 +180,7 @@ static Node *primary(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
-static Node *compute_vla_size(Type *ty, Token *tok);
+static Node *calc_vla(Type *ty, Token *tok);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 static Node *new_node(NodeKind kind, Token *tok);
 
@@ -317,7 +317,7 @@ static Node *new_intptr(int64_t val, Token *tok) {
   return node;
 }
 
-static Node *new_size(long val, Token *tok) {
+static Node *new_size(int64_t val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->val = val;
   node->ty = ty_size_t;
@@ -1087,7 +1087,7 @@ static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
         chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
                                      new_var_node(promoted, tok), tok));
       }
-      chain_expr(&expr, compute_vla_size(ty, tok));
+      chain_expr(&expr, calc_vla(ty, tok));
     } while (comma_list(&tok, &tok, ";", true));
   }
   *rest = tok;
@@ -1155,7 +1155,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     Token *name = NULL;
     ty2 = declarator(&tok, tok, ty2, &name);
 
-    chain_expr(&expr, compute_vla_size(ty2, tok));
+    chain_expr(&expr, calc_vla(ty2, tok));
 
     if (is_array(ty2)) {
       // "array of T" is converted to "pointer to T" only in the parameter
@@ -1439,30 +1439,36 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
   return ty;
 }
 
-// Generate code for computing a VLA size.
-static Node *compute_vla_size(Type *ty, Token *tok) {
-  if (ty->vla_size)
-    return NULL;
+static Node *vla_count(Type *ty, Token *tok, bool is_void) {
+  int64_t val;
+  if (is_const_expr(ty->vla_len, &val))
+    return is_void ? NULL : new_size(val, tok);
 
-  Node *node = NULL;
-  if (ty->base)
-    node = compute_vla_size(ty->base, tok);
+  if (ty->vla_cnt)
+    return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
 
-  if (ty->kind != TY_VLA)
-    return node;
+  ty->vla_cnt = new_lvar(NULL, ty_size_t);
+  return new_binary(ND_ASSIGN, new_var_node(ty->vla_cnt, tok), ty->vla_len, tok);
+}
 
+static Node *vla_size(Type *ty, Token *tok) {
   Node *base_sz;
   if (ty->base->kind == TY_VLA)
-    base_sz = new_var_node(ty->base->vla_size, tok);
+    base_sz = vla_size(ty->base, tok);
   else
     base_sz = new_num(ty->base->size, tok);
 
-  ty->vla_size = new_lvar(NULL, ty_size_t);
-  chain_expr(&node, new_binary(ND_ASSIGN, new_var_node(ty->vla_size, tok),
-                               new_binary(ND_MUL, ty->vla_len, base_sz, tok),
-                               tok));
-  add_type(node);
-  return node;
+  return new_binary(ND_MUL, vla_count(ty, tok, false), base_sz, tok);
+}
+
+static Node *calc_vla(Type *ty, Token *tok) {
+  Node *n = NULL;
+  if (ty->kind == TY_VLA)
+    n = vla_count(ty, tok, true);
+
+  if (ty->base)
+    chain_expr(&n, calc_vla(ty->base, tok));
+  return n;
 }
 
 static Node *new_vla(Node *sz, Obj *var) {
@@ -1513,10 +1519,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
   DeclAttr(attr_cleanup, &cleanup_fn);
 
-  // Generate code for computing a VLA size. We need to do this
-  // even if ty is not VLA because ty may be a pointer to VLA
-  // (e.g. int (*foo)[n][m] where n and m are variables.)
-  chain_expr(&expr, compute_vla_size(ty, tok));
+  chain_expr(&expr, calc_vla(ty, tok));
 
   if (attr && attr->is_static) {
     if (ty->kind == TY_VLA)
@@ -1557,7 +1560,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     Obj *var = new_lvar(get_ident(name), ty);
     if (alt_align)
       var->align = alt_align;
-    chain_expr(&expr, new_vla(new_var_node(ty->vla_size, name), var));
+    chain_expr(&expr, new_vla(vla_size(ty, name), var));
 
     DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
     defr->vla = var;
@@ -3743,7 +3746,7 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
 
   if (ptr && ofs) {
     if (ptr->ty->base->kind == TY_VLA)
-      *ofs = new_binary(ND_MUL, *ofs, new_var_node(ptr->ty->base->vla_size, tok), tok);
+      *ofs = new_binary(ND_MUL, *ofs, vla_size(ptr->ty->base, tok), tok);
     else
       *ofs = new_binary(ND_MUL, *ofs, new_intptr(ptr->ty->base->size, tok), tok);
 
@@ -3770,7 +3773,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   // ptr - num
   if (lhs->ty->base && is_integer(rhs->ty)) {
     if (lhs->ty->base->kind == TY_VLA)
-      rhs = new_binary(ND_MUL, rhs, new_var_node(lhs->ty->base->vla_size, tok), tok);
+      rhs = new_binary(ND_MUL, rhs, vla_size(lhs->ty->base, tok), tok);
     else
       rhs = new_binary(ND_MUL, rhs, new_intptr(lhs->ty->base->size, tok), tok);
 
@@ -4461,11 +4464,9 @@ static Node *primary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
     }
-    if (ty->kind == TY_VLA) {
-      if (ty->vla_size)
-        return new_var_node(ty->vla_size, tok);
-      return compute_vla_size(ty, tok);
-    }
+    if (ty->kind == TY_VLA)
+      return vla_size(ty, tok);
+
     if (ty->size < 0)
       error_tok(tok, "sizeof applied to incomplete type");
 
@@ -4495,6 +4496,20 @@ static Node *primary(Token **rest, Token *tok) {
     while (is_array(ty))
       ty = ty->base;
     return new_size(ty->align, tok);
+  }
+
+  if (equal(tok, "_Countof")) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+    }
+    if (ty->kind == TY_VLA)
+      return vla_count(ty, start, false);
+    if (ty->kind == TY_ARRAY)
+      return new_size(ty->array_len, start);
+    error_tok(tok, "countof applied to non-array type");
   }
 
   if (equal(tok, "_Generic"))
@@ -4753,7 +4768,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
       ty->align = alt_align;
     }
     push_scope(get_ident(name))->type_def = ty;
-    chain_expr(&node, compute_vla_size(ty, tok));
+    chain_expr(&node, calc_vla(ty, tok));
   }
   return node;
 }

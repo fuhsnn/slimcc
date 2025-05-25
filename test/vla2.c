@@ -9,12 +9,15 @@ void fn(int32_t x){
 
   x = 17;
   B b1[x++], *b2;
+  ASSERT(18, x);
   ASSERT(476, sizeof(b1));
   ASSERT(28, sizeof(*b1));
   ASSERT(28, sizeof(*b2));
 
   typedef int32_t (*C)[++x];
+  ASSERT(19, x);
   C c1[++x], c2;
+  ASSERT(20, x);
   ASSERT(160, sizeof(c1));
   ASSERT(8, sizeof(*c1));
   ASSERT(76, sizeof(**c1));
