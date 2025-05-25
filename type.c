@@ -596,5 +596,9 @@ void add_type(Node *node) {
   case ND_VA_START:
   case ND_VA_COPY:
     node->ty = ty_void;
+    return;
+  case ND_CKD_ARITH:
+    node->ty = ty_bool;
+    return;
   }
 }

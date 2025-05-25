@@ -15,6 +15,24 @@ static inline int __slimcc_bitint_first_set(int bits, void *lp) {
   return 0;
 }
 
+static inline _Bool __slimcc_bitint_overflow(int bits, void *sp, int chk_bits, _Bool is_unsigned) {
+  long long *val = sp;
+  int idx = (chk_bits - 1) / 64;
+  int shft = (chk_bits - 1) % 64;
+
+  long long chk = val[idx++] >> shft;
+  if (chk != 0)
+    if (is_unsigned || chk != -1)
+      return 1;
+
+  int top = (bits - 1) / 64;
+  while (idx <= top)
+    if (val[idx++] != chk)
+      return 1;
+
+  return 0;
+}
+
 static inline _Bool __slimcc_bitint_to_bool(int bits, void *lp) {
   int idx = (bits - 1) / 64;
   unsigned long long *lh = lp;

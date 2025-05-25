@@ -276,6 +276,10 @@ bool is_const_var(Obj *var) {
   return ty->is_const;
 }
 
+static bool is_int_class(Type *ty) {
+  return is_integer(ty) || ty->kind == TY_BITINT;
+}
+
 static bool equal_tok(Token *a, Token *b) {
   return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
 }
@@ -4361,6 +4365,32 @@ static Node *generic_selection(Token **rest, Token *tok) {
   return ret;
 }
 
+static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
+  Node *node = new_node(ND_CKD_ARITH, tok);
+  node->arith_kind = kind;
+  tok = skip(tok->next, "(");
+  node->lhs = assign(&tok, tok);
+  tok = skip(tok, ",");
+  node->rhs = assign(&tok, tok);
+  tok = skip(tok, ",");
+  node->inc = assign(&tok, tok);
+  *rest = skip(tok, ")");
+  add_type(node);
+
+  Token *bad_tok = NULL;
+  if (node->inc->ty->kind != TY_PTR || node->inc->ty->base->kind == TY_BOOL ||
+    !is_int_class(node->inc->ty->base))
+    bad_tok = node->inc->tok;
+  else if (!is_int_class(node->lhs->ty))
+    bad_tok = node->lhs->tok;
+  else if (!is_int_class(node->rhs->ty))
+    bad_tok = node->rhs->tok;
+  if (bad_tok)
+    error_tok(bad_tok, "operand invalid for integer overflow arithmetic");
+
+  return node;
+}
+
 // primary = "(" "{" stmt+ "}" ")"
 //         | "(" expr ")"
 //         | "sizeof" "(" type-name ")"
@@ -4542,6 +4572,15 @@ static Node *primary(Token **rest, Token *tok) {
       return new_size(ofs, tok);
     return new_cast(new_unary(ND_ADDR, node, tok), ty_size_t);
   }
+
+  if (equal(tok, "__builtin_add_overflow"))
+    return checked_arith(rest, tok, ND_ADD);
+
+  if (equal(tok, "__builtin_sub_overflow"))
+    return checked_arith(rest, tok, ND_SUB);
+
+  if (equal(tok, "__builtin_mul_overflow"))
+    return checked_arith(rest, tok, ND_MUL);
 
   if (equal(tok, "__builtin_types_compatible_p")) {
     tok = skip(tok->next, "(");

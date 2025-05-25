@@ -299,6 +299,18 @@ static Type *bitwidth_to_ty(int width, bool is_unsigned) {
   return NULL;
 }
 
+static int32_t ovf_headroom(Type *ty, NodeKind kind) {
+  int32_t bits;
+  switch (ty->kind) {
+  case TY_BOOL: bits = 1; break;
+  case TY_BITINT: bits = ty->bit_cnt; break;
+  default: bits = ty->size * 8; break;
+  }
+  if (kind == ND_MUL)
+    return bits * 2 + ty->is_unsigned;
+  return bits + 1 + ty->is_unsigned;
+}
+
 static int write_size(Node *node)  {
   if (node->ty->kind == TY_LDOUBLE)
     return 10;
@@ -1070,6 +1082,11 @@ static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
   Node expr = {.kind = kind, .lhs = &null, .rhs = rhs,.tok = rhs->tok};
   add_type(&expr);
   gen_expr(new_cast(&expr, ty));
+}
+
+static void gen_cast_to_bitint(int32_t width, Node *node) {
+  Node expr = *node;
+  gen_expr(new_cast(&expr, new_bitint(width, node->tok)));
 }
 
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
@@ -2160,6 +2177,38 @@ static void gen_expr2(Node *node, bool is_void) {
     store(node->lhs, true);
     pop_by_ty(node->lhs->ty);
     return;
+  case ND_CKD_ARITH: {
+    Type *res_ty = node->inc->ty->base;
+    int32_t chk_bits = res_ty->is_unsigned +
+      (res_ty->kind == TY_BITINT ? res_ty->bit_cnt : res_ty->size * 8);
+
+    int32_t bits = MAX(chk_bits, res_ty->size * 8);
+    bits = MAX(bits, ovf_headroom(node->lhs->ty, node->arith_kind));
+    bits = MAX(bits, ovf_headroom(node->rhs->ty, node->arith_kind));
+    bits = align_to(bits, 64);
+    int32_t sz = bits / 8;
+
+    gen_expr(node->inc);
+    push();
+    gen_cast_to_bitint(bits, node->lhs);
+    push_bitint(sz);
+    gen_cast_to_bitint(bits, node->rhs);
+
+    load_val2(ty_int, bits, argreg32[0], NULL);
+    Printftn("lea %d(%s), %s", pop_bitint(sz), lvar_ptr, argreg64[1]);
+    Printftn("lea %s(%s), %s", tmpbuf(sz), lvar_ptr, argreg64[2]);
+    gen_bitint_builtin_call(node->arith_kind);
+
+    pop("%rax");
+    gen_mem_copy2(tmpbuf(sz), lvar_ptr, "0", "%rax", res_ty->size);
+
+    load_val2(ty_int, bits, argreg32[0], NULL);
+    Printftn("lea %s(%s), %s", tmpbuf(sz), lvar_ptr, argreg64[1]);
+    load_val2(ty_int, chk_bits, argreg32[2], NULL);
+    load_val2(ty_int, res_ty->is_unsigned, argreg32[3], NULL);
+    gen_bitint_builtin_call2("__slimcc_bitint_overflow");
+    return;
+  }
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next) {
       if (!n->next && n->kind == ND_EXPR_STMT)

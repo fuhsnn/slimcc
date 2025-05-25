@@ -15,6 +15,24 @@ int32_t eval_bitint_first_set(int32_t bits, void *lp) {
   return 0;
 }
 
+bool eval_bitint_overflow(int32_t bits, void *sp, int32_t chk_bits, bool is_unsigned) {
+  int64_t *val = sp;
+  int32_t idx = (chk_bits - 1) / 64;
+  int shft = (chk_bits - 1) % 64;
+
+  int64_t chk = val[idx++] >> shft;
+  if (chk != 0)
+    if (is_unsigned || chk != -1)
+      return true;
+
+  int32_t top = (bits - 1) / 64;
+  while (idx <= top)
+    if (val[idx++] != chk)
+      return true;
+
+  return false;
+}
+
 bool eval_bitint_to_bool(int32_t bits, void *lp) {
   int32_t idx = (bits - 1) / 64;
   uint64_t *lh = lp;
