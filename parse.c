@@ -2223,6 +2223,9 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer init = {0};
   var->ty = initializer(rest, &init, tok, var->ty);
 
+  if (var->ty->size < 0)
+    error_tok(tok, "variable has incomplete type");
+
   Relocation head = {0};
   char *buf = calloc(1, var->ty->size);
   write_gvar_data(&head, &init, var->ty, buf, 0, EV_LABEL);
