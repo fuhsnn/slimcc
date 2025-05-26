@@ -39,7 +39,6 @@ typedef struct {
   bool is_weak;
   bool is_gnu_inline;
   bool is_returns_twice;
-  bool local_only;
   bool is_ctor;
   bool is_dtor;
   uint16_t ctor_prior;
@@ -504,14 +503,6 @@ static char *new_unique_name(void) {
   return format(".L..%"PRIi64, id++);
 }
 
-static Obj *new_anon_gvar(Type *ty) {
-  Obj *var = new_gvar(NULL, ty);
-  var->name = new_unique_name();
-  var->is_definition = true;
-  var->is_static = true;
-  return var;
-}
-
 static Obj *new_static_lvar(Type *ty) {
   Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
   var->name = new_unique_name();
@@ -520,6 +511,16 @@ static Obj *new_static_lvar(Type *ty) {
 
   var->next = current_fn->static_lvars;
   current_fn->static_lvars = var;
+  return var;
+}
+
+static Obj *new_anon_gvar(Type *ty) {
+  if (current_fn)
+    return new_static_lvar(ty);
+  Obj *var = new_gvar(NULL, ty);
+  var->name = new_unique_name();
+  var->is_definition = true;
+  var->is_static = true;
   return var;
 }
 
@@ -800,7 +801,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     if (equal(tok, "typedef") || equal(tok, "static") || equal(tok, "extern") ||
         equal(tok, "inline") || equal(tok, "_Thread_local") || equal(tok, "__thread") ||
         equal_tykw(tok, "thread_local")) {
-      if (!attr || attr->local_only)
+      if (!attr)
         error_tok(tok, "storage class specifier is not allowed in this context");
 
       if (equal(tok, "typedef"))
@@ -1533,9 +1534,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     push_scope(get_ident(name))->var = var;
 
     if (attr->is_constexpr) {
-      if (!equal(tok, "="))
-        error_tok(tok, "constexpr variable not initialized");
-      constexpr_initializer(&tok, tok->next, var, var);
+      constexpr_initializer(&tok, skip(tok, "="), var, var);
       *rest = tok;
       return expr;
     }
@@ -1585,10 +1584,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
 
   if (attr && attr->is_constexpr) {
-    if (!equal(tok, "="))
-      error_tok(tok, "constexpr variable not initialized");
     Obj *init_var = new_static_lvar(ty);
-    constexpr_initializer(&tok, tok->next, init_var, var);
+    constexpr_initializer(&tok, skip(tok, "="), init_var, var);
     chain_expr(&expr, new_binary(ND_ASSIGN,
       new_var_node(var, tok), new_var_node(init_var, tok), tok));
     *cond_var = var;
@@ -4400,6 +4397,60 @@ static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
   return node;
 }
 
+static Node *compound_literal(Token **rest, Token *tok) {
+  Token *start = tok;
+  VarAttr attr = {0};
+  Type *ty = declspec(&tok, tok->next, &attr);
+  ty = declarator(&tok, tok, ty, NULL);
+  tok = skip(tok, ")");
+
+  if (ty->kind == TY_VLA)
+    error_tok(tok, "compound literals cannot be VLA");
+
+  if (is_constant_context() || attr.is_static) {
+    bool set_ctx = !is_constant_context();
+    if (set_ctx)
+      is_global_init_context = true;
+
+    Obj *var = new_anon_gvar(ty);
+    var->is_tls = attr.is_tls;
+    var->is_compound_lit = true;
+
+    if (attr.is_constexpr)
+      constexpr_initializer(rest, tok, var, var);
+    else
+      gvar_initializer(rest, tok, var);
+
+    if (set_ctx)
+      is_global_init_context = false;
+    return new_var_node(var, start);
+  }
+
+  Scope *sc = scope;
+  while (sc->is_temporary)
+    sc = sc->parent;
+
+  Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
+  var->is_compound_lit = true;
+  var->is_local = true;
+  var->next = sc->locals;
+  sc->locals = var;
+  Node *init;
+  if (attr.is_constexpr) {
+    Obj *init_var = new_anon_gvar(ty);
+    is_global_init_context = true;
+
+    constexpr_initializer(&tok, tok, init_var, var);
+
+    is_global_init_context = false;
+    init = new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok);
+  } else {
+    init = lvar_initializer(&tok, tok, var);
+  }
+  *rest = tok;
+  return new_binary(ND_CHAIN, init, new_var_node(var, tok), start);
+}
+
 // primary = "(" "{" stmt+ "}" ")"
 //         | "(" expr ")"
 //         | "sizeof" "(" type-name ")"
@@ -4414,39 +4465,8 @@ static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
 static Node *primary(Token **rest, Token *tok) {
   Token *start = tok;
 
-  if (equal(tok, "(") && is_typename(tok->next)) {
-    // Compound literal
-    Token *start = tok;
-    Type *ty = typename(&tok, tok->next);
-    if (ty->kind == TY_VLA)
-      error_tok(tok, "compound literals cannot be VLA");
-    tok = skip(tok, ")");
-
-    if (is_constant_context()) {
-      Obj *var;
-      if (current_fn)
-        var = new_static_lvar(ty);
-      else
-        var = new_anon_gvar(ty);
-
-      var->is_compound_lit = true;
-      gvar_initializer(rest, tok, var);
-      return new_var_node(var, start);
-    }
-    Scope *sc = scope;
-    while (sc->is_temporary)
-      sc = sc->parent;
-
-    Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
-    var->is_compound_lit = true;
-    var->is_local = true;
-    var->next = sc->locals;
-    sc->locals = var;
-
-    Node *lhs = lvar_initializer(rest, tok, var);
-    Node *rhs = new_var_node(var, tok);
-    return new_binary(ND_CHAIN, lhs, rhs, start);
-  }
+  if (equal(tok, "(") && is_typename(tok->next))
+    return compound_literal(rest, tok);
 
   if (equal(tok, "(") && equal(tok->next, "{")) {
     if (is_constant_context())
@@ -4726,12 +4746,7 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_STR) {
-    Obj *var;
-    if (current_fn)
-      var = new_static_lvar(tok->ty);
-    else
-      var = new_anon_gvar(tok->ty);
-
+    Obj *var = new_anon_gvar(tok->ty);
     var->init_data = tok->str;
     *rest = tok->next;
     Node *n = new_var_node(var, tok);
@@ -4960,9 +4975,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       var->align = alt_align;
 
     if (attr->is_constexpr) {
-      if (!equal(tok, "="))
-        error_tok(tok, "constexpr variable not initialized");
-      constexpr_initializer(&tok, tok->next, var, var);
+      constexpr_initializer(&tok, skip(tok, "="), var, var);
       var->is_static = true;
       continue;
     }
