@@ -4553,6 +4553,23 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
+  if (equal(tok, "__builtin_return_address")) {
+    Node *node = new_node(ND_RTN_ADDR, tok);
+    node->ty = pointer_to(ty_void);
+    tok = skip(tok->next, "(");
+    if (!is_const_expr(expr(&tok, tok), &node->val))
+      error_tok(tok, "expected integer constant expression");
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "__builtin_extract_return_addr")) {
+    tok = skip(tok->next, "(");
+    Node *node = assign(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
   if (!strncmp(tok->loc, "__builtin_atomic_fetch_", 23)) {
     Token *start = tok;
     tok = skip(tok->next, "(");
