@@ -832,6 +832,14 @@ Token *tokenize(File *file, Token **end) {
       continue;
     }
 
+    // UTF-8 character literal
+    if (startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
+      cur = cur->next = read_char_literal(p, p + 2, ty_uchar);
+      cur->ival &= 0xff;
+      p += cur->len;
+      continue;
+    }
+
     // UTF-16 character literal
     if (startswith2(p, 'u', '\'')) {
       cur = cur->next = read_char_literal(p, p + 1, ty_ushort);
