@@ -4533,8 +4533,11 @@ static Node *primary(Token **rest, Token *tok) {
     }
     if (ty->kind == TY_VLA)
       return vla_count(ty, start, false);
-    if (ty->kind == TY_ARRAY)
+    if (ty->kind == TY_ARRAY) {
+      if (ty->size < 0)
+        error_tok(tok, "countof applied to incomplete array");
       return new_size(ty->array_len, start);
+    }
     error_tok(tok, "countof applied to non-array type");
   }
 

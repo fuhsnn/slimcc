@@ -247,7 +247,8 @@ TokenKind ident_keyword(Token *tok) {
     static char *kw[] = {
       "return", "if", "else", "for", "while", "do", "goto", "break", "continue",
       "switch", "case", "default", "_Alignof", "sizeof", "__asm", "__asm__",
-      "_Static_assert", "_Defer"
+      "_Static_assert", "_Countof"
+      "_Defer"
     };
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
       hashmap_put(&map, kw[i], (void *)TK_KEYWORD);
