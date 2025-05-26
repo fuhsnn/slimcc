@@ -4333,17 +4333,21 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Token *start = tok;
   tok = skip(tok, "(");
 
-  Node *ctrl = assign(&tok, tok);
-  add_type(ctrl);
+  Type *t1;
+  if (is_typename(tok)) {
+    t1 = typename(&tok, tok);
+  } else {
+    Node *ctrl = assign(&tok, tok);
+    add_type(ctrl);
 
-  Type *t1 = ctrl->ty;
-  if (t1->kind == TY_FUNC)
-    t1 = pointer_to(t1);
-  else if (is_array(t1))
-    t1 = pointer_to(t1->base);
-  else
-    t1 = unqual(t1);
-
+    t1 = ctrl->ty;
+    if (t1->kind == TY_FUNC)
+      t1 = pointer_to(t1);
+    else if (is_array(t1))
+      t1 = pointer_to(t1->base);
+    else
+      t1 = unqual(t1);
+  }
   Node *ret = NULL;
 
   while (comma_list(rest, &tok, ")", true)) {
