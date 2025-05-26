@@ -35,12 +35,14 @@ jobs:
       matrix:
         include:
           - thirdparty: test_bash
+          - thirdparty: test_c23doku
           - thirdparty: test_cello
           - thirdparty: test_curl
           - thirdparty: test_doom
           - thirdparty: test_git
           - thirdparty: test_glib
           - thirdparty: test_gmake
+          - thirdparty: test_go
           - thirdparty: test_gzip
           - thirdparty: test_imagemagick
           - thirdparty: test_janet

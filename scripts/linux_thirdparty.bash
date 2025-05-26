@@ -56,6 +56,15 @@ test_bash() {
  make test
 }
 
+test_c23doku() {
+ git_fetch https://github.com/fuhsnn/c23doku 5ff41e96002f14c59c33f43dd4b7849c025382ae c23doku
+ replace_line "#include <stdbit.h>" "" all.h
+ "$CC" -std=c23 brute_force.c -I 12x12_simple/ -o run
+ ./run | md5sum | grep -q 4fa4c109fbe377d4314b191b7a508f4a
+ "$CC" -std=c23 brute_force.c -I 16x16_embed/ -o run
+ ./run | md5sum | grep -q 2cf4c7aecbcd621395471be3a140d66e
+}
+
 test_cello() {
  git_fetch https://github.com/orangeduck/Cello 61ee5c3d9bca98fd68af575e9704f5f02533ae26 cello
  make check
@@ -98,6 +107,15 @@ test_gmake() {
  fix_configure ./configure
  ./configure
  make check
+}
+
+test_go() {
+ git_fetch https://github.com/golang/go ceb95ea6aef52c1fb472d3539c6ef68670778b5b go
+ sed -i 's|\"-ggdb\",||g' src/cmd/dist/build.c
+ sed -i 's|\"-pipe\",||g' src/cmd/dist/build.c
+ sed -i 's|vadd(&gccargs, \"-fmessage-length=0\");||g' src/cmd/dist/build.c
+ cd src/
+ GO14TESTS=1 ./all.bash
 }
 
 test_gzip() {
@@ -284,7 +302,7 @@ test_tcl() {
 }
 
 test_tinycc() {
- git_fetch https://github.com/TinyCC/tinycc 6ca228339cbae14203b255e3e27f56586d2b10dc tinycc
+ git_fetch https://github.com/TinyCC/tinycc 83de532563c6d922c6262dea757a22cb90d06101 tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
