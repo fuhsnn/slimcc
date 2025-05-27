@@ -3,6 +3,10 @@
 
 #define NULL ((void *)0)
 
+#if __STDC_VERSION__ >= 202311L
+typedef typeof(nullptr) nullptr_t;
+#endif
+
 typedef unsigned long size_t;
 typedef long ptrdiff_t;
 typedef int wchar_t;

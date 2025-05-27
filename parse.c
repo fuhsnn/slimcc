@@ -336,16 +336,29 @@ static Node *new_var_node(Obj *var, Token *tok) {
   return node;
 }
 
-static bool invalid_cast(Type *from, Type *to) {
+static bool invalid_cast(Node *node, Type *to) {
+  if (to->kind == TY_NULLPTR)
+    return !is_nullptr(node);
+
+  if (node->ty->kind == TY_NULLPTR) {
+    switch (to->kind) {
+    case TY_VOID:
+    case TY_BOOL:
+    case TY_PTR:
+      return false;
+    }
+    return true;
+  }
+
   if (to->kind != TY_VOID) {
-    switch (from->kind) {
+    switch (node->ty->kind) {
     case TY_VOID:
     case TY_STRUCT:
     case TY_UNION:
       return true;
     }
   }
-  if (from->base && is_flonum(to))
+  if (node->ty->base && is_flonum(to))
     return true;
 
   return false;
@@ -355,7 +368,7 @@ Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
   ty = unqual(ty);
 
-  if (invalid_cast(expr->ty, ty))
+  if (invalid_cast(expr, ty))
     error_tok(expr->tok, "invalid cast");
 
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .lhs = expr, .ty = ty};
@@ -2164,7 +2177,8 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     }
 
     // Pointer or equivalent sized integer may be relocation
-    if (ty->kind == TY_PTR || (is_integer(ty) && ty->size == ty_intptr_t->size)) {
+    if (ty->kind == TY_PTR || ty->kind == TY_NULLPTR ||
+      (is_integer(ty) && ty->size == ty_intptr_t->size)) {
       int64_t val;
       if (is_const_expr(node, &val)) {
         memcpy(buf + offset, &val, ty->size);
@@ -3183,7 +3197,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval_error(node->tok, "invalid initializer");
   }
 
-  if (ctx->kind == EV_CONST && (is_integer(ty) || ty->kind == TY_PTR)) {
+  if (ctx->kind == EV_CONST && (is_integer(ty) ||
+    ty->kind == TY_PTR || ty->kind == TY_NULLPTR)) {
     char *data = eval_constexpr_data(node);
     if (data) {
       int64_t val = eval_sign_extend(ty, read_buf(data, ty->size));
@@ -4788,6 +4803,14 @@ static Node *primary(Token **rest, Token *tok) {
   if (equal_kw(tok, "true")) {
     *rest = tok->next;
     return new_boolean(1, tok);
+  }
+
+  if (equal_kw(tok, "nullptr")) {
+    *rest = tok->next;
+    Node *node = new_node(ND_NUM, tok);
+    node->ty = ty_nullptr;
+    node->tok = tok;
+    return node;
   }
 
   if (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) {

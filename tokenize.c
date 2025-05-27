@@ -273,6 +273,7 @@ TokenKind ident_keyword(Token *tok) {
       hashmap_put(&map, "alignof", (void *)TK_KEYWORD);
       hashmap_put(&map, "false", (void *)TK_KEYWORD);
       hashmap_put(&map, "true", (void *)TK_KEYWORD);
+      hashmap_put(&map, "nullptr", (void *)TK_KEYWORD);
       hashmap_put(&map, "static_assert", (void *)TK_KEYWORD);
 
       hashmap_put(&map, "alignas", (void *)TK_TYPEKW);

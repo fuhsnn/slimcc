@@ -567,6 +567,7 @@ typedef enum {
   TY_LDOUBLE,
   TY_ENUM,
   TY_PTR,
+  TY_NULLPTR,
   TY_FUNC,
   TY_ARRAY,
   TY_VLA, // variable-length array
@@ -639,6 +640,7 @@ struct Member {
 
 extern Type *ty_void;
 extern Type *ty_bool;
+extern Type *ty_nullptr;
 
 extern Type *ty_pchar;
 

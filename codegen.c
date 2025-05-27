@@ -205,7 +205,7 @@ static char *tmpbuf(int sz) {
 }
 
 static bool is_gp_ty(Type *ty) {
-  return is_integer(ty) || ty->kind == TY_PTR;
+  return is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR;
 }
 
 static bool is_scalar(Type *ty) {

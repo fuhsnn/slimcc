@@ -2,6 +2,7 @@
 
 Type *ty_void = &(Type){TY_VOID, 1, 1};
 Type *ty_bool = &(Type){TY_BOOL, 1, 1, true};
+Type *ty_nullptr = &(Type){TY_NULLPTR, 8, 8};
 
 Type *ty_pchar = &(Type){TY_PCHAR, 1, 1};
 
@@ -320,6 +321,9 @@ static int int_rank(Type *t) {
 }
 
 bool is_nullptr(Node *node) {
+  if (node->ty->kind == TY_NULLPTR)
+    return true;
+
   if (node->kind == ND_CAST &&
     node->ty->kind == TY_PTR && node->ty->base->kind == TY_VOID)
     node = node->lhs;
