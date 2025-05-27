@@ -3677,15 +3677,6 @@ static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
   error_tok(tok, "out of registers");
 }
 
-static void ptr_transfrom(Node **node) {
-  Node *arg = *node;
-  add_type(arg);
-  if (is_array(arg->ty))
-    *node = new_cast(arg, pointer_to(arg->ty->base));
-  else if (arg->ty->kind == TY_FUNC)
-    *node = new_cast(arg, pointer_to(arg->ty));
-}
-
 void prepare_inline_asm(Node *node) {
   for (int i = 0; i < REG_END; i++)
     asm_use.in[i] = asm_use.out[i] = false;

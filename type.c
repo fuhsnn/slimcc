@@ -362,30 +362,44 @@ static void int_promotion(Node **node) {
   }
 }
 
-static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
+void ptr_transfrom(Node **node) {
+  add_type(*node);
+  Type *ty = (*node)->ty;
+  if (is_array(ty))
+    *node = new_cast(*node, pointer_to(ty->base));
+  else if (ty->kind == TY_FUNC)
+    *node = new_cast(*node, pointer_to(ty));
+}
+
+static bool is_ptr(Node *node) {
+  return node->ty->kind == TY_PTR || is_nullptr(node);
+}
+
+static Type *get_common_ptr_type(Node *lhs, Node *rhs) {
+  Type *ty1 = lhs->ty;
+  Type *ty2 = rhs->ty;
+
+  if (ty1->base && is_nullptr(rhs))
+    return ty1;
+  if (ty2->base && is_nullptr(lhs))
+    return ty2;
+
+  if (ty1->base && ty2->base) {
+    if (is_compatible(ty1->base, ty2->base))
+      return ty1;
+    return pointer_to(ty_void);
+  }
+  return NULL;
+}
+
+static Type *get_common_type(Node **lhs, Node **rhs) {
   Type *ty1 = (*lhs)->ty;
   Type *ty2 = (*rhs)->ty;
 
-  if (handle_ptr) {
-    if (ty1->kind == TY_FUNC)
-      ty1 = pointer_to(ty1);
-    if (ty2->kind == TY_FUNC)
-      ty2 = pointer_to(ty2);
-
-    if (ty1->base && is_nullptr(*rhs))
-      return array_to_pointer(ty1);
-    if (ty2->base && is_nullptr(*lhs))
-      return array_to_pointer(ty2);
-
-    if (ty1->base && ty2->base) {
-      if (is_compatible(ty1->base, ty2->base))
-        return array_to_pointer(ty1);
-      return pointer_to(ty_void);
-    }
-  }
-
-  if (!is_numeric(ty1) || !is_numeric(ty2))
-    error_tok((*rhs)->tok,"invalid operand");
+  if (!is_numeric(ty1))
+    error_tok((*lhs)->tok, "invalid operand");
+  if (!is_numeric(ty2))
+    error_tok((*rhs)->tok, "invalid operand");
 
   if (ty1->kind == TY_LDOUBLE || ty2->kind == TY_LDOUBLE)
     return ty_ldouble;
@@ -425,17 +439,11 @@ static Type *get_common_type(Node **lhs, Node **rhs, bool handle_ptr) {
   internal_error();
 }
 
-// For many binary operators, we implicitly promote operands so that
-// both operands have the same type. Any integral type smaller than
-// int is always promoted to int. If the type of one operand is larger
-// than the other's (e.g. "long" vs. "int"), the smaller operand will
-// be promoted to match with the other.
-//
-// This operation is called the "usual arithmetic conversion".
-static void usual_arith_conv(Node **lhs, Node **rhs, bool handle_ptr) {
-  Type *ty = get_common_type(lhs, rhs, handle_ptr);
+static Type *usual_arith_conv(Node **lhs, Node **rhs) {
+  Type *ty = get_common_type(lhs, rhs);
   *lhs = new_cast(*lhs, ty);
   *rhs = new_cast(*rhs, ty);
+  return ty;
 }
 
 void add_type(Node *node) {
@@ -466,8 +474,7 @@ void add_type(Node *node) {
       node->ty = (*ptr)->ty;
       return;
     }
-    usual_arith_conv(&node->lhs, &node->rhs, false);
-    node->ty = node->lhs->ty;
+    node->ty = usual_arith_conv(&node->lhs, &node->rhs);
     return;
   }
   case ND_MUL:
@@ -476,8 +483,7 @@ void add_type(Node *node) {
   case ND_BITAND:
   case ND_BITOR:
   case ND_BITXOR:
-    usual_arith_conv(&node->lhs, &node->rhs, false);
-    node->ty = node->lhs->ty;
+    node->ty = usual_arith_conv(&node->lhs, &node->rhs);
     return;
   case ND_POS:
   case ND_NEG:
@@ -500,7 +506,10 @@ void add_type(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-    usual_arith_conv(&node->lhs, &node->rhs, true);
+    ptr_transfrom(&node->lhs);
+    ptr_transfrom(&node->rhs);
+    if (!(is_ptr(node->lhs) && is_ptr(node->rhs)))
+      usual_arith_conv(&node->lhs, &node->rhs);
     node->ty = ty_int;
     return;
   case ND_FUNCALL:
@@ -538,8 +547,11 @@ void add_type(Node *node) {
     } else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty)) {
       node->ty = array_to_pointer(node->then->ty);
     } else {
-      usual_arith_conv(&node->then, &node->els, true);
-      node->ty = node->then->ty;
+      ptr_transfrom(&node->then);
+      ptr_transfrom(&node->els);
+      node->ty = get_common_ptr_type(node->then, node->els);
+      if (!node->ty)
+        node->ty = usual_arith_conv(&node->then, &node->els);
     }
     return;
   case ND_CHAIN:
