@@ -2164,22 +2164,23 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     }
 
     // Pointer or equivalent sized integer may be relocation
-    if (kind == EV_LABEL &&
-      (ty->kind == TY_PTR || (is_integer(ty) && ty->size == ty_intptr_t->size))) {
+    if (ty->kind == TY_PTR || (is_integer(ty) && ty->size == ty_intptr_t->size)) {
       int64_t val;
       if (is_const_expr(node, &val)) {
         memcpy(buf + offset, &val, ty->size);
         return cur;
       }
-      EvalContext ctx = {.kind = EV_LABEL};
-      int64_t addend = eval2(node, &ctx);
-      if (ctx.label) {
-        Relocation *rel = ast_arena_calloc(sizeof(Relocation));
-        rel->offset = offset;
-        rel->label = ctx.label;
-        rel->addend = addend;
-        cur->next = rel;
-        return cur->next;
+      if (kind == EV_LABEL) {
+        EvalContext ctx = {.kind = EV_LABEL};
+        int64_t addend = eval2(node, &ctx);
+        if (ctx.label) {
+          Relocation *rel = ast_arena_calloc(sizeof(Relocation));
+          rel->offset = offset;
+          rel->label = ctx.label;
+          rel->addend = addend;
+          cur->next = rel;
+          return cur->next;
+        }
       }
       error_tok(node->tok, "invalid initializer");
     }
@@ -2207,8 +2208,8 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
       memcpy(buf + offset, &(int64_t){eval(node)}, ty->size);
       return cur;
     }
+    error_tok(node->tok, "unknown initializer");
   }
-
   internal_error();
 }
 
@@ -3182,7 +3183,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval_error(node->tok, "invalid initializer");
   }
 
-  if (ctx->kind == EV_CONST && is_integer(ty)) {
+  if (ctx->kind == EV_CONST && (is_integer(ty) || ty->kind == TY_PTR)) {
     char *data = eval_constexpr_data(node);
     if (data) {
       int64_t val = eval_sign_extend(ty, read_buf(data, ty->size));

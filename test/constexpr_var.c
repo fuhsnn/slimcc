@@ -11,6 +11,14 @@ union U {int i; float f;};
 constexpr union U u1 = {.i = 0x40490fda};
 constexpr union U u2 = u1;
 
+constexpr int *np1 = 0;
+constexpr int *np2 = {};
+constexpr int *np3 = {0};
+
+SASSERT(!np1);
+SASSERT(np2 == 0);
+SASSERT(np3 == NULL);
+
 void local_adr(int recur, const int *local_p, const int *static_p) {
   if (recur >= 3)
     return;
