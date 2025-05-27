@@ -10,6 +10,8 @@ struct S {
 
 _Static_assert(offsetof(struct S, i) == 1);
 
+static_assert(sizeof (char[]){1,2,3} == 3);
+
 int main(void) {
   for (_Static_assert(1); 0;) {
     _Static_assert(1, "msg");

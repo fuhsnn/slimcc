@@ -5049,7 +5049,15 @@ Obj *parse(Token *tok) {
 
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       arena_on(&ast_arena);
+      Obj *last = globals;
+
       static_assertion(&tok, tok->next);
+
+      while (globals != last) {
+        Obj *tmp = globals;
+        globals = globals->next;
+        free(tmp);
+      }
       arena_off(&ast_arena);
       arena_off(&node_arena);
       continue;
