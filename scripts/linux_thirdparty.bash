@@ -39,7 +39,7 @@ url_tar() {
 }
 
 install_libtool() {
- url_tar https://ftp.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz __libtool
+ url_tar https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz __libtool
  fix_configure ./configure
  fix_configure libltdl/configure
  ./configure
@@ -50,7 +50,7 @@ install_libtool() {
 # tests
 
 test_bash() {
- url_tar https://ftp.gnu.org/gnu/bash/bash-5.3-rc1.tar.gz bash
+ url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3-rc1.tar.gz bash
  fix_configure ./configure
  ./configure
  make test
@@ -103,7 +103,7 @@ test_glib() {
 }
 
 test_gmake() {
- url_tar https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
+ url_tar https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
  fix_configure ./configure
  ./configure
  make check
@@ -119,7 +119,7 @@ test_go() {
 }
 
 test_gzip() {
- url_tar https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
+ url_tar https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
  fix_configure ./configure
  ./configure
  make check
@@ -365,7 +365,7 @@ build_erlang() {
 }
 
 build_gcc() {
- url_tar https://ftp.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.gz gcc47
+ url_tar https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.gz gcc47
  export -f fix_configure
  find . -name 'configure' -exec bash -c 'fix_configure "$0"' {} \;
  sed -i 's/^\s*struct ucontext/ucontext_t/g' ./libgcc/config/i386/linux-unwind.h
