@@ -4346,25 +4346,30 @@ static Node *generic_selection(Token **rest, Token *tok) {
       t1 = unqual(t1);
   }
   Node *ret = NULL;
+  Node *def = NULL;
 
   while (comma_list(rest, &tok, ")", true)) {
     if (equal(tok, "default")) {
       tok = skip(tok->next, ":");
-      Node *node = assign(&tok, tok);
-      if (!ret)
-        ret = node;
+      def = assign(&tok, tok);
       continue;
     }
 
     Type *t2 = typename(&tok, tok);
     if (t2->kind == TY_FUNC)
       error_tok(tok, "association has function type");
-    tok = skip(tok, ":");
-    Node *node = assign(&tok, tok);
-    if (is_compatible2(t1, t2))
-      ret = node;
-  }
 
+    Node *node = assign(&tok, skip(tok, ":"));
+    if (is_compatible2(t1, t2)) {
+      if (ret) {
+        warn_tok(ret->tok, "ambiguous _Generic selection");
+        error_tok(node->tok, "with this option");
+      }
+      ret = node;
+    }
+  }
+  if (!ret)
+    ret = def;
   if (!ret)
     error_tok(start, "controlling expression type not compatible with"
               " any generic association type");
