@@ -279,7 +279,7 @@ static bool is_int_class(Type *ty) {
   return is_integer(ty) || ty->kind == TY_BITINT;
 }
 
-static bool equal_tok(Token *a, Token *b) {
+bool equal_tok(Token *a, Token *b) {
   return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
 }
 
@@ -4047,19 +4047,27 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   if (!tag)
     return ty;
 
+  ty->tag = tag;
+  tag->is_live = true;
+
   Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
   if (ty2) {
-    for (Type *t = ty2; t; t = t->decl_next) {
-      t->size = ty->size;
-      t->align = MAX(t->align, ty->align);
-      t->members = ty->members;
-      t->is_flexible = ty->is_flexible;
-      t->is_packed = ty->is_packed;
-      t->origin = ty;
+    if (ty2->size < 0) {
+      for (Type *t = ty2; t; t = t->decl_next) {
+        t->size = ty->size;
+        t->align = MAX(t->align, ty->align);
+        t->members = ty->members;
+        t->is_flexible = ty->is_flexible;
+        t->is_packed = ty->is_packed;
+        t->origin = ty;
+        t->tag = tag;
+      }
+      return ty2;
     }
+    if (!(opt_std >= STD_C23 && is_compatible(ty, ty2)))
+      error_tok(tag, "tag redeclaration");
     return ty2;
   }
-
   push_tag_scope(tag, ty);
   return ty;
 }

@@ -205,16 +205,57 @@ bool is_redundant_cast(Node *expr, Type *ty) {
   return false;
 }
 
+static bool is_qual_compatible(Type *t1, Type *t2) {
+  return t1->is_atomic == t2->is_atomic &&
+    t1->is_const == t2->is_const &&
+    t1->is_volatile == t2->is_volatile &&
+    t1->is_restrict == t2->is_restrict;
+}
+
+static bool is_record_compatible(Type *t1, Type *t2) {
+  if (t1->align != t2->align ||
+    t1->is_flexible != t2->is_flexible ||
+    t1->is_packed != t2->is_packed)
+    return false;
+
+  Member *mem1 = t1->members;
+  Member *mem2 = t2->members;
+  while (mem1 && mem2) {
+    if (mem1->offset != mem2->offset ||
+      mem1->alt_align != mem2->alt_align ||
+      mem1->is_bitfield != mem2->is_bitfield ||
+      mem1->bit_offset != mem2->bit_offset ||
+      mem1->bit_width != mem2->bit_width)
+      return false;
+
+    if ((!mem1->name != !mem2->name) ||
+      (mem1->name && !equal_tok(mem1->name, mem2->name)))
+      return false;
+
+    Type *t1 = mem1->ty;
+    Type *t2 = mem2->ty;
+    if (t1->kind != t2->kind)
+      return false;
+
+    if (t1->kind == TY_STRUCT || t1->kind == TY_UNION) {
+      if (!mem1->name != !t1->tag || !mem2->name != !t2->tag ||
+        (t1->tag && !equal_tok(t1->tag, t2->tag)))
+        return false;
+      if (!is_qual_compatible(t1, t2) ||
+        !is_record_compatible(t1, t2))
+        return false;
+    } else {
+      if (!is_compatible2(t1, t2))
+        return false;
+    }
+    mem1 = mem1->next;
+    mem2 = mem2->next;
+  }
+  return !mem1 == !mem2;
+}
+
 bool is_compatible2(Type *t1, Type *t2) {
-  if (t1->is_atomic != t2->is_atomic)
-    return false;
-  if (t1->is_const != t2->is_const)
-    return false;
-  if (t1->is_volatile != t2->is_volatile)
-    return false;
-  if (t1->is_restrict != t2->is_restrict)
-    return false;
-  return is_compatible(t1, t2);
+  return is_qual_compatible(t1, t2) && is_compatible(t1, t2);
 }
 
 bool is_compatible(Type *t1, Type *t2) {
@@ -269,6 +310,12 @@ bool is_compatible(Type *t1, Type *t2) {
       return false;
     return t1->array_len < 0 || t2->array_len < 0 ||
            t1->array_len == t2->array_len;
+  case TY_STRUCT:
+  case TY_UNION:
+    if (opt_std >= STD_C23 && t1->tag && t2->tag &&
+      equal_tok(t1->tag, t2->tag)) {
+      return is_record_compatible(t1, t2);
+    }
   }
   return false;
 }

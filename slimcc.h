@@ -526,6 +526,7 @@ Obj *parse(Token *tok);
 Token *skip_paren(Token *tok);
 Obj *new_lvar(char *name, Type *ty);
 bool is_const_var(Obj *var);
+bool equal_tok(Token *a, Token *b);
 
 //
 // bitint.c
@@ -588,6 +589,7 @@ struct Type {
   bool is_unspec_enum;
   Type *origin;       // for type compatibility check
   Type *decl_next;    // forward declarations
+  Token *tag;
 
   // Pointer-to or array-of type. We intentionally use the same member
   // to represent pointer/array duality in C.
