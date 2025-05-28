@@ -692,6 +692,7 @@ Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic);
 void ptr_transfrom(Node **node);
+bool mem_iter(Member **mem);
 
 //
 // codegen.c

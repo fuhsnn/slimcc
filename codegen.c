@@ -1296,7 +1296,7 @@ static ArgClass calc_class(ArgClass a, ArgClass b) {
 
 static ArgClass get_class(Type *ty, int lo, int hi, int offset, ArgClass ac) {
   if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-    for (Member *mem = ty->members; mem; mem = mem->next) {
+    for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
       int ofs = offset + mem->offset;
       if ((ofs + mem->ty->size) <= lo)
         continue;

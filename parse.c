@@ -473,14 +473,14 @@ static void new_initializer(Initializer *init, Type *ty, bool is_flexible) {
   if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
     // Count the number of struct members.
     int len = 0;
-    for (Member *mem = ty->members; mem; mem = mem->next)
+    for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next)
       mem->idx = len++;
 
     init->kind = INIT_LIST;
     init->mem_arr = calloc(len, sizeof(Initializer));
     init->mem_cnt = len;
 
-    for (Member *mem = ty->members; mem; mem = mem->next) {
+    for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
       Initializer *child = &init->mem_arr[mem->idx];
 
       if (!mem->next && ty->kind == TY_STRUCT && is_flexible && ty->is_flexible) {
@@ -1921,6 +1921,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
   if (init->ty->kind == TY_UNION) {
     if (consume(&tok, tok, "{")) {
       init->initmem = init->ty->members;
+      mem_iter(&init->initmem);
       braced_initializer(rest, tok, init);
       return;
     }
@@ -1934,6 +1935,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
     }
 
     init->initmem = init->ty->members;
+    mem_iter(&init->initmem);
     initializer2(rest, tok, &init->mem_arr[0]);
     return;
   }
@@ -1967,11 +1969,9 @@ static Type *initializer(Token **rest, Initializer *init, Token *tok, Type *ty) 
     Member head = {0};
     Member *cur = &head;
     for (Member *mem = ty->members; mem; mem = mem->next) {
-      Member *m = ast_arena_calloc(sizeof(Member));
-      *m = *mem;
-      cur = cur->next = m;
+      cur = cur->next = ast_arena_malloc(sizeof(Member));
+      *cur = *mem;
     }
-
     cur->ty = init->mem_arr[cur->idx].ty;
     ty->size += cur->ty->size;
     ty->members = head.next;
@@ -2018,7 +2018,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
       return expr;
     }
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      for (Member *mem = ty->members; mem; mem = mem->next) {
+      for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
         if (ty->kind == TY_UNION && init->initmem != mem)
           continue;
 
@@ -2114,7 +2114,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     }
 
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      for (Member *mem = ty->members; mem; mem = mem->next) {
+      for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
         if (ty->kind == TY_UNION && init->initmem != mem)
           continue;
 
@@ -4066,12 +4066,8 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
 
 static Type *struct_decl(Type *ty, int alt_align) {
   int bits = 0;
-  Member head = {0};
-  Member *cur = &head;
-
   for (Member *mem = ty->members; mem; mem = mem->next) {
     if (!mem->is_bitfield || mem->name) {
-      cur = cur->next = mem;
       if (!ty->is_packed)
         alt_align = MAX(alt_align, mem->ty->align);
       alt_align = MAX(alt_align, mem->alt_align);
@@ -4104,8 +4100,6 @@ static Type *struct_decl(Type *ty, int alt_align) {
     mem->offset = bits / 8;
     bits += mem->ty->size * 8;
   }
-  cur->next = NULL;
-  ty->members = head.next;
   ty->size = MAX(ty->size, 0);
 
   if (alt_align)
@@ -4118,11 +4112,8 @@ static Type *struct_decl(Type *ty, int alt_align) {
 }
 
 static Type *union_decl(Type *ty, int alt_align) {
-  Member head = {0};
-  Member *cur = &head;
   for (Member *mem = ty->members; mem; mem = mem->next) {
     if (!mem->is_bitfield || mem->name) {
-      cur = cur->next = mem;
       if (!ty->is_packed)
         alt_align = MAX(alt_align, mem->ty->align);
       alt_align = MAX(alt_align, mem->alt_align);
@@ -4134,8 +4125,6 @@ static Type *union_decl(Type *ty, int alt_align) {
       sz = mem->ty->size;
     ty->size = MAX(ty->size, sz);
   }
-  cur->next = NULL;
-  ty->members = head.next;
   ty->size = MAX(ty->size, 0);
 
   if (alt_align)

@@ -119,6 +119,14 @@ Type *new_qualified_type(Type *ty) {
   return ret;
 }
 
+bool mem_iter(Member **mem) {
+  Member *m = *mem;
+  while (m && m->is_bitfield && !m->name)
+    m = m->next;
+  *mem = m;
+  return m;
+}
+
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
   return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||
