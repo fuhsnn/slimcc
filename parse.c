@@ -407,6 +407,13 @@ Node *new_cast(Node *expr, Type *ty) {
   return node;
 }
 
+static Node *assign_cast(Type *to, Node *expr) {
+  Node ty_node = {.kind = ND_NULL_EXPR, .ty = to, .tok = expr->tok};
+  Node tmp_node = {.kind = ND_ASSIGN, .lhs = &ty_node, .rhs = expr, .tok = expr->tok};
+  add_type(&tmp_node);
+  return tmp_node.rhs;
+}
+
 static Node *cond_cast(Node *expr) {
   switch (expr->kind) {
   case ND_EQ:
@@ -2115,18 +2122,18 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         if (mem->is_bitfield &&
           ((init2->kind == INIT_EXPR || init2->kind == INIT_TOK))) {
           Node *node = init_num_tok(init2, &(Node){.kind = ND_NUM, .tok = init2->tok});
-          Node init_expr = {.kind = ND_CAST, .tok = node->tok, .lhs = node, .ty = mem->ty};
+          node = assign_cast(mem->ty, node);
 
           char *loc = buf + offset + mem->offset;
 
           if (mem->ty->kind == TY_BITINT) {
-            uint64_t *val = eval_bitint(&init_expr);
+            uint64_t *val = eval_bitint(node);
             eval_bitint_bitfield_save(mem->ty->bit_cnt, val, loc, mem->bit_width, mem->bit_offset);
             free(val);
             continue;
           }
           uint64_t oldval = read_buf(loc, mem->ty->size);
-          uint64_t newval = eval(&init_expr);
+          uint64_t newval = eval(node);
           uint64_t mask = (1L << mem->bit_width) - 1;
           uint64_t combined = oldval | ((newval & mask) << mem->bit_offset);
           memcpy(loc, &combined, mem->ty->size);
@@ -2140,7 +2147,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
 
   if (init->kind == INIT_EXPR || init->kind == INIT_TOK) {
     Node *node = init_num_tok(init, &(Node){.kind = ND_NUM, .tok = init->tok});
-    node = &(Node){.kind = ND_CAST, .tok = node->tok, .lhs = node, .ty = ty};
+    node = assign_cast(ty, node);
 
     if (ty->kind == TY_ARRAY)
       error_tok(node->tok, "array initializer must be an initializer list");
@@ -4297,10 +4304,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
     if (param) {
-      Node ty_node = {.kind = ND_NULL_EXPR, .ty = param->ty};
-      Node assign_node = {.kind = ND_ASSIGN, .lhs = &ty_node, .rhs = arg};
-      add_type(&assign_node);
-      arg = assign_node.rhs;
+      arg = assign_cast(param->ty, arg);
 
       param = param->param_next;
     } else {

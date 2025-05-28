@@ -500,8 +500,11 @@ void add_type(Node *node) {
   case ND_ASSIGN:
     if (node->lhs->ty->kind == TY_ARRAY && !node->lhs->var->constexpr_data)
       error_tok(node->lhs->tok, "not an lvalue");
-    if (node->lhs->ty->kind != TY_STRUCT && node->lhs->ty->kind != TY_UNION)
+    if (is_numeric(node->lhs->ty) || is_ptr(node->lhs))
       node->rhs = new_cast(node->rhs, node->lhs->ty);
+    else if (!is_compatible(node->lhs->ty, node->rhs->ty))
+      error_tok(node->rhs->tok, "invalid assignment");
+
     node->ty = node->lhs->ty;
     return;
   case ND_EQ:
