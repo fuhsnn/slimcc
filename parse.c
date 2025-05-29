@@ -1540,8 +1540,6 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
   DeclAttr(attr_cleanup, &cleanup_fn);
 
-  chain_expr(&expr, calc_vla(ty, tok));
-
   if (attr && attr->is_static) {
     if (ty->kind == TY_VLA)
       error_tok(tok, "variable length arrays cannot be 'static'");
@@ -1621,6 +1619,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (var->ty->kind == TY_VOID)
     error_tok(name, "variable declared void");
 
+  chain_expr(&expr, calc_vla(ty, tok));
   *rest = tok;
   return expr;
 }
