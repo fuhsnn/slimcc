@@ -1018,6 +1018,11 @@ static char *search_include_paths2(char *filename, Token *start, bool is_dquote,
     if (file_exists(path)) {
       return path;
     }
+    for (int i = 0; i < iquote_paths.len; i++) {
+      char *path = format("%s/%s", iquote_paths.data[i], filename);
+      if (file_exists(path))
+        return path;
+    }
   }
   return search_include_paths3(filename, incl_no);
 }

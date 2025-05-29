@@ -14,6 +14,7 @@ typedef enum {
 } LinkType;
 
 StringArray include_paths;
+StringArray iquote_paths;
 bool opt_fcommon;
 bool opt_fpic;
 bool opt_fpie;
@@ -271,6 +272,11 @@ static int parse_args(int argc, char **argv) {
 
     if (take_arg_s(argv, &i, &arg, "-idirafter")) {
       add_include_path(&idirafter, arg);
+      continue;
+    }
+
+    if (take_arg_s(argv, &i, &arg, "-iquote")) {
+      add_include_path(&iquote_paths, arg);
       continue;
     }
 

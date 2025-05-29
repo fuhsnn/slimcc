@@ -754,6 +754,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
 
 extern char *argv0;
 extern StringArray include_paths;
+extern StringArray iquote_paths;
 extern bool opt_E;
 extern bool opt_enable_universal_char;
 extern bool opt_fpic;
