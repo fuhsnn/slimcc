@@ -517,23 +517,6 @@ static void pop_by_ty(Type *ty) {
   }
 }
 
-static void push_copy(int sz) {
-  assert(sz > 0);
-  for (int ofs = ((sz - 1) / 8 * 8); ofs >= 0; ofs -= 8)
-    push_tmpstack(SL_ST);
-}
-
-static void pop_copy(int sz, char *sptr) {
-  assert(sz > 0);
-  int pos;
-  for (int ofs = ((sz - 1) / 8 * 8); ofs >= 0; ofs -= 8) {
-    Slot *sl = pop_tmpstack(1);
-    pos = sl->st_ofs;
-    insrtln("mov %d(%s), %%rdx; mov %%rdx, %d(%s)", sl->loc, ofs, sptr, sl->st_ofs, lvar_ptr);
-  }
-  Printftn("lea %d(%s), %s", pos, lvar_ptr, sptr);
-}
-
 static void cast_extend_int32(Type *ty, char *from, char *to) {
   char *insn = ty->is_unsigned ? "movz" : "movs";
   switch (ty->size) {
@@ -2559,9 +2542,11 @@ static void gen_stmt(Node *node) {
 
       if (!is_mem_class(ty)) {
         if (has_defr(node)) {
-          push_copy(ty->size);
+          if (ty->kind != TY_BITINT)
+            gen_mem_copy2("0", "%rax", tmpbuf(ty->size), lvar_ptr, ty->size);
+          push_bitint(ty->size);
           gen_defr(node);
-          pop_copy(ty->size, "%rax");
+          Printftn("lea %d(%s), %%rax", pop_bitint(ty->size), lvar_ptr);
         }
         copy_struct_reg();
         Printftn("jmp .L.rtn.%"PRIi64, rtn_label);

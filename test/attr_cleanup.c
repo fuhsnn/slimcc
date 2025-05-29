@@ -127,6 +127,22 @@ Large large_struct_rtn(void) {
   return s;
 }
 
+static void small_bitint_cln(_BitInt(100)* s) {
+  rec[0] = ++(*s);
+}
+_BitInt(100) small_bitint_rtn(void) {
+  _BitInt(100) s __attribute__((cleanup(small_bitint_cln))) = -88;
+  return s;
+}
+
+static void large_bitint_cln(_BitInt(400)* s) {
+  rec[0] = ++(*s);
+}
+_BitInt(400) large_bitint_rtn(void) {
+  _BitInt(400) s __attribute__((cleanup(large_bitint_cln))) = 99;
+  return s;
+}
+
 struct S {
   int j,i;
 };
@@ -175,7 +191,6 @@ int main(void) {
   ASSERT(137, rec[3]);
   ASSERT(222, rec[4]);
 
-
   rec_idx = 0;
   void_nortn();
   ASSERT(11, rec[0]);
@@ -192,6 +207,10 @@ int main(void) {
   ASSERT(66, rec[0]);
   ASSERT(77, large_struct_rtn().c);
   ASSERT(77, rec[0]);
+  ASSERT(1, -88wb == small_bitint_rtn());
+  ASSERT(-87, rec[0]);
+  ASSERT(1, 99wb == large_bitint_rtn());
+  ASSERT(100, rec[0]);
 
   stmt_expr();
 
