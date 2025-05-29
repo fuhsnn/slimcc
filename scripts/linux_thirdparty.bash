@@ -183,6 +183,11 @@ test_metalang99() {
  sh scripts/test-all.sh
 }
 
+test_noplate() {
+ git_fetch https://github.com/fuhsnn/noplate 5d7f2d9e2d1a400eb69c52d3cd901fca5d97f749 noplate
+ make test examples
+}
+
 test_ocaml() {
  github_tar ocaml ocaml 5.3.0
  fix_configure ./configure

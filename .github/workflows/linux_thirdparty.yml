@@ -51,6 +51,7 @@ jobs:
           - thirdparty: test_libuev
           - thirdparty: test_lua
           - thirdparty: test_metalang99
+          - thirdparty: test_noplate
           - thirdparty: test_ocaml
           - thirdparty: test_oniguruma_jq
           - thirdparty: test_openssh
