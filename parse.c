@@ -1567,24 +1567,24 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
 
   if (ty->kind == TY_VLA) {
-    if (equal(tok, "="))
-      error_tok(tok, "variable-sized object may not be initialized");
-
     fn_use_vla = true;
-    // Variable length arrays (VLAs) are translated to alloca() calls.
-    // For example, `int x[n+2]` is translated to `tmp = n + 2,
-    // x = alloca(tmp)`.
-    Obj *var = new_lvar(get_ident(name), ty);
-    if (alt_align)
-      var->align = alt_align;
-    chain_expr(&expr, new_vla(vla_size(ty, name), var));
+
+    Node *node = new_vla(vla_size(ty, name), new_lvar(get_ident(name), ty));
 
     DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
-    defr->vla = var;
+    defr->vla = node->var;
 
     if (cleanup_fn)
-      defr_cleanup(var, cleanup_fn, tok);
+      defr_cleanup(node->var, cleanup_fn, tok);
+    if (alt_align)
+      node->var->align = alt_align;
+
+    if (equal(tok, "=")) {
+      tok = skip(skip(tok->next, "{"), "}");
+      node->kind = ND_ALLOCA_ZINIT;
+    }
     *rest = tok;
+    chain_expr(&expr, node);
     return expr;
   }
 

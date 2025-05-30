@@ -48,6 +48,24 @@ int fn4(int i){
   return sizeof(*(char(*)[i+7]){0});
 }
 
+int zinit(int cnt) {
+ {
+   int a[cnt*100];
+   for (int i = 0; i < 100; i++)
+     a[i] = -1;
+ }
+ {
+   int a[cnt*100] = {};
+   int chk = 0;
+
+   for (int i = 0; i < 100; i++)
+     chk |= a[i];
+
+   ASSERT(0, chk);
+ }
+ return 1;
+}
+
 int main(void){
   fn(5);
 
@@ -59,6 +77,7 @@ int main(void){
 
   ASSERT(14, fn4(7));
 
+  ASSERT(1, zinit(1));
 
   printf("OK\n");
 }

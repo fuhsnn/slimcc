@@ -1498,11 +1498,28 @@ static void gen_vaarg_reg_copy(Type *ty, Obj *var) {
 }
 
 static void builtin_alloca(Node *node) {
-  // Shift the temporary area by %rax.
+  Printstn("mov %%rsp, %%rcx");
   Printstn("sub %%rax, %%rsp");
-  // Align frame pointer
+
   int align = node->var ? MAX(node->var->align, 16) : 16;
   Printftn("and $-%d, %%rsp", align);
+  Printstn("sub %%rsp, %%rcx");
+
+  if (node->kind == ND_ALLOCA_ZINIT) {
+    Printstn("xorps %%xmm0, %%xmm0");
+    Printstn("2:");
+    Printstn("sub $16, %%rcx");
+    Printstn("js 1f");
+    Printstn("movaps %%xmm0, (%%rsp, %%rcx)");
+  } else {
+    Printstn("2:");
+    Printstn("sub $4096, %%rcx");
+    Printstn("js 1f");
+    Printstn("orb $0, (%%rsp, %%rcx)");
+  }
+  Printstn("jmp 2b");
+  Printstn("1:");
+
   if (node->var)
     Printftn("mov %%rsp, %d(%s)", node->var->ofs, node->var->ptr);
   else
@@ -2323,6 +2340,7 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   }
   case ND_ALLOCA:
+  case ND_ALLOCA_ZINIT:
     gen_expr(node->lhs);
     builtin_alloca(node);
     return;

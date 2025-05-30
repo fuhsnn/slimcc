@@ -420,6 +420,7 @@ typedef enum {
   ND_VA_ARG,    // "va_arg"
   ND_CHAIN,     // ND_COMMA without array-to-pointer conversion
   ND_ALLOCA,
+  ND_ALLOCA_ZINIT,
   ND_ARITH_ASSIGN,
   ND_POST_INCDEC,
   ND_CKD_ARITH,
