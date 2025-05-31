@@ -251,12 +251,6 @@ static Type *find_tag(Token *tok) {
   return NULL;
 }
 
-static bool in_ty_range(int64_t val, Type *ty) {
-  Node num = {.kind = ND_NUM, .ty = ty_llong, .val = val};
-  Node cast = {.kind = ND_CAST, .ty = ty, .lhs = &num};
-  return eval(&cast) == val;
-}
-
 static int32_t bitfield_footprint(Member *mem) {
   return align_to(mem->bit_width + mem->bit_offset, 8) / 8;
 }
@@ -1388,18 +1382,17 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     ty = new_type(TY_ENUM, -1, 1);
 
   bool has_type = (ty->kind != TY_ENUM);
-  Type *base_ty;
-  if (has_type) {
-    base_ty = ty;
-  } else {
-    base_ty = ty_int;
+  if (!has_type)
     update_enum_ty(ty, ty_uint, true);
-  }
 
-  int64_t val = 0;
-  bool been_negative = false;
-  bool been_unsigned = false;
+  bool need_u32 = false;
+  bool need_u64 = false;
+  bool need_i64 = false;
+  bool been_neg = false;
 
+  uint64_t val = 0;
+  bool is_neg = false;
+  bool is_ovf = false;
   bool first = true;
   for (; comma_list(rest, &tok, "}", !first); first = false) {
     char *name = get_ident(tok);
@@ -1408,37 +1401,47 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     if (consume(&tok, tok, "=")) {
       Type *val_ty = NULL;
       val = const_expr2(&tok, tok, &val_ty);
-      if (!val_ty->is_unsigned && val < 0)
-        been_negative = true;
-    }
 
-    if (!in_ty_range(val, base_ty)) {
-      if (has_type)
-        error_tok(tok, "enum value out of type range");
-
-      if (been_negative) {
-        base_ty = (in_ty_range(val, ty_int) && !been_unsigned) ? ty_int : ty_first_64bit_int;
-      } else {
-        base_ty = in_ty_range(val, ty_uint) ? ty_uint : ty_first_64bit_uint;
-        been_unsigned = true;
+      if (!val_ty->is_unsigned && (int64_t)val < 0) {
+        need_i64 = (int64_t)val < INT32_MIN;
+        is_neg = been_neg = true;
       }
+    } else if (is_ovf) {
+      error_tok(tok, "enum value overflowed");
     }
 
+    if (!is_neg && (val > INT32_MAX)) {
+      need_u64 = val > UINT32_MAX;
+      need_u32 = true;
+    }
     VarScope *sc = push_scope(name);
     sc->enum_ty = ty;
     sc->enum_val = val++;
+    is_ovf = !is_neg && val == 0;
+    is_neg = (int64_t)val < 0;
   }
 
   if (first)
     error_tok(tok, "empty enum specifier");
 
-  if (base_ty->kind == TY_INT && !been_negative && !been_unsigned)
-    update_enum_ty(ty, ty_uint, true);
-  else if (been_negative && been_unsigned)
-    update_enum_ty(ty, ty_first_64bit_int, false);
-  else
-    update_enum_ty(ty, base_ty, false);
+  if (has_type) {
+    if ((ty->is_unsigned && (been_neg || (ty->size < 8 && need_u64))) ||
+      (!ty->is_unsigned && (need_u64 || (ty->size < 8 && (need_u32 || need_i64)))))
+      error_tok(tok, "enum value out of type range");
+  } else {
+    Type *enum_ty;
+    bool is_unspec = false;
+    if (been_neg)
+      enum_ty = (need_u64 || need_u32 || need_i64) ? ty_first_64bit_int : ty_int;
+    else if (need_u64)
+      enum_ty = ty_first_64bit_uint;
+    else if (need_u32)
+      enum_ty = ty_uint;
+    else
+      enum_ty = ty_uint, is_unspec = true;
 
+    update_enum_ty(ty, enum_ty, is_unspec);
+  }
   if (tag)
     push_tag_scope(tag, ty);
   return ty;
