@@ -350,6 +350,14 @@ echo 'foo' > $tmp/next3/file2.h
 $testcc -I$tmp/next1 -I$tmp/next2 -I$tmp/next3 -Iinclude -E $tmp/file.c | grep -q foo
 check '#include_next'
 
+# #include_next
+mkdir -p $tmp/next1
+echo '#include "next1/file1.h"' > $tmp/file.c
+echo '#include_next "file1.h"' > $tmp/next1/file1.h
+echo 'foo' > $tmp/next2/file1.h
+$testcc -I$tmp/next1 -I$tmp/next2 -E $tmp/file.c | grep -q foo
+check '#include_next'
+
 # constructor/destructor attribute
 echo "int putchar(int);" > $tmp/foo.c
 echo "__attribute__((constructor,destructor(333)))void z(void){putchar('z');}" >> $tmp/foo.c
