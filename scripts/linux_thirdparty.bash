@@ -71,7 +71,7 @@ test_cello() {
 }
 
 test_curl() {
- url_tar https://github.com/curl/curl/releases/download/curl-8_13_0/curl-8.13.0.tar.gz curl
+ url_tar https://github.com/curl/curl/releases/download/curl-8_14_0/curl-8.14.0.tar.gz curl
  fix_configure ./configure
  ./configure --with-openssl
  make && make test
@@ -99,7 +99,7 @@ test_glib() {
  replace_line "#if  __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)" "#if 1" glib/gconstructor.h
  replace_line "#ifdef __GNUC__" "#if 1" glib/gmacros.h
  replace_line "#elif defined(__GNUC__) && (__GNUC__ >= 4)" "#elif 1" gio/tests/modules/symbol-visibility.h
- make -j2 check
+ make check
 }
 
 test_gmake() {
@@ -293,7 +293,7 @@ test_scrapscript() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.49.2
+ github_tar sqlite sqlite version-3.50.0
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
