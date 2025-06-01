@@ -723,7 +723,12 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   Fn(name->next, TK_BATTR, __VA_ARGS__); \
   Fn(tok, TK_ATTR, __VA_ARGS__)
 
-static void symbol_attr(Obj *var, VarAttr *attr, Token *name, Token *tok) {
+static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token *name) {
+  if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
+    var->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
+    *rest = skip(tok, ")");
+  }
+
   apply_str_attr("alias", name, &var->alias_name, attr->alias);
   DeclAttr(str_attr, "alias", &var->alias_name);
 
@@ -1531,7 +1536,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
       error_tok(tok, "function name omitted");
     Obj *fn = func_prototype(ty, attr, name);
     func_attr(fn, attr, name, tok);
-    symbol_attr(fn, attr, name, tok);
+    symbol_attr(&tok, tok, fn, attr, name);
     *rest = tok;
     return expr;
   }
@@ -3199,7 +3204,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 
       if (var) {
         ctx->var = var;
-        ctx->label = &var->name;
+        ctx->label = var->asm_name ? &var->asm_name : &var->name;
         return ofs;
       }
     }
@@ -4980,19 +4985,11 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 
       Obj *fn = func_prototype(ty, attr, name);
       func_attr(fn, attr, name, tok);
-      symbol_attr(fn, attr, name, tok);
+      symbol_attr(&tok, tok, fn, attr, name);
 
-      if (equal(tok, "{")) {
-        if (!first || scope->parent)
-          error_tok(tok, "function definition is not allowed here");
-        func_definition(&tok, tok, fn, ty);
-        *rest = tok;
+      if (first && !scope->parent && equal(tok, "{")) {
+        func_definition(rest, tok, fn, ty);
         return;
-      }
-
-      if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
-        fn->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
-        tok = skip(tok, ")");
       }
       continue;
     }
@@ -5007,7 +5004,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     VarScope *sc = find_var(name);
     Obj *var;
     if (sc && sc->var) {
-      symbol_attr(sc->var, attr, name, tok);
+      symbol_attr(&tok, tok, sc->var, attr, name);
 
       if (!is_definition)
         continue;
@@ -5018,7 +5015,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
-      symbol_attr(var, attr, name, tok);
+      symbol_attr(&tok, tok, var, attr, name);
     }
     var->is_definition = is_definition;
     var->is_static = attr->is_static;
