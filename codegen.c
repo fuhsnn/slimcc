@@ -4316,17 +4316,18 @@ static void emit_data(Obj *var) {
   }
 
   bool use_rodata = is_const_var(var) && !((opt_fpic || opt_fpie) && (var->rel || var->section_name));
+  bool use_bss = !var->init_data && !var->rel;
 
   if (var->section_name)
     Printfts(".section \"%s\"", var->section_name);
   else if (var->is_tls)
-    Printfts(".section .%s", var->init_data ? "tdata" : "tbss");
+    Printfts(".section .%s", use_bss ? "tbss" : "tdata");
   else if (use_rodata)
     Printsts(".section .rodata");
   else if ((opt_fpic || opt_fpie) && var->rel)
     Printfts(".section .data.rel%s%s", (is_const_var(var) ? ".ro" : ""), (opt_fpie ? ".local" : ""));
   else
-    Printfts(".section .%s", var->init_data ? "data" : "bss");
+    Printfts(".section .%s", use_bss ? "bss" : "data");
 
   if (opt_data_sections && !var->section_name)
     Printf(".\"%s\"", asm_name(var));
@@ -4338,7 +4339,7 @@ static void emit_data(Obj *var) {
   else
     Prints(",\"aw\"");
 
-  if (!var->init_data && !use_rodata)
+  if (!use_rodata && use_bss)
     Printssn(",@nobits");
   else
     Printssn(",@progbits");
