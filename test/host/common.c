@@ -17,7 +17,6 @@ int *ext2 = &ext1;
 int ext3 = 7;
 int ext_fn1(int x) { return x; }
 int ext_fn2(int x) { return x; }
-int common_ext2 = 3;
 static int common_local;
 _Thread_local int extern_tls;
 

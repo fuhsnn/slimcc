@@ -176,6 +176,13 @@ check -idirafter
 echo 'int foo;' | $testcc -fcommon -S -o- -xc - | grep '\.comm' | grep -q 'foo'
 check '-fcommon'
 
+echo 'int var; int main(void) { return var; }' > $tmp/foo.c
+echo 'int var = 3;' > $tmp/bar.c
+$testcc -fcommon $tmp/foo.c $tmp/bar.c -o $tmp/foo
+$tmp/foo
+[ "$?" = 3 ]
+check '-fcommon'
+
 # -fno-common
 echo 'int foo;' | $testcc -fno-common -S -o- -xc - | (! grep -q '\.comm')
 check '-fno-common'

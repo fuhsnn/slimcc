@@ -2,7 +2,7 @@ SRCS=alloc.c bitint.c codegen.c hashmap.c main.c parse.c platform.c preprocess.c
 
 TEST_SRCS!=ls test/*.c
 
-TEST_FLAGS=-Itest -fenable-universal-char -fcommon -std=c23 -fdefer-ts
+TEST_FLAGS=-Itest -fenable-universal-char -std=c23 -fdefer-ts
 
 .SUFFIXES: .exe .stage2.o .stage2.exe .asan.o .asan.exe
 
