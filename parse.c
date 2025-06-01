@@ -251,6 +251,14 @@ static Type *find_tag(Token *tok) {
   return NULL;
 }
 
+static Type *get_first_64bit_int(bool is_unsigned) {
+  if (ty_long->size == 8)
+    return is_unsigned ? ty_ulong : ty_long;
+  if (ty_llong->size == 8)
+    return is_unsigned ? ty_ullong : ty_llong;
+  internal_error();
+}
+
 static int32_t bitfield_footprint(Member *mem) {
   return align_to(mem->bit_width + mem->bit_offset, 8) / 8;
 }
@@ -1437,9 +1445,9 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     Type *enum_ty;
     bool is_unspec = false;
     if (been_neg)
-      enum_ty = (need_u64 || need_u32 || need_i64) ? ty_first_64bit_int : ty_int;
+      enum_ty = (need_u64 || need_u32 || need_i64) ? get_first_64bit_int(false) : ty_int;
     else if (need_u64)
-      enum_ty = ty_first_64bit_uint;
+      enum_ty = get_first_64bit_int(true);
     else if (need_u32)
       enum_ty = ty_uint;
     else

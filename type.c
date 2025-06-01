@@ -25,8 +25,6 @@ Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
 Type *ty_size_t;
 Type *ty_intptr_t;
 Type *ty_ptrdiff_t;
-Type *ty_first_64bit_int;
-Type *ty_first_64bit_uint;
 
 void init_ty_lp64(void) {
   define_macro("_LP64", "1");
@@ -45,8 +43,6 @@ void init_ty_lp64(void) {
 
   ty_size_t = ty_ulong;
   ty_intptr_t = ty_ptrdiff_t = ty_long;
-  ty_first_64bit_int = ty_long;
-  ty_first_64bit_uint = ty_ulong;
 }
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {

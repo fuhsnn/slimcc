@@ -666,8 +666,6 @@ extern Type *ty_ldouble;
 extern Type *ty_size_t;
 extern Type *ty_intptr_t;
 extern Type *ty_ptrdiff_t;
-extern Type *ty_first_64bit_int;
-extern Type *ty_first_64bit_uint;
 
 bool is_integer(Type *ty);
 bool is_flonum(Type *ty);
