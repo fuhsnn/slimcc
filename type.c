@@ -323,10 +323,20 @@ Type *pointer_to(Type *base) {
   return ty;
 }
 
-Type *array_to_pointer(Type *ty) {
-  if (ty->base && ty->kind != TY_PTR)
+Type *ptr_decay(Type *ty) {
+  if (is_array(ty))
     return pointer_to(ty->base);
+  else if (ty->kind == TY_FUNC)
+    return pointer_to(ty);
   return ty;
+}
+
+void ptr_convert(Node **node) {
+  add_type(*node);
+  Type *orig = (*node)->ty;
+  Type *ty = ptr_decay(orig);
+  if (ty != orig)
+    *node = new_cast(*node, ty);
 }
 
 Type *func_type(Type *return_ty, Token *tok) {
@@ -415,15 +425,6 @@ static void int_promotion(Node **node) {
       *node = new_cast(*node, ty_int);
     return;
   }
-}
-
-void ptr_transfrom(Node **node) {
-  add_type(*node);
-  Type *ty = (*node)->ty;
-  if (is_array(ty))
-    *node = new_cast(*node, pointer_to(ty->base));
-  else if (ty->kind == TY_FUNC)
-    *node = new_cast(*node, pointer_to(ty));
 }
 
 static bool is_ptr(Node *node) {
@@ -522,11 +523,9 @@ void add_type(Node *node) {
     return;
   case ND_ADD:
   case ND_SUB: {
-    Node **ptr = node->lhs->ty->base ? &node->lhs : node->rhs->ty->base ? &node->rhs : NULL;
+    Node *ptr = node->lhs->ty->base ? node->lhs : node->rhs->ty->base ? node->rhs : NULL;
     if (ptr) {
-      if ((*ptr)->ty->kind != TY_PTR)
-        *ptr = new_cast(*ptr, pointer_to((*ptr)->ty->base));
-      node->ty = (*ptr)->ty;
+      node->ty = ptr->ty;
       return;
     }
     node->ty = usual_arith_conv(&node->lhs, &node->rhs);
@@ -564,8 +563,8 @@ void add_type(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-    ptr_transfrom(&node->lhs);
-    ptr_transfrom(&node->rhs);
+    ptr_convert(&node->lhs);
+    ptr_convert(&node->rhs);
     if (!(is_ptr(node->lhs) && is_ptr(node->rhs)))
       usual_arith_conv(&node->lhs, &node->rhs);
     node->ty = ty_int;
@@ -600,13 +599,13 @@ void add_type(Node *node) {
     node->ty = node->var->ty;
     return;
   case ND_COND:
+    ptr_convert(&node->then);
+    ptr_convert(&node->els);
     if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID) {
       node->ty = ty_void;
     } else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty)) {
-      node->ty = array_to_pointer(node->then->ty);
+      node->ty = node->then->ty;
     } else {
-      ptr_transfrom(&node->then);
-      ptr_transfrom(&node->els);
       node->ty = get_common_ptr_type(node->then, node->els);
       if (!node->ty)
         node->ty = usual_arith_conv(&node->then, &node->els);
@@ -616,7 +615,7 @@ void add_type(Node *node) {
     node->ty = node->rhs->ty;
     return;
   case ND_COMMA:
-    node->ty = array_to_pointer(node->rhs->ty);
+    node->ty = ptr_decay(node->rhs->ty);
     return;
   case ND_MEMBER:
     node->ty = node->member->ty;
@@ -638,7 +637,7 @@ void add_type(Node *node) {
       while (stmt->next)
         stmt = stmt->next;
       if (stmt->kind == ND_EXPR_STMT) {
-        node->ty = array_to_pointer(stmt->lhs->ty);
+        node->ty = ptr_decay(stmt->lhs->ty);
         return;
       }
     }

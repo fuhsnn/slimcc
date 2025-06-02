@@ -681,8 +681,8 @@ bool is_nullptr(Node *node);
 void init_ty_lp64(void);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
-Type *array_to_pointer(Type *ty);
-void ptr_transfrom(Node **node);
+Type *ptr_decay(Type *ty);
+void ptr_convert(Node **node);
 Type *func_type(Type *return_ty, Token *tok);
 Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr);
@@ -692,7 +692,6 @@ void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic);
-void ptr_transfrom(Node **node);
 bool mem_iter(Member **mem);
 
 //

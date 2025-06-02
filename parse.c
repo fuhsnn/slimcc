@@ -1061,7 +1061,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     Node *node = assign(&(Token *){0}, tok->next->next);
     add_type(node);
     leave_scope();
-    ty = unqual(array_to_pointer(node->ty));
+    ty = unqual(ptr_decay(node->ty));
   }
 
   if (!ty)
@@ -1104,10 +1104,8 @@ static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
         promoted = new_lvar(NULL, ty_int);
       else if (ty->kind == TY_FLOAT)
         promoted = new_lvar(NULL, ty_double);
-      else if (ty->kind == TY_ARRAY || ty->kind == TY_VLA)
-        ty = pointer_to(ty->base);
-      else if (ty->kind == TY_FUNC)
-        ty = pointer_to(ty);
+      else
+        ty = ptr_decay(ty);
 
       Obj *var = new_lvar(get_ident(name), ty);
       if (promoted) {
@@ -3773,10 +3771,8 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_ADD, lhs, rhs, tok);
 
-  if (lhs->ty->kind == TY_FUNC)
-    lhs = new_cast(lhs, pointer_to(lhs->ty));
-  if (rhs->ty->kind == TY_FUNC)
-    rhs = new_cast(rhs, pointer_to(rhs->ty));
+  ptr_convert(&lhs);
+  ptr_convert(&rhs);
 
   Node **ofs = is_integer(lhs->ty) ? &lhs : is_integer(rhs->ty) ? &rhs : NULL;
   Node *ptr = lhs->ty->base ? lhs : rhs->ty->base ? rhs : NULL;
@@ -3802,10 +3798,8 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_SUB, lhs, rhs, tok);
 
-  if (lhs->ty->kind == TY_FUNC)
-    lhs = new_cast(lhs, pointer_to(lhs->ty));
-  if (rhs->ty->kind == TY_FUNC)
-    rhs = new_cast(rhs, pointer_to(rhs->ty));
+  ptr_convert(&lhs);
+  ptr_convert(&rhs);
 
   // ptr - num
   if (lhs->ty->base && is_integer(rhs->ty)) {
@@ -4328,10 +4322,8 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
         arg = new_cast(arg, ty_int);
       else if (arg->ty->kind == TY_FLOAT)
         arg = new_cast(arg, ty_double);
-      else if (is_array(arg->ty))
-        arg = new_cast(arg, pointer_to(arg->ty->base));
-      else if (arg->ty->kind == TY_FUNC)
-        arg = new_cast(arg, pointer_to(arg->ty));
+      else
+        ptr_convert(&arg);
     }
     cur = cur->param_next = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
     cur->arg_expr = arg;
@@ -4368,14 +4360,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   } else {
     Node *ctrl = assign(&tok, tok);
     add_type(ctrl);
-
-    t1 = ctrl->ty;
-    if (t1->kind == TY_FUNC)
-      t1 = pointer_to(t1);
-    else if (is_array(t1))
-      t1 = pointer_to(t1->base);
-    else
-      t1 = unqual(t1);
+    t1 = unqual(ptr_decay(ctrl->ty));
   }
   Node *ret = NULL;
   Node *def = NULL;

@@ -315,6 +315,15 @@ Aligned1024 s = {.c = 77};
       ASSERT(73, struct_test181(t1, t2).ld);
     }
 
+  ASSERT(sizeof(void*), sizeof (main + 1) );
+  ASSERT(sizeof(void*), sizeof ({ main; }) );
+  ASSERT(sizeof(void*), sizeof (0 ? main : main) );
+  ASSERT(sizeof(void*), sizeof (0, main) );
+  ASSERT(1, sizeof * (main + 1) );
+  ASSERT(1, sizeof * ({ main; }) );
+  ASSERT(1, sizeof * (0 ? main : main) );
+  ASSERT(1, sizeof * (0, main) );
+
   printf("OK\n");
 
 }

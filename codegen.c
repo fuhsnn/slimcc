@@ -3714,14 +3714,14 @@ void prepare_inline_asm(Node *node) {
 
   for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG)
-      ptr_transfrom(&ap->arg);
+      ptr_convert(&ap->arg);
     if (has_memop(ap->arg))
       continue;
     ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
   }
   for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG)
-      ptr_transfrom(&ap->arg);
+      ptr_convert(&ap->arg);
     if (has_memop(ap->arg))
       continue;
     if (ap->kind == ASMOP_REG)
