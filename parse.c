@@ -311,14 +311,14 @@ static Node *new_num(int64_t val, Token *tok) {
   return node;
 }
 
-static Node *new_intptr(int64_t val, Token *tok) {
+static Node *new_intptr_t(int64_t val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->val = val;
   node->ty = ty_intptr_t;
   return node;
 }
 
-static Node *new_size(int64_t val, Token *tok) {
+static Node *new_size_t(int64_t val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->val = val;
   node->ty = ty_size_t;
@@ -1477,7 +1477,7 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
 static Node *vla_count(Type *ty, Token *tok, bool is_void) {
   int64_t val;
   if (is_const_expr(ty->vla_len, &val))
-    return is_void ? NULL : new_size(val, tok);
+    return is_void ? NULL : new_size_t(val, tok);
 
   if (ty->vla_cnt)
     return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
@@ -3781,7 +3781,7 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
     if (ptr->ty->base->kind == TY_VLA)
       *ofs = new_binary(ND_MUL, *ofs, vla_size(ptr->ty->base, tok), tok);
     else
-      *ofs = new_binary(ND_MUL, *ofs, new_intptr(ptr->ty->base->size, tok), tok);
+      *ofs = new_binary(ND_MUL, *ofs, new_intptr_t(ptr->ty->base->size, tok), tok);
 
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
@@ -3806,7 +3806,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
     if (lhs->ty->base->kind == TY_VLA)
       rhs = new_binary(ND_MUL, rhs, vla_size(lhs->ty->base, tok), tok);
     else
-      rhs = new_binary(ND_MUL, rhs, new_intptr(lhs->ty->base->size, tok), tok);
+      rhs = new_binary(ND_MUL, rhs, new_intptr_t(lhs->ty->base->size, tok), tok);
 
     return new_binary(ND_SUB, lhs, rhs, tok);
   }
@@ -4523,9 +4523,9 @@ static Node *primary(Token **rest, Token *tok) {
       while (mem->next)
         mem = mem->next;
       if (mem->ty->kind == TY_ARRAY)
-        return new_size((ty->size - mem->ty->size), start);
+        return new_size_t((ty->size - mem->ty->size), start);
     }
-    return new_size(ty->size, start);
+    return new_size_t(ty->size, start);
   }
 
   if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
@@ -4534,16 +4534,16 @@ static Node *primary(Token **rest, Token *tok) {
       Node *node = unary(rest, tok->next);
       switch (node->kind) {
       case ND_MEMBER:
-        return new_size(MAX(node->member->ty->align, node->member->alt_align), tok);
+        return new_size_t(MAX(node->member->ty->align, node->member->alt_align), tok);
       case ND_VAR:
-        return new_size(node->var->align, tok);
+        return new_size_t(node->var->align, tok);
       }
       add_type(node);
       ty = node->ty;
     }
     while (is_array(ty))
       ty = ty->base;
-    return new_size(ty->align, tok);
+    return new_size_t(ty->align, tok);
   }
 
   if (equal(tok, "_Countof")) {
@@ -4558,7 +4558,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (ty->kind == TY_ARRAY) {
       if (ty->size < 0)
         error_tok(tok, "countof applied to incomplete array");
-      return new_size(ty->array_len, start);
+      return new_size_t(ty->array_len, start);
     }
     error_tok(tok, "countof applied to non-array type");
   }
@@ -4652,7 +4652,7 @@ static Node *primary(Token **rest, Token *tok) {
 
     int64_t ofs;
     if (eval_non_var_ofs(node, &ofs))
-      return new_size(ofs, tok);
+      return new_size_t(ofs, tok);
     return new_cast(new_unary(ND_ADDR, node, tok), ty_size_t);
   }
 
