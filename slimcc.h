@@ -780,6 +780,7 @@ extern bool opt_static;
 extern bool opt_static_pie;
 extern bool opt_static_libgcc;
 extern bool opt_shared;
+extern bool opt_s;
 extern bool opt_nostartfiles;
 extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;

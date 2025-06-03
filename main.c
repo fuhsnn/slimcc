@@ -51,6 +51,7 @@ bool opt_static;
 bool opt_static_pie;
 bool opt_static_libgcc;
 bool opt_shared;
+bool opt_s;
 bool opt_nostartfiles;
 bool opt_nodefaultlibs;
 bool opt_nolibc;
@@ -61,9 +62,8 @@ static char *opt_MT;
 static char *opt_o;
 
 static StringArray ld_paths;
-static StringArray ld_extra_args;
+static StringArray input_args;
 static StringArray sysincl_paths;
-static StringArray input_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
 
@@ -296,8 +296,8 @@ static int parse_args(int argc, char **argv) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-x")) {
-      strarray_push(&input_paths, "-x");
-      strarray_push(&input_paths, arg);
+      strarray_push(&input_args, "-x");
+      strarray_push(&input_args, arg);
       continue;
     }
 
@@ -307,23 +307,26 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
-    if (comma_arg(argv[i], &as_args, "-Wa,") ||
-      comma_arg(argv[i], &ld_extra_args, "-Wl,"))
+    if (comma_arg(argv[i], &as_args, "-Wa,"))
       continue;
 
+    if (startswith(argv[i], &arg, "-Wl,")) {
+      strarray_push(&input_args, argv[i]);
+      continue;
+    }
+
     if (take_arg_s(argv, &i, &arg, "-l")) {
-      strarray_push(&ld_extra_args, "-l");
-      strarray_push(&ld_extra_args, arg);
+      strarray_push(&input_args, format("-Wl,-l%s", arg));
       continue;
     }
 
     if (take_arg(argv, &i, &arg, "-Xlinker")) {
-      strarray_push(&ld_extra_args, arg);
+      strarray_push(&input_args, format("-Wl,%s", arg));
       continue;
     }
 
     if (!strcmp(argv[i], "-s")) {
-      strarray_push(&ld_extra_args, "-s");
+      opt_s = true;
       continue;
     }
 
@@ -529,7 +532,7 @@ static int parse_args(int argc, char **argv) {
     if (argv[i][0] == '-' && argv[i][1] != '\0')
       error("unknown argument: %s", argv[i]);
 
-    strarray_push(&input_paths, argv[i]);
+    strarray_push(&input_args, argv[i]);
     input_cnt++;
   }
 
@@ -956,6 +959,9 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
   strarray_push(&arr, "elf_x86_64");
   strarray_push(&arr, "--eh-frame-hdr");
 
+  if (opt_s)
+    strarray_push(&arr, "-s");
+
   LinkType lt = link_type(&arr, ldso_path);
 
   if (!opt_nostartfiles && lt != LT_RELO) {
@@ -1071,15 +1077,19 @@ int main(int argc, char **argv) {
     error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
 
   bool no_fork = (input_cnt == 1);
+  bool run_ld = false;
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
 
-  for (int i = 0; i < input_paths.len; i++) {
-    if (!strcmp(input_paths.data[i], "-x")) {
-      opt_x = parse_opt_x(input_paths.data[++i]);
+  for (int i = 0; i < input_args.len; i++) {
+    if (!strcmp(input_args.data[i], "-x")) {
+      opt_x = parse_opt_x(input_args.data[++i]);
       continue;
     }
-    char *input = input_paths.data[i];
+    if (comma_arg(input_args.data[i], &ld_args, "-Wl,"))
+      continue;
+
+    char *input = input_args.data[i];
 
     char *output;
     if (opt_o)
@@ -1098,6 +1108,7 @@ int main(int argc, char **argv) {
     // Handle .o or .a
     if (type == FILE_OBJ || type == FILE_AR || type == FILE_DSO) {
       strarray_push(&ld_args, input);
+      run_ld = true;
       continue;
     }
 
@@ -1114,6 +1125,7 @@ int main(int argc, char **argv) {
       char *tmp = create_tmpfile();
       run_assembler(&as_args, input, tmp);
       strarray_push(&ld_args, tmp);
+      run_ld = true;
       continue;
     }
 
@@ -1134,6 +1146,7 @@ int main(int argc, char **argv) {
       run_cc1(input, tmp1, no_fork, true);
       run_assembler(&as_args, tmp1, tmp2);
       strarray_push(&ld_args, tmp2);
+      run_ld = true;
       continue;
     }
 
@@ -1165,13 +1178,11 @@ int main(int argc, char **argv) {
     run_cc1(input, tmp1, no_fork, false);
     run_assembler(&as_args, tmp1, tmp2);
     strarray_push(&ld_args, tmp2);
+    run_ld = true;
     continue;
   }
 
-  if (ld_args.len) {
-    for (int i = 0; i < ld_extra_args.len; i++)
-      strarray_push(&ld_args, ld_extra_args.data[i]);
-
+  if (run_ld) {
     run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
   }
   return 0;

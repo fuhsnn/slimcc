@@ -48,6 +48,9 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   strarray_push(&arr, "-m");
   strarray_push(&arr, "elf_x86_64");
 
+  if (opt_s)
+    strarray_push(&arr, "-s");
+
   if (!(opt_nostartfiles || opt_shared)) {
     strarray_push(&arr, "-e");
     strarray_push(&arr, "__start");
