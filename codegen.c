@@ -1668,12 +1668,6 @@ static void gen_funcall_args(Node *node) {
 }
 
 static void gen_funcall(Node *node) {
-  if (node->lhs->kind == ND_VAR && !strcmp(asm_name(node->lhs->var), "alloca")) {
-    gen_expr(node->args->arg_expr);
-    builtin_alloca(node);
-    return;
-  }
-
   bool rtn_by_stk = is_mem_class(node->ty);
   int gp_count = rtn_by_stk;
   int fp_count = 0;
