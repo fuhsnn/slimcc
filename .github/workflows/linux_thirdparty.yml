@@ -3,8 +3,13 @@ name: build-test-thirdparty
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  build-docker-for-thirdparty-tests:
+  build-docker-for-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - tag: debian_asan
+          - tag: debian_asan_interop
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,65 +22,90 @@ jobs:
         with:
           platforms: linux/amd64
           context: .
-          file: scripts/debian_asan.Dockerfile
-          tags: debian_asan
-          outputs: type=docker,dest=/tmp/debian_asan.tar
+          file: scripts/${{ matrix.tag }}.Dockerfile
+          tags: ${{ matrix.tag }}
+          outputs: type=docker,dest=/tmp/${{ matrix.tag }}.tar
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: debian_asan
-          path: /tmp/debian_asan.tar
+          name: ${{ matrix.tag }}
+          path: /tmp/${{ matrix.tag }}.tar
 
-  thirdparty-tests:
+  interop-tests:
     runs-on: ubuntu-latest
-    needs: build-docker-for-thirdparty-tests
+    needs: build-docker-for-tests
     strategy:
       fail-fast: false
       matrix:
         include:
-          - thirdparty: test_bash
-          - thirdparty: test_c23doku
-          - thirdparty: test_cello
-          - thirdparty: test_curl
-          - thirdparty: test_doom
-          - thirdparty: test_git
-          - thirdparty: test_glib
-          - thirdparty: test_gmake
-          - thirdparty: test_go
-          - thirdparty: test_gzip
-          - thirdparty: test_imagemagick
-          - thirdparty: test_janet
-          - thirdparty: test_libpng
-          - thirdparty: test_libressl
-          - thirdparty: test_libuev
-          - thirdparty: test_lua
-          - thirdparty: test_metalang99
-          - thirdparty: test_noplate
-          - thirdparty: test_ocaml
-          - thirdparty: test_oniguruma_jq
-          - thirdparty: test_openssh
-          - thirdparty: test_openssl
-          - thirdparty: test_perl
-          - thirdparty: test_php
-          - thirdparty: test_postgres
-          - thirdparty: test_python
-          - thirdparty: test_qbe_hare
-          - thirdparty: test_scrapscript
-          - thirdparty: test_sqlite
-          - thirdparty: test_tcl
-          - thirdparty: test_tinycc
-          - thirdparty: test_toxcore
-          - thirdparty: test_toybox
-          - thirdparty: test_vim
-          - thirdparty: test_zlib
-          - thirdparty: test_zsh
-          - thirdparty: test_zstd
-          - thirdparty: build_erlang
-          - thirdparty: build_gcc
-          - thirdparty: build_nano
-          - thirdparty: build_sdl
-          - thirdparty: build_zig
+          - project: test_c3
+          - project: test_muon
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: debian_asan_interop
+          path: /tmp
+
+      - name: Load image
+        run: docker load --input /tmp/debian_asan_interop.tar
+
+      - name: Run test
+        run: >
+          sudo docker run debian_asan_interop
+          su non-root -c
+          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.project }}
+
+  build-tests:
+    runs-on: ubuntu-latest
+    needs: build-docker-for-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: test_bash
+          - project: test_c23doku
+          - project: test_cello
+          - project: test_curl
+          - project: test_doom
+          - project: test_git
+          - project: test_glib
+          - project: test_gmake
+          - project: test_go
+          - project: test_gzip
+          - project: test_imagemagick
+          - project: test_janet
+          - project: test_libpng
+          - project: test_libressl
+          - project: test_libuev
+          - project: test_lua
+          - project: test_metalang99
+          - project: test_noplate
+          - project: test_ocaml
+          - project: test_oniguruma_jq
+          - project: test_openssh
+          - project: test_openssl
+          - project: test_perl
+          - project: test_php
+          - project: test_postgres
+          - project: test_python
+          - project: test_qbe_hare
+          - project: test_scrapscript
+          - project: test_sqlite
+          - project: test_tcl
+          - project: test_tinycc
+          - project: test_toxcore
+          - project: test_toybox
+          - project: test_vim
+          - project: test_zlib
+          - project: test_zsh
+          - project: test_zstd
+          - project: build_erlang
+          - project: build_gcc
+          - project: build_nano
+          - project: build_sdl
+          - project: build_zig
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -90,7 +120,7 @@ jobs:
         run: >
           sudo docker run debian_asan
           su non-root -c
-          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.thirdparty }}
+          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.project }}
 
   musl-bootstrap:
     runs-on: ubuntu-latest

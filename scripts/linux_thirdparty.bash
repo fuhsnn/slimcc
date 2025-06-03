@@ -65,6 +65,17 @@ test_c23doku() {
  ./run | md5sum | grep -q 2cf4c7aecbcd621395471be3a140d66e
 }
 
+test_c3() {
+ git_fetch https://github.com/fuhsnn/c3c ffafc6c366b86c736b185eabbebeb1fc03878756 c3c
+ replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
+ mkdir build && cd build
+ cmake ../ -DCMAKE_C_COMPILER=$CC
+ make VERBOSE=1
+ cd ../test
+ ../build/c3c compile-test unit
+ ../build/c3c compile-run -O1 src/test_suite_runner.c3 -- ../build/c3c test_suite/
+}
+
 test_cello() {
  git_fetch https://github.com/orangeduck/Cello 61ee5c3d9bca98fd68af575e9704f5f02533ae26 cello
  make check
@@ -181,6 +192,17 @@ test_metalang99() {
  sh scripts/test-all.sh
  github_tar hirrolot metalang99 v1.13.5
  sh scripts/test-all.sh
+}
+
+test_muon() {
+ git_fetch https://github.com/muon-build/muon 0cdfd4b4ccd1fa7f9585aa4741ff44c0ebc6cf2b muon
+ sh ./bootstrap.sh build
+ build/muon-bootstrap setup build
+ sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
+ sed -i "s|\['common/13|#|g" subprojects/meson-tests/meson.build # we don't do pch
+ sed -i "s|\['common/251|#|g" subprojects/meson-tests/meson.build # https://github.com/muon-build/muon/issues/149
+ build/muon-bootstrap -C build samu
+ build/muon-bootstrap -C build test
 }
 
 test_noplate() {
