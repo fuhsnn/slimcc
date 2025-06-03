@@ -1034,7 +1034,7 @@ char *search_include_paths(char *filename) {
 static char *search_include_next(char *filename, char *cur_file, int *idx) {
   for (; *idx < include_paths.len; (*idx)++) {
     char *path = format("%s/%s", include_paths.data[*idx], filename);
-    if (file_exists(path) && strcmp(path, cur_file))
+    if (file_exists(path) && strcmp(realpath(path, NULL), realpath(cur_file, NULL)))
       return path;
   }
   return NULL;
@@ -1099,7 +1099,7 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
     error_tok(filename_tok, "file not found");
 
   // Check for "#pragma once"
-  if (hashmap_get(&pragma_once, path))
+  if (hashmap_get(&pragma_once, realpath(path, NULL)))
     return tok;
 
   char *guard_name = hashmap_get(&include_guards, path);
@@ -1427,7 +1427,7 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "pragma") && equal(tok->next, "once")) {
-    hashmap_put(&pragma_once, tok->file->name, (void *)1);
+    hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
     tok = skip_line(tok->next->next);
     return tok;
   }
