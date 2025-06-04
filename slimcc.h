@@ -691,7 +691,7 @@ Type *new_bitint(int64_t width, Token *tok);
 void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);
-Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic);
+Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
 
 //

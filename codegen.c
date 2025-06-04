@@ -233,9 +233,9 @@ static Node *skip_gp_cast(Node *node) {
   return node;
 }
 
-static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, bool let_atomic) {
+static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_array, bool let_atomic) {
   int offset;
-  Obj *var = eval_var_opt(node, &offset, let_subarray, let_atomic);
+  Obj *var = eval_var_opt(node, &offset, let_array, let_atomic);
   if (var) {
     if (var->is_local) {
       snprintf(ofs, STRBUF_SZ, "%d", offset + var->ofs);

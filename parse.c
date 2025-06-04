@@ -94,9 +94,9 @@ typedef struct {
   char **label;
   Obj *var;
   int deref_cnt;
-  bool is_pending_deref;
-  bool is_atomic;
-  bool is_volatile;
+  bool let_array;
+  bool let_atomic;
+  bool let_volatile;
 } EvalContext;
 
 typedef struct JumpContext JumpContext;
@@ -2853,14 +2853,15 @@ static bool eval_ctx(Node *node, EvalContext *ctx, int64_t *val) {
 
 static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
-    EvalContext ctx = {.kind = EV_AGGREGATE};
+    EvalContext ctx = {.kind = EV_AGGREGATE,
+      .let_array = true, .let_atomic = true, .let_volatile = true};
     if (eval_ctx(node, &ctx, ofs) && !ctx.var)
       return true;
   }
   return false;
 }
 
-static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volatile, bool let_atomic) {
+static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile, bool let_atomic) {
   if (node->kind == ND_VAR && node->ty->kind != TY_VLA) {
     if ((let_volatile || !node->ty->is_volatile) &&
       (let_atomic || !node->ty->is_atomic)) {
@@ -2870,11 +2871,9 @@ static Obj *eval_var_ofs(Node *node, int *ofs, bool let_subarray, bool let_volat
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     int64_t offset;
-    EvalContext ctx = {.kind = EV_AGGREGATE};
-    if (eval_ctx(node, &ctx, &offset) && ctx.var && !ctx.is_pending_deref &&
-      (!ctx.deref_cnt || (let_subarray && ctx.deref_cnt < 0)) &&
-      (!ctx.is_volatile || let_volatile) &&
-      (!ctx.is_atomic || let_atomic)) {
+    EvalContext ctx = {.kind = EV_AGGREGATE, .let_array = let_array,
+      .let_volatile = let_volatile, .let_atomic = let_atomic};
+    if (eval_ctx(node, &ctx, &offset) && ctx.var) {
       *ofs = offset;
       return ctx.var;
     }
@@ -3134,63 +3133,43 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval_sign_extend(ty, val);
     return val;
   }
-  case ND_ADDR: {
-    int64_t ofs;
-    if (eval_non_var_ofs(lhs, &ofs))
-      return ofs;
-    break;
-  }
   case ND_NUM:
     return node->val;
   }
 
-  if (node->kind == ND_DEREF && lhs->kind == ND_ADDR)
-    return eval2(lhs->lhs, ctx);
-  if (node->kind == ND_ADDR && lhs->kind == ND_DEREF)
-    return eval2(lhs->lhs, ctx);
-
   if (ctx->kind == EV_AGGREGATE) {
-    ctx->is_atomic |= node->ty->is_atomic;
-    ctx->is_volatile |= node->ty->is_volatile;
+    if ((ty->is_atomic && !ctx->let_atomic) ||
+      (ty->is_volatile && !ctx->let_volatile))
+      return eval_error(node->tok, "not a compile-time constant");
 
-    if (ctx->is_pending_deref && node->kind == ND_ADDR) {
-      ctx->is_pending_deref = false;
+    if (node->kind == ND_DEREF) {
+      ctx->deref_cnt++;
       return eval2(lhs, ctx);
     }
 
-    if (node->kind == ND_DEREF) {
-      switch (node->lhs->kind) {
-      case ND_MEMBER:
-      case ND_CAST:
-      case ND_ADD:
-      case ND_SUB:
-        if (!ctx->is_pending_deref || node->ty->kind == TY_ARRAY) {
-          ctx->is_pending_deref = true;
-          ctx->deref_cnt++;
-          return eval2(lhs, ctx);
-        }
-      }
+    if (node->kind == ND_ADDR && ctx->deref_cnt) {
+      ctx->deref_cnt--;
+      return eval2(lhs, ctx);
     }
 
-    switch (node->kind) {
-    case ND_MEMBER:
-      for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base) {
-        ctx->is_pending_deref = false;
-        ctx->deref_cnt--;
-      }
+    for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base)
+      ctx->deref_cnt--;
+
+    if (ctx->deref_cnt < 0) {
+      if (!ctx->let_array)
+        return eval_error(node->tok, "not a compile-time constant");
+      ctx->let_array = false;
+      ctx->deref_cnt = 0;
+    }
+
+    bool is_agg = ty->kind == TY_ARRAY || ty->kind == TY_STRUCT || ty->kind == TY_UNION;
+
+    if (node->kind == ND_MEMBER && (!ctx->deref_cnt || is_agg))
       return eval2(lhs, ctx) + node->member->offset;
-    case ND_VAR:
-      switch (ty->kind) {
-      case TY_ARRAY:
-        for (Type *t = ty; t && t->kind == TY_ARRAY; t = t->base) {
-          ctx->is_pending_deref = false;
-          ctx->deref_cnt--;
-        }
-      case TY_STRUCT:
-      case TY_UNION:
-        ctx->var = node->var;
-        return 0;
-      }
+
+    if (node->kind == ND_VAR && (!ctx->deref_cnt && is_agg)) {
+      ctx->var = node->var;
+      return 0;
     }
   }
 
@@ -3217,20 +3196,26 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return eval_error(node->tok, "invalid initializer");
   }
 
-  if (ctx->kind == EV_CONST && (is_integer(ty) ||
-    ty->kind == TY_PTR || ty->kind == TY_NULLPTR)) {
-    char *data = eval_constexpr_data(node);
-    if (data) {
-      int64_t val = eval_sign_extend(ty, read_buf(data, ty->size));
-      if (is_bitfield(node)) {
-        int unused_msb = 64 - node->member->bit_width;
-        val <<= (unused_msb - node->member->bit_offset);
+  if (ctx->kind == EV_CONST) {
+    if (node->kind == ND_ADDR) {
+      int64_t ofs;
+      if (eval_non_var_ofs(lhs, &ofs))
+        return ofs;
+    }
+    if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
+      char *data = eval_constexpr_data(node);
+      if (data) {
+        int64_t val = eval_sign_extend(ty, read_buf(data, ty->size));
+        if (is_bitfield(node)) {
+          int unused_msb = 64 - node->member->bit_width;
+          val <<= (unused_msb - node->member->bit_offset);
 
-        if (ty->is_unsigned)
-          return (uint64_t)val >> unused_msb;
-        return val >> unused_msb;
+          if (ty->is_unsigned)
+            return (uint64_t)val >> unused_msb;
+          return val >> unused_msb;
+        }
+        return val;
       }
-      return val;
     }
   }
   return eval_error(node->tok, "not a compile-time constant");
