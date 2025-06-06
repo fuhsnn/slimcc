@@ -247,7 +247,7 @@ TokenKind ident_keyword(Token *tok) {
     static char *kw[] = {
       "return", "if", "else", "for", "while", "do", "goto", "break", "continue",
       "switch", "case", "default", "_Alignof", "sizeof", "__asm", "__asm__",
-      "_Static_assert", "_Countof"
+      "_Static_assert", "_Countof",
       "_Defer"
     };
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
@@ -513,7 +513,7 @@ static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
 }
 
 static bool convert_pp_bitint(char *begin, char *end, Node *node, int base, bool is_unsigned) {
-  uint32_t *data = calloc(1, sizeof(uint64_t));
+  uint32_t *data = calloc(2, sizeof(uint32_t));
   size_t limb32 = 1;
 
   for (char *p = begin; p != end; p++) {

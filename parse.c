@@ -485,7 +485,7 @@ static void new_initializer(Initializer *init, Type *ty, bool is_flexible) {
       return;
     }
     init->kind = INIT_LIST;
-    init->mem_arr = calloc(ty->array_len, sizeof(Initializer));
+    init->mem_arr = ty->array_len ? calloc(ty->array_len, sizeof(Initializer)) : NULL;
     init->mem_cnt = ty->array_len;
 
     for (int i = 0; i < ty->array_len; i++)
@@ -499,7 +499,7 @@ static void new_initializer(Initializer *init, Type *ty, bool is_flexible) {
       mem->idx = len++;
 
     init->kind = INIT_LIST;
-    init->mem_arr = calloc(len, sizeof(Initializer));
+    init->mem_arr = len ? calloc(len, sizeof(Initializer)) : NULL;
     init->mem_cnt = len;
 
     for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
@@ -3354,7 +3354,7 @@ static uint64_t *eval_bitint(Node *node) {
     if (eval_recover && *eval_recover)
       return free(val), NULL;
 
-    if (amount < 0 || amount >= ty->bit_cnt)
+    if (amount >= ty->bit_cnt)
       return (void *)eval_error(rhs->tok, "invalid shift amount");
 
     if (node->kind == ND_SHL)

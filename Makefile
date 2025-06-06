@@ -84,16 +84,16 @@ test-asan: $(TESTS_ASAN)
 test-all: test test-stage2
 
 warn: $(SRCS)
-	$(CC) -fsyntax-only -Wall -Wpedantic -Wno-switch $(CFLAGS) $(SRCS)
+	$(CC) -fsyntax-only -Wall -Wpedantic -Wextra -Wno-switch -Wno-missing-field-initializers $(CFLAGS) $(SRCS)
 
 lto: clean
-	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch"
+	$(MAKE) CFLAGS="-O2 -flto=auto -fvisibility=hidden"
 
 lto-je: clean
-	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch" LDFLAGS="-ljemalloc"
+	$(MAKE) CFLAGS="-O2 -flto=auto -fvisibility=hidden" LDFLAGS="-ljemalloc"
 
 lto-mi: clean
-	$(MAKE) CFLAGS="-O2 -flto=auto -Wno-switch" LDFLAGS="-lmimalloc"
+	$(MAKE) CFLAGS="-O2 -flto=auto -fvisibility=hidden" LDFLAGS="-lmimalloc"
 
 clean:
 	rm -f slimcc slimcc-stage2 slimcc-asan

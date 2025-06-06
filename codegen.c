@@ -481,7 +481,7 @@ static void push_bitint(int sz) {
 }
 
 static int pop_bitint(int sz) {
-  int pos;
+  int pos = 0;
   for (int ofs = align_to(sz, 8) - 8; ofs >= 0; ofs -= 8) {
     Slot *sl = pop_tmpstack(1);
     pos = sl->st_ofs;
