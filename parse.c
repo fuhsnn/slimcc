@@ -2906,7 +2906,8 @@ static char *eval_constexpr_data(Node *node) {
   int32_t ofs;
   Obj *var = eval_var(node, &ofs, false);
 
-  if (!var || !(var->constexpr_data || is_static_const_var(var, ofs, node->ty->size)))
+  if (!var || !(var->constexpr_data || var->is_string_lit ||
+    is_static_const_var(var, ofs, node->ty->size)))
     return (char *)eval_error(node->tok, "not a compile-time constant");
 
   int32_t access_sz = !is_bitfield(node) ? node->ty->size : bitfield_footprint(node->member);
@@ -4775,6 +4776,7 @@ static Node *primary(Token **rest, Token *tok) {
   if (tok->kind == TK_STR) {
     Obj *var = new_anon_gvar(tok->ty);
     var->init_data = tok->str;
+    var->is_string_lit = true;
     *rest = tok->next;
     Node *n = new_var_node(var, tok);
     add_type(n);
