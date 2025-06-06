@@ -216,6 +216,14 @@ static bool is_pow_of_two(uint64_t val) {
   return !(val & (val - 1));
 }
 
+static int trailing_zero(uint64_t val) {
+  int tz = 0;
+  for (; tz < 64; tz++)
+    if ((1LL << tz) == val)
+      break;
+  return tz;
+}
+
 static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
@@ -2914,30 +2922,49 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
     return true;
   }
 
-  if (kind == ND_DIV && is_pow_of_two(val) && ty->is_unsigned) {
-    for (int i = 1; i < ty->size * 8; i++) {
-      if (1LL << i == val) {
+  if (is_pow_of_two(val)) {
+    if (kind == ND_DIV) {
+      if (ty->is_unsigned) {
         gen_expr(expr);
-        Printftn("shr $%d, %s", i, ax);
+        Printftn("shr $%d, %s", trailing_zero(val), ax);
+        return true;
+      }
+      if (val > 1 && val <= (1L << 30)) {
+        gen_expr(expr);
+        Printftn("lea %"PRIi32"(%s), %s", (int32_t)(val - 1), ax, dx);
+        Printftn("test %s, %s", ax, ax);
+        Printftn("cmovs %s, %s", dx, ax);
+        Printftn("sar $%d, %s", trailing_zero(val), ax);
         return true;
       }
     }
-  }
 
-  if (kind == ND_MOD && is_pow_of_two(val) && ty->is_unsigned && val != 0) {
-    gen_expr(expr);
+    if (kind == ND_MOD && val != 0) {
+      if (ty->is_unsigned) {
+        gen_expr(expr);
 
-    uint64_t msk = val - 1;
-    if (msk == UINT32_MAX) {
-      Printstn("movl %%eax, %%eax");
-      return true;
+        uint64_t msk = val - 1;
+        if (msk == UINT32_MAX) {
+          Printstn("movl %%eax, %%eax");
+          return true;
+        }
+        if (msk <= INT32_MAX) {
+          Printftn("and $%d, %%eax", (int)msk);
+          return true;
+        }
+        imm_and(ax, dx, msk);
+        return true;
+      }
+      if (val > 1 && val <= (1L << 30)) {
+        gen_expr(expr);
+        Printftn("%s", ty->size == 8 ? "cqto" : "cltd");
+        Printftn("shr $%d, %s", (int)(ty->size * 8 - trailing_zero(val)), dx);
+        Printftn("add %s, %s", dx, ax);
+        imm_and(ax, NULL, (int32_t)(val - 1));
+        Printftn("sub %s, %s", dx, ax);
+        return true;
+      }
     }
-    if (msk <= INT32_MAX) {
-      Printftn("and $%d, %%eax", (int)msk);
-      return true;
-    }
-    imm_and(ax, dx, msk);
-    return true;
   }
 
   return false;
