@@ -373,6 +373,26 @@ Node *new_cast(Node *expr, Type *ty) {
   if (invalid_cast(expr, ty))
     error_tok(expr->tok, "invalid cast");
 
+  if (ty->kind == TY_BOOL) {
+    Node *n = expr;
+    while (n->kind == ND_CAST && n->ty->size == 8 &&
+      (n->ty->kind == TY_PTR || is_integer(n->ty)))
+      n = n->lhs;
+
+    Obj *var = NULL;
+    if (n->kind == ND_ADDR && n->lhs->kind == ND_VAR)
+      var = n->lhs->var;
+    else if (n->kind == ND_VAR && (is_array(n->ty) || n->ty->kind == TY_FUNC))
+      var = n->var;
+
+    if (var && !var->is_weak) {
+      expr->kind = ND_NUM;
+      expr->val = 1;
+      expr->ty = ty_bool;
+      return expr;
+    }
+  }
+
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .lhs = expr, .ty = ty};
   if (opt_optimize) {
     if ((is_integer(ty) && is_const_expr(&tmp_node, &tmp_node.val)) ||
@@ -3112,19 +3132,6 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       if (ty->size == 8 && ty->is_unsigned)
         return (uint64_t)eval_double(lhs);
       return eval_sign_extend(ty, eval_double(lhs));
-    }
-
-    if (ty->kind == TY_BOOL && lhs->kind == ND_VAR &&
-      !lhs->var->is_weak && (is_array(lhs->ty)))
-      return true;
-
-    if (ty->size != ty_intptr_t->size) {
-      EvalContext ctx2= {.kind = EV_LABEL};
-      if (eval_ctx(lhs, &ctx2, NULL) && ctx2.label) {
-        if (ty->kind == TY_BOOL && !ctx2.var->is_weak)
-          return true;
-        return eval_error(node->tok, "pointer cast to different size");
-      }
     }
 
     int64_t val = eval2(lhs, ctx);
