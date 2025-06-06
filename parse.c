@@ -2134,7 +2134,7 @@ static long double read_double_buf(char *buf, Type *ty) {
 }
 
 static Relocation *
-write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int offset, EvalKind kind) {
+write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int offset, EvalKind ev_kind) {
   if (init->kind == INIT_NONE || init->kind == INIT_FLEXIBLE)
     return cur;
 
@@ -2142,7 +2142,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     if (ty->kind == TY_ARRAY) {
       int sz = ty->base->size;
       for (int i = 0; i < ty->array_len; i++)
-        cur = write_gvar_data(cur, &init->mem_arr[i], ty->base, buf, offset + sz * i, kind);
+        cur = write_gvar_data(cur, &init->mem_arr[i], ty->base, buf, offset + sz * i, ev_kind);
       return cur;
     }
 
@@ -2172,7 +2172,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
           memcpy(loc, &combined, mem->ty->size);
           continue;
         }
-        cur = write_gvar_data(cur, init2, mem->ty, buf, offset + mem->offset, kind);
+        cur = write_gvar_data(cur, init2, mem->ty, buf, offset + mem->offset, ev_kind);
       }
       return cur;
     }
@@ -2216,27 +2216,18 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
       }
     }
 
-    // Pointer or equivalent sized integer may be relocation
-    if (ty->kind == TY_PTR || ty->kind == TY_NULLPTR ||
-      (is_integer(ty) && ty->size == ty_intptr_t->size)) {
-      int64_t val;
-      if (is_const_expr(node, &val)) {
-        memcpy(buf + offset, &val, ty->size);
-        return cur;
+    if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
+      EvalContext ctx = {.kind = (ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
+      int64_t val = eval2(node, &ctx);
+      if (ctx.label) {
+        Relocation *rel = ast_arena_calloc(sizeof(Relocation));
+        rel->offset = offset;
+        rel->label = ctx.label;
+        rel->addend = val;
+        return cur->next = rel;
       }
-      if (kind == EV_LABEL) {
-        EvalContext ctx = {.kind = EV_LABEL};
-        int64_t addend = eval2(node, &ctx);
-        if (ctx.label) {
-          Relocation *rel = ast_arena_calloc(sizeof(Relocation));
-          rel->offset = offset;
-          rel->label = ctx.label;
-          rel->addend = addend;
-          cur->next = rel;
-          return cur->next;
-        }
-      }
-      error_tok(node->tok, "invalid initializer");
+      memcpy(buf + offset, &val, ty->size);
+      return cur;
     }
 
     switch (ty->kind) {
@@ -2257,10 +2248,6 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
       free(data);
       return cur;
     }
-    }
-    if (is_integer(ty)) {
-      memcpy(buf + offset, &(int64_t){eval(node)}, ty->size);
-      return cur;
     }
     error_tok(node->tok, "unknown initializer");
   }
@@ -3201,7 +3188,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
         return ofs;
       }
     }
-    return eval_error(node->tok, "invalid initializer");
+    return eval(node);
   }
 
   if (ctx->kind == EV_CONST) {
