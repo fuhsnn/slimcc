@@ -2586,15 +2586,8 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     if (consume(rest, tok->next, ";"))
       return node;
 
-    Node *exp = expr(&tok, tok->next);
+    node->lhs = assign_cast(current_fn->ty->return_ty, expr(&tok, tok->next));
     *rest = skip(tok, ";");
-
-    add_type(exp);
-    Type *ty = current_fn->ty->return_ty;
-    if (ty->kind != TY_STRUCT && ty->kind != TY_UNION)
-      exp = new_cast(exp, current_fn->ty->return_ty);
-
-    node->lhs = exp;
     return node;
   }
 
