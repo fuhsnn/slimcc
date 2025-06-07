@@ -548,13 +548,16 @@ void add_type(Node *node) {
     node->ty = node->lhs->ty;
     return;
   case ND_ASSIGN:
-    if (node->lhs->ty->kind == TY_ARRAY && !node->lhs->var->constexpr_data)
-      error_tok(node->lhs->tok, "not an lvalue");
-    if (is_numeric(node->lhs->ty) || is_ptr(node->lhs))
-      node->rhs = new_cast(node->rhs, node->lhs->ty);
-    else if (!is_compatible(node->lhs->ty, node->rhs->ty))
-      error_tok(node->rhs->tok, "invalid assignment");
-
+    if (node->lhs->ty->kind == TY_ARRAY) {
+      if (!node->lhs->var->constexpr_data)
+        error_tok(node->lhs->tok, "not an lvalue");
+    } else if (!is_compatible(node->lhs->ty, node->rhs->ty)) {
+      ptr_convert(&node->rhs);
+      if (is_numeric(node->lhs->ty))
+        node->rhs = new_cast(node->rhs, node->lhs->ty);
+      else if (!(is_ptr(node->lhs) && is_ptr(node->rhs)))
+        error_tok(node->rhs->tok, "invalid assignment");
+    }
     node->ty = node->lhs->ty;
     return;
   case ND_EQ:
