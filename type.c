@@ -146,6 +146,10 @@ bool is_bitfield(Node *node) {
   return node->kind == ND_MEMBER && node->member->is_bitfield;
 }
 
+static bool is_ptr(Type *ty) {
+  return ty->kind == TY_PTR || ty->kind == TY_NULLPTR;
+}
+
 static bool is_bitfield2(Node *node, int *width) {
   switch (node->kind) {
   case ND_ASSIGN:
@@ -199,6 +203,11 @@ bool is_redundant_cast(Node *expr, Type *ty) {
       return ty3->is_unsigned || !ty2->is_unsigned;
   }
   return false;
+}
+
+static void cast_if_not(Type *ty, Node **node) {
+  if ((*node)->ty != ty)
+    *node = new_cast(*node, ty);
 }
 
 static bool is_qual_compatible(Type *t1, Type *t2) {
@@ -364,6 +373,17 @@ Type *vla_of(Type *base, Node *len) {
   return ty;
 }
 
+Node *assign_cast(Type *to_ty, Node *expr) {
+  add_type(expr);
+  if (!is_compatible(to_ty, expr->ty)) {
+    if (is_numeric(to_ty) || is_ptr(to_ty))
+      expr = new_cast(expr, to_ty);
+    else
+      error_tok(expr->tok, "invalid assignment");
+  }
+  return expr;
+}
+
 static int int_rank(Type *t) {
   switch (t->kind) {
     case TY_BITINT:
@@ -427,25 +447,38 @@ static void int_promotion(Node **node) {
   }
 }
 
-static bool is_ptr(Node *node) {
-  return node->ty->kind == TY_PTR || is_nullptr(node);
-}
-
 static Type *get_common_ptr_type(Node *lhs, Node *rhs) {
   Type *ty1 = lhs->ty;
   Type *ty2 = rhs->ty;
+  bool np1 = is_nullptr(lhs);
+  bool np2 = is_nullptr(rhs);
 
-  if (ty1->base && is_nullptr(rhs))
+  if (ty1->base && np2)
     return ty1;
-  if (ty2->base && is_nullptr(lhs))
+  if (ty2->base && np1)
     return ty2;
-
+  if (ty1->kind == TY_NULLPTR && np2)
+    return ty1;
+  if (ty2->kind == TY_NULLPTR && np1)
+    return ty2;
   if (ty1->base && ty2->base) {
     if (is_compatible(ty1->base, ty2->base))
       return ty1;
     return pointer_to(ty_void);
   }
   return NULL;
+}
+
+static bool common_ptr_conv(Node **lhs, Node **rhs) {
+  ptr_convert(lhs);
+  ptr_convert(rhs);
+  Type *ty = get_common_ptr_type(*lhs, *rhs);
+  if (ty) {
+    cast_if_not(ty, lhs);
+    cast_if_not(ty, rhs);
+    return true;
+  }
+  return false;
 }
 
 static Type *get_common_type(Node **lhs, Node **rhs) {
@@ -497,8 +530,8 @@ static Type *get_common_type(Node **lhs, Node **rhs) {
 
 static Type *usual_arith_conv(Node **lhs, Node **rhs) {
   Type *ty = get_common_type(lhs, rhs);
-  *lhs = new_cast(*lhs, ty);
-  *rhs = new_cast(*rhs, ty);
+  cast_if_not(ty, lhs);
+  cast_if_not(ty, rhs);
   return ty;
 }
 
@@ -548,13 +581,7 @@ void add_type(Node *node) {
     node->ty = node->lhs->ty;
     return;
   case ND_ASSIGN:
-    if (node->lhs->ty->kind == TY_ARRAY && !node->lhs->var->constexpr_data)
-      error_tok(node->lhs->tok, "not an lvalue");
-    if (is_numeric(node->lhs->ty) || is_ptr(node->lhs))
-      node->rhs = new_cast(node->rhs, node->lhs->ty);
-    else if (!is_compatible(node->lhs->ty, node->rhs->ty))
-      error_tok(node->rhs->tok, "invalid assignment");
-
+    node->rhs = assign_cast(node->lhs->ty, node->rhs);
     node->ty = node->lhs->ty;
     return;
   case ND_EQ:
@@ -563,11 +590,10 @@ void add_type(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-    ptr_convert(&node->lhs);
-    ptr_convert(&node->rhs);
-    if (!(is_ptr(node->lhs) && is_ptr(node->rhs)))
-      usual_arith_conv(&node->lhs, &node->rhs);
     node->ty = ty_int;
+    if (common_ptr_conv(&node->lhs, &node->rhs))
+      return;
+    usual_arith_conv(&node->lhs, &node->rhs);
     return;
   case ND_FUNCALL:
     assert(!!node->ty);
@@ -599,17 +625,14 @@ void add_type(Node *node) {
     node->ty = node->var->ty;
     return;
   case ND_COND:
-    ptr_convert(&node->then);
-    ptr_convert(&node->els);
-    if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID) {
+    if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID)
       node->ty = ty_void;
-    } else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty)) {
+    else if (common_ptr_conv(&node->then, &node->els))
       node->ty = node->then->ty;
-    } else {
-      node->ty = get_common_ptr_type(node->then, node->els);
-      if (!node->ty)
-        node->ty = usual_arith_conv(&node->then, &node->els);
-    }
+    else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty))
+      node->ty = node->then->ty;
+    else
+      node->ty = usual_arith_conv(&node->then, &node->els);
     return;
   case ND_CHAIN:
     node->ty = node->rhs->ty;

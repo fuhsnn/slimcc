@@ -429,13 +429,6 @@ Node *new_cast(Node *expr, Type *ty) {
   return node;
 }
 
-static Node *assign_cast(Type *to, Node *expr) {
-  Node ty_node = {.kind = ND_NULL_EXPR, .ty = to, .tok = expr->tok};
-  Node tmp_node = {.kind = ND_ASSIGN, .lhs = &ty_node, .rhs = expr, .tok = expr->tok};
-  add_type(&tmp_node);
-  return tmp_node.rhs;
-}
-
 static Node *cond_cast(Node *expr) {
   switch (expr->kind) {
   case ND_EQ:
@@ -3028,8 +3021,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval_error(rhs->tok, "division by zero during constant evaluation");
     if (ty->is_unsigned)
       return (uint64_t)lval / rval;
-    if (lval == INT64_MIN && rval == -1)
-      return INT64_MIN;
+    if ((lval == INT64_MIN || lval == INT32_MIN) && rval == -1)
+      return lval;
     return lval / rval;
   }
   case ND_MOD: {

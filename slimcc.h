@@ -694,6 +694,7 @@ Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
+Node *assign_cast(Type *to, Node *expr);
 
 //
 // codegen.c
