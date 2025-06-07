@@ -3028,8 +3028,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval_error(rhs->tok, "division by zero during constant evaluation");
     if (ty->is_unsigned)
       return (uint64_t)lval / rval;
-    if (lval == INT64_MIN && rval == -1)
-      return INT64_MIN;
+    if ((lval == INT64_MIN || lval == INT32_MIN) && rval == -1)
+      return lval;
     return lval / rval;
   }
   case ND_MOD: {
