@@ -429,29 +429,6 @@ Node *new_cast(Node *expr, Type *ty) {
   return node;
 }
 
-static Node *assign_cast(Type *to, Node *expr) {
-  Node ty_node = {.kind = ND_NULL_EXPR, .ty = to, .tok = expr->tok};
-  Node tmp_node = {.kind = ND_ASSIGN, .lhs = &ty_node, .rhs = expr, .tok = expr->tok};
-  add_type(&tmp_node);
-  return tmp_node.rhs;
-}
-
-static Node *cond_cast(Node *expr) {
-  switch (expr->kind) {
-  case ND_EQ:
-  case ND_NE:
-  case ND_LT:
-  case ND_LE:
-  case ND_GT:
-  case ND_GE:
-  case ND_LOGAND:
-  case ND_LOGOR:
-  case ND_NOT:
-    return expr;
-  }
-  return new_cast(expr, ty_bool);
-}
-
 static void apply_cv_qualifier(Node *node, Type *ty2) {
   add_type(node);
   Type *ty = node->ty;

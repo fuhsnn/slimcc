@@ -146,6 +146,10 @@ bool is_bitfield(Node *node) {
   return node->kind == ND_MEMBER && node->member->is_bitfield;
 }
 
+static bool is_ptr(Type *ty) {
+  return ty->kind == TY_PTR || ty->kind == TY_NULLPTR;
+}
+
 static bool is_bitfield2(Node *node, int *width) {
   switch (node->kind) {
   case ND_ASSIGN:
@@ -369,6 +373,33 @@ Type *vla_of(Type *base, Node *len) {
   return ty;
 }
 
+Node *assign_cast(Type *to_ty, Node *expr) {
+  add_type(expr);
+  if (!is_compatible(to_ty, expr->ty)) {
+    if (is_numeric(to_ty) || is_ptr(to_ty))
+      expr = new_cast(expr, to_ty);
+    else
+      error_tok(expr->tok, "invalid assignment");
+  }
+  return expr;
+}
+
+Node *cond_cast(Node *expr) {
+  switch (expr->kind) {
+    case ND_EQ:
+    case ND_NE:
+    case ND_LT:
+    case ND_LE:
+    case ND_GT:
+    case ND_GE:
+    case ND_LOGAND:
+    case ND_LOGOR:
+    case ND_NOT:
+      return expr;
+  }
+  return new_cast(expr, ty_bool);
+}
+
 static int int_rank(Type *t) {
   switch (t->kind) {
     case TY_BITINT:
@@ -430,10 +461,6 @@ static void int_promotion(Node **node) {
       *node = new_cast(*node, ty_int);
     return;
   }
-}
-
-static bool is_ptr(Type *ty) {
-  return ty->kind == TY_PTR || ty->kind == TY_NULLPTR;
 }
 
 static Type *get_common_ptr_type(Node *lhs, Node *rhs) {
@@ -570,15 +597,7 @@ void add_type(Node *node) {
     node->ty = node->lhs->ty;
     return;
   case ND_ASSIGN:
-    if (node->lhs->ty->kind == TY_ARRAY) {
-      if (!node->lhs->var->constexpr_data)
-        error_tok(node->lhs->tok, "not an lvalue");
-    } else if (!is_compatible(node->lhs->ty, node->rhs->ty)) {
-      if (is_numeric(node->lhs->ty) || is_ptr(node->lhs->ty))
-        node->rhs = new_cast(node->rhs, node->lhs->ty);
-      else
-        error_tok(node->rhs->tok, "invalid assignment");
-    }
+    node->rhs = assign_cast(node->lhs->ty, node->rhs);
     node->ty = node->lhs->ty;
     return;
   case ND_EQ:
