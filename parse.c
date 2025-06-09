@@ -3494,6 +3494,11 @@ static Node *assign(Token **rest, Token *tok) {
   Node *node = conditional(&tok, tok);
   add_type(node);
 
+  if (node->ty->is_const || is_array(node->ty)) {
+    *rest = tok;
+    return node;
+  }
+
   // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
   if (equal(tok, "=") && node->ty->is_atomic) {
     Node *rhs = assign(rest, tok->next);
