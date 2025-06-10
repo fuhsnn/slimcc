@@ -4596,7 +4596,14 @@ static Node *primary(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_constant_p")) {
     Node *node = new_node(ND_NUM, tok);
     tok = skip(tok->next, "(");
-    node->val = is_const_expr(expr(&tok, tok), NULL);
+    Node *exp = conditional(&tok, tok);
+    add_type(exp);
+
+    if (((is_integer(exp->ty) || is_ptr(exp->ty)) && is_const_expr(exp, NULL)) ||
+      (is_flonum(exp->ty) && is_const_double(exp, NULL)) ||
+      (exp->kind == ND_VAR && exp->var->is_string_lit))
+      node->val = 1;
+
     node->ty = ty_int;
     *rest = skip(tok, ")");
     return node;

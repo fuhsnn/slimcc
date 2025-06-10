@@ -679,6 +679,7 @@ bool is_compatible2(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
 bool is_const_double(Node *node, long double *fval);
 bool is_nullptr(Node *node);
+bool is_ptr(Type *ty);
 void init_ty_lp64(void);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);

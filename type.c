@@ -146,7 +146,7 @@ bool is_bitfield(Node *node) {
   return node->kind == ND_MEMBER && node->member->is_bitfield;
 }
 
-static bool is_ptr(Type *ty) {
+bool is_ptr(Type *ty) {
   return ty->kind == TY_PTR || ty->kind == TY_NULLPTR;
 }
 
