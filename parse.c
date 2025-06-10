@@ -4243,6 +4243,32 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
   }
 }
 
+static Node *skip_ptr_cast(Node *n) {
+	while (n->kind == ND_CAST && (n->ty->kind == TY_PTR ||
+	  (is_integer(n->ty) && n->ty->size == ty_intptr_t->size)))
+		n = n->lhs;
+	return n;
+}
+
+static Node *funcall_opt(Node *fn, Obj *args) {
+	char *fnname = fn->kind == ND_VAR ? fn->var->name : NULL;
+  if (!fnname)
+		return NULL;
+
+	if (!strcmp("strlen", fnname)) {
+	  if (!is_compatible(fn->ty->return_ty, ty_size_t))
+			return NULL;
+		if (!(args && args->ty->kind == TY_PTR && args->ty->base->kind == TY_PCHAR && args->ty->base->is_const))
+			return NULL;
+		Node *n = skip_ptr_cast(args->arg_expr);
+		if (!(n->kind == ND_VAR && n->var->is_string_lit &&
+		  n->var->ty->kind == TY_ARRAY && n->var->ty->base->kind == TY_PCHAR))
+		  return NULL;
+		return new_size_t(strlen(n->var->init_data), fn->tok);
+	}
+	return NULL;
+}
+
 // funcall = (assign ("," assign)*)? ")"
 static Node *funcall(Token **rest, Token *tok, Node *fn) {
   add_type(fn);
@@ -4286,11 +4312,14 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   if (param)
     error_tok(tok, "too few arguments");
 
-  Node *node = new_unary(ND_FUNCALL, fn, tok);
-  node->ty = ty->return_ty;
-  node->args = head.param_next;
+	Node *node = funcall_opt(fn, head.param_next);
+	if (!node) {
+		node = new_unary(ND_FUNCALL, fn, tok);
+		node->ty = ty->return_ty;
+		node->args = head.param_next;
 
-  prepare_funcall(node, scope);
+		prepare_funcall(node, scope);
+	}
   leave_scope();
 
   // If a function returns a struct, it is caller's responsibility
