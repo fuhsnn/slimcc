@@ -1,15 +1,15 @@
-name: build-test-thirdparty
+name: ci
 
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  build-docker-for-tests:
+  build-docker:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - tag: debian_asan
-          - tag: debian_asan_interop
+          - { vm: main, file: debian_asan }
+          - { vm: interop, file: debian_asan_interop }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,105 +22,93 @@ jobs:
         with:
           platforms: linux/amd64
           context: .
-          file: scripts/${{ matrix.tag }}.Dockerfile
-          tags: ${{ matrix.tag }}
-          outputs: type=docker,dest=/tmp/${{ matrix.tag }}.tar
+          file: scripts/${{ matrix.file }}.Dockerfile
+          tags: ${{ matrix.vm }}
+          outputs: type=docker,dest=/tmp/${{ matrix.vm }}.tar
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.tag }}
-          path: /tmp/${{ matrix.tag }}.tar
+          name: ${{ matrix.vm }}
+          path: /tmp/${{ matrix.vm }}.tar
 
-  interop-tests:
+  run:
     runs-on: ubuntu-latest
-    needs: build-docker-for-tests
+    needs: build-docker
     strategy:
       fail-fast: false
       matrix:
         include:
-          - project: test_c3
-          - project: test_muon
+          - { vm: interop, proj: test_c23doku }
+          - { vm: interop, proj: test_c3 }
+          - { vm: interop, proj: test_libexpat }
+          - { vm: interop, proj: test_muon }
+          - { vm: main, proj: test_bash }
+          - { vm: main, proj: test_cello }
+          - { vm: main, proj: test_curl }
+          - { vm: main, proj: test_doom }
+          - { vm: main, proj: test_git }
+          - { vm: main, proj: test_glib }
+          - { vm: main, proj: test_gmake }
+          - { vm: main, proj: test_go }
+          - { vm: main, proj: test_gzip }
+          - { vm: main, proj: test_imagemagick }
+          - { vm: main, proj: test_janet }
+          - { vm: main, proj: test_libevent }
+          - { vm: main, proj: test_libgmp }
+          - { vm: main, proj: test_libmpc }
+          - { vm: main, proj: test_libmpfr }
+          - { vm: main, proj: test_libpcre2 }
+          - { vm: main, proj: test_libpng }
+          - { vm: main, proj: test_libpsl }
+          - { vm: main, proj: test_libressl }
+          - { vm: main, proj: test_libsodium }
+          - { vm: main, proj: test_libuev }
+          - { vm: main, proj: test_libxml }
+          - { vm: main, proj: test_lua }
+          - { vm: main, proj: test_memcached }
+          - { vm: main, proj: test_metalang99 }
+          - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_noplate }
+          - { vm: main, proj: test_ocaml }
+          - { vm: main, proj: test_oniguruma_jq }
+          - { vm: main, proj: test_openssh }
+          - { vm: main, proj: test_openssl }
+          - { vm: main, proj: test_perl }
+          - { vm: main, proj: test_php }
+          - { vm: main, proj: test_postgres }
+          - { vm: main, proj: test_python }
+          - { vm: main, proj: test_qbe_hare }
+          - { vm: main, proj: test_scrapscript }
+          - { vm: main, proj: test_sqlite }
+          - { vm: main, proj: test_tcl }
+          - { vm: main, proj: test_tinycc }
+          - { vm: main, proj: test_toxcore }
+          - { vm: main, proj: test_toybox }
+          - { vm: main, proj: test_vim }
+          - { vm: main, proj: test_zlib }
+          - { vm: main, proj: test_zsh }
+          - { vm: main, proj: test_zstd }
+          - { vm: main, proj: build_erlang }
+          - { vm: main, proj: build_gcc }
+          - { vm: main, proj: build_nano }
+          - { vm: main, proj: build_sdl }
+          - { vm: main, proj: build_zig }
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: debian_asan_interop
+          name: ${{ matrix.vm }}
           path: /tmp
 
       - name: Load image
-        run: docker load --input /tmp/debian_asan_interop.tar
+        run: docker load --input /tmp/${{ matrix.vm }}.tar
 
       - name: Run test
         run: >
-          sudo docker run debian_asan_interop
+          sudo docker run ${{ matrix.vm }}
           su non-root -c
-          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.project }}
-
-  build-tests:
-    runs-on: ubuntu-latest
-    needs: build-docker-for-tests
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - project: test_bash
-          - project: test_c23doku
-          - project: test_cello
-          - project: test_curl
-          - project: test_doom
-          - project: test_git
-          - project: test_glib
-          - project: test_gmake
-          - project: test_go
-          - project: test_gzip
-          - project: test_imagemagick
-          - project: test_janet
-          - project: test_libpng
-          - project: test_libressl
-          - project: test_libuev
-          - project: test_lua
-          - project: test_metalang99
-          - project: test_noplate
-          - project: test_ocaml
-          - project: test_oniguruma_jq
-          - project: test_openssh
-          - project: test_openssl
-          - project: test_perl
-          - project: test_php
-          - project: test_postgres
-          - project: test_python
-          - project: test_qbe_hare
-          - project: test_scrapscript
-          - project: test_sqlite
-          - project: test_tcl
-          - project: test_tinycc
-          - project: test_toxcore
-          - project: test_toybox
-          - project: test_vim
-          - project: test_zlib
-          - project: test_zsh
-          - project: test_zstd
-          - project: build_erlang
-          - project: build_gcc
-          - project: build_nano
-          - project: build_sdl
-          - project: build_zig
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: debian_asan
-          path: /tmp
-
-      - name: Load image
-        run: docker load --input /tmp/debian_asan.tar
-
-      - name: Run test
-        run: >
-          sudo docker run debian_asan
-          su non-root -c
-          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.project }}
+          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.proj }}
 
   musl-bootstrap:
     runs-on: ubuntu-latest

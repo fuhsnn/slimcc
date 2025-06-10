@@ -9,6 +9,11 @@ fix_configure() {
  sed -i 's/^\s*lt_prog_compiler_static=$/lt_prog_compiler_static=-static/g' "$1"
 }
 
+fix_and_configure() {
+ fix_configure ./configure
+ ./configure
+}
+
 replace_line() {
  sed -i s/^"$1"$/"$2"/g "$3"
 }
@@ -40,29 +45,30 @@ url_tar() {
 
 install_libtool() {
  url_tar https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz __libtool
- fix_configure ./configure
  fix_configure libltdl/configure
- ./configure
- make -j2 install
+ fix_and_configure
+ make -j4 install
  cd ../ && rm -rf __libtool
 }
 
 # tests
 
 test_bash() {
- url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3-rc1.tar.gz bash
- fix_configure ./configure
- ./configure
+ url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3-rc2.tar.gz bash
+ fix_and_configure
  make test
 }
 
 test_c23doku() {
  git_fetch https://github.com/fuhsnn/c23doku 5ff41e96002f14c59c33f43dd4b7849c025382ae c23doku
- replace_line "#include <stdbit.h>" "" all.h
  "$CC" -std=c23 brute_force.c -I 12x12_simple/ -o run
  ./run | md5sum | grep -q 4fa4c109fbe377d4314b191b7a508f4a
  "$CC" -std=c23 brute_force.c -I 16x16_embed/ -o run
  ./run | md5sum | grep -q 2cf4c7aecbcd621395471be3a140d66e
+ "$CC" -std=c23 graph_color.c -I 9x9_antibrute/ -o run
+ ./run | md5sum | grep -q 990e2d99fface43030c1246a820db879
+ "$CC" -std=c23 graph_color.c -I 9x9_tdoku/ -o run
+ ./run | md5sum | grep -q d89988b8b41f9c9485de73894a203b2e
 }
 
 test_c3() {
@@ -82,7 +88,7 @@ test_cello() {
 }
 
 test_curl() {
- url_tar https://github.com/curl/curl/releases/download/curl-8_14_0/curl-8.14.0.tar.gz curl
+ url_tar https://github.com/curl/curl/releases/download/curl-8_14_1/curl-8.14.1.tar.gz curl
  fix_configure ./configure
  ./configure --with-openssl
  make && make test
@@ -105,8 +111,7 @@ test_glib() {
  github_clone fuhsnn glib main
  libtoolize
  sh autogen.sh
- fix_configure ./configure
- ./configure
+ fix_and_configure
  replace_line "#if  __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)" "#if 1" glib/gconstructor.h
  replace_line "#ifdef __GNUC__" "#if 1" glib/gmacros.h
  replace_line "#elif defined(__GNUC__) && (__GNUC__ >= 4)" "#elif 1" gio/tests/modules/symbol-visibility.h
@@ -115,8 +120,7 @@ test_glib() {
 
 test_gmake() {
  url_tar https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -131,15 +135,13 @@ test_go() {
 
 test_gzip() {
  url_tar https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_imagemagick() {
  github_tar ImageMagick ImageMagick 7.1.0-47
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -153,18 +155,69 @@ test_janet() {
  make test
 }
 
+test_libevent() {
+ git_fetch https://github.com/libevent/libevent 112421c8fa4840acd73502f2ab6a674fc025de37 libevent
+ libtoolize
+ sh autogen.sh
+ fix_and_configure
+ make check -j2
+}
+
+test_libexpat() {
+ url_tar https://github.com/libexpat/libexpat/releases/download/R_2_7_1/expat-2.7.1.tar.gz libexpat
+ fix_and_configure
+ make check
+}
+
+test_libgmp() {
+ url_tar https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.gz gmp
+ fix_and_configure
+ make && make check
+}
+
+test_libmpc() {
+ url_tar https://ftpmirror.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz mpc
+ fix_and_configure
+ make check
+}
+
+test_libmpfr() {
+ url_tar https://ftpmirror.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.gz mpfr
+ fix_and_configure
+ make check
+}
+
+test_libpcre2() {
+ github_tar PCRE2Project pcre2 pcre2-10.45
+ fix_and_configure
+ make check
+}
+
 test_libpng() {
- github_tar pnggroup libpng v1.6.48
- fix_configure ./configure
- ./configure
+ github_tar pnggroup libpng v1.6.49
+ fix_and_configure
  make test
+}
+
+test_libpsl() {
+ url_tar https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.gz libpsl
+ fix_and_configure
+ make check
 }
 
 test_libressl() {
  url_tar https://github.com/libressl/portable/releases/download/v4.1.0/libressl-4.1.0.tar.gz libressl
  replace_line "#if defined(__GNUC__)" "#if 1" crypto/bn/arch/amd64/bn_arch.h
- fix_configure ./configure
- ./configure
+ fix_and_configure
+ make check
+}
+
+test_libsodium() {
+ url_tar https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz libsodium
+ fix_and_configure
+ replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/private/common.h
+ replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/export.h
+ replace_line "#elif defined(HAVE_C11_MEMORY_FENCES)" "#elif defined(HAVE_C11_MEMORY_FENCES)\n#include <stdatomic.h>" src/libsodium/include/sodium/private/common.h
  make check
 }
 
@@ -172,17 +225,33 @@ test_libuev() {
  github_tar troglobit libuev v2.4.1
  libtoolize
  autoreconf -fi
+ fix_and_configure
+ make check
+}
+
+test_libxml() {
+ github_tar GNOME libxml2 v2.14.3
+ libtoolize
+ sh autogen.sh
  fix_configure ./configure
- ./configure
+ CFLAGS=-D_FILE_OFFSET_BITS=64 ./configure
  make check
 }
 
 test_lua() {
- url_tar https://lua.org/ftp/lua-5.4.7.tar.gz lua
+ url_tar https://lua.org/ftp/lua-5.4.8.tar.gz lua
  cd src && make CC="$CC" linux-readline
- url_tar https://www.lua.org/tests/lua-5.4.7-tests.tar.gz luatests
+ url_tar https://www.lua.org/tests/lua-5.4.8-tests.tar.gz luatests
  cd libs && make CC="$CC" && cd ../
- ../lua -e"_port=true" all.lua # assertion at files.lua:84 fail on CI
+ ../lua -e"_port=true" all.lua # assertion at files.lua:84 fail in CI
+}
+
+test_memcached() {
+ github_tar memcached memcached 1.6.38
+ sed -i "s/defined(__has_builtin)/0/g" crc32c.c
+ sh autogen.sh
+ CFLAGS=-D_GNU_SOURCE ./configure
+ make && make test
 }
 
 test_metalang99() {
@@ -192,6 +261,16 @@ test_metalang99() {
  sh scripts/test-all.sh
  github_tar hirrolot metalang99 v1.13.5
  sh scripts/test-all.sh
+}
+
+test_mimalloc() {
+ github_tar microsoft mimalloc v3.1.4
+ replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
+ replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
+ replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
+ mkdir build && cd build
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
+ make && make test
 }
 
 test_muon() {
@@ -231,8 +310,7 @@ test_oniguruma_jq() {
  cd ../../
  libtoolize
  autoreconf -fi
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -248,7 +326,7 @@ test_openssh() {
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.4.0
+ github_tar openssl openssl openssl-3.5.0
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make test -j4
@@ -285,7 +363,7 @@ test_postgres() {
 }
 
 test_python() {
- github_tar python cpython v3.13.3
+ github_tar python cpython v3.13.5
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
  ./configure && make
@@ -315,7 +393,7 @@ test_scrapscript() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.50.0
+ github_tar sqlite sqlite version-3.50.1
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
@@ -334,11 +412,10 @@ test_tinycc() {
 }
 
 test_toxcore() {
- github_clone TokTok c-toxcore v0.2.20
+ github_clone TokTok c-toxcore v0.2.21
  libtoolize
  autoreconf -fi
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -403,12 +480,12 @@ build_gcc() {
 }
 
 build_nano() {
- url_tar https://www.nano-editor.org/dist/v8/nano-8.4.tar.gz nano
+ url_tar https://www.nano-editor.org/dist/v8/nano-8.5.tar.gz nano
  ./configure && make
 }
 
 build_sdl() {
- github_tar libsdl-org SDL release-3.2.12
+ github_tar libsdl-org SDL release-3.2.16
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  mkdir cmakebuild && cd cmakebuild
  cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DSDL_UNIX_CONSOLE_BUILD=ON
