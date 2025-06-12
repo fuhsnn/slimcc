@@ -354,9 +354,10 @@ static bool invalid_cast(Node *node, Type *to) {
 
   if (to->kind != TY_VOID) {
     switch (node->ty->kind) {
-    case TY_VOID:
     case TY_STRUCT:
     case TY_UNION:
+      return !is_compatible(node->ty, to);
+    case TY_VOID:
       return true;
     }
   }
