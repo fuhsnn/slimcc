@@ -1329,6 +1329,8 @@ static bool is_fp_class_hi(Type *ty) {
 }
 
 static bool is_x87_class(Type *ty) {
+  if (ty->size != 16)
+    return false;
   return get_class(ty, 0, 16, 0, CLASS_NO) == CLASS_X87;
 }
 
