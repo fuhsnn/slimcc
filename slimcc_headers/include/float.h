@@ -27,15 +27,15 @@
 #endif
 
 #define FLT_DIG 6
-#define FLT_EPSILON 0x1p-23
+#define FLT_EPSILON 0x1p-23f
 #define FLT_MANT_DIG 24
-#define FLT_MAX 0x1.fffffep+127
+#define FLT_MAX 0x1.fffffep+127f
 #define FLT_MAX_10_EXP 38
 #define FLT_MAX_EXP 128
-#define FLT_MIN 0x1p-126
-#define FLT_MIN_10_EXP -37
-#define FLT_MIN_EXP -125
-#define FLT_TRUE_MIN 0x1p-149
+#define FLT_MIN 0x1p-126f
+#define FLT_MIN_10_EXP (-37)
+#define FLT_MIN_EXP (-125)
+#define FLT_TRUE_MIN 0x1p-149f
 
 #define DBL_DIG 15
 #define DBL_EPSILON 0x1p-52
@@ -44,19 +44,19 @@
 #define DBL_MAX_10_EXP 308
 #define DBL_MAX_EXP 1024
 #define DBL_MIN 0x1p-1022
-#define DBL_MIN_10_EXP -307
-#define DBL_MIN_EXP -1021
-#define DBL_TRUE_MIN 0x0.0000000000001p-1022
+#define DBL_MIN_10_EXP (-307)
+#define DBL_MIN_EXP (-1021)
+#define DBL_TRUE_MIN 0x1p-1074
 
-#define LDBL_DIG 15
-#define LDBL_EPSILON 0x1p-52
-#define LDBL_MANT_DIG 53
-#define LDBL_MAX 0x1.fffffffffffffp+1023
-#define LDBL_MAX_10_EXP 308
-#define LDBL_MAX_EXP 1024
-#define LDBL_MIN 0x1p-1022
-#define LDBL_MIN_10_EXP -307
-#define LDBL_MIN_EXP -1021
-#define LDBL_TRUE_MIN 0x0.0000000000001p-1022
+#define LDBL_DIG 18
+#define LDBL_EPSILON 0x1p-63L
+#define LDBL_MANT_DIG 64
+#define LDBL_MAX 0x1.fffffffffffffffep+16383L
+#define LDBL_MAX_10_EXP 4932
+#define LDBL_MAX_EXP 16384
+#define LDBL_MIN 0x1p-16382L
+#define LDBL_MIN_10_EXP (-4931)
+#define LDBL_MIN_EXP (-16381)
+#define LDBL_TRUE_MIN 0x1p-16445L
 
 #endif
