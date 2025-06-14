@@ -1,11 +1,16 @@
-#ifndef __STDDEF_H
-#define __STDDEF_H
-
-#define NULL ((void *)0)
+#ifndef __STDC_VERSION_STDDEF_H__
 
 #if __STDC_VERSION__ >= 202311L
+#define unreachable() __builtin_unreachable()
+
 typedef typeof(nullptr) nullptr_t;
+
+#define __STDC_VERSION_STDDEF_H__ 202311L
+#else
+#define __STDC_VERSION_STDDEF_H__
 #endif
+
+#define NULL ((void *)0)
 
 typedef unsigned long size_t;
 typedef long ptrdiff_t;

@@ -4653,6 +4653,13 @@ static Node *primary(Token **rest, Token *tok) {
     return new_num(is_compatible(t1, t2), start);
   }
 
+  if (equal(tok, "__builtin_unreachable")) {
+    Node *node = new_node(ND_NULL_EXPR, tok);
+    node->ty = ty_void;
+    *rest = skip(skip(tok->next, "("), ")");
+    return node;
+  }
+
   if (equal(tok, "__builtin_va_start")) {
     Node *node = new_node(ND_VA_START, tok);
     tok = skip(tok->next, "(");
