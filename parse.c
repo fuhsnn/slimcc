@@ -448,12 +448,7 @@ static Node *cond_cast(Node *expr) {
 
 static void apply_cv_qualifier(Node *node, Type *ty2) {
   add_type(node);
-  Type *ty = node->ty;
-  if (ty->is_const < ty2->is_const || ty->is_volatile < ty2->is_volatile) {
-    node->ty = new_qualified_type(ty);
-    node->ty->is_const = ty->is_const | ty2->is_const;
-    node->ty->is_volatile = ty->is_volatile | ty2->is_volatile;
-  }
+  cvqual_type(&node->ty, ty2);
 }
 
 static VarScope *push_scope(char *name) {
@@ -1159,8 +1154,8 @@ static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
 
 // func-params = ("void" | param ("," param)* ("," "...")?)? ")"
 // param       = declspec declarator
-static Type *func_params(Token **rest, Token *tok, Type *ty) {
-  Type *fn_ty = func_type(ty, tok);
+static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
+  Type *fn_ty = func_type(rtn_ty, tok);
 
   if (equal(tok, "...") && consume(rest, tok->next, ")")) {
     fn_ty->is_variadic = true;
@@ -1191,28 +1186,23 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
       break;
     }
 
-    Type *ty2 = declspec(&tok, tok, NULL);
+    Type *ty = declspec(&tok, tok, NULL);
     Token *name = NULL;
-    ty2 = declarator(&tok, tok, ty2, &name);
+    ty = declarator(&tok, tok, ty, &name);
 
-    chain_expr(&expr, calc_vla(ty2, tok));
+    chain_expr(&expr, calc_vla(ty, tok));
 
-    if (is_array(ty2)) {
-      // "array of T" is converted to "pointer to T" only in the parameter
-      // context. For example, *argv[] is converted to **argv by this.
-      Type *ty3 = pointer_to(ty2->base);
-      ty3->is_atomic = ty2->is_atomic;
-      ty3->is_const = ty2->is_const;
-      ty3->is_volatile = ty2->is_volatile;
-      ty3->is_restrict = ty2->is_restrict;
-      ty2 = ty3;
-    } else if (ty2->kind == TY_FUNC) {
-      // Likewise, a function is converted to a pointer to a function
-      // only in the parameter context.
-      ty2 = pointer_to(ty2);
+    Type *param_ty = ptr_decay(ty);
+
+    if (ty->qty) {
+      param_ty->is_atomic = ty->qty->is_atomic;
+      param_ty->is_const = ty->qty->is_const;
+      param_ty->is_volatile = ty->qty->is_volatile;
+      param_ty->is_restrict = ty->qty->is_restrict;
     }
+
     char *var_name = name ? get_ident(name) : NULL;
-    cur = cur->param_next = new_lvar(var_name, ty2);
+    cur = cur->param_next = new_lvar(var_name, param_ty);
   }
   leave_scope();
   add_type(expr);
@@ -1274,15 +1264,15 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
     return func_params(rest, tok->next, ty);
 
   if (consume(&tok, tok, "[")) {
-    if (tok->kind == TK_TYPEKW) {
-      Token *start = tok;
-      pointer_qualifiers(&tok, tok, &(Type){0});
-      consume(&tok, tok, "static");
-      Type *ty2 = array_dimensions(rest, tok, ty);
-      pointer_qualifiers(&(Token *){0}, start, ty2);
-      return ty2;
+    Type *qty = NULL;
+    if (tok->kind == TK_TYPEKW && !equal(tok, "static")) {
+      qty = new_type(TY_VOID, 0, 0);
+      pointer_qualifiers(&tok, tok, qty);
     }
-    return array_dimensions(rest, tok, ty);
+    consume(&tok, tok, "static");
+    Type *ty2 = array_dimensions(rest, tok, ty);
+    ty2->qty = qty;
+    return ty2;
   }
   *rest = tok;
   return ty;

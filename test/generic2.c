@@ -1,39 +1,81 @@
 #include "test.h"
 
 void paramty(int a[volatile], int sz, int b[const restrict static sz]) {
-  ASSERT(1, _Generic(a, int *: 1, int volatile*: 0));
-  ASSERT(1, _Generic(a, int volatile*: 0, int *: 1));
+  SASSERT(1 == _Generic(a, int *: 1, int volatile*: 0));
+  SASSERT(1 == _Generic(a, int volatile*: 0, int *: 1));
 
-  ASSERT(1, _Generic(&a, int **: 0, int *volatile *: 1));
-  ASSERT(1, _Generic(&a, int *volatile *: 1, int **: 0));
+  SASSERT(1 == _Generic(&a, int **: 0, int *volatile *: 1));
+  SASSERT(1 == _Generic(&a, int *volatile *: 1, int **: 0));
 
-  ASSERT(1, _Generic(&b, int **: 0, int *restrict const *: 1));
-  ASSERT(1, _Generic(&b, int *restrict const *: 1, int **: 0));
+  SASSERT(1 == _Generic(&b, int **: 0, int *restrict const *: 1));
+  SASSERT(1 == _Generic(&b, int *restrict const *: 1, int **: 0));
 }
 
 void param_arrptr_ty(int sz, int(*a)[13], int(*b)[]) {
-  ASSERT(1, _Generic(a, default:0, int(*)[13]:1, int(*)[17]:2));
-  ASSERT(0, _Generic(a, default:0, int(*)[13][17]:1));
+  SASSERT(1 == _Generic(a, default:0, int(*)[13]:1, int(*)[17]:2));
+  SASSERT(0 == _Generic(a, default:0, int(*)[13][17]:1));
 
-  ASSERT(1, _Generic(b, default:0, typeof(a):1));
-  ASSERT(1, _Generic(a, default:0, typeof(b):1));
+  SASSERT(1 == _Generic(b, default:0, typeof(a):1));
+  SASSERT(1 == _Generic(a, default:0, typeof(b):1));
 
-  ASSERT(1, _Generic(b, default:0, int(*)[17]:1));
-  ASSERT(0, _Generic(b, default:0, int(*)[13][17]:1));
+  SASSERT(1 == _Generic(b, default:0, int(*)[17]:1));
+  SASSERT(0 == _Generic(b, default:0, int(*)[13][17]:1));
 
   int vla1[sz];
   int vla2[sz][13];
-  ASSERT(1, _Generic(&vla1, default :0, typeof(a):1));
-  ASSERT(1, _Generic(&vla1, default :0, typeof(b):1));
-  ASSERT(0, _Generic(&vla2, default :0, typeof(a):1));
-  ASSERT(1, _Generic(&vla2[1], default :0, typeof(a):1));
+  SASSERT(1 == _Generic(&vla1, default :0, typeof(a):1));
+  SASSERT(1 == _Generic(&vla1, default :0, typeof(b):1));
+  SASSERT(0 == _Generic(&vla2, default :0, typeof(a):1));
+  SASSERT(1 == _Generic(&vla2[1], default :0, typeof(a):1));
 }
 
-
 void param_vlaptr_ty(int sz, int (*a)[sz]) {
-  ASSERT(0, _Generic(a, default:0, int *:1));
-  ASSERT(1, _Generic(a, default:0, int(*)[13]:1));
-  ASSERT(0, _Generic(a, default:0, int(*)[13][17]:1));
+  SASSERT(0 == _Generic(a, default:0, int *:1));
+  SASSERT(1 == _Generic(a, default:0, int(*)[13]:1));
+  SASSERT(0 == _Generic(a, default:0, int(*)[13][17]:1));
+}
+
+void param_array_decay_with_qualifier(
+  typeof(int[1]) t1,
+  typeof(int[1]) const t2,
+  typeof(int[1][1]) t3,
+  typeof(int[1][1]) const t4,
+  typeof(int[1]) t5[],
+  typeof(int[1]) t6[volatile],
+  typeof(int[1]) volatile t7[],
+  typeof(int[1]) volatile t8[const],
+  typeof(const int[1]) volatile t9)
+{
+  SASSERT(_Generic(       t1 , int *: 1));
+  SASSERT(_Generic(       t2 , int const *: 1));
+  SASSERT(_Generic(       t3 , typeof(int[1]) *: 1));
+  SASSERT(_Generic(       t4 , typeof(int[1]) const *: 1));
+  SASSERT(_Generic(       t5 , typeof(int[1]) *: 1));
+  SASSERT(_Generic(       t6 , typeof(int[1]) *: 1));
+  SASSERT(_Generic(typeof(t6), typeof(int[1]) * volatile: 1));
+  SASSERT(_Generic(       t7 , typeof(int[1]) volatile *: 1));
+  SASSERT(_Generic(       t8 , typeof(int[1]) volatile *: 1));
+  SASSERT(_Generic(typeof(t8), typeof(int[1]) volatile * const: 1));
+  SASSERT(_Generic(       t9 , int const volatile *: 1));
+}
+
+void array_decay_with_qualifier(void) {
+  typeof(int[1]) t1;
+  typeof(int[1]) const t2;
+  typeof(int[1][1]) t3;
+  typeof(int[1][1]) const t4;
+  typeof(int[1]) t5[1];
+  typeof(int[1]) volatile t7[1];
+
+  typeof(const int[1]) volatile t9;
+
+  SASSERT(_Generic(t1, int *: 1));
+  SASSERT(_Generic(t2, int const *: 1));
+  SASSERT(_Generic(t3, typeof(int[1]) *: 1));
+  SASSERT(_Generic(t4, typeof(int[1]) const *: 1));
+  SASSERT(_Generic(t5, typeof(int[1]) *: 1));
+  SASSERT(_Generic(t7, typeof(int[1]) volatile *: 1));
+  SASSERT(_Generic(t9, int const volatile *: 1));
 }
 
 int main(int argc, char**argv) {
@@ -46,28 +88,28 @@ int main(int argc, char**argv) {
   ASSERT(1, ({ char c; _Generic(-c, int:1 ); }) );
   ASSERT(1, ({ short s; _Generic(+s, int:1 ); }) );
 
-  ASSERT(1, _Generic((long){0}, long:1, long long:0) );
-  ASSERT(1, _Generic((long long){0}, long long:1, long:0) );
+  SASSERT(1 == _Generic((long){0}, long:1, long long:0) );
+  SASSERT(1 == _Generic((long long){0}, long long:1, long:0) );
 
-  ASSERT(1, _Generic(1L, long:1, long long:0) );
-  ASSERT(1, _Generic(1LL, long long:1, long:0) );
+  SASSERT(1 == _Generic(1L, long:1, long long:0) );
+  SASSERT(1 == _Generic(1LL, long long:1, long:0) );
 
-  ASSERT(1, _Generic(1UL, unsigned long:1, unsigned long long:0) );
-  ASSERT(1, _Generic(1lu, unsigned long:1, unsigned long long:0) );
+  SASSERT(1 == _Generic(1UL, unsigned long:1, unsigned long long:0) );
+  SASSERT(1 == _Generic(1lu, unsigned long:1, unsigned long long:0) );
 
-  ASSERT(1, _Generic(1ULL, unsigned long long:1, unsigned long:0) );
-  ASSERT(1, _Generic(1llu, unsigned long long:1, unsigned long:0) );
+  SASSERT(1 == _Generic(1ULL, unsigned long long:1, unsigned long:0) );
+  SASSERT(1 == _Generic(1llu, unsigned long long:1, unsigned long:0) );
 
   ASSERT(1, ({ unsigned long a; long long b; _Generic(a + b, unsigned long long:1, unsigned long:0); }) );
 
-  ASSERT(1, _Generic(argc ? 0 : "a", char*:1 ) );
-  ASSERT(1, _Generic(argc ? "a" : 0, char*:1 ) );
+  SASSERT(1 == _Generic(argc ? 0 : "a", char*:1 ) );
+  SASSERT(1 == _Generic(argc ? "a" : 0, char*:1 ) );
 
-  ASSERT(1, _Generic(argc ? (void*)0 : "a", char*:1 ) );
-  ASSERT(1, _Generic(argc ? "a" : (void*)0, char*:1 ) );
+  SASSERT(1 == _Generic(argc ? (void*)0 : "a", char*:1 ) );
+  SASSERT(1 == _Generic(argc ? "a" : (void*)0, char*:1 ) );
 
-  ASSERT(1, _Generic(argc ? "a" : (void*)(void*)0, void*:1 ) );
-  ASSERT(1, _Generic(argc ? (void*)(void*)0 : "a", void*:1 ) );
+  SASSERT(1 == _Generic(argc ? "a" : (void*)(void*)0, void*:1 ) );
+  SASSERT(1 == _Generic(argc ? (void*)(void*)0 : "a", void*:1 ) );
 
   ASSERT(1, ({ void *p; _Generic(argc ? p : "a", void*:1, char*:2); }) );
   ASSERT(1, ({ void *p; _Generic(argc ? "a" : p, void*:1, char*:2); }) );
@@ -75,8 +117,8 @@ int main(int argc, char**argv) {
   ASSERT(1, ({ double *p; char *q; _Generic(argc ? p : q, void*:1 ); }) );
   ASSERT(1, ({ double *p; char *q; _Generic(argc ? q : p, void*:1 ); }) );
 
-  ASSERT(1, _Generic(**argv, unsigned char:0, char:1, signed char:0) );
-  ASSERT(1, _Generic("a", unsigned char*:0, char*:1, signed char*:0) );
+  SASSERT(1 == _Generic(**argv, unsigned char:0, char:1, signed char:0) );
+  SASSERT(1 == _Generic("a", unsigned char*:0, char*:1, signed char*:0) );
 
   ASSERT(1, ({ int vla[argc]; _Generic(vla, int*:1 ); }) );
 
@@ -99,13 +141,9 @@ int main(int argc, char**argv) {
   ASSERT(1, ({ const int i; _Generic(        i, int :1, const int: 2);}));
   ASSERT(2, ({ const int i; _Generic(typeof(i), int :1, const int: 2);}));
 
-  DASSERT(2 == _Generic(const int, int :1, const int: 2) );
-  DASSERT(2 == _Generic(volatile int, volatile int: 2, int: 1) );
-  DASSERT(2 == _Generic(_Atomic int,  _Atomic int: 2, int :1) );
-
-  paramty(0,0,0);
-  param_arrptr_ty(0,0,0);
-  param_vlaptr_ty(0,0);
+  SASSERT(2 == _Generic(const int, int :1, const int: 2) );
+  SASSERT(2 == _Generic(volatile int, volatile int: 2, int: 1) );
+  SASSERT(2 == _Generic(_Atomic int,  _Atomic int: 2, int :1) );
 
   printf("OK\n");
 }

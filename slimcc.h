@@ -618,6 +618,9 @@ struct Type {
   bool is_flexible;
   bool is_packed;
 
+  // Function parameter
+  Type *qty;
+
   // Function type
   Scope *scopes;
   Type *return_ty;
@@ -693,6 +696,7 @@ Type *new_bitint(int64_t width, Token *tok);
 void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_qualified_type(Type *ty);
+void cvqual_type(Type **ty_p, Type *ty2);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
 Node *assign_cast(Type *to, Node *expr);
