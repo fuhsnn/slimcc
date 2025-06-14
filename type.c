@@ -115,6 +115,15 @@ Type *new_qualified_type(Type *ty) {
   return ret;
 }
 
+void cvqual_type(Type **ty_p, Type *ty2) {
+  Type *ty = *ty_p;
+  if (ty->is_const < ty2->is_const || ty->is_volatile < ty2->is_volatile) {
+    *ty_p = new_qualified_type(ty);
+    (*ty_p)->is_const = ty->is_const | ty2->is_const;
+    (*ty_p)->is_volatile = ty->is_volatile | ty2->is_volatile;
+  }
+}
+
 bool mem_iter(Member **mem) {
   Member *m = *mem;
   while (m && m->is_bitfield && !m->name)
@@ -333,8 +342,11 @@ Type *pointer_to(Type *base) {
 }
 
 Type *ptr_decay(Type *ty) {
-  if (is_array(ty))
-    return pointer_to(ty->base);
+  if (is_array(ty)) {
+    Type *pty = pointer_to(ty->base);
+    cvqual_type(&pty->base, ty);
+    return pty;
+  }
   else if (ty->kind == TY_FUNC)
     return pointer_to(ty);
   return ty;
