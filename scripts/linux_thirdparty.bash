@@ -9,6 +9,11 @@ fix_configure() {
  sed -i 's/^\s*lt_prog_compiler_static=$/lt_prog_compiler_static=-static/g' "$1"
 }
 
+fix_and_configure() {
+ fix_configure ./configure
+ ./configure
+}
+
 replace_line() {
  sed -i s/^"$1"$/"$2"/g "$3"
 }
@@ -40,10 +45,9 @@ url_tar() {
 
 install_libtool() {
  url_tar https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz __libtool
- fix_configure ./configure
  fix_configure libltdl/configure
- ./configure
- make -j2 install
+ fix_and_configure
+ make -j4 install
  cd ../ && rm -rf __libtool
 }
 
@@ -51,8 +55,7 @@ install_libtool() {
 
 test_bash() {
  url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3-rc2.tar.gz bash
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make test
 }
 
@@ -108,8 +111,7 @@ test_glib() {
  github_clone fuhsnn glib main
  libtoolize
  sh autogen.sh
- fix_configure ./configure
- ./configure
+ fix_and_configure
  replace_line "#if  __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)" "#if 1" glib/gconstructor.h
  replace_line "#ifdef __GNUC__" "#if 1" glib/gmacros.h
  replace_line "#elif defined(__GNUC__) && (__GNUC__ >= 4)" "#elif 1" gio/tests/modules/symbol-visibility.h
@@ -118,8 +120,7 @@ test_glib() {
 
 test_gmake() {
  url_tar https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -134,15 +135,13 @@ test_go() {
 
 test_gzip() {
  url_tar https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_imagemagick() {
  github_tar ImageMagick ImageMagick 7.1.0-47
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -160,72 +159,62 @@ test_libevent() {
  git_fetch https://github.com/libevent/libevent 112421c8fa4840acd73502f2ab6a674fc025de37 libevent
  libtoolize
  sh autogen.sh
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check -j2
 }
 
 test_libexpat() {
  url_tar https://github.com/libexpat/libexpat/releases/download/R_2_7_1/expat-2.7.1.tar.gz libexpat
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_libgmp() {
  url_tar https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.gz gmp
-  fix_configure ./configure
- ./configure
+ fix_and_configure
  make && make check
 }
 
 test_libmpc() {
  url_tar https://ftpmirror.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz mpc
-  fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_libmpfr() {
  url_tar https://ftpmirror.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.gz mpfr
-  fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_libpcre2() {
  github_tar PCRE2Project pcre2 pcre2-10.45
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_libpng() {
  github_tar pnggroup libpng v1.6.49
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make test
 }
 
 test_libpsl() {
  url_tar https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.gz libpsl
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_libressl() {
  url_tar https://github.com/libressl/portable/releases/download/v4.1.0/libressl-4.1.0.tar.gz libressl
  replace_line "#if defined(__GNUC__)" "#if 1" crypto/bn/arch/amd64/bn_arch.h
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
 test_libsodium() {
  url_tar https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz libsodium
- fix_configure ./configure
- ./configure
+ fix_and_configure
  replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/private/common.h
  replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/export.h
  replace_line "#elif defined(HAVE_C11_MEMORY_FENCES)" "#elif defined(HAVE_C11_MEMORY_FENCES)\n#include <stdatomic.h>" src/libsodium/include/sodium/private/common.h
@@ -236,8 +225,7 @@ test_libuev() {
  github_tar troglobit libuev v2.4.1
  libtoolize
  autoreconf -fi
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -322,8 +310,7 @@ test_oniguruma_jq() {
  cd ../../
  libtoolize
  autoreconf -fi
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
@@ -428,8 +415,7 @@ test_toxcore() {
  github_clone TokTok c-toxcore v0.2.21
  libtoolize
  autoreconf -fi
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
 }
 
