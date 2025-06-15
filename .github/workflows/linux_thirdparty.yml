@@ -45,6 +45,7 @@ jobs:
           - { vm: interop, proj: test_muon }
           - { vm: main, proj: test_bash }
           - { vm: main, proj: test_cello }
+          - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
           - { vm: main, proj: test_git }

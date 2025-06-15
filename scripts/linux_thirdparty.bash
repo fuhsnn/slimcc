@@ -87,6 +87,16 @@ test_cello() {
  make check
 }
 
+test_coreutils() {
+ url_tar https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.7.tar.gz coreutils
+ sed -i 's|--std=gnu99||g' init.cfg
+ # fail in docker
+  sed -i 's|tests/tail/inotify-dir-recreate.sh||g' tests/local.mk
+  sed -i 's|tests/rm/deep-2.sh||g' tests/local.mk
+ ./configure
+ make check
+}
+
 test_curl() {
  url_tar https://github.com/curl/curl/releases/download/curl-8_14_1/curl-8.14.1.tar.gz curl
  fix_configure ./configure
