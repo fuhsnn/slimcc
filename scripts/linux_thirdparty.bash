@@ -59,6 +59,12 @@ test_bash() {
  make test
 }
 
+test_bison() {
+ url_tar https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.gz bison
+ ./configure
+ make check
+}
+
 test_c23doku() {
  git_fetch https://github.com/fuhsnn/c23doku 5ff41e96002f14c59c33f43dd4b7849c025382ae c23doku
  "$CC" -std=c23 brute_force.c -I 12x12_simple/ -o run
