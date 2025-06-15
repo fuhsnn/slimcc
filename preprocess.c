@@ -1683,6 +1683,7 @@ static Token *has_builtin_macro(Token *start) {
     equal(tok, "__builtin_return_address") ||
     equal(tok, "__builtin_types_compatible_p") ||
     equal(tok, "__builtin_unreachable") ||
+    equal(tok, "__builtin_c23_va_start") ||
     equal(tok, "__builtin_va_start") ||
     equal(tok, "__builtin_va_copy") ||
     equal(tok, "__builtin_va_end") ||

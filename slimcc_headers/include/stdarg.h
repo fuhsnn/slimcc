@@ -3,7 +3,11 @@
 
 typedef __builtin_va_list va_list;
 
-#define va_start(ap, ...) __builtin_va_start(ap)
+#if __STDC_VERSION__ >= 202311L
+#define va_start(...) __builtin_c23_va_start(__VA_ARGS__)
+#else
+#define va_start(ap, last) __builtin_va_start(ap, last)
+#endif
 
 #define va_end(ap) __builtin_va_end(ap)
 

@@ -28,9 +28,7 @@ int va_expr_in_arg(int i, ...) {
   __builtin_va_start(ap, (i += 7, i));
   __builtin_va_copy(ap2, ap);
   ASSERT(1, !memcmp(ap,ap2,sizeof(__builtin_va_list)));
-#ifdef __slimcc__
-  __builtin_va_start(ap);
-#endif
+  __builtin_c23_va_start(ap);
   __builtin_va_end((i += 13, ap));
   return i;
 }

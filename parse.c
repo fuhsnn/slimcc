@@ -4650,12 +4650,21 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
-  if (equal(tok, "__builtin_va_start")) {
+  if (equal(tok, "__builtin_c23_va_start")) {
     Node *node = new_node(ND_VA_START, tok);
     tok = skip(tok->next, "(");
     node->lhs = conditional(&tok, tok);
     if (equal(tok, ","))
       assign(&tok, tok->next);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "__builtin_va_start")) {
+    Node *node = new_node(ND_VA_START, tok);
+    tok = skip(tok->next, "(");
+    node->lhs = conditional(&tok, tok);
+    assign(&tok, skip(tok, ","));
     *rest = skip(tok, ")");
     return node;
   }
