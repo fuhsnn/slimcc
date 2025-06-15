@@ -1232,9 +1232,12 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   *rest = tok;
 
   int64_t array_len;
-  if (ty->kind != TY_VLA && is_const_expr(expr, &array_len))
-    return array_of(ty, array_len);
-
+  if (is_const_expr(expr, &array_len)) {
+    if (array_len < 0)
+      error_tok(expr->tok, "size of array is negative");
+    if (ty->kind != TY_VLA)
+      return array_of(ty, array_len);
+  }
   if (is_constant_context())
     error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr);
