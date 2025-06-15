@@ -689,6 +689,7 @@ Type *pointer_to(Type *base);
 Type *ptr_decay(Type *ty);
 void ptr_convert(Node **node);
 Type *func_type(Type *return_ty, Token *tok);
+Type *get_func_ty(Type *ty);
 Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr);
 Type *new_type(TypeKind kind, int64_t size, int align);

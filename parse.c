@@ -4254,14 +4254,13 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
 static Node *funcall(Token **rest, Token *tok, Node *fn) {
   add_type(fn);
 
-  if (fn->ty->kind != TY_FUNC &&
-      (fn->ty->kind != TY_PTR || fn->ty->base->kind != TY_FUNC))
+  Type *ty = get_func_ty(fn->ty);
+  if (!ty)
     error_tok(fn->tok, "not a function");
 
   if (fn->kind == ND_VAR && fn->var->returns_twice)
     current_fn->dont_reuse_stk = true;
 
-  Type *ty = (fn->ty->kind == TY_FUNC) ? fn->ty : fn->ty->base;
   Obj *param = ty->is_oldstyle ? NULL : ty->param_list;
 
   Obj head = {0};

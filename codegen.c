@@ -1704,7 +1704,7 @@ static void gen_funcall(Node *node) {
 
   gen_funcall_args(node);
 
-  if (node->lhs->ty->is_variadic) {
+  if (get_func_ty(node->lhs->ty)->is_variadic) {
     if (fp_count)
       Printftn("movb $%d, %%al", fp_count);
     else

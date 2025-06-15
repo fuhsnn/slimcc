@@ -371,6 +371,14 @@ Type *func_type(Type *return_ty, Token *tok) {
   return ty;
 }
 
+Type *get_func_ty(Type *ty) {
+  if (ty->kind == TY_FUNC)
+    return ty;
+  if (ty->kind == TY_PTR && ty->base->kind == TY_FUNC)
+    return ty->base;
+  return NULL;
+}
+
 Type *array_of(Type *base, int64_t len) {
   Type *ty = new_type(TY_ARRAY, base->size * len, base->align);
   ty->base = base;
