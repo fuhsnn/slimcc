@@ -59,6 +59,17 @@ test_bash() {
  make test
 }
 
+test_bison() {
+ url_tar https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.gz bison
+ ./configure
+ make check
+}
+
+test_bzip2() {
+ url_tar https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz bzip2
+ make CC=$CC test
+}
+
 test_c23doku() {
  git_fetch https://github.com/fuhsnn/c23doku 5ff41e96002f14c59c33f43dd4b7849c025382ae c23doku
  "$CC" -std=c23 brute_force.c -I 12x12_simple/ -o run
@@ -87,6 +98,16 @@ test_cello() {
  make check
 }
 
+test_coreutils() {
+ url_tar https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.7.tar.gz coreutils
+ sed -i 's|--std=gnu99||g' init.cfg
+ # fail in docker
+  sed -i 's|tests/tail/inotify-dir-recreate.sh||g' tests/local.mk
+  sed -i 's|tests/rm/deep-2.sh||g' tests/local.mk
+ ./configure
+ make check
+}
+
 test_curl() {
  url_tar https://github.com/curl/curl/releases/download/curl-8_14_1/curl-8.14.1.tar.gz curl
  fix_configure ./configure
@@ -100,6 +121,13 @@ test_doom() {
  replace_line "project(pd_tests)" "project(pd_tests C)" ../CMakeLists.txt
  cmake ../ && make
  cd ../../../ && examples/Tests/build/pd_tests
+}
+
+test_flex() {
+ url_tar https://github.com/westes/flex/files/981163/flex-2.6.4.tar.gz flex
+ fix_configure ./configure
+ CC_FOR_BUILD=$CC ./configure
+ make check
 }
 
 test_git() {
@@ -330,6 +358,11 @@ test_openssl() {
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make test -j4
+}
+
+test_pdpmake() {
+ git_fetch https://github.com/rmyorston/pdpmake 7adf57a0171bf188ae14576223715215a06d5768 pdpmake
+ make test
 }
 
 test_perl() {
