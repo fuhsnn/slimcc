@@ -309,9 +309,10 @@ bool is_compatible(Type *t1, Type *t2) {
   case TY_FUNC: {
     if (!is_compatible(t1->return_ty, t2->return_ty))
       return false;
+    if (t1->is_oldstyle || t2->is_oldstyle)
+      return true;
     if (t1->is_variadic != t2->is_variadic)
       return false;
-
     Obj *p1 = t1->param_list;
     Obj *p2 = t2->param_list;
     for (; p1 && p2; p1 = p1->param_next, p2 = p2->param_next)
