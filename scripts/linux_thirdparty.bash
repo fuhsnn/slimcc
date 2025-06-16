@@ -119,10 +119,10 @@ test_doom() {
 }
 
 test_flex() {
- git_fetch https://github.com/westes/flex bf254c75b1e0d2641ebbd7fc85fb183f36a62ea7 flex
- sh autogen.sh
- fix_and_configure
- make HELP2MAN=true check
+ url_tar https://github.com/westes/flex/files/981163/flex-2.6.4.tar.gz flex
+ fix_configure ./configure
+ CC_FOR_BUILD=$CC ./configure
+ make check
 }
 
 test_git() {
