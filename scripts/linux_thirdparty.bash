@@ -118,6 +118,13 @@ test_doom() {
  cd ../../../ && examples/Tests/build/pd_tests
 }
 
+test_flex() {
+ git_fetch https://github.com/westes/flex bf254c75b1e0d2641ebbd7fc85fb183f36a62ea7 flex
+ sh autogen.sh
+ fix_and_configure
+ make HELP2MAN=true check
+}
+
 test_git() {
  github_tar git git v2.49.0
  make CC="$CC" test -j2

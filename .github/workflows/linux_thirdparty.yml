@@ -49,6 +49,7 @@ jobs:
           - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
+          - { vm: main, proj: test_flex }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_glib }
           - { vm: main, proj: test_gmake }
