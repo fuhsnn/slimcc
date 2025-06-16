@@ -4340,7 +4340,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
     Node *node = assign(&tok, skip(tok, ":"));
     if (is_compatible2(t1, t2)) {
       if (ret) {
-        warn_tok(ret->tok, "ambiguous _Generic selection");
+        notice_tok(ret->tok, "ambiguous _Generic selection");
         error_tok(node->tok, "with this option");
       }
       ret = node;

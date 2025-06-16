@@ -35,6 +35,7 @@ struct Macro {
   bool is_objlike; // Object-like or function-like
   bool is_locked;
   bool has_va_arg;
+  bool align;
 };
 
 typedef struct {
@@ -90,6 +91,14 @@ static Token *skip_line(Token *tok) {
   warn_tok(tok, "extra token");
   while (!tok->at_bol)
     tok = tok->next;
+  return tok;
+}
+
+static Token *get_line(Token **cur, Token *tok) {
+  do {
+    (*cur) = (*cur)->next = tok;
+    tok = tok->next;
+  } while (!tok->at_bol);
   return tok;
 }
 
@@ -927,7 +936,8 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   // Built-in dynamic macro application such as __LINE__
   if (m->handler) {
     *rest = m->handler(tok);
-    align_token(*rest, tok);
+    if (m->align)
+      align_token(*rest, tok);
     return true;
   }
 
@@ -1429,25 +1439,19 @@ static Token *directives(Token **cur, Token *start) {
     return tok;
   }
 
-  if (equal(tok, "pragma") && equal(tok->next, "once")) {
-    hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
-    tok = skip_line(tok->next->next);
-    return tok;
-  }
-
-  if (equal(tok, "pragma") && opt_E) {
-    tok = start;
-    do {
-      *cur = (**cur).next = tok;
-      tok = tok->next;
-    } while (!tok->at_bol);
-    return tok;
-  }
-
   if (equal(tok, "pragma")) {
-    do {
-      tok = tok->next;
-    } while (!tok->at_bol);
+    if (equal(tok->next, "once")) {
+      hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
+      tok = skip_line(tok->next->next);
+      return tok;
+    }
+    tok = get_line(cur, start);
+
+    for (Token *t = start; t != tok; t = t->next) {
+      t->is_root = true;
+      if (t->origin)
+        t->origin->is_root = true;
+    }
     return tok;
   }
 
@@ -1462,14 +1466,8 @@ static Token *directives(Token **cur, Token *start) {
     return tok;
   }
 
-  if (opt_cc1_asm_pp) {
-    tok = start;
-    do {
-      *cur = (**cur).next = tok;
-      tok = tok->next;
-    } while (!tok->at_bol);
-    return tok;
-  }
+  if (opt_cc1_asm_pp)
+    return get_line(cur, start);
 
   // `#`-only line is legal. It's called a null directive.
   if (tok->at_bol)
@@ -1506,8 +1504,10 @@ void define_macro(char *name, char *buf) {
   new_macro(name, true)->body = tokenize(new_file("<built-in>", 1, buf), NULL);
 }
 
-static void add_builtin(char *name, macro_handler_fn *fn) {
-  new_macro(name, true)->handler = fn;
+static void add_builtin(char *name, macro_handler_fn *fn, bool align) {
+  Macro *m = new_macro(name, true);
+  m->handler = fn;
+  m->align = align;
 }
 
 void undef_macro(char *name) {
@@ -1581,7 +1581,8 @@ static Token *stdver_macro(Token *tok) {
 
 static Token *pragma_macro(Token *start) {
   Token *tok = start->next;
-  Token *str;
+  Token *str_tok = NULL;
+
   for (int progress = 0;;) {
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated _Pragma sequence");
@@ -1595,9 +1596,9 @@ static Token *pragma_macro(Token *start) {
       tok = skip(tok, "(");
       continue;
     case 1:
-      if (tok->kind != TK_STR || tok->len < 2)
+      if (tok->kind != TK_STR)
         error_tok(tok, "expected string literal");
-      str = tok;
+      str_tok = tok;
       tok = tok->next;
       continue;
     case 2:
@@ -1606,13 +1607,15 @@ static Token *pragma_macro(Token *start) {
     }
     break;
   }
-  char *buf = calloc(1, str->len + 7);
-  memcpy(buf, "#pragma ", 8);
-  memcpy(buf + 8, str->loc + 1, str->len - 2);
+  char *buf = format("#pragma %s", str_tok->str);
 
   Token *end;
   Token *hash = tokenize(new_file(start->file->name, start->file->file_no, buf), &end);
   end->next = tok;
+  Token *orig = start->origin ? start->origin : start;
+  for (Token *t = hash; t != tok; t = t->next)
+    t->origin = orig;
+  hash->at_bol = true;
   return hash;
 }
 
@@ -1752,20 +1755,20 @@ void init_macros(void) {
 
   define_macro("__slimcc__", "1");
 
-  add_builtin("__FILE__", file_macro);
-  add_builtin("__LINE__", line_macro);
-  add_builtin("__COUNTER__", counter_macro);
-  add_builtin("__TIMESTAMP__", timestamp_macro);
-  add_builtin("__BASE_FILE__", base_file_macro);
-  add_builtin("__STDC_VERSION__", stdver_macro);
+  add_builtin("__FILE__", file_macro, true);
+  add_builtin("__LINE__", line_macro, true);
+  add_builtin("__COUNTER__", counter_macro, true);
+  add_builtin("__TIMESTAMP__", timestamp_macro, true);
+  add_builtin("__BASE_FILE__", base_file_macro, true);
+  add_builtin("__STDC_VERSION__", stdver_macro, true);
 
-  add_builtin("_Pragma", pragma_macro);
+  add_builtin("_Pragma", pragma_macro, false);
 
-  add_builtin("__has_attribute", has_attribute_macro);
-  add_builtin("__has_c_attribute", has_c_attribute_macro);
-  add_builtin("__has_builtin", has_builtin_macro);
-  add_builtin("__has_include", has_include_macro);
-  add_builtin("__has_embed", has_embed_macro);
+  add_builtin("__has_attribute", has_attribute_macro, true);
+  add_builtin("__has_c_attribute", has_c_attribute_macro, true);
+  add_builtin("__has_builtin", has_builtin_macro, true);
+  add_builtin("__has_include", has_include_macro, true);
+  add_builtin("__has_embed", has_embed_macro, true);
 
   time_t now = time(NULL);
   struct tm *tm = localtime(&now);
@@ -1935,6 +1938,18 @@ static Token *preprocess3(Token *tok) {
 
       Token *free_end = tok;
       tok = skip(tok, "]");
+      to_freelist(start, free_end);
+      continue;
+    }
+
+    if (is_hash(tok) && consume(&tok, tok->next, "pragma")) {
+      if (equal(tok, "message"))
+        notice_tok(tok, "#pragma message");
+
+      while (!tok->next->at_bol)
+        tok = tok->next;
+      Token *free_end = tok;
+      tok = tok->next;
       to_freelist(start, free_end);
       continue;
     }

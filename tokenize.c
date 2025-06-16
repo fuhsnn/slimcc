@@ -72,7 +72,7 @@ void verror_at_tok(Token *tok, char *fmt, va_list ap) {
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
 
   if (tok->origin)
-    warn_tok(tok->origin, "in expansion of macro");
+    notice_tok(tok->origin, "in expansion of macro");
 }
 
 void error_at(char *loc, char *fmt, ...) {
@@ -103,6 +103,13 @@ void warn_tok(Token *tok, char *fmt, ...) {
   va_end(ap);
   if (opt_werror)
     exit(1);
+}
+
+void notice_tok(Token *tok, char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  verror_at_tok(tok, fmt, ap);
+  va_end(ap);
 }
 
 // Consumes the current token if it matches `op`.

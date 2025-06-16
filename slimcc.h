@@ -209,6 +209,7 @@ void error_ice(char *file, int32_t line) NORETURN;
 void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void error_tok(Token *tok, char *fmt, ...) FMTCHK(2,3) NORETURN;
 void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
+void notice_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
 void verror_at_tok(Token *tok, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);

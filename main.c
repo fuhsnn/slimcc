@@ -660,6 +660,10 @@ static void print_tokens(Token *tok, char *path) {
   tok->at_bol = false;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
+    if (tok->at_bol) {
+      fprintf(out, "\n");
+      line++;
+    }
     if (!opt_P) {
       Token *orig = tok->origin ? tok->origin : tok;
 
@@ -675,9 +679,6 @@ static void print_tokens(Token *tok, char *path) {
           print_linemarker(out, orig);
       }
       line = orig->line_no;
-    } else {
-      if (tok->at_bol)
-        fprintf(out, "\n");
     }
     if (tok->has_space)
       fprintf(out, " ");
