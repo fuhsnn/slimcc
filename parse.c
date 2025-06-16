@@ -4337,9 +4337,6 @@ static Node *generic_selection(Token **rest, Token *tok) {
     }
 
     Type *t2 = typename(&tok, tok);
-    if (t2->kind == TY_FUNC)
-      error_tok(tok, "association has function type");
-
     Node *node = assign(&tok, skip(tok, ":"));
     if (is_compatible2(t1, t2)) {
       if (ret) {
