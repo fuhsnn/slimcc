@@ -4434,99 +4434,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
   return new_binary(ND_CHAIN, init, new_var_node(var, tok), start);
 }
 
-// primary = "(" "{" stmt+ "}" ")"
-//         | "(" expr ")"
-//         | "sizeof" "(" type-name ")"
-//         | "sizeof" unary
-//         | "_Alignof" "(" type-name ")"
-//         | "_Alignof" unary
-//         | "_Generic" generic-selection
-//         | "__builtin_types_compatible_p" "(" type-name, type-name, ")"
-//         | ident
-//         | str
-//         | num
-static Node *primary(Token **rest, Token *tok) {
-  Token *start = tok;
-
-  if (equal(tok, "(") && is_typename(tok->next))
-    return compound_literal(rest, tok);
-
-  if (equal(tok, "(") && equal(tok->next, "{")) {
-    if (is_constant_context())
-      error_tok(tok, "statement expresssion in constant context");
-
-    Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
-    *rest = skip(tok, ")");
-    return node;
-  }
-
-  if (equal(tok, "(")) {
-    Node *node = expr(&tok, tok->next);
-    *rest = skip(tok, ")");
-    return node;
-  }
-
-  if (equal(tok, "sizeof")) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      add_type(node);
-      ty = node->ty;
-    }
-    if (ty->kind == TY_VLA)
-      return vla_size(ty, tok);
-
-    if (ty->size < 0)
-      error_tok(tok, "sizeof applied to incomplete type");
-
-    if (ty->kind == TY_STRUCT && ty->is_flexible) {
-      Member *mem = ty->members;
-      while (mem->next)
-        mem = mem->next;
-      if (mem->ty->kind == TY_ARRAY)
-        return new_size_t((ty->size - mem->ty->size), start);
-    }
-    return new_size_t(ty->size, start);
-  }
-
-  if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      switch (node->kind) {
-      case ND_MEMBER:
-        return new_size_t(MAX(node->member->ty->align, node->member->alt_align), tok);
-      case ND_VAR:
-        return new_size_t(node->var->align, tok);
-      }
-      add_type(node);
-      ty = node->ty;
-    }
-    while (is_array(ty))
-      ty = ty->base;
-    return new_size_t(ty->align, tok);
-  }
-
-  if (equal(tok, "_Countof")) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      add_type(node);
-      ty = node->ty;
-    }
-    if (ty->kind == TY_VLA)
-      return vla_count(ty, start, false);
-    if (ty->kind == TY_ARRAY) {
-      if (ty->size < 0)
-        error_tok(tok, "countof applied to incomplete array");
-      return new_size_t(ty->array_len, start);
-    }
-    error_tok(tok, "countof applied to non-array type");
-  }
-
-  if (equal(tok, "_Generic"))
-    return generic_selection(rest, tok->next);
-
+static Node *builtin_functions(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_alloca")) {
     Node *node = new_node(ND_ALLOCA, tok);
     tok = skip(tok->next, "(");
@@ -4639,7 +4547,7 @@ static Node *primary(Token **rest, Token *tok) {
     tok = skip(tok, ",");
     Type *t2 = typename(&tok, tok);
     *rest = skip(tok, ")");
-    return new_num(is_compatible(t1, t2), start);
+    return new_num(is_compatible(t1, t2), tok);
   }
 
   if (equal(tok, "__builtin_unreachable")) {
@@ -4725,6 +4633,91 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
+  error_tok(tok, "implicit declaration of a function");
+}
+
+static Node *primary(Token **rest, Token *tok) {
+  Token *start = tok;
+
+  if (equal(tok, "(") && is_typename(tok->next))
+    return compound_literal(rest, tok);
+
+  if (equal(tok, "(") && equal(tok->next, "{")) {
+    if (is_constant_context())
+      error_tok(tok, "statement expresssion in constant context");
+
+    Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "(")) {
+    Node *node = expr(&tok, tok->next);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (equal(tok, "sizeof")) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+    }
+    if (ty->kind == TY_VLA)
+      return vla_size(ty, tok);
+
+    if (ty->size < 0)
+      error_tok(tok, "sizeof applied to incomplete type");
+
+    if (ty->kind == TY_STRUCT && ty->is_flexible) {
+      Member *mem = ty->members;
+      while (mem->next)
+        mem = mem->next;
+      if (mem->ty->kind == TY_ARRAY)
+        return new_size_t((ty->size - mem->ty->size), start);
+    }
+    return new_size_t(ty->size, start);
+  }
+
+  if (equal(tok, "_Alignof") || equal_kw(tok, "alignof")) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      switch (node->kind) {
+      case ND_MEMBER:
+        return new_size_t(MAX(node->member->ty->align, node->member->alt_align), tok);
+      case ND_VAR:
+        return new_size_t(node->var->align, tok);
+      }
+      add_type(node);
+      ty = node->ty;
+    }
+    while (is_array(ty))
+      ty = ty->base;
+    return new_size_t(ty->align, tok);
+  }
+
+  if (equal(tok, "_Countof")) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+    }
+    if (ty->kind == TY_VLA)
+      return vla_count(ty, start, false);
+    if (ty->kind == TY_ARRAY) {
+      if (ty->size < 0)
+        error_tok(tok, "countof applied to incomplete array");
+      return new_size_t(ty->array_len, start);
+    }
+    error_tok(tok, "countof applied to non-array type");
+  }
+
+  if (equal(tok, "_Generic"))
+    return generic_selection(rest, tok->next);
+
   if (tok->kind == TK_IDENT) {
     // Variable or enum constant
     VarScope *sc = find_var(tok);
@@ -4752,6 +4745,9 @@ static Node *primary(Token **rest, Token *tok) {
       }
     }
 
+    if (equal(tok->next, "("))
+      return builtin_functions(rest, tok);
+
     // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
     // automatically defined as a local variable containing the
     // current function name.
@@ -4766,8 +4762,6 @@ static Node *primary(Token **rest, Token *tok) {
       return new_var_node(vsc->var, tok);
     }
 
-    if (equal(tok->next, "("))
-      error_tok(tok, "implicit declaration of a function");
     error_tok(tok, "undefined variable");
   }
 
