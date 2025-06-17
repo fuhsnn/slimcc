@@ -212,10 +212,6 @@ static bool is_scalar(Type *ty) {
   return is_gp_ty(ty) || is_flonum(ty) || ty->kind == TY_BITINT;
 }
 
-static bool is_pow_of_two(uint64_t val) {
-  return !(val & (val - 1));
-}
-
 static int trailing_zero(uint64_t val) {
   int tz = 0;
   for (; tz < 64; tz++)

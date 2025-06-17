@@ -148,6 +148,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, Token *label_list);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
+static int64_t align_expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
@@ -644,7 +645,7 @@ static void attr_aligned(Token *loc, int *align, TokenKind kind) {
     if (equal_ext(tok, "aligned")) {
       Token *tok2;
       if (consume(&tok2, tok->next, "(")) {
-        int align2 = const_expr(&tok2, tok2);
+        int align2 = align_expr(&tok2, tok2);
         *align = MAX(*align, align2);
         continue;
       }
@@ -917,7 +918,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       if (is_typename(tok))
         align = typename(&tok, tok)->align;
       else
-        align = const_expr(&tok, tok);
+        align = align_expr(&tok, tok);
       attr->align = MAX(attr->align, align);
       tok = skip(tok, ")");
       continue;
@@ -3236,6 +3237,13 @@ static int64_t const_expr2(Token **rest, Token *tok, Type **ty) {
 
 int64_t const_expr(Token **rest, Token *tok) {
   return const_expr2(rest, tok, NULL);
+}
+
+static int64_t align_expr(Token **rest, Token *tok) {
+  int64_t val = const_expr2(rest, tok, NULL);
+  if (!is_pow_of_two(val))
+    error_tok(tok, "alignment not power of two");
+  return val;
 }
 
 static long double eval_fp_cast(long double fval, Type *ty) {

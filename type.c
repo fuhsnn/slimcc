@@ -132,6 +132,10 @@ bool mem_iter(Member **mem) {
   return m;
 }
 
+bool is_pow_of_two(uint64_t val) {
+  return !(val & (val - 1));
+}
+
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
   return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||
