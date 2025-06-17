@@ -875,7 +875,10 @@ static Token *prepare_funclike_args(Token *start) {
         tok->dont_expand = true;
     }
     cur = cur->next = tok;
-
+    if (cur->at_bol) {
+      cur->at_bol = false;
+      cur->has_space = true;
+    }
     if (lvl == 0 && equal(tok, ")"))
       break;
 
