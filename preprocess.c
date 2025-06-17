@@ -83,9 +83,13 @@ static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
 }
 
+bool is_pragma(Token **rest, Token *tok) {
+  return is_hash(tok) && consume(rest, tok->next, "pragma");
+}
+
 // Some preprocessor directives such as #include allow extraneous
 // tokens before newline. This function skips such tokens.
-static Token *skip_line(Token *tok) {
+Token *skip_line(Token *tok) {
   if (tok->at_bol)
     return tok;
   warn_tok(tok, "extra token");
@@ -1915,6 +1919,12 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
   }
 }
 
+static void stash_attr(Token *tok, Token *head, Token **attr_cur) {
+  tok->attr_next = head->attr_next;
+  head->attr_next = NULL;
+  *attr_cur = head;
+}
+
 static Token *preprocess3(Token *tok) {
   Token head = {0};
   Token *cur = &head;
@@ -1946,7 +1956,14 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (is_hash(tok) && consume(&tok, tok->next, "pragma")) {
+    if (is_pragma(&tok, tok)) {
+      if (equal(tok, "pack")) {
+        tok = get_line(&cur, start);
+        for (Token *t = start; t != tok; t = t->next)
+          t->alloc_next = NULL;
+        stash_attr(start, &attr_head, &attr_cur);
+        continue;
+      }
       if (equal(tok, "message"))
         notice_tok(tok, "#pragma message");
 
@@ -1964,10 +1981,7 @@ static Token *preprocess3(Token *tok) {
     if (tok->kind == TK_STR && tok->next->kind == TK_STR)
       join_adjacent_string_literals(tok);
 
-    tok->attr_next = attr_head.attr_next;
-    attr_head.attr_next = NULL;
-    attr_cur = &attr_head;
-
+    stash_attr(tok, &attr_head, &attr_cur);
     cur = cur->next = tok;
     tok = tok->next;
     continue;

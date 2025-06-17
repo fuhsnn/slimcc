@@ -107,9 +107,13 @@ struct JumpContext {
   DeferStmt *defr_end;
   Token *labels;
   Node *switch_node;
-};
+} *jump_ctx;
 
-static JumpContext *jump_ctx;
+struct {
+  int *data;
+  int capacity;
+  int cnt;
+} pack_stk;
 
 // Likewise, global variables are accumulated to this list.
 static Obj *globals;
@@ -628,6 +632,67 @@ static bool equal_kw(Token *tok, char *op) {
 
 static bool equal_tykw(Token *tok, char *op) {
   return tok->kind == TK_TYPEKW && equal(tok, op);
+}
+
+static void pragma_pack_push(void) {
+  bool init = !pack_stk.cnt;
+
+  int idx = pack_stk.cnt++;
+  if (idx >= pack_stk.capacity) {
+    pack_stk.capacity = idx + 2;
+    pack_stk.data = realloc(pack_stk.data, sizeof(*pack_stk.data) * pack_stk.capacity);
+  }
+  pack_stk.data[idx] = idx ? pack_stk.data[idx - 1] : 0;
+
+  if (init)
+    pragma_pack_push();
+}
+
+static void pragma_pack_pop(Token *tok) {
+  if (pack_stk.cnt <= 1) {
+    warn_tok(tok, "#pragma pack() stack empty");
+    return;
+  }
+  pack_stk.cnt--;
+}
+
+static void pragma_pack_set(int val) {
+  if (!pack_stk.cnt) {
+    pragma_pack_push();
+    pack_stk.cnt = 1;
+  }
+  pack_stk.data[pack_stk.cnt - 1] = val;
+}
+
+static int pragma_pack_get(Type *ty) {
+  if (ty->is_packed)
+    return 1;
+  if (pack_stk.cnt)
+    return pack_stk.data[pack_stk.cnt - 1];
+  return 0;
+}
+
+static bool pragma_pack(Token **rest, Token *tok) {
+  if (is_pragma(&tok, tok) && consume(&tok, tok, "pack")) {
+    tok = skip(tok, "(");
+    if (equal(tok, "pop")) {
+      pragma_pack_pop(tok);
+      *rest = skip_line(skip(tok->next, ")"));
+      return true;
+    }
+    if (equal(tok, "push")) {
+      pragma_pack_push();
+      if (consume(&tok, tok->next, ")")) {
+        *rest = skip_line(tok);
+        return true;
+      }
+      tok = skip(tok->next, ",");
+    }
+    pragma_pack_set(equal(tok, ")") ? 0 : align_expr(&tok, tok));
+    *rest = skip_line(skip(tok, ")"));
+    return true;
+  }
+  return false;
 }
 
 static bool get_attr_val(Token *tok, int64_t *val) {
@@ -2746,6 +2811,8 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
     if (equal(tok, "}"))
       break;
 
+    if (pragma_pack(&tok, tok))
+      continue;
     if (static_assertion(&tok, tok))
       continue;
 
@@ -3928,6 +3995,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
 
   while (!equal(tok, "}")) {
+    if (pragma_pack(&tok, tok))
+      continue;
     if (static_assertion(&tok, tok))
       continue;
 
@@ -4056,10 +4125,13 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
 
 static Type *struct_decl(Type *ty, int alt_align) {
   int bits = 0;
+  int pack_align = pragma_pack_get(ty);
+
   for (Member *mem = ty->members; mem; mem = mem->next) {
+    int mem_align = (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
+
     if (!mem->is_bitfield || mem->name) {
-      if (!ty->is_packed)
-        alt_align = MAX(alt_align, mem->ty->align);
+      alt_align = MAX(alt_align, mem_align);
       alt_align = MAX(alt_align, mem->alt_align);
     }
     if (mem->alt_align)
@@ -4073,7 +4145,7 @@ static Type *struct_decl(Type *ty, int alt_align) {
         continue;
       }
       int sz = mem->ty->size;
-      if (!ty->is_packed)
+      if (!pack_align)
         if (bits / (sz * 8) != (bits + mem->bit_width - 1) / (sz * 8))
           bits = align_to(bits, sz * 8);
 
@@ -4082,10 +4154,7 @@ static Type *struct_decl(Type *ty, int alt_align) {
       bits += mem->bit_width;
       continue;
     }
-    if (ty->is_packed)
-      bits = align_to(bits, 8);
-    else
-      bits = align_to(bits, mem->ty->align * 8);
+    bits = align_to(bits, mem_align * 8);
 
     mem->offset = bits / 8;
     bits += mem->ty->size * 8;
@@ -4094,18 +4163,21 @@ static Type *struct_decl(Type *ty, int alt_align) {
 
   if (alt_align)
     ty->align = alt_align;
-  if (!alt_align && ty->is_packed)
-    ty->size = align_to(bits, 8) / 8;
+  if (!alt_align && pack_align > 0)
+    ty->size = align_to(bits, pack_align * 8) / 8;
   else
     ty->size = align_to(bits, ty->align * 8) / 8;
   return ty;
 }
 
 static Type *union_decl(Type *ty, int alt_align) {
+  int pack_align = pragma_pack_get(ty);
+
   for (Member *mem = ty->members; mem; mem = mem->next) {
+    int mem_align = (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
+
     if (!mem->is_bitfield || mem->name) {
-      if (!ty->is_packed)
-        alt_align = MAX(alt_align, mem->ty->align);
+      alt_align = MAX(alt_align, mem_align);
       alt_align = MAX(alt_align, mem->alt_align);
     }
     int sz;
@@ -5054,6 +5126,11 @@ Obj *parse(Token *tok) {
     }
 
     arena_on(&node_arena);
+
+    if (pragma_pack(&tok, tok)) {
+      arena_off(&node_arena);
+      continue;
+    }
 
     if (equal(tok, "_Static_assert") || equal_kw(tok, "static_assert")) {
       arena_on(&ast_arena);

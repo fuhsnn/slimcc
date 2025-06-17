@@ -238,6 +238,8 @@ void define_macro(char *name, char *buf);
 void define_macro_cli(char *str);
 void undef_macro(char *name);
 Token *preprocess(Token *tok, Token *imacros_tok, char *input_file);
+Token *skip_line(Token *tok);
+bool is_pragma(Token **rest, Token *tok);
 extern Token *last_alloc_tok;
 extern Token *tok_freelist;
 
