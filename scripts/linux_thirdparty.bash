@@ -43,11 +43,17 @@ url_tar() {
   cd "$2"
 }
 
+url_xz() {
+  mkdir -p "$2"
+  curl -fL "$1" | tar x --xz -C "$2" --strip-components=1
+  cd "$2"
+}
+
 install_libtool() {
- url_tar https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz __libtool
+ url_xz https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz __libtool
  fix_configure libltdl/configure
  fix_and_configure
- make -j4 install
+ make  install
  cd ../ && rm -rf __libtool
 }
 
@@ -59,10 +65,23 @@ test_bash() {
  make test
 }
 
-test_bison() {
- url_tar https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.gz bison
+test_bfs() {
+ github_tar tavianator bfs 4.0.7
+ sed -i 's|-std=c17|-std=c23|g' build/flags.mk
  ./configure
  make check
+}
+
+test_bison() {
+ url_xz https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.xz bison
+ ./configure
+ make check
+}
+
+test_blake2() {
+ git_fetch https://github.com/BLAKE2/BLAKE2 ed1974ea83433eba7b2d95c5dcd9ac33cb847913 blake2
+ cd ref
+ make CC=$CC check
 }
 
 test_bzip2() {
@@ -99,11 +118,17 @@ test_cello() {
 }
 
 test_coreutils() {
- url_tar https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.7.tar.gz coreutils
+ url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.7.tar.xz coreutils
  sed -i 's|--std=gnu99||g' init.cfg
  # fail in docker
   sed -i 's|tests/tail/inotify-dir-recreate.sh||g' tests/local.mk
   sed -i 's|tests/rm/deep-2.sh||g' tests/local.mk
+ ./configure
+ make check
+}
+
+test_cpio() {
+ url_tar https://ftpmirror.gnu.org/gnu/cpio/cpio-2.15.tar.gz cpio
  ./configure
  make check
 }
@@ -130,8 +155,15 @@ test_flex() {
  make check
 }
 
+test_gawk() {
+ url_xz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz gawk
+ fix_configure extension/configure
+ ./configure --disable-pma # pma segfault in docker
+ make check
+}
+
 test_git() {
- github_tar git git v2.49.0
+ github_tar git git v2.50.0
  make CC="$CC" test -j2
 }
 
@@ -162,15 +194,15 @@ test_go() {
 }
 
 test_gzip() {
- url_tar https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.gz gzip
+ url_xz https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.xz gzip
  fix_and_configure
  make check
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.0-47
+ github_tar ImageMagick ImageMagick 7.1.1-47
  fix_and_configure
- make check
+ make check V=1
 }
 
 test_janet() {
@@ -181,6 +213,14 @@ test_janet() {
  # Enable computed goto
  replace_line "#if defined(__GNUC__) && !defined(__EMSCRIPTEN__)" "#if 1" src/core/vm.c
  make test
+}
+
+test_libarchive() {
+ url_tar https://github.com/libarchive/libarchive/releases/download/v3.8.1/libarchive-3.8.1.tar.gz libarchive
+ replace_line "#elif defined(__GNUC__)" "#elif 1" libarchive/archive_blake2.h
+ replace_line "#if defined(__GNUC__)" "#if 1" libarchive/archive_write_set_format_cpio_binary.c
+ fix_and_configure
+ make check
 }
 
 test_libevent() {
@@ -198,7 +238,7 @@ test_libexpat() {
 }
 
 test_libgmp() {
- url_tar https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.gz gmp
+ url_xz https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp
  fix_and_configure
  make && make check
 }
@@ -210,7 +250,7 @@ test_libmpc() {
 }
 
 test_libmpfr() {
- url_tar https://ftpmirror.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.gz mpfr
+ url_xz https://ftpmirror.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz mpfr
  fix_and_configure
  make check
 }
@@ -258,7 +298,7 @@ test_libuev() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.14.3
+ github_tar GNOME libxml2 v2.14.4
  libtoolize
  sh autogen.sh
  fix_configure ./configure
@@ -292,10 +332,11 @@ test_metalang99() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.1.4
+ github_tar microsoft mimalloc v3.1.5
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
+ replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/prim/prim.c
  mkdir build && cd build
  cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
  make && make test
@@ -308,6 +349,7 @@ test_muon() {
  sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
  sed -i "s|\['common/13|#|g" subprojects/meson-tests/meson.build # we don't do pch
  sed -i "s|\['common/251|#|g" subprojects/meson-tests/meson.build # https://github.com/muon-build/muon/issues/149
+ sed -i "s|\['frameworks/7 gnome|#|g" subprojects/meson-tests/meson.build
  build/muon-bootstrap -C build samu
  build/muon-bootstrap -C build test
 }
@@ -321,21 +363,19 @@ test_ocaml() {
  github_tar ocaml ocaml 5.3.0
  fix_configure ./configure
  ./configure --enable-ocamltest --disable-ocamldoc --disable-debugger --disable-native-compiler
- make && make -C testsuite parallel -j 4
+ make -j2  && make -C testsuite parallel -j2
 }
 
-test_oniguruma_jq() {
- git_fetch https://github.com/jqlang/jq 96e8d893c10ed2f7656ccb8cfa39a9a291663a7e jq
- cd modules/
-
- git_fetch https://github.com/kkos/oniguruma e0a8f04615ecc5bbae0bec8b007ecb4816966ae5 oniguruma
+test_oniguruma() {
+ git_fetch https://github.com/kkos/oniguruma f95747b462de672b6f8dbdeb478245ddf061ca53 oniguruma
  libtoolize
  autoreconf -fi
- fix_configure ./configure
- ./configure
+ fix_and_configure
  make check
+}
 
- cd ../../
+test_jq() {
+ git_fetch https://github.com/jqlang/jq 499c91bca9d4d027833bc62787d1bb075c03680e jq
  libtoolize
  autoreconf -fi
  fix_and_configure
@@ -357,7 +397,13 @@ test_openssl() {
  github_tar openssl openssl openssl-3.5.0
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
- make test -j4
+ make -j2 && make test HARNESS_JOBS=2
+}
+
+test_pacman() {
+ url_tar https://sources.archlinux.org/other/pacman/pacman-5.2.2.tar.gz pacman
+ fix_and_configure
+ make check
 }
 
 test_pdpmake() {
@@ -371,7 +417,7 @@ test_perl() {
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
    -Alibpth="/usr/local/lib /lib /usr/lib /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu"
- make -j4 test_prep && HARNESS_OPTIONS=j4 make test_harness
+ make -j3 test_prep && HARNESS_OPTIONS=j3 make test_harness
 }
 
 test_php() {
@@ -399,14 +445,13 @@ test_python() {
  github_tar python cpython v3.13.5
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
- ./configure && make
-
- rm Lib/test/test_ctypes/test_dlerror.py #https://github.com/python/cpython/issues/127626
+ replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
  skip_tests=(
   test_asyncio test_socket # Fail in CI
   test_os # https://github.com/python/cpython/issues/126112
  )
- ./python -m test -j4 --exclude "${skip_tests[@]}"
+ ./configure
+ make -j3 && ./python -m test -j3 --exclude "${skip_tests[@]}"
 }
 
 test_qbe_hare() {
@@ -423,6 +468,13 @@ test_scrapscript() {
  ~/.local/bin/uv python install 3.10
  ~/.local/bin/uv python pin 3.010
  ~/.local/bin/uv run python compiler_tests.py
+}
+
+test_sokol() {
+ git_fetch https://github.com/fuhsnn/sokol eccb38d4775736a0046eb6fb326588cde231658f sokol
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../tests/ -DCMAKE_C_COMPILER=$CC -DSOKOL_BACKEND=SOKOL_GLCORE
+ make VERBOSE=1 && ./sokol-test
 }
 
 test_sqlite() {
@@ -468,6 +520,13 @@ test_vim() {
  github_tar vim vim v9.1.1200
  ./configure
  make && make testtiny
+}
+
+test_xz() {
+ url_tar https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.gz xz
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC
+ make && make test
 }
 
 test_zlib() {
@@ -517,12 +576,71 @@ build_nano() {
  ./configure && make
 }
 
-build_sdl() {
+build_nuklear() {
+ github_tar Immediate-Mode-UI Nuklear 4.12.7
+ rm -r demo/sfml_opengl*
+ sed -i 's|CFLAGS+=|CFLAGS+=-DSDL_DISABLE_IMMINTRIN_H |g' demo/rawfb/sdl/Makefile
+ sed -i 's|__builtin_ctzl|stdc_trailing_zeros|g' demo/rawfb/x11/nuklear_xlib.h
+ sed -i 's|__builtin_popcount|stdc_count_ones|g' demo/rawfb/x11/nuklear_xlib.h
+ sed -i 's|#include <X11/Xlib.h>|#include <stdbit.h>\n#include <X11/Xlib.h>|g' demo/rawfb/x11/nuklear_xlib.h
+ sed -i 's|-std=c99|-DSTBI_NO_SIMD -std=c99|g' demo/glfw_opengl2/Makefile
+ sed -i 's|-fsanitize=address||g' demo/sdl_vulkan/Makefile
+ make CC=$CC demos
+}
+
+build_q2rtx() {
+ github_clone NVIDIA Q2RTX v1.8.0
+ replace_line "#if (defined __GNUC__)" "#if 1" inc/common/intreadwrite.h
+ replace_line "#define inline __inline" "" inc/shared/config.h
+ sed -i 's|-msse2 -mfpmath=sse||g' CMakeLists.txt
+ mkdir build && cd build
+ cmake ../ -DUSE_SYSTEM_CURL=on -DUSE_SYSTEM_OPENAL=on -DUSE_SYSTEM_SDL2=on -DUSE_SYSTEM_ZLIB=on -DCONFIG_BUILD_GLSLANG=no \
+  -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD -DSTBIR_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
+ make VERBOSE=1
+}
+
+build_quake3e() {
+ git_fetch https://github.com/ec-/Quake3e 814f2b5c8b6ff9a6f0976b880963a86f0b2afdb6 quake3e
+ sed -i 's|-pipe||g' Makefile
+ sed -i 's|Snd_Memset|Snd_Memset_unused|g' code/unix/linux_snd.c
+ make CC=$CC V=1 CFLAGS=-DSDL_DISABLE_IMMINTRIN_H
+}
+
+build_raylib_raygui() {
+ git_fetch https://github.com/raysan5/raylib 4bc8d3761c48f4dcf56f126640da8f3567dc516b raylib
+ sed -i 's|__builtin_clz|stdc_leading_zeros|g' src/external/sinfl.h
+ sed -i 's|#include <string.h>|#include <stdbit.h>\n#include <string.h>|g' src/external/sinfl.h
+ sed -i 's|#define DR_MP3_ONLY_SIMD||g' src/external/dr_mp3.h
+
+ make CC=$CC CUSTOM_CFLAGS='-DSTBI_NO_SIMD -DSTBIR_NO_SIMD' -C src/ PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC -B
+ make CC=$CC CUSTOM_CFLAGS='-DSTBI_NO_SIMD -DSTBIR_NO_SIMD' -C examples/ PLATFORM=PLATFORM_DESKTOP -B
+ make CC=$CC CUSTOM_CFLAGS='-DSTBI_NO_SIMD -DSTBIR_NO_SIMD' -C src/ PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=SHARED -B
+
+ cd ../
+ git_fetch https://github.com/raysan5/raygui 99b37e4d4fdc19e7bf73844d6b9f177cbb27ce24 raygui
+ make CC=$CC -C examples RAYLIB_PREFIX=../../raylib/ -B
+}
+
+build_sdl3() {
  github_tar libsdl-org SDL release-3.2.16
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DSDL_UNIX_CONSOLE_BUILD=ON
- make
+ cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD'
+ make VERBOSE=1
+}
+
+build_stb() {
+ git_fetch https://github.com/nothings/stb f58f558c120e9b32c217290b80bad1a0729fbb2c stb
+ sed -i 's|-DSTB_DIVIDE_TEST|-DSTB_DIVIDE_TEST -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' tests/Makefile
+ sed -i 's|$(CC) $(INCLUDES) $(CPPFLAGS) -std=c++0x test_cpp_compilation.cpp -lm -lstdc++||g' tests/Makefile
+ make -C tests
+}
+
+build_yquake2() {
+ github_tar yquake2 yquake2 QUAKE2_8_51
+ sed -i 's|-pipe -fomit-frame-pointer||g' Makefile
+ sed -i 's|__VERSION__|\"\"|g' src/backends/unix/signalhandler.c
+ make CC=$CC V=1 CFLAGS='-DSTBI_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
 }
 
 build_zig() {
