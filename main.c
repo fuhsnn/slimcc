@@ -31,6 +31,7 @@ char *opt_visibility;
 StdVer opt_std;
 bool opt_fdefer_ts;
 
+static StringArray opt_imacros;
 static StringArray opt_include;
 bool opt_E;
 bool opt_enable_universal_char;
@@ -287,6 +288,11 @@ static int parse_args(int argc, char **argv) {
 
     if (take_arg_s(argv, &i, &arg, "-U")) {
       undef_macro(arg);
+      continue;
+    }
+
+    if (take_arg_s(argv, &i, &arg, "-imacros")) {
+      strarray_push(&opt_imacros, arg);
       continue;
     }
 
@@ -756,9 +762,22 @@ static Token *must_tokenize_file(char *path, Token **end) {
   return tok;
 }
 
+static char *get_path(char *mode, char *incl) {
+  if (file_exists(incl)) {
+    return incl;
+  }
+  char *path = search_include_paths(incl);
+  if (!path)
+    error("%s: %s: %s", mode, incl, strerror(errno));
+  return path;
+}
+
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   Token head = {0};
   Token *cur = &head;
+
+  Token imacros_head = {0};
+  Token *imacros_cur = &imacros_head;
 
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
@@ -783,19 +802,18 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
     }
   }
 
+  // Process -imacros option
+  for (int i = 0; i < opt_imacros.len; i++) {
+    char *path = get_path("-imacros", opt_imacros.data[i]);
+    Token *end = NULL;
+    imacros_cur->next = must_tokenize_file(path, &end);
+    if (end)
+      imacros_cur = end;
+  }
+
   // Process -include option
   for (int i = 0; i < opt_include.len; i++) {
-    char *incl = opt_include.data[i];
-
-    char *path;
-    if (file_exists(incl)) {
-      path = incl;
-    } else {
-      path = search_include_paths(incl);
-      if (!path)
-        error("-include: %s: %s", incl, strerror(errno));
-    }
-
+    char *path = get_path("-include", opt_include.data[i]);
     Token *end = NULL;
     cur->next = must_tokenize_file(path, &end);
     if (end)
@@ -804,7 +822,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 
   // Tokenize and parse.
   cur->next = must_tokenize_file(input_file, NULL);
-  Token *tok = preprocess(head.next, input_file);
+  Token *tok = preprocess(head.next, imacros_head.next, input_file);
 
   // If -M or -MD are given, print file dependencies.
   if (opt_M || opt_MD) {

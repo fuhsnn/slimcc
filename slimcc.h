@@ -237,7 +237,7 @@ void init_macros(void);
 void define_macro(char *name, char *buf);
 void define_macro_cli(char *str);
 void undef_macro(char *name);
-Token *preprocess(Token *tok, char *input_file);
+Token *preprocess(Token *tok, Token *imacros_tok, char *input_file);
 extern Token *last_alloc_tok;
 extern Token *tok_freelist;
 

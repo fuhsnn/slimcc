@@ -1281,6 +1281,10 @@ static Token *preprocess2(Token *tok) {
   tok->is_root = true;
   cur->next = tok;
 
+  CondIncl *cond;
+  if (get_cond_incl(&cond))
+    error_tok(cond->tok, "unterminated conditional directive");
+
   if (start_m != locked_macros)
     internal_error();
   return head.next;
@@ -1973,14 +1977,12 @@ static Token *preprocess3(Token *tok) {
 }
 
 // Entry point function of the preprocessor.
-Token *preprocess(Token *tok, char *input_file) {
+Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
   base_file = input_file;
 
+  if (imacros_tok)
+    imacros_tok = preprocess2(imacros_tok);
   tok = preprocess2(tok);
-
-  CondIncl *cond;
-  if (get_cond_incl(&cond))
-    error_tok(cond->tok, "unterminated conditional directive");
 
   if (opt_E)
     return tok;
@@ -1988,6 +1990,13 @@ Token *preprocess(Token *tok, char *input_file) {
   if (!(free_alloc = check_mem_usage())) {
     arena_off(&pp_arena);
     return preprocess3(tok);
+  }
+
+  if (imacros_tok) {
+    Token *t = imacros_tok;
+    while (t->kind != TK_EOF)
+      t->is_root = false;
+    t->is_root = false;
   }
 
   Token *t = tok;
