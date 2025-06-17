@@ -39,27 +39,45 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: interop, proj: test_bfs }
           - { vm: interop, proj: test_c23doku }
           - { vm: interop, proj: test_c3 }
           - { vm: interop, proj: test_flex }
+          - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_muon }
+          - { vm: interop, proj: test_sokol }
+          - { vm: interop, proj: build_ncurses }
+          - { vm: interop, proj: build_nuklear }
+          - { vm: interop, proj: build_q2rtx }
+          - { vm: interop, proj: build_quake3e }
+          - { vm: interop, proj: build_raylib_raygui }
+          - { vm: interop, proj: build_sdl3 }
+          - { vm: interop, proj: build_yquake2 }
           - { vm: main, proj: test_bash }
           - { vm: main, proj: test_bison }
+          - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_bzip2 }
           - { vm: main, proj: test_cello }
           - { vm: main, proj: test_coreutils }
+          - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
+          - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_glib }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_go }
+          - { vm: main, proj: test_gsed }
+          - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
-          - { vm: main, proj: test_imagemagick }
           - { vm: main, proj: test_janet }
+          - { vm: main, proj: test_jq }
+          - { vm: main, proj: test_libarchive }
           - { vm: main, proj: test_libevent }
           - { vm: main, proj: test_libgmp }
+          - { vm: main, proj: test_libjsonc }
+          - { vm: main, proj: test_liblz4 }
           - { vm: main, proj: test_libmpc }
           - { vm: main, proj: test_libmpfr }
           - { vm: main, proj: test_libpcre2 }
@@ -75,11 +93,13 @@ jobs:
           - { vm: main, proj: test_mimalloc }
           - { vm: main, proj: test_noplate }
           - { vm: main, proj: test_ocaml }
-          - { vm: main, proj: test_oniguruma_jq }
+          - { vm: main, proj: test_oniguruma }
           - { vm: main, proj: test_openssh }
           - { vm: main, proj: test_openssl }
+          - { vm: main, proj: test_pacman }
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_perl }
+          - { vm: main, proj: test_pixman }
           - { vm: main, proj: test_php }
           - { vm: main, proj: test_postgres }
           - { vm: main, proj: test_python }
@@ -91,13 +111,16 @@ jobs:
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }
           - { vm: main, proj: test_vim }
+          - { vm: main, proj: test_wget }
+          - { vm: main, proj: test_xz }
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: build_erlang }
+          - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
           - { vm: main, proj: build_nano }
-          - { vm: main, proj: build_sdl }
+          - { vm: main, proj: build_stb }
           - { vm: main, proj: build_zig }
     steps:
       - name: Download artifact

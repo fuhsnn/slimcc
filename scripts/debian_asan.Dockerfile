@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  file binutils libc-dev libgcc-12-dev \
  make cmake pkg-config \
  autoconf autopoint automake gettext texinfo \
- git curl ca-certificates \
+ git curl ca-certificates locales \
  tcl-dev bison flex re2c \
  libcurl4-openssl-dev libssl-dev libexpat1-dev zlib1g-dev libicu-dev \
  libncurses-dev libreadline-dev libpsl-dev libffi-dev libxml2-dev libsqlite3-dev \
@@ -23,7 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # memcached
  libevent-dev \
  # libxml
- python3-dev
+ python3-dev \
+ # pacman
+ libarchive-dev fakeroot fakechroot gawk \
+ # libarchive
+ libbz2-dev liblzma-dev \
+ # jq
+ libonig-dev \
+ # pixman, freetype
+ libpng-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
@@ -38,6 +46,8 @@ RUN ! command -v gcc
 RUN ! command -v gcc-12
 
 ENV CC=/work/slimcc/slimcc
+
+RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
 RUN bash scripts/linux_thirdparty.bash install_libtool
 
