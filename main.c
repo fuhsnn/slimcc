@@ -34,7 +34,6 @@ bool opt_fdefer_ts;
 static StringArray opt_imacros;
 static StringArray opt_include;
 bool opt_E;
-bool opt_enable_universal_char;
 static bool opt_P;
 static bool opt_M;
 static bool opt_MD;
@@ -420,8 +419,7 @@ static int parse_args(int argc, char **argv) {
         set_bool(arg, b, "plt", &opt_use_plt) ||
         set_bool(arg, b, "function-sections", &opt_func_sections) ||
         set_bool(arg, b, "data-sections", &opt_data_sections) ||
-        set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
-        set_bool(arg, b, "enable-universal-char", &opt_enable_universal_char))
+        set_bool(arg, b, "emulated-tls", &opt_femulated_tls))
         continue;
 
       if (b) {

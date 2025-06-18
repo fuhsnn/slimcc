@@ -296,10 +296,24 @@ TokenKind ident_keyword(Token *tok) {
   return val ? (TokenKind)(intptr_t)val : TK_IDENT;
 }
 
-static int read_escaped_char(char **new_pos, char *p) {
+static bool read_ucn(uint32_t *val, char **new_pos, char *p) {
+  int len = (*p++ == 'u') ? 4 : 8;
+
+  uint32_t c = 0;
+  for (int i = 0; i < len; i++) {
+    if (!Isxdigit(p[i]))
+      return false;
+    c = (c << 4) | from_hex(p[i]);
+  }
+  *val = c;
+  *new_pos = p + len;
+  return true;
+}
+
+static uint32_t read_escape_seq(char **new_pos, char *p) {
   if (Inrange(*p, '0', '7')) {
     // Read an octal number.
-    int c = *p++ - '0';
+    uint32_t c = *p++ - '0';
     if (Inrange(*p, '0', '7')) {
       c = (c << 3) + (*p++ - '0');
       if (Inrange(*p, '0', '7'))
@@ -315,10 +329,17 @@ static int read_escaped_char(char **new_pos, char *p) {
     if (!Isxdigit(*p))
       error_at(p, "invalid hex escape sequence");
 
-    int c = 0;
+    uint32_t c = 0;
     for (; Isxdigit(*p); p++)
-      c = ((unsigned)c << 4) + from_hex(*p);
+      c = (c << 4) + from_hex(*p);
     *new_pos = p;
+    return c;
+  }
+
+  if (Casecmp(*p, 'u')) {
+    uint32_t c;
+    if (!read_ucn(&c, new_pos, p))
+      error_at(p, "incomplete universal character name");
     return c;
   }
 
@@ -367,10 +388,15 @@ static Token *read_string_literal(char *start, char *quote) {
   int len = 0;
 
   for (char *p = quote + 1; p < end;) {
-    if (*p == '\\')
-      buf[len++] = read_escaped_char(&p, p + 1);
-    else
-      buf[len++] = *p++;
+    if (*p == '\\') {
+      if (Casecmp(p[1], 'u')) {
+        len += encode_utf8(&buf[len], read_escape_seq(&p, p + 1));
+        continue;
+      }
+      buf[len++] = read_escape_seq(&p, p + 1);
+      continue;
+    }
+    buf[len++] = *p++;
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
@@ -392,12 +418,12 @@ static Token *read_utf16_string_literal(char *start, char *quote) {
   int len = 0;
 
   for (char *p = quote + 1; p < end;) {
-    if (*p == '\\') {
-      buf[len++] = read_escaped_char(&p, p + 1);
-      continue;
-    }
+    uint32_t c;
+    if (*p == '\\')
+      c = read_escape_seq(&p, p + 1);
+    else
+      c = decode_utf8(&p, p);
 
-    uint32_t c = decode_utf8(&p, p);
     if (c < 0x10000) {
       // Encode a code point in 2 bytes.
       buf[len++] = c;
@@ -426,7 +452,7 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
 
   for (char *p = quote + 1; p < end;) {
     if (*p == '\\')
-      buf[len++] = read_escaped_char(&p, p + 1);
+      buf[len++] = read_escape_seq(&p, p + 1);
     else
       buf[len++] = decode_utf8(&p, p);
   }
@@ -442,9 +468,9 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
   if (*p == '\0')
     error_at(start, "unclosed char literal");
 
-  int c;
+  uint32_t c;
   if (*p == '\\')
-    c = read_escaped_char(&p, p + 1);
+    c = read_escape_seq(&p, p + 1);
   else
     c = decode_utf8(&p, p);
 
@@ -984,42 +1010,6 @@ static void remove_backslash_newline(char *p) {
   }
 }
 
-static uint32_t read_universal_char(char *p, int len) {
-  uint32_t c = 0;
-  for (int i = 0; i < len; i++) {
-    if (!Isxdigit(p[i]))
-      return 0;
-    c = (c << 4) | from_hex(p[i]);
-  }
-  return c;
-}
-
-// Replace \u or \U escape sequences with corresponding UTF-8 bytes.
-static void convert_universal_chars(char *p) {
-  char *q = p;
-
-  while (*p) {
-    if (startswith2(p, '\\', 'u')) {
-      uint32_t c = read_universal_char(p + 2, 4);
-      if (c) {
-        p += 6;
-        q += encode_utf8(q, c);
-        continue;
-      }
-    } else if (startswith2(p, '\\', 'U')) {
-      uint32_t c = read_universal_char(p + 2, 8);
-      if (c) {
-        p += 10;
-        q += encode_utf8(q, c);
-        continue;
-      }
-    }
-    *q++ = *p++;
-  }
-
-  *q = '\0';
-}
-
 File *add_input_file(char *path, char *contents, int *incl_no) {
   static HashMap input_files_map;
 
@@ -1057,9 +1047,6 @@ Token *tokenize_file(char *path, Token **end, int *incl_no) {
 
   canonicalize_newline(p);
   remove_backslash_newline(p);
-
-  if (opt_enable_universal_char)
-    convert_universal_chars(p);
 
   return tokenize(add_input_file(path, p, incl_no), end);
 }
