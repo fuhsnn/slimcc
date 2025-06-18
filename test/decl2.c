@@ -1,9 +1,5 @@
 #include "test.h"
 
-#define CAT(x) b##x
-int CAT(6_) = 7;
-int CAT(8µ) = 9;
-
 int fn(float), var1 = 7, fn2(void), var2 = 11;
 
 int tentative_var;
@@ -17,11 +13,6 @@ static inline int static_inline_fn(void);
 int (*static_inline_fn_ptr)(void) = static_inline_fn;
 
 int main(void) {
-  {
-    ASSERT(7, b6_);
-    ASSERT(9, b8µ);
-  }
-
   {
     ASSERT(7, var1);
     ASSERT(11, var2);

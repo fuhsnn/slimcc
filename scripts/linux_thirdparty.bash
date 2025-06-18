@@ -332,7 +332,7 @@ test_oniguruma_jq() {
  libtoolize
  autoreconf -fi
  fix_configure ./configure
- CFLAGS=-fenable-universal-char ./configure
+ ./configure
  make check
 
  cd ../../

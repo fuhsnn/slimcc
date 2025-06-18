@@ -1,5 +1,7 @@
 #include "slimcc.h"
 
+static uint32_t read_universal_char(char *p, int len);
+
 // Input file
 static File *current_file;
 
@@ -367,10 +369,26 @@ static Token *read_string_literal(char *start, char *quote) {
   int len = 0;
 
   for (char *p = quote + 1; p < end;) {
-    if (*p == '\\')
+    if (*p == '\\') {
+      if (p[1] == 'u') {
+        uint32_t c = read_universal_char(p + 2, 4);
+        if (c) {
+          p += 6;
+          len += encode_utf8(&buf[len], c);
+          continue;
+        }
+      } else if (p[1] == 'U') {
+        uint32_t c = read_universal_char(p + 2, 8);
+        if (c) {
+          p += 10;
+          len += encode_utf8(&buf[len], c);
+          continue;
+        }
+      }
       buf[len++] = read_escaped_char(&p, p + 1);
-    else
-      buf[len++] = *p++;
+      continue;
+    }
+    buf[len++] = *p++;
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
@@ -392,12 +410,27 @@ static Token *read_utf16_string_literal(char *start, char *quote) {
   int len = 0;
 
   for (char *p = quote + 1; p < end;) {
+    uint32_t c = 0;
     if (*p == '\\') {
-      buf[len++] = read_escaped_char(&p, p + 1);
-      continue;
+      if (p[1] == 'u') {
+        c = read_universal_char(p + 2, 4);
+        if (c) {
+          p += 6;
+        }
+      } else if (p[1] == 'U') {
+        c = read_universal_char(p + 2, 8);
+        if (c) {
+          p += 10;
+        }
+      }
+      if (!c) {
+        buf[len++] = read_escaped_char(&p, p + 1);
+        continue;
+      }
     }
+    if (!c)
+      c = decode_utf8(&p, p);
 
-    uint32_t c = decode_utf8(&p, p);
     if (c < 0x10000) {
       // Encode a code point in 2 bytes.
       buf[len++] = c;
@@ -425,10 +458,26 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
   int len = 0;
 
   for (char *p = quote + 1; p < end;) {
-    if (*p == '\\')
+    if (*p == '\\') {
+      if (p[1] == 'u') {
+        uint32_t c = read_universal_char(p + 2, 4);
+        if (c) {
+          buf[len++] = c;
+          p += 6;
+          continue;
+        }
+      } else if (p[1] == 'U') {
+        uint32_t c = read_universal_char(p + 2, 8);
+        if (c) {
+          buf[len++] = c;
+          p += 10;
+          continue;
+        }
+      }
       buf[len++] = read_escaped_char(&p, p + 1);
-    else
-      buf[len++] = decode_utf8(&p, p);
+      continue;
+    }
+    buf[len++] = decode_utf8(&p, p);
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
@@ -442,10 +491,22 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
   if (*p == '\0')
     error_at(start, "unclosed char literal");
 
-  int c;
-  if (*p == '\\')
-    c = read_escaped_char(&p, p + 1);
-  else
+  uint32_t c = 0;
+  if (*p == '\\') {
+    if (p[1] == 'u') {
+      c = read_universal_char(p + 2, 4);
+      if (c) {
+        p += 6;
+      }
+    } else if (p[1] == 'U') {
+      c = read_universal_char(p + 2, 8);
+      if (c) {
+        p += 10;
+      }
+    }
+    if (!c)
+      c = read_escaped_char(&p, p + 1);
+  } else
     c = decode_utf8(&p, p);
 
   char *end = strchr(p, '\'');
@@ -453,7 +514,7 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
     error_at(p, "unclosed char literal");
 
   Token *tok = new_token(TK_INT_NUM, start, end + 1);
-  tok->ival = c;
+  tok->ival = (int32_t)c;
   tok->ty = ty;
   return tok;
 }
@@ -988,7 +1049,7 @@ static uint32_t read_universal_char(char *p, int len) {
   uint32_t c = 0;
   for (int i = 0; i < len; i++) {
     if (!Isxdigit(p[i]))
-      return 0;
+      error_at(&p[i], "incomplete universal character name");
     c = (c << 4) | from_hex(p[i]);
   }
   return c;
@@ -1057,9 +1118,6 @@ Token *tokenize_file(char *path, Token **end, int *incl_no) {
 
   canonicalize_newline(p);
   remove_backslash_newline(p);
-
-  if (opt_enable_universal_char)
-    convert_universal_chars(p);
 
   return tokenize(add_input_file(path, p, incl_no), end);
 }
