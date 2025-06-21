@@ -29,7 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # libarchive
  libbz2-dev liblzma-dev \
  # jq
- libonig-dev
+ libonig-dev \
+ # pixman, freetype
+ libpng-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

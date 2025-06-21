@@ -47,6 +47,7 @@ jobs:
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_muon }
           - { vm: interop, proj: test_sokol }
+          - { vm: interop, proj: build_ncurses }
           - { vm: interop, proj: build_nuklear }
           - { vm: interop, proj: build_q2rtx }
           - { vm: interop, proj: build_quake3e }
@@ -67,12 +68,16 @@ jobs:
           - { vm: main, proj: test_glib }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_go }
+          - { vm: main, proj: test_gsed }
+          - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
           - { vm: main, proj: test_janet }
           - { vm: main, proj: test_jq }
           - { vm: main, proj: test_libarchive }
           - { vm: main, proj: test_libevent }
           - { vm: main, proj: test_libgmp }
+          - { vm: main, proj: test_libjsonc }
+          - { vm: main, proj: test_liblz4 }
           - { vm: main, proj: test_libmpc }
           - { vm: main, proj: test_libmpfr }
           - { vm: main, proj: test_libpcre2 }
@@ -94,6 +99,7 @@ jobs:
           - { vm: main, proj: test_pacman }
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_perl }
+          - { vm: main, proj: test_pixman }
           - { vm: main, proj: test_php }
           - { vm: main, proj: test_postgres }
           - { vm: main, proj: test_python }
@@ -105,11 +111,13 @@ jobs:
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }
           - { vm: main, proj: test_vim }
+          - { vm: main, proj: test_wget }
           - { vm: main, proj: test_xz }
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: build_erlang }
+          - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_stb }

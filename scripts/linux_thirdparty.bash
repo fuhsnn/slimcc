@@ -193,6 +193,18 @@ test_go() {
  GO14TESTS=1 ./all.bash
 }
 
+test_gsed() {
+ url_xz https://ftpmirror.gnu.org/gnu/sed/sed-4.9.tar.xz gsed
+ ./configure
+ make check
+}
+
+test_gtar() {
+ url_xz https://ftpmirror.gnu.org/gnu/tar/tar-1.35.tar.xz gtar
+ ./configure
+ make check
+}
+
 test_gzip() {
  url_xz https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.xz gzip
  fix_and_configure
@@ -241,6 +253,19 @@ test_libgmp() {
  url_xz https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp
  fix_and_configure
  make && make check
+}
+
+test_libjsonc() {
+ git_fetch https://github.com/json-c/json-c 7cee5237dc6c0831e3f9dc490394eaea44636861 json-c
+ sed -i 's|json_object_new_double(NAN)|json_object_new_double(nan(\"\"))|g' json_tokener.c
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC -DHAVE_VASPRINTF=no
+ make && make test
+}
+
+test_liblz4() {
+ git_fetch https://github.com/lz4/lz4 2bc386d57cd9c36780366acead0054fd49dcd36b lz4
+ make test
 }
 
 test_libmpc() {
@@ -420,6 +445,12 @@ test_perl() {
  make -j3 test_prep && HARNESS_OPTIONS=j3 make test_harness
 }
 
+test_pixman() {
+ url_tar https://cairographics.org/releases/pixman-0.42.2.tar.gz pixman
+ fix_and_configure
+ make check
+}
+
 test_php() {
  github_tar php php-src php-8.1.32
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
@@ -522,6 +553,12 @@ test_vim() {
  make && make testtiny
 }
 
+test_wget() {
+ url_tar https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.0.tar.gz wget
+ fix_and_configure
+ make check
+}
+
 test_xz() {
  url_tar https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.gz xz
  mkdir cmakebuild && cd cmakebuild
@@ -560,6 +597,13 @@ build_erlang() {
  OTP_TINY_BUILD=true make
 }
 
+build_freetype() {
+ url_tar https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-13-3/freetype-VER-2-13-3.tar.gz freetype
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=$(dirname $(find /usr/ 2>/dev/null | grep libbz2.so$))
+ make
+}
+
 build_gcc() {
  url_tar https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.gz gcc47
  export -f fix_configure
@@ -574,6 +618,12 @@ build_gcc() {
 build_nano() {
  url_tar https://www.nano-editor.org/dist/v8/nano-8.5.tar.gz nano
  ./configure && make
+}
+
+build_ncurses() {
+ url_tar https://ftpmirror.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz ncurses
+ ./configure
+ make
 }
 
 build_nuklear() {
