@@ -2716,6 +2716,11 @@ static void gen_void_assign(Node *node) {
 }
 
 static void gen_void_expr(Node *node) {
+  if (node->ty->is_atomic || node->ty->is_volatile) {
+    gen_expr2(node, true);
+    return;
+  }
+
   switch (node->kind) {
   case ND_NULL_EXPR:
   case ND_LABEL_VAL:
