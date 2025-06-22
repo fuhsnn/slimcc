@@ -185,6 +185,7 @@ struct Token {
   bool is_root : 1;
   bool is_live : 1;
   bool is_generated : 1;
+  bool has_ucn : 1;
   int len;                // Token length
   char *loc;              // Token location
   File *file;             // Source location
@@ -224,6 +225,7 @@ Token *tokenize_file(char *filename, Token **end, int *incl_no);
 File *add_input_file(char *path, char *content, int *incl_no);
 void convert_pp_number(Token *tok, Node *node);
 TokenKind ident_keyword(Token *tok);
+void convert_ucn_ident(Token *tok);
 
 #define internal_error() \
   error_ice(__FILE__, __LINE__)

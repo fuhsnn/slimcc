@@ -1975,11 +1975,15 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (tok->kind == TK_IDENT)
+    if (tok->kind == TK_IDENT) {
       tok->kind = ident_keyword(tok);
 
-    if (tok->kind == TK_STR && tok->next->kind == TK_STR)
-      join_adjacent_string_literals(tok);
+      if (tok->kind == TK_IDENT && tok->has_ucn)
+        convert_ucn_ident(tok);
+    } else if (tok->kind == TK_STR) {
+      if (tok->next->kind == TK_STR)
+        join_adjacent_string_literals(tok);
+    }
 
     stash_attr(tok, &attr_head, &attr_cur);
     cur = cur->next = tok;

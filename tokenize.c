@@ -161,10 +161,9 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
   return tok;
 }
 
-// Read an identifier and returns the length of it.
-// If p does not point to a valid identifier, 0 is returned.
-static int read_ident(char *p) {
+static Token *read_ident(char *p) {
   char *start = p;
+  bool has_ucn = false;
 
   for (;;) {
     if (*p == '$') {
@@ -174,6 +173,11 @@ static int read_ident(char *p) {
       continue;
     }
     if (Isalnum(*p) || *p == '_') {
+      p++;
+      continue;
+    }
+    if (*p == '\\') {
+      has_ucn = true;
       p++;
       continue;
     }
@@ -187,7 +191,13 @@ static int read_ident(char *p) {
     }
     break;
   }
-  return p - start;
+
+  if (p == start)
+    return NULL;
+
+  Token *tok = new_token(TK_IDENT, start, p);
+  tok->has_ucn = has_ucn;
+  return tok;
 }
 
 static int from_hex(char c) {
@@ -236,7 +246,6 @@ static int read_punct(char *p) {
   case '?':
   case '@':
   case '[':
-  case '\\':
   case ']':
   case '`':
   case '{':
@@ -759,6 +768,30 @@ Token *tokenize_string_literal(Token *tok, Type *basety) {
   return t;
 }
 
+void convert_ucn_ident(Token *tok) {
+  char *end = tok->loc + tok->len;
+  char *p = tok->loc;
+  char *q = p;
+
+  while (p != end) {
+    if (p < end) {
+      if (*p != '\\') {
+        *q++ = *p++;
+        continue;
+      }
+      uint32_t c;
+      if (Casecmp(p[1], 'u') && read_ucn(&c, &p, p + 1) &&
+        (p == tok->loc ? is_ident1(c) : is_ident2(c))) {
+        q += encode_utf8(q, c);
+        continue;
+      }
+    }
+    error_tok(tok, "invalid token");
+  }
+
+  tok->len = q - tok->loc;
+}
+
 // Tokenize a given string and returns new tokens.
 Token *tokenize(File *file, Token **end) {
   current_file = file;
@@ -898,9 +931,9 @@ Token *tokenize(File *file, Token **end) {
     }
 
     // Identifier or keyword
-    int ident_len = read_ident(p);
-    if (ident_len) {
-      cur = cur->next = new_token(TK_IDENT, p, p + ident_len);
+    Token *ident = read_ident(p);
+    if (ident) {
+      cur = cur->next = ident;
       p += cur->len;
       continue;
     }
