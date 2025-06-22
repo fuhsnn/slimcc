@@ -1381,7 +1381,7 @@ static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
-    if (is_typename(tok) || equal(tok, ")"))
+    if (is_typename(tok) || equal(tok, "...") || equal(tok, ")"))
       return func_params(rest, tok, ty);
 
     ty = type_suffix(rest, skip_paren(tok), ty);

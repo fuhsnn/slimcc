@@ -179,6 +179,20 @@ static int add_all2(int n, ...) {
   int sum = 0;
   for (int i = 0; i < n; i++)
     sum += ({ va_arg(ap, int); });
+
+  va_end(ap);
+  return sum;
+}
+
+static int va_fn(...) {
+  va_list ap;
+  va_start(ap);
+
+  int sum = 0;
+  for (int i = 0; i < 2; i++)
+    sum += ({ va_arg(ap, int); });
+
+  va_end(ap);
   return sum;
 }
 
@@ -323,6 +337,18 @@ Aligned1024 s = {.c = 77};
   ASSERT(1, sizeof * ({ main; }) );
   ASSERT(1, sizeof * (0 ? main : main) );
   ASSERT(1, sizeof * (0, main) );
+
+#ifdef NOTCLANG
+  {
+    int va_fn(...);
+
+    typeof(int(...))*fn_ptr = &va_fn;
+
+    SASSERT(1 == _Generic(typeof(va_fn), int(...):1));
+
+    ASSERT(37, fn_ptr(13,24));
+  }
+#endif
 
   printf("OK\n");
 
