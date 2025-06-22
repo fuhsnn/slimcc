@@ -10,68 +10,68 @@
 #define STRBUF_SZ2 208
 
 typedef enum {
-  REG_NULL = 0,
-  REG_AX,
-  REG_CX,
-  REG_DX,
-  REG_SI,
-  REG_DI,
-  REG_R8,
-  REG_R9,
-  REG_R10,
-  REG_R11,
-  REG_R12,
-  REG_R13,
-  REG_R14,
-  REG_R15,
-  REG_BX,
-  REG_BP,
-  REG_SP,
-  REG_XMM0,
-  REG_XMM1,
-  REG_XMM2,
-  REG_XMM3,
-  REG_XMM4,
-  REG_XMM5,
-  REG_XMM6,
-  REG_XMM7,
-  REG_XMM8,
-  REG_XMM9,
-  REG_XMM10,
-  REG_XMM11,
-  REG_XMM12,
-  REG_XMM13,
-  REG_XMM14,
-  REG_XMM15,
-  REG_X87_ST0,
-  REG_X87_ST1,
-  REG_X87_ST2,
-  REG_X87_ST3,
-  REG_X87_ST4,
-  REG_X87_ST5,
-  REG_X87_ST6,
-  REG_X87_ST7,
-  REG_END
+  REG_X64_NULL = 0,
+  REG_X64_AX,
+  REG_X64_CX,
+  REG_X64_DX,
+  REG_X64_SI,
+  REG_X64_DI,
+  REG_X64_R8,
+  REG_X64_R9,
+  REG_X64_R10,
+  REG_X64_R11,
+  REG_X64_R12,
+  REG_X64_R13,
+  REG_X64_R14,
+  REG_X64_R15,
+  REG_X64_BX,
+  REG_X64_BP,
+  REG_X64_SP,
+  REG_X64_XMM0,
+  REG_X64_XMM1,
+  REG_X64_XMM2,
+  REG_X64_XMM3,
+  REG_X64_XMM4,
+  REG_X64_XMM5,
+  REG_X64_XMM6,
+  REG_X64_XMM7,
+  REG_X64_XMM8,
+  REG_X64_XMM9,
+  REG_X64_XMM10,
+  REG_X64_XMM11,
+  REG_X64_XMM12,
+  REG_X64_XMM13,
+  REG_X64_XMM14,
+  REG_X64_XMM15,
+  REG_X64_X87_ST0,
+  REG_X64_X87_ST1,
+  REG_X64_X87_ST2,
+  REG_X64_X87_ST3,
+  REG_X64_X87_ST4,
+  REG_X64_X87_ST5,
+  REG_X64_X87_ST6,
+  REG_X64_X87_ST7,
+  REG_X64_END
 } Reg;
 
-static char *regs[REG_XMM0][4] = {
-  [REG_NULL] = {"null", "null", "null", "null"},
-  [REG_SP] = {"%spl", "%sp", "%esp", "%rsp"},
-  [REG_BP] = {"%bpl", "%bp", "%ebp", "%rbp"},
-  [REG_AX] = {"%al", "%ax", "%eax", "%rax"},
-  [REG_BX] = {"%bl", "%bx", "%ebx", "%rbx"},
-  [REG_CX] = {"%cl", "%cx", "%ecx", "%rcx"},
-  [REG_DX] = {"%dl", "%dx", "%edx", "%rdx"},
-  [REG_SI] = {"%sil", "%si", "%esi", "%rsi"},
-  [REG_DI] = {"%dil", "%di", "%edi", "%rdi"},
-  [REG_R8] = {"%r8b", "%r8w", "%r8d", "%r8"},
-  [REG_R9] = {"%r9b", "%r9w", "%r9d", "%r9"},
-  [REG_R10] = {"%r10b", "%r10w", "%r10d", "%r10"},
-  [REG_R11] = {"%r11b", "%r11w", "%r11d", "%r11"},
-  [REG_R12] = {"%r12b", "%r12w", "%r12d", "%r12"},
-  [REG_R13] = {"%r13b", "%r13w", "%r13d", "%r13"},
-  [REG_R14] = {"%r14b", "%r14w", "%r14d", "%r14"},
-  [REG_R15] = {"%r15b", "%r15w", "%r15d", "%r15"},
+static char *regs[REG_X64_XMM0][4] = {
+  [REG_X64_NULL] = {"null", "null", "null", "null"},
+  [REG_X64_SP] = {"%spl", "%sp", "%esp", "%rsp"},
+  [REG_X64_BP] = {"%bpl", "%bp", "%ebp", "%rbp"},
+  [REG_X64_AX] = {"%al", "%ax", "%eax", "%rax"},
+  [REG_X64_BX] = {"%bl", "%bx", "%ebx", "%rbx"},
+  [REG_X64_CX] = {"%cl", "%cx", "%ecx", "%rcx"},
+  [REG_X64_DX] = {"%dl", "%dx", "%edx", "%rdx"},
+  [REG_X64_SI] = {"%sil", "%si", "%esi", "%rsi"},
+  [REG_X64_DI] = {"%dil", "%di", "%edi", "%rdi"},
+  [REG_X64_R8] = {"%r8b", "%r8w", "%r8d", "%r8"},
+  [REG_X64_R9] = {"%r9b", "%r9w", "%r9d", "%r9"},
+  [REG_X64_R10] = {"%r10b", "%r10w", "%r10d", "%r10"},
+  [REG_X64_R11] = {"%r11b", "%r11w", "%r11d", "%r11"},
+  [REG_X64_R12] = {"%r12b", "%r12w", "%r12d", "%r12"},
+  [REG_X64_R13] = {"%r13b", "%r13w", "%r13d", "%r13"},
+  [REG_X64_R14] = {"%r14b", "%r14w", "%r14d", "%r14"},
+  [REG_X64_R15] = {"%r15b", "%r15w", "%r15d", "%r15"},
 };
 
 static FILE *output_file;
@@ -80,7 +80,7 @@ static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 
-static Reg argreg[] = {REG_DI, REG_SI, REG_DX, REG_CX, REG_R8, REG_R9};
+static Reg argreg[] = {REG_X64_DI, REG_X64_SI, REG_X64_DX, REG_X64_CX, REG_X64_R8, REG_X64_R9};
 
 static char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
 static char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
@@ -98,8 +98,8 @@ static int tmpbuf_sz;
 static int64_t rtn_label;
 
 static struct {
-  bool in[REG_END];
-  bool out[REG_END];
+  bool in[REG_X64_END];
+  bool out[REG_X64_END];
 } asm_use;
 
 static struct {
@@ -1644,7 +1644,7 @@ static void gen_funcall_args(Node *node) {
         load_f32_f64(arg_expr->ty, fval, fp++);
         continue;
       }
-      if (gen_load_opt_gp(arg_expr, (gp < 6 ? argreg[gp] : REG_NULL))) {
+      if (gen_load_opt_gp(arg_expr, (gp < 6 ? argreg[gp] : REG_X64_NULL))) {
         gp++;
         continue;
       }
@@ -3130,7 +3130,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
   char ofs[STRBUF_SZ], *ptr;
   Node *lhs = node->lhs;
   Type *ty = node->ty;
-  bool gen = (r != REG_NULL);
+  bool gen = (r != REG_X64_NULL);
 
   if (is_memop_ptr(node, ofs, &ptr)) {
     if (gen) {
@@ -3290,7 +3290,7 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (gen_load_opt_gp(node, REG_AX))
+  if (gen_load_opt_gp(node, REG_X64_AX))
     return true;
 
   if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
@@ -3426,29 +3426,29 @@ static void asm_fill_ops2(Node *node) {
 }
 
 static bool is_gp_reg(Reg reg) {
-  return REG_AX <= reg && reg <= REG_SP;
+  return REG_X64_AX <= reg && reg <= REG_X64_SP;
 }
 
 static bool is_xmm_reg(Reg reg) {
-  return REG_XMM0 <= reg && reg <= REG_XMM15;
+  return REG_X64_XMM0 <= reg && reg <= REG_X64_XMM15;
 }
 
 static bool is_x87_reg(Reg reg) {
-  return REG_X87_ST0 <= reg && reg <= REG_X87_ST7;
+  return REG_X64_X87_ST0 <= reg && reg <= REG_X64_X87_ST7;
 }
 
 static Reg ident_gp_reg(char *loc) {
   static HashMap map;
   if (map.capacity == 0) {
-    for (Reg r = REG_NULL; r < REG_END; r++)
+    for (Reg r = REG_X64_NULL; r < REG_X64_END; r++)
       if (is_gp_reg(r))
         for (int j = 0; j < 4; j++)
           hashmap_put(&map, &regs[r][j][1], (void *)(intptr_t)r);
 
-    hashmap_put(&map, "ah", (void *)(intptr_t)REG_AX);
-    hashmap_put(&map, "bh", (void *)(intptr_t)REG_BX);
-    hashmap_put(&map, "ch", (void *)(intptr_t)REG_CX);
-    hashmap_put(&map, "dh", (void *)(intptr_t)REG_DX);
+    hashmap_put(&map, "ah", (void *)(intptr_t)REG_X64_AX);
+    hashmap_put(&map, "bh", (void *)(intptr_t)REG_X64_BX);
+    hashmap_put(&map, "ch", (void *)(intptr_t)REG_X64_CX);
+    hashmap_put(&map, "dh", (void *)(intptr_t)REG_X64_DX);
   }
   return (intptr_t)hashmap_get(&map, loc);
 }
@@ -3463,14 +3463,14 @@ static Reg ident_reg(Token *tok) {
     return gpreg;
 
   if (!strncmp(loc, "xmm", 3) || !strncmp(loc, "ymm", 3) || !strncmp(loc, "zmm", 3))
-    return REG_XMM0 + strtoul(&loc[3], NULL, 10);
+    return REG_X64_XMM0 + strtoul(&loc[3], NULL, 10);
 
   if (!strncmp(loc, "st", 2)) {
     if (loc[2] == '(') {
       unsigned long num = strtoul(&loc[3], NULL, 10);
-      return REG_X87_ST0 + MIN(num, 7);
+      return REG_X64_X87_ST0 + MIN(num, 7);
     }
-    return REG_X87_ST0;
+    return REG_X64_X87_ST0;
   }
   error_tok(tok, "unknown register");
 }
@@ -3490,10 +3490,10 @@ static void asm_clobbers(Token *tok, int *x87_clobber) {
       continue;
 
     Reg r = ident_reg(tok);
-    if (r == REG_SP)
+    if (r == REG_X64_SP)
       continue;
     if (is_x87_reg(r)) {
-      *x87_clobber = MAX(*x87_clobber, (r - REG_X87_ST0 + 1));
+      *x87_clobber = MAX(*x87_clobber, (r - REG_X64_X87_ST0 + 1));
       continue;
     }
     asm_use.in[r] = asm_use.out[r] = true;
@@ -3542,7 +3542,7 @@ static void fixed_reg(Reg *reg, Reg spec, Token *tok) {
 
 static void asm_constraint(AsmParam *ap, int x87_clobber) {
   for (; ap; ap = ap->next) {
-    Reg reg = REG_NULL;
+    Reg reg = REG_X64_NULL;
     char *p = ap->constraint->str;
     Token *tok = ap->arg->tok;
     int match_idx = -1;
@@ -3581,14 +3581,14 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       case 'f': ap->is_x87 = true; continue;
       case 'X': ap->is_fp = true;
       case 'g': ap->is_mem = ap->is_gp = is_num = true; continue;
-      case 'a': fixed_reg(&reg, REG_AX, tok); continue;
-      case 'b': fixed_reg(&reg, REG_BX, tok); continue;
-      case 'c': fixed_reg(&reg, REG_CX, tok); continue;
-      case 'd': fixed_reg(&reg, REG_DX, tok); continue;
-      case 'S': fixed_reg(&reg, REG_SI, tok); continue;
-      case 'D': fixed_reg(&reg, REG_DI, tok); continue;
-      case 't': fixed_reg(&reg, REG_X87_ST0, tok); continue;
-      case 'u': fixed_reg(&reg, REG_X87_ST1, tok); continue;
+      case 'a': fixed_reg(&reg, REG_X64_AX, tok); continue;
+      case 'b': fixed_reg(&reg, REG_X64_BX, tok); continue;
+      case 'c': fixed_reg(&reg, REG_X64_CX, tok); continue;
+      case 'd': fixed_reg(&reg, REG_X64_DX, tok); continue;
+      case 'S': fixed_reg(&reg, REG_X64_SI, tok); continue;
+      case 'D': fixed_reg(&reg, REG_X64_DI, tok); continue;
+      case 't': fixed_reg(&reg, REG_X64_X87_ST0, tok); continue;
+      case 'u': fixed_reg(&reg, REG_X64_X87_ST1, tok); continue;
       }
       if (Isdigit(*p)) {
         char *pos;
@@ -3618,9 +3618,9 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       fixed_reg(&reg, r, tok);
     }
     if (reg) {
-      if (reg == REG_X87_ST0 && x87_clobber >= 1)
+      if (reg == REG_X64_X87_ST0 && x87_clobber >= 1)
         ap->is_clobbered_x87 = true;
-      else if (reg == REG_X87_ST1 && x87_clobber >= 2)
+      else if (reg == REG_X64_X87_ST1 && x87_clobber >= 2)
         ap->is_clobbered_x87 = true;
 
       ap->reg = reg;
@@ -3651,7 +3651,7 @@ static void asm_assign_oprands2(Reg *reg_list, size_t bofs) {
     AsmParam *ap = asm_ops.data[i];
     if (ap->kind || !*((bool *)ap + bofs))
       continue;
-    for (Reg *r = reg_list; *r != REG_NULL; r++) {
+    for (Reg *r = reg_list; *r != REG_X64_NULL; r++) {
       if (!asm_get_use(ap, *r)) {
         ap->reg = *r;
         ap->kind = ASMOP_REG;
@@ -3663,10 +3663,10 @@ static void asm_assign_oprands2(Reg *reg_list, size_t bofs) {
 }
 
 static void asm_assign_oprands(void) {
-  static Reg highbyte[] = {REG_AX, REG_CX, REG_DX, REG_BX, REG_NULL};
-  static Reg legacy[] = {REG_AX, REG_CX, REG_DX, REG_SI, REG_DI, REG_BX, REG_BP, REG_NULL};
+  static Reg highbyte[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_BX, REG_X64_NULL};
+  static Reg legacy[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI, REG_X64_BX, REG_X64_BP, REG_X64_NULL};
   static Reg free[] = {
-    REG_AX, REG_CX, REG_DX, REG_SI, REG_DI, REG_R8, REG_R9, REG_R10, REG_R11, REG_NULL};
+    REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI, REG_X64_R8, REG_X64_R9, REG_X64_R10, REG_X64_R11, REG_X64_NULL};
 
   asm_assign_oprands2(highbyte, offsetof(AsmParam, is_gp_highbyte));
   asm_assign_oprands2(legacy, offsetof(AsmParam, is_gp_legacy));
@@ -3676,14 +3676,14 @@ static void asm_assign_oprands(void) {
     AsmParam *ap = asm_ops.data[i];
     if (ap->kind)
       continue;
-    if ((ap->is_fp && find_free_reg(ap, REG_XMM0, REG_XMM15)) ||
-      (ap->is_x87 && find_free_reg(ap, REG_X87_ST0, REG_X87_ST7)) ||
-      (ap->is_gp && find_free_reg(ap, REG_AX, REG_R15))) {
+    if ((ap->is_fp && find_free_reg(ap, REG_X64_XMM0, REG_X64_XMM15)) ||
+      (ap->is_x87 && find_free_reg(ap, REG_X64_X87_ST0, REG_X64_X87_ST7)) ||
+      (ap->is_gp && find_free_reg(ap, REG_X64_AX, REG_X64_R15))) {
       ap->kind = ASMOP_REG;
       asm_set_use(ap);
       continue;
     }
-    if (ap->is_mem && find_free_reg(ap, REG_AX, REG_R15)) {
+    if (ap->is_mem && find_free_reg(ap, REG_X64_AX, REG_X64_R15)) {
       ap->kind = ASMOP_MEM;
       asm_set_use(ap);
       continue;
@@ -3693,7 +3693,7 @@ static void asm_assign_oprands(void) {
 }
 
 static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
-  for (Reg r = REG_AX; r <= REG_R15; r++) {
+  for (Reg r = REG_X64_AX; r <= REG_X64_R15; r++) {
     if (use1[r] || (use2 && use2[r]))
       continue;
     use1[r] = true;
@@ -3705,7 +3705,7 @@ static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
 }
 
 void prepare_inline_asm(Node *node) {
-  for (int i = 0; i < REG_END; i++)
+  for (int i = 0; i < REG_X64_END; i++)
     asm_use.in[i] = asm_use.out[i] = false;
 
   asm_fill_ops(node);
@@ -3718,21 +3718,21 @@ void prepare_inline_asm(Node *node) {
 
   asm_assign_oprands();
 
-  if (asm_use.in[REG_BP] || asm_use.out[REG_BP])
+  if (asm_use.in[REG_X64_BP] || asm_use.out[REG_X64_BP])
     node->alt_frame_ptr = acquire_gp(asm_use.in, asm_use.out, node->tok);
-  if (asm_use.in[REG_BX] || asm_use.out[REG_BX])
+  if (asm_use.in[REG_X64_BX] || asm_use.out[REG_X64_BX])
     node->alt_frame_ptr2 = acquire_gp(asm_use.in, asm_use.out, node->tok);
 
   if (node->asm_outputs) {
-    if (node->alt_frame_ptr && !asm_use.out[REG_BP])
-      node->output_tmp_gp = REG_BP;
-    else if (node->alt_frame_ptr2 && !asm_use.out[REG_BX])
-      node->output_tmp_gp = REG_BX;
+    if (node->alt_frame_ptr && !asm_use.out[REG_X64_BP])
+      node->output_tmp_gp = REG_X64_BP;
+    else if (node->alt_frame_ptr2 && !asm_use.out[REG_X64_BX])
+      node->output_tmp_gp = REG_X64_BX;
     else
       node->output_tmp_gp = acquire_gp(asm_use.out, NULL, node->tok);
   }
 
-  for (Reg r = REG_R12; r <= REG_BP; r++)
+  for (Reg r = REG_X64_R12; r <= REG_X64_BP; r++)
     if (asm_use.in[r] || asm_use.out[r])
       node->clobber_mask |= 1U << r;
 
@@ -3757,10 +3757,10 @@ void prepare_inline_asm(Node *node) {
 
 static char *reg_high_byte(Reg reg) {
   switch (reg) {
-  case REG_AX: return "%ah";
-  case REG_BX: return "%bh";
-  case REG_CX: return "%ch";
-  case REG_DX: return "%dh";
+  case REG_X64_AX: return "%ah";
+  case REG_X64_BX: return "%bh";
+  case REG_X64_CX: return "%ch";
+  case REG_X64_DX: return "%dh";
   }
   return regs[reg][0];
 }
@@ -3833,8 +3833,8 @@ static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
   }
   if (is_xmm_reg(ap->reg)) {
     switch (ap->arg->ty->size) {
-    case 4: Printftn("movss %s(%s), %%xmm%d", ofs, ptr, ap->reg - REG_XMM0); return;
-    case 8: Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, ap->reg - REG_XMM0); return;
+    case 4: Printftn("movss %s(%s), %%xmm%d", ofs, ptr, ap->reg - REG_X64_XMM0); return;
+    case 8: Printftn("movsd %s(%s), %%xmm%d", ofs, ptr, ap->reg - REG_X64_XMM0); return;
     }
   }
   if (is_x87_reg(ap->reg)) {
@@ -3861,8 +3861,8 @@ static void asm_reg_output(AsmParam *ap, Reg tmpreg) {
   }
   if (is_xmm_reg(ap->reg)) {
     switch (ap->arg->ty->size) {
-    case 4: Printftn("movss %%xmm%d, %s(%s)", ap->reg - REG_XMM0, ofs, ptr); return;
-    case 8: Printftn("movsd %%xmm%d, %s(%s)", ap->reg - REG_XMM0, ofs, ptr); return;
+    case 4: Printftn("movss %%xmm%d, %s(%s)", ap->reg - REG_X64_XMM0, ofs, ptr); return;
+    case 8: Printftn("movsd %%xmm%d, %s(%s)", ap->reg - REG_X64_XMM0, ofs, ptr); return;
     }
   }
   if (is_x87_reg(ap->reg)) {
@@ -3908,14 +3908,14 @@ static bool asm_bitfield_out(AsmParam *ap, Reg tmpreg) {
 static Reg get_input_reg(AsmParam *ap) {
   if (ap->kind == ASMOP_REG && *ap->constraint->str != '=')
     return ap->reg;
-  return REG_NULL;
+  return REG_X64_NULL;
 }
 
 static void asm_xmm_inputs(void) {
   for (int i = 0; i < asm_ops.cnt; i++) {
     AsmParam *ap = asm_ops.data[i];
     if (is_xmm_reg(get_input_reg(ap)))
-      asm_reg_input(ap, REG_DX);
+      asm_reg_input(ap, REG_X64_DX);
   }
 }
 
@@ -3936,7 +3936,7 @@ static int asm_x87_inputs(void) {
     AsmParam *ap = asm_ops.data[i];
     Reg reg = get_input_reg(ap);
     if (is_x87_reg(reg))
-      sort_buf[reg - REG_X87_ST0] = ap;
+      sort_buf[reg - REG_X64_X87_ST0] = ap;
   }
 
   int cnt = 0;
@@ -3945,7 +3945,7 @@ static int asm_x87_inputs(void) {
     if (ap) {
       if (!ap->is_clobbered_x87)
         cnt++;
-      asm_reg_input(ap, REG_DX);
+      asm_reg_input(ap, REG_X64_DX);
     }
   }
   return cnt;
@@ -3956,7 +3956,7 @@ static void asm_x87_outputs(Node *node, int in_cnt) {
   int out_cnt = 0;
   for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
     if (is_x87_reg(ap->reg)) {
-      sort_buf[ap->reg - REG_X87_ST0] = ap;
+      sort_buf[ap->reg - REG_X64_X87_ST0] = ap;
       out_cnt++;
     }
   }
@@ -4106,11 +4106,11 @@ static void asm_body(Node *node) {
       }
       case ASMOP_REG:
         if (is_xmm_reg(ap->reg)) {
-          Printf("%%xmm%d", ap->reg - REG_XMM0);
+          Printf("%%xmm%d", ap->reg - REG_X64_XMM0);
           continue;
         }
         if (is_x87_reg(ap->reg)) {
-          Printf("%%st(%d)", ap->reg - REG_X87_ST0);
+          Printf("%%st(%d)", ap->reg - REG_X64_X87_ST0);
           continue;
         }
         if (is_gp_reg(ap->reg)) {
@@ -4135,13 +4135,13 @@ static void asm_body(Node *node) {
 }
 
 static void asm_push_clobbers(Node *node) {
-  for (Reg r = REG_R12; r <= REG_R15; r++)
+  for (Reg r = REG_X64_R12; r <= REG_X64_R15; r++)
     if (node->clobber_mask & (1U << r))
       push_from(regs[r][3]);
 }
 
 static void asm_pop_clobbers(Node *node) {
-  for (Reg r = REG_R15; r >= REG_R12; r--)
+  for (Reg r = REG_X64_R15; r >= REG_X64_R12; r--)
     if (node->clobber_mask & (1U << r))
       pop(regs[r][3]);
 }
@@ -4635,7 +4635,7 @@ void prepare_funcall(Node *node, Scope *scope) {
         continue;
       if (is_flonum(arg_expr->ty) && is_const_double(arg_expr, &(long double){0}))
         continue;
-      if (gen_load_opt_gp(arg_expr, REG_NULL))
+      if (gen_load_opt_gp(arg_expr, REG_X64_NULL))
         continue;
       if (has_memop(var->arg_expr))
         continue;
