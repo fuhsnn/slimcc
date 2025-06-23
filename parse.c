@@ -1139,8 +1139,14 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     ty = unqual(ptr_decay(node->ty));
   }
 
-  if (!ty)
+  if (!ty) {
+    if (opt_std != STD_C89) {
+      if (tok->kind == TK_IDENT)
+        error_tok(tok, "unknown type name");
+      error_tok(tok, "implicit int only supported under -std=c89");
+    }
     ty = ty_int;
+  }
 
   if (ty->kind == TY_BITINT)
     if (ty->bit_cnt < (1 + !ty->is_unsigned))
@@ -5116,6 +5122,9 @@ Obj *parse(Token *tok) {
   while (tok->kind != TK_EOF) {
     if (free_alloc)
       free_head = free_parsed_tok(free_head, tok);
+
+    if (consume(&tok, tok, ";"))
+      continue;
 
     if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
       cur = cur->next = calloc(1, sizeof(Obj));
