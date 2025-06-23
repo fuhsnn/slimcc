@@ -12,7 +12,9 @@ RUN apt-get install -y --no-install-recommends \
  # game builds
  libopenal-dev glslang-tools libcurl4-openssl-dev \
  # C3
- zlib1g zlib1g-dev libllvm19 llvm llvm-dev llvm-runtime liblld-dev liblld-19 libpolly-19-dev
+ zlib1g zlib1g-dev libllvm19 llvm llvm-dev llvm-runtime liblld-dev liblld-19 libpolly-19-dev \
+ # redis/valkey
+ tcl-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

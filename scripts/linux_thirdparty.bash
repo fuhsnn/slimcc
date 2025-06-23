@@ -14,20 +14,18 @@ fix_and_configure() {
  ./configure
 }
 
-builtins_to_stdbit() {
- sed -i 's|__builtin_ctzll|(int)stdc_trailing_zeros_ull|g' "$1"
- sed -i 's|__builtin_ctzl|(int)stdc_trailing_zeros_ul|g' "$1"
- sed -i 's|__builtin_ctz|(int)stdc_trailing_zeros_ui|g' "$1"
- sed -i 's|__builtin_clzll|(int)stdc_leading_zeros_ull|g' "$1"
- sed -i 's|__builtin_clzl|(int)stdc_leading_zeros_ul|g' "$1"
- sed -i 's|__builtin_clz|(int)stdc_leading_zeros_ui|g' "$1"
- sed -i 's|__builtin_popcountll|(int)stdc_count_ones_ull|g' "$1"
- sed -i 's|__builtin_popcountl|(int)stdc_count_ones_ul|g' "$1"
- sed -i 's|__builtin_popcount|(int)stdc_count_ones_ui|g' "$1"
-}
-
-add_include_stdbit() {
+use_stdbit() {
  sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
+
+ sed -i 's|__builtin_ctzll|(int)stdc_trailing_zeros_ull|g' "$2"
+ sed -i 's|__builtin_ctzl|(int)stdc_trailing_zeros_ul|g' "$2"
+ sed -i 's|__builtin_ctz|(int)stdc_trailing_zeros_ui|g' "$2"
+ sed -i 's|__builtin_clzll|(int)stdc_leading_zeros_ull|g' "$2"
+ sed -i 's|__builtin_clzl|(int)stdc_leading_zeros_ul|g' "$2"
+ sed -i 's|__builtin_clz|(int)stdc_leading_zeros_ui|g' "$2"
+ sed -i 's|__builtin_popcountll|(int)stdc_count_ones_ull|g' "$2"
+ sed -i 's|__builtin_popcountl|(int)stdc_count_ones_ul|g' "$2"
+ sed -i 's|__builtin_popcount|(int)stdc_count_ones_ui|g' "$2"
 }
 
 replace_line() {
@@ -82,7 +80,7 @@ test_bash() {
 }
 
 test_bfs() {
- github_tar tavianator bfs 4.0.7
+ github_tar tavianator bfs 4.0.8
  sed -i 's|-std=c17|-std=c23|g' build/flags.mk
  ./configure
  make check
@@ -162,6 +160,14 @@ test_doom() {
  replace_line "project(pd_tests)" "project(pd_tests C)" ../CMakeLists.txt
  cmake ../ && make
  cd ../../../ && examples/Tests/build/pd_tests
+}
+
+test_file() {
+ github_tar file file FILE5_46
+ libtoolize
+ autoreconf -fi
+ fix_and_configure
+ make check
 }
 
 test_flex() {
@@ -395,8 +401,17 @@ test_muon() {
  build/muon-bootstrap -C build test
 }
 
+test_nginx() {
+ github_tar nginx nginx release-1.29.0
+ auto/configure
+ make
+ cd ../
+ git_fetch https://github.com/nginx/nginx-tests 7f1e88e10dca8e4c135ab9e688df0c2484091125 nginx-tests
+ prove .
+}
+
 test_noplate() {
- git_fetch https://github.com/fuhsnn/noplate 5d7f2d9e2d1a400eb69c52d3cd901fca5d97f749 noplate
+ git_fetch https://github.com/fuhsnn/noplate f1853fc99810611538d9d23009227384a03cb5a7 noplate
  make test examples
 }
 
@@ -502,11 +517,41 @@ test_python() {
 }
 
 test_qbe_hare() {
- git_fetch git://c9x.me/qbe.git 8d5b86ac4c24e24802a60e5e9df2dd5902fe0a5c qbe
+ git_fetch git://c9x.me/qbe.git 120f316162879b6165deba77815cd4193fb2fb59 qbe
  make CC="$CC" check
- url_tar https://git.sr.ht/~sircmpwn/harec/archive/0.24.2.tar.gz harec
+ url_tar https://git.sr.ht/~sircmpwn/harec/archive/0.25.2.tar.gz harec
  mv configs/linux.mk config.mk
  make CC="$CC" QBE=../qbe check
+}
+
+test_redis() {
+ github_tar redis redis 8.0.2
+ replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
+ sed -i 's|asm volatile|__asm__ volatile|g' deps/hdr_histogram/hdr_atomic.h
+ sed -i 's|__sync_add_and_fetch(field, value)|*(_Atomic int64_t*)field+=value|g' deps/hdr_histogram/hdr_atomic.h
+ use_stdbit "#include <stdint.h>" deps/hdr_histogram/hdr_histogram.c
+ use_stdbit "#include <stdint.h>" src/util.h
+ use_stdbit "#include <stdint.h>" src/dict.c
+ use_stdbit "#include <stdint.h>" src/hyperloglog.c
+ use_stdbit "#include <stdarg.h>" src/server.c
+ use_stdbit '#include "server.h"' src/bitops.c
+ rm tests/integration/logging.tcl
+ make V=1 CC=$CC CXX=clang++ OPTIMIZATION=-O MALLOC=libc test
+}
+
+test_valkey() {
+ github_tar valkey-io valkey 8.1.2
+ replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
+ sed -i 's|asm volatile|__asm__ volatile|g' deps/hdr_histogram/hdr_atomic.h
+ sed -i 's|__sync_add_and_fetch(field, value)|*(_Atomic int64_t*)field+=value|g' deps/hdr_histogram/hdr_atomic.h
+ use_stdbit "#include <stdint.h>" deps/hdr_histogram/hdr_histogram.c
+ use_stdbit "#include <stdint.h>" src/dict.c
+ sed -i 's|builtin_ctzll|__builtin_ctzll|g' src/hyperloglog.c
+ use_stdbit "#include <stdint.h>" src/hyperloglog.c
+ use_stdbit "#include <stdarg.h>" src/server.c
+ sed -i 's|v = __builtin_bswap64(v)|__asm(\"bswap %0\":\"+r\"(v))|g' src/hashtable.c
+ use_stdbit "#include <stdint.h>" src/hashtable.c
+ make V=1 CC=$CC OPTIMIZATION=-O MALLOC=libc test
 }
 
 test_scrapscript() {
@@ -525,7 +570,7 @@ test_sokol() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.50.1
+ github_tar sqlite sqlite version-3.50.2
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
@@ -564,7 +609,7 @@ test_toybox() {
 }
 
 test_vim() {
- github_tar vim vim v9.1.1200
+ github_tar vim vim v9.1.1484
  ./configure
  make && make testtiny
 }
@@ -646,8 +691,7 @@ build_nuklear() {
  github_tar Immediate-Mode-UI Nuklear 4.12.7
  rm -r demo/sfml_opengl*
  sed -i 's|CFLAGS+=|CFLAGS+=-DSDL_DISABLE_IMMINTRIN_H |g' demo/rawfb/sdl/Makefile
- builtins_to_stdbit demo/rawfb/x11/nuklear_xlib.h
- add_include_stdbit "#include <X11/Xlib.h>" demo/rawfb/x11/nuklear_xlib.h
+ use_stdbit "#include <X11/Xlib.h>" demo/rawfb/x11/nuklear_xlib.h
  sed -i 's|-std=c99|-DSTBI_NO_SIMD -std=c99|g' demo/glfw_opengl2/Makefile
  sed -i 's|-fsanitize=address||g' demo/sdl_vulkan/Makefile
  make CC=$CC demos
@@ -673,8 +717,7 @@ build_quake3e() {
 
 build_raylib_raygui() {
  git_fetch https://github.com/raysan5/raylib 4bc8d3761c48f4dcf56f126640da8f3567dc516b raylib
- builtins_to_stdbit src/external/sinfl.h
- add_include_stdbit "#include <string.h>" src/external/sinfl.h
+ use_stdbit "#include <string.h>" src/external/sinfl.h
  sed -i 's|#define DR_MP3_ONLY_SIMD||g' src/external/dr_mp3.h
 
  make CC=$CC CUSTOM_CFLAGS='-DSTBI_NO_SIMD -DSTBIR_NO_SIMD' -C src/ PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC -B
@@ -705,7 +748,7 @@ build_yquake2() {
  github_tar yquake2 yquake2 QUAKE2_8_51
  sed -i 's|-pipe -fomit-frame-pointer||g' Makefile
  sed -i 's|__VERSION__|\"\"|g' src/backends/unix/signalhandler.c
- make CC=$CC V=1 CFLAGS='-DSTBI_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
+ make CC=$CC VERBOSE=1 CFLAGS='-DSTBI_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
 }
 
 build_zig() {

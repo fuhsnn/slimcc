@@ -46,7 +46,9 @@ jobs:
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_muon }
+          - { vm: interop, proj: test_redis }
           - { vm: interop, proj: test_sokol }
+          - { vm: interop, proj: test_valkey }
           - { vm: interop, proj: build_ncurses }
           - { vm: interop, proj: build_nuklear }
           - { vm: interop, proj: build_q2rtx }
@@ -63,6 +65,7 @@ jobs:
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
+          - { vm: main, proj: test_file }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_glib }
@@ -91,6 +94,7 @@ jobs:
           - { vm: main, proj: test_memcached }
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_noplate }
           - { vm: main, proj: test_ocaml }
           - { vm: main, proj: test_oniguruma }
