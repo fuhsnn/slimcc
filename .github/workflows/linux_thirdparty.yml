@@ -63,6 +63,7 @@ jobs:
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
+          - { vm: main, proj: test_file }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_glib }

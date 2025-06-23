@@ -164,6 +164,14 @@ test_doom() {
  cd ../../../ && examples/Tests/build/pd_tests
 }
 
+test_file() {
+ github_tar file file FILE5_46
+ libtoolize
+ autoreconf -fi
+ fix_and_configure
+ make check
+}
+
 test_flex() {
  url_tar https://github.com/westes/flex/files/981163/flex-2.6.4.tar.gz flex
  fix_configure ./configure
@@ -396,7 +404,7 @@ test_muon() {
 }
 
 test_noplate() {
- git_fetch https://github.com/fuhsnn/noplate 5d7f2d9e2d1a400eb69c52d3cd901fca5d97f749 noplate
+ git_fetch https://github.com/fuhsnn/noplate f1853fc99810611538d9d23009227384a03cb5a7 noplate
  make test examples
 }
 
@@ -705,7 +713,7 @@ build_yquake2() {
  github_tar yquake2 yquake2 QUAKE2_8_51
  sed -i 's|-pipe -fomit-frame-pointer||g' Makefile
  sed -i 's|__VERSION__|\"\"|g' src/backends/unix/signalhandler.c
- make CC=$CC V=1 CFLAGS='-DSTBI_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
+ make CC=$CC VERBOSE=1 CFLAGS='-DSTBI_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
 }
 
 build_zig() {
