@@ -391,7 +391,7 @@ static char *string_literal_end(char *p) {
   return p;
 }
 
-static Token *read_string_literal(char *start, char *quote) {
+static Token *read_string_literal(char *start, char *quote, Type *ty) {
   char *end = string_literal_end(quote + 1);
   char *buf = calloc(1, end - quote);
   int len = 0;
@@ -409,7 +409,7 @@ static Token *read_string_literal(char *start, char *quote) {
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
-  tok->ty = array_of(ty_pchar, len + 1);
+  tok->ty = array_of(ty, len + 1);
   tok->str = buf;
   return tok;
 }
@@ -445,7 +445,7 @@ static Token *read_utf16_string_literal(char *start, char *quote) {
   }
 
   Token *tok = new_token(TK_STR, start, end + 1);
-  tok->ty = array_of(ty_ushort, len + 1);
+  tok->ty = array_of(ty_char16_t, len + 1);
   tok->str = (char *)buf;
   return tok;
 }
@@ -859,14 +859,14 @@ Token *tokenize(File *file, Token **end) {
 
     // String literal
     if (*p == '"') {
-      cur = cur->next = read_string_literal(p, p);
+      cur = cur->next = read_string_literal(p, p, ty_pchar);
       p += cur->len;
       continue;
     }
 
     // UTF-8 string literal
     if (startswith3(p, 'u', '8', '\"')) {
-      cur = cur->next = read_string_literal(p, p + 2);
+      cur = cur->next = read_string_literal(p, p + 2, opt_std >= STD_C23 ? ty_uchar : ty_pchar);
       p += cur->len;
       continue;
     }
@@ -880,14 +880,14 @@ Token *tokenize(File *file, Token **end) {
 
     // Wide string literal
     if (startswith2(p, 'L', '\"')) {
-      cur = cur->next = read_utf32_string_literal(p, p + 1, ty_int);
+      cur = cur->next = read_utf32_string_literal(p, p + 1, ty_wchar_t);
       p += cur->len;
       continue;
     }
 
     // UTF-32 string literal
     if (startswith2(p, 'U', '\"')) {
-      cur = cur->next = read_utf32_string_literal(p, p + 1, ty_uint);
+      cur = cur->next = read_utf32_string_literal(p, p + 1, ty_char32_t);
       p += cur->len;
       continue;
     }
@@ -910,7 +910,7 @@ Token *tokenize(File *file, Token **end) {
 
     // UTF-16 character literal
     if (startswith2(p, 'u', '\'')) {
-      cur = cur->next = read_char_literal(p, p + 1, ty_ushort);
+      cur = cur->next = read_char_literal(p, p + 1, ty_char16_t);
       cur->ival &= 0xffff;
       p += cur->len;
       continue;
@@ -918,14 +918,14 @@ Token *tokenize(File *file, Token **end) {
 
     // Wide character literal
     if (startswith2(p, 'L', '\'')) {
-      cur = cur->next = read_char_literal(p, p + 1, ty_int);
+      cur = cur->next = read_char_literal(p, p + 1, ty_wchar_t);
       p += cur->len;
       continue;
     }
 
     // UTF-32 character literal
     if (startswith2(p, 'U', '\'')) {
-      cur = cur->next = read_char_literal(p, p + 1, ty_uint);
+      cur = cur->next = read_char_literal(p, p + 1, ty_char32_t);
       p += cur->len;
       continue;
     }

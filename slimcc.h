@@ -676,6 +676,10 @@ extern Type *ty_size_t;
 extern Type *ty_intptr_t;
 extern Type *ty_ptrdiff_t;
 
+extern Type *ty_char16_t;
+extern Type *ty_char32_t;
+extern Type *ty_wchar_t;
+
 bool is_pow_of_two(uint64_t val);
 bool is_integer(Type *ty);
 bool is_flonum(Type *ty);

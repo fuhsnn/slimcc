@@ -26,6 +26,10 @@ Type *ty_size_t;
 Type *ty_intptr_t;
 Type *ty_ptrdiff_t;
 
+Type *ty_char16_t;
+Type *ty_char32_t;
+Type *ty_wchar_t;
+
 void init_ty_lp64(void) {
   define_macro("_LP64", "1");
   define_macro("__LP64__", "1");
@@ -43,6 +47,10 @@ void init_ty_lp64(void) {
 
   ty_size_t = ty_ulong;
   ty_intptr_t = ty_ptrdiff_t = ty_long;
+
+  ty_char16_t = ty_ushort;
+  ty_char32_t = ty_uint;
+  ty_wchar_t = ty_int;
 }
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {

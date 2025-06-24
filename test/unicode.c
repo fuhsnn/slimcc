@@ -1,10 +1,9 @@
 #include "test.h"
 
-#define STR(x) #x
+#include <uchar.h>
+#include <wchar.h>
 
-typedef unsigned short char16_t;
-typedef unsigned int char32_t;
-typedef int wchar_t;
+#define STR(x) #x
 
 int π = 3;
 

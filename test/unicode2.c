@@ -1,5 +1,8 @@
 #include "test.h"
 
+#include <uchar.h>
+#include <wchar.h>
+
 #define STR(x) #x
 
 int main(void) {
@@ -29,14 +32,14 @@ int main(void) {
   ASSERT(1, sizeof(str2) == sizeof(ref2) && !memcmp(&str2, &ref2, sizeof(ref2)));
   ASSERT(1, sizeof(str3) == sizeof(ref3) && !memcmp(&str3, &ref3, sizeof(ref3)));
 
-  static const uint8_t tst8[] = u8"\u00b5\u28e1\U0001f0a1";
-  static const uint8_t chk8[] = {0xc2, 0xb5, 0xe2, 0xa3, 0xa1, 0xf0, 0x9f, 0x82, 0xa1, 0};
+  static const char tst8[] = "\u00b5\u28e1\U0001f0a1";
+  static const char chk8[] = {0xc2, 0xb5, 0xe2, 0xa3, 0xa1, 0xf0, 0x9f, 0x82, 0xa1, 0};
 
-  static const uint16_t tst16[] = u"\u00b5\u28e1\U0001f0a1";
-  static const uint16_t chk16[] = {0xb5, 0x28e1, 0xd83c, 0xdca1, 0};
+  static const char16_t tst16[] = u"\u00b5\u28e1\U0001f0a1";
+  static const char16_t chk16[] = {0xb5, 0x28e1, 0xd83c, 0xdca1, 0};
 
-  static const uint32_t tst32[] = U"\u00b5\u28e1\U0001f0a1";
-  static const uint32_t chk32[] = {0xb5, 0x28e1, 0x1f0a1, 0};
+  static const char32_t tst32[] = U"\u00b5\u28e1\U0001f0a1";
+  static const char32_t chk32[] = {0xb5, 0x28e1, 0x1f0a1, 0};
 
   ASSERT(1, sizeof(tst8) == sizeof(chk8) && !memcmp(&tst8, &chk8, sizeof(chk8)));
   ASSERT(1, sizeof(tst16) == sizeof(chk16) && !memcmp(&tst16, &chk16, sizeof(chk16)));
