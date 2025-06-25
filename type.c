@@ -360,7 +360,7 @@ Type *ptr_decay(Type *ty) {
     cvqual_type(&pty->base, ty);
     return pty;
   }
-  else if (ty->kind == TY_FUNC)
+  if (ty->kind == TY_FUNC)
     return pointer_to(ty);
   return ty;
 }
