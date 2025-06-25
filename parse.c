@@ -1769,6 +1769,9 @@ static Token *skip_excess_element(Token *tok) {
 
 // string-initializer = string-literal
 static void string_initializer(Token *tok, Initializer *init) {
+  if (tok->ty->base->size != init->ty->base->size)
+    error_tok(tok, "array initialization with string of different character size");
+
   if (init->kind == INIT_FLEXIBLE)
     new_initializer(init, array_of(init->ty->base, tok->ty->array_len), false);
 
@@ -1963,16 +1966,14 @@ static void list_initializer(Token **rest, Token *tok, Initializer *init, int id
 //             | assign
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
   if (init->ty->kind == TY_ARRAY && is_integer(init->ty->base)) {
-    Token *start = tok;
     Token *str_tok;
-    if (equal(tok, "{") && is_str_tok(&tok, tok->next, &str_tok)) {
-      if (consume(rest, tok, "}")) {
+    Token *tok2;
+    if (equal(tok, "{") && is_str_tok(&tok2, tok->next, &str_tok)) {
+      if (consume(rest, tok2, "}")) {
         string_initializer(str_tok, init);
         return;
       }
-      tok = start;
-    }
-    if (is_str_tok(rest, tok, &str_tok)) {
+    } else if (is_str_tok(rest, tok, &str_tok)) {
       string_initializer(str_tok, init);
       return;
     }
