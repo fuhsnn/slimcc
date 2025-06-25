@@ -144,7 +144,6 @@ static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
 static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
-static Type *initializer(Token **rest, Initializer *init, Token *tok, Type *ty);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
@@ -1132,11 +1131,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   if (!ty && is_auto) {
     if (tok->kind != TK_IDENT || !equal(tok->next, "="))
       error_tok(tok, "unsupported form for type inference");
-    enter_scope();
-    Node *node = assign(&(Token *){0}, tok->next->next);
-    add_type(node);
-    leave_scope();
-    ty = unqual(ptr_decay(node->ty));
+    ty = new_type(TY_AUTO, -1, 0);
   }
 
   if (!ty) {
@@ -2052,9 +2047,35 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
   init->expr = assign(rest, tok);
 }
 
-static Type *initializer(Token **rest, Initializer *init, Token *tok, Type *ty) {
+static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
+  Type *ty = var->ty;
+
+  if (ty->kind == TY_AUTO) {
+    bool is_atomic = ty->is_atomic;
+    bool is_const = ty->is_const;
+    bool is_volatile = ty->is_volatile;
+    bool is_restrict = ty->is_restrict;
+
+    init->ty = ty;
+    init->kind = INIT_EXPR;
+    init->expr = assign(rest, tok);
+    add_type(init->expr);
+    *ty = *ptr_decay(init->expr->ty);
+
+    ty->origin = init->expr->ty->origin ? init->expr->ty->origin : init->expr->ty;
+    ty->is_atomic = is_atomic;
+    ty->is_const = is_const;
+    ty->is_volatile = is_volatile;
+    ty->is_restrict = is_restrict;
+
+    if (!var->align)
+      var->align = ty->align;
+    return;
+  }
+
   new_initializer(init, ty, true);
   initializer2(rest, tok, init);
+  var->ty = init->ty;
 
   if (ty->kind == TY_STRUCT && ty->is_flexible) {
     ty = copy_type(ty);
@@ -2068,10 +2089,8 @@ static Type *initializer(Token **rest, Initializer *init, Token *tok, Type *ty) 
     cur->ty = init->mem_arr[cur->idx].ty;
     ty->size += cur->ty->size;
     ty->members = head.next;
-
-    return ty;
+    var->ty = ty;
   }
-  return init->ty;
 }
 
 static Node *init_desg_expr(InitDesg *desg, Token *tok) {
@@ -2150,9 +2169,9 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
 //   x[1][1] = 9;
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer init = {0};
-  var->ty = initializer(rest, &init, tok, var->ty);
-  InitDesg desg = {NULL, 0, NULL, var};
+  initializer(rest, tok, &init, var);
 
+  InitDesg desg = {NULL, 0, NULL, var};
   Node head = {0};
   create_lvar_init(&head, &init, var->ty, &desg, tok);
   free_initializers(&init);
@@ -2320,7 +2339,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
 // initializer list contains a non-constant expression.
 static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer init = {0};
-  var->ty = initializer(rest, &init, tok, var->ty);
+  initializer(rest, tok, &init, var);
 
   if (var->ty->size < 0)
     error_tok(tok, "variable has incomplete type");
@@ -2336,7 +2355,7 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
 
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var) {
   Initializer init = {0};
-  init_var->ty = initializer(rest, &init, tok, init_var->ty);
+  initializer(rest, tok, &init, init_var);
 
   Relocation head = {0};
   char *buf = calloc(1, init_var->ty->size);
@@ -2346,6 +2365,8 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
   init_var->init_data = var->constexpr_data = buf;
   init_var->rel = head.next;
   var->ty = init_var->ty;
+  if (!var->align)
+    var->align = init_var->align;
 }
 
 // Returns true if a given token represents a type.

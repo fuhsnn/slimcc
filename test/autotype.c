@@ -35,6 +35,25 @@ int main(void) {
   ASSERT(1, ({const int init = 0; auto i = init; _Generic(&i, int *:1);}));
   ASSERT(1, ({const int init = 0; const auto i = init; _Generic(&i, int const*:1);}));
 
+  {
+    constexpr auto v1 = 123LL;
+    SASSERT(_Alignof(v1) == _Alignof(long long));
+  }
+  {
+    struct { int i; float f; } s1 = {1, 2.5};
+    __auto_type s2 = s1;
+    ASSERT(1, s2.i);
+    ASSERT(1, s2.f == 2.5f);
+
+    __auto_type sp = &s1;
+    ASSERT(1, sp->i);
+    ASSERT(1, sp->f == 2.5f);
+
+    __auto_type s3 = *sp;
+    ASSERT(1, s3.i);
+    ASSERT(1, s3.f == 2.5f);
+  }
+
   printf("OK\n");
 }
 
