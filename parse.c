@@ -4778,6 +4778,9 @@ static Node *primary(Token **rest, Token *tok) {
       Node *node = unary(rest, tok->next);
       add_type(node);
       ty = node->ty;
+
+      if (ty->kind == TY_VLA)
+        return new_binary(ND_COMMA, node, vla_size(ty, start), tok);
     }
     if (ty->kind == TY_VLA)
       return vla_size(ty, tok);
@@ -4819,9 +4822,14 @@ static Node *primary(Token **rest, Token *tok) {
       Node *node = unary(rest, tok->next);
       add_type(node);
       ty = node->ty;
+
+      if (ty->kind == TY_VLA)
+        if (!is_const_expr(ty->vla_len, &(int64_t){0}))
+          return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
     }
     if (ty->kind == TY_VLA)
       return vla_count(ty, start, false);
+
     if (ty->kind == TY_ARRAY) {
       if (ty->size < 0)
         error_tok(tok, "countof applied to incomplete array");
