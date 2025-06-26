@@ -4373,6 +4373,9 @@ static void emit_data(Obj *var) {
   Printftn(".align %d", align);
   Printfsn("\"%s\":", asm_name(var));
 
+  if (sz == 0)
+    return;
+
   if (!var->init_data) {
     Printftn(".zero %"PRIi64, sz);
     return;
