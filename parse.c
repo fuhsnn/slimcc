@@ -1556,7 +1556,11 @@ static Node *vla_count(Type *ty, Token *tok, bool is_void) {
   if (ty->vla_cnt)
     return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
 
+  Scope *cur_sc = scope;
+  while (scope->parent && scope->parent->parent)
+    scope = scope->parent;
   ty->vla_cnt = new_lvar(NULL, ty_size_t);
+  scope = cur_sc;
   return new_binary(ND_ASSIGN, new_var_node(ty->vla_cnt, tok), ty->vla_len, tok);
 }
 
@@ -3945,8 +3949,11 @@ static Node *cast(Token **rest, Token *tok) {
   Token *start = tok;
   Type *ty;
   if (is_typename_paren(&tok, tok, &ty)) {
+    Node *calc = calc_vla(ty, start);
     Node *node = new_cast(cast(rest, tok), ty);
     node->tok = start;
+    if (calc)
+      return new_binary(ND_COMMA, calc, node, start);
     return node;
   }
   return unary(rest, tok);

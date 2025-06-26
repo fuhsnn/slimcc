@@ -48,6 +48,35 @@ int fn4(int i){
   return sizeof(*(char(*)[i+7]){0});
 }
 
+int vm_in_cast(int i) {
+  (int(*)[i++])(void *)0;
+
+  int tmp;
+
+  void *p = (int(*)[i++])(tmp = i, (void *)0);
+
+  ASSERT(11, tmp);
+
+  __auto_type p2 = (char(*)[i++])(tmp = i, (void *)0);
+
+  ASSERT(11, sizeof *p2);
+  ASSERT(12, tmp);
+
+  return i;
+}
+
+int infer_inner_scope(int i, int j) {
+  __auto_type v1 = ({
+    (int(*)[i - j + 90])(void *)0;
+  });
+  __auto_type v2 = ({
+    (int(*)[j -= i])(void *)0;
+  });
+  ASSERT(5, sizeof *v1 / sizeof **v1);
+  ASSERT(85, sizeof *v2 / sizeof **v2);
+  return j;
+}
+
 int zinit(int cnt) {
  {
    int a[cnt*100];
@@ -76,6 +105,10 @@ int main(void){
   ASSERT(52, fn3(13));
 
   ASSERT(14, fn4(7));
+
+  ASSERT(12, vm_in_cast(9));
+
+  ASSERT(85, infer_inner_scope(137, 222));
 
   ASSERT(1, zinit(1));
 
