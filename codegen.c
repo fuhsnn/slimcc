@@ -2465,29 +2465,41 @@ static void gen_stmt(Node *node) {
   }
   case ND_FOR: {
     int64_t c = count();
+    char begin[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
+    snprintf(begin, STRBUF_SZ, ".L.begin.%"PRIi64, c);
+    snprintf(cont, STRBUF_SZ, ".L.cont.%"PRIi64, c);
+    snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, c);
+    node->cont_label = &cont[0];
+    node->brk_label = &brk[0];
+
     if (node->init)
       gen_stmt(node->init);
-    Printfsn(".L.begin.%"PRIi64":", c);
+    Printfsn("%s:", begin);
     if (node->cond)
-      gen_cond(node->cond, false, node->brk_label);
+      gen_cond(node->cond, false, brk);
     gen_stmt(node->then);
-    Printfsn("%s:", node->cont_label);
+    Printfsn("%s:", cont);
     if (node->inc)
       gen_void_expr(node->inc);
     gen_defr(node);
-    Printftn("jmp .L.begin.%"PRIi64, c);
-    Printfsn("%s:", node->brk_label);
+    Printftn("jmp %s", begin);
+    Printfsn("%s:", brk);
     return;
   }
   case ND_DO: {
-    char begin_label[STRBUF_SZ];
-    snprintf(begin_label, STRBUF_SZ, ".L.begin.%"PRIi64, count());
+    int64_t c = count();
+    char begin[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
+    snprintf(begin, STRBUF_SZ, ".L.begin.%"PRIi64, c);
+    snprintf(cont, STRBUF_SZ, ".L.cont.%"PRIi64, c);
+    snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, c);
+    node->cont_label = &cont[0];
+    node->brk_label = &brk[0];
 
-    Printfsn("%s:", begin_label);
+    Printfsn("%s:", begin);
     gen_stmt(node->then);
-    Printfsn("%s:", node->cont_label);
-    gen_cond(node->cond, true, begin_label);
-    Printfsn("%s:", node->brk_label);
+    Printfsn("%s:", cont);
+    gen_cond(node->cond, true, begin);
+    Printfsn("%s:", brk);
     return;
   }
   case ND_SWITCH: {
@@ -2499,33 +2511,46 @@ static void gen_stmt(Node *node) {
     else
       ax = "%eax", cx = "%ecx", dx = "%edx";
 
+    Node *label = NULL;
     for (CaseRange *cr = node->cases; cr; cr = cr->next) {
-      if (!cr->label ||
-        (node->default_case && node->default_case->label == cr->label))
+      if (cr->label == node->default_label)
         continue;
+
+      if (label != cr->label) {
+        label = cr->label;
+        label->indir_label = arena_malloc(&ast_arena, sizeof(char **));
+        *label->indir_label = new_unique_name();
+      }
 
       if (cr->hi == cr->lo) {
         imm_cmp(ax, dx, cr->lo);
-        Printftn("je %s", cr->label);
+        Printftn("je %s", *label->indir_label);
         continue;
       }
       if (cr->lo == 0) {
         imm_cmp(ax, dx, cr->hi);
-        Printftn("jbe %s", cr->label);
+        Printftn("jbe %s", *label->indir_label);
         continue;
       }
       Printftn("mov %s, %s", ax, cx);
       imm_sub(cx, dx, cr->lo);
       imm_cmp(cx, dx, cr->hi - cr->lo);
-      Printftn("jbe %s", cr->label);
+      Printftn("jbe %s", *label->indir_label);
     }
 
-    if (node->default_case)
-      Printftn("jmp %s", node->default_case->label);
+    if (node->default_label) {
+      node->default_label->indir_label = arena_malloc(&ast_arena, sizeof(char **));
+      *node->default_label->indir_label = new_unique_name();
 
-    Printftn("jmp %s", node->brk_label);
+      Printftn("jmp %s", *node->default_label->indir_label);
+    }
+    char brk[STRBUF_SZ];
+    snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, count());
+    node->brk_label = &brk[0];
+
+    Printftn("jmp %s", brk);
     gen_stmt(node->then);
-    Printfsn("%s:", node->brk_label);
+    Printfsn("%s:", brk);
     return;
   }
   case ND_BLOCK:
@@ -2535,14 +2560,22 @@ static void gen_stmt(Node *node) {
     return;
   case ND_GOTO:
     gen_defr(node);
-    Printftn("jmp %s", node->unique_label);
+    if (node->indir_label)
+      Printftn("jmp %s", *node->indir_label);
+    else if (node->unique_label)
+      Printftn("jmp %s", node->unique_label);
+    else
+      internal_error();
     return;
   case ND_GOTO_EXPR:
     gen_expr(node->lhs);
     Printstn("jmp *%%rax");
     return;
   case ND_LABEL:
-    Printfsn("%s:", node->unique_label);
+    if (node->indir_label)
+      Printftn("%s:", *node->indir_label);
+    if (node->unique_label)
+      Printfsn("%s:", node->unique_label);
     return;
   case ND_RETURN: {
     if (!node->lhs) {

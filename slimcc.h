@@ -436,7 +436,7 @@ typedef enum {
 typedef struct CaseRange CaseRange;
 struct CaseRange {
   CaseRange *next;
-  char *label;
+  Node *label;
   int64_t lo;
   int64_t hi;
 };
@@ -474,12 +474,13 @@ struct Node {
 
   // Goto or labeled statement, or labels-as-values
   Token *labels;
+  char **indir_label;
   char *unique_label;
   Node *goto_next;
 
   // Switch
   CaseRange *cases;
-  CaseRange *default_case;
+  Node *default_label;
 
   DeferStmt *defr_start;
   DeferStmt *defr_end;
@@ -534,6 +535,7 @@ Token *skip_paren(Token *tok);
 Obj *new_lvar(char *name, Type *ty);
 bool is_const_var(Obj *var);
 bool equal_tok(Token *a, Token *b);
+char *new_unique_name(void);
 
 //
 // bitint.c
