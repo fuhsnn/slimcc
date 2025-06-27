@@ -4366,8 +4366,8 @@ static void emit_data(Obj *var) {
 
   emit_symbol(var);
 
-  if (opt_fcommon && var->is_tentative &&
-    !(var->is_tls || var->is_weak || var->section_name)) {
+  if (var->is_tentative && !(var->is_tls || var->is_weak || var->section_name) &&
+    (var->is_common || (!var->is_nocommon && opt_fcommon))) {
     Printftn(".comm \"%s\", %"PRIi64", %d", asm_name(var), sz, align);
     return;
   }

@@ -37,6 +37,8 @@ typedef struct {
   bool is_tls;
   bool is_constexpr;
   bool is_weak;
+  bool is_common;
+  bool is_nocommon;
   bool is_gnu_inline;
   bool is_returns_twice;
   bool is_ctor;
@@ -792,6 +794,8 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, kind, &attr->cleanup_fn);
   bool_attr(tok, kind, "weak", &attr->is_weak);
+  bool_attr(tok, kind, "common", &attr->is_common);
+  bool_attr(tok, kind, "nocommon", &attr->is_nocommon);
   bool_attr(tok, kind, "gnu_inline", &attr->is_gnu_inline);
   bool_attr(tok, kind, "returns_twice", &attr->is_returns_twice);
   cdtor_attr(tok, kind, "constructor", &attr->is_ctor, &attr->ctor_prior);
@@ -823,6 +827,15 @@ static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token
 
   var->is_weak |= attr->is_weak;
   DeclAttr(bool_attr, "weak", &var->is_weak);
+
+  var->is_common |= attr->is_common;
+  DeclAttr(bool_attr, "common", &var->is_common);
+
+  var->is_nocommon |= attr->is_nocommon;
+  DeclAttr(bool_attr, "nocommon", &var->is_nocommon);
+
+  if (var->is_common && var->is_nocommon)
+    error_tok(name, "conflict of attribute common/nocommon");
 }
 
 static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
