@@ -28,6 +28,7 @@ void platform_stdinc_paths(StringArray *paths) {
     if (!file_exists(hdr_dir))
       error("can't find built-in headers");
 
+    add_include_path(paths, format("%s/platform_fix/linux_glibc", hdr_dir));
     add_include_path(paths, format("%s/include", hdr_dir));
   }
 
