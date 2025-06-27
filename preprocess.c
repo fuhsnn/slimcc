@@ -78,6 +78,7 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok);
+static void newline_to_space(Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -505,7 +506,7 @@ static void read_macro_definition2(Token **rest, Token *tok) {
     if (is_hash(tok) && equal(tok->next, "enddef"))
       break;
     cur = cur->next = tok;
-    cur->at_bol = false;
+    newline_to_space(cur);
   }
   cur->next = new_eof(start);
   m->body = head.next;
@@ -685,6 +686,13 @@ static Token *stringize(Token *hash, Token *tok) {
 static void align_token(Token *tok1, Token *tok2) {
   tok1->at_bol = tok2->at_bol;
   tok1->has_space = tok2->has_space;
+}
+
+static void newline_to_space(Token *tok) {
+  if (tok->at_bol) {
+    tok->at_bol = false;
+    tok->has_space = true;
+  }
 }
 
 // Concatenate two tokens to create a new token.
@@ -888,10 +896,8 @@ static Token *prepare_funclike_args(Token *start) {
         tok->dont_expand = true;
     }
     cur = cur->next = tok;
-    if (cur->at_bol) {
-      cur->at_bol = false;
-      cur->has_space = true;
-    }
+    newline_to_space(cur);
+
     if (lvl == 0 && equal(tok, ")"))
       break;
 
@@ -1214,7 +1220,6 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
       cur = cur->next = make_token(",", start);
 
     cur = cur->next = new_num_token(buf, start);
-    cur->at_bol = false;
   }
   fclose(fp);
   if (cur == &head) {
