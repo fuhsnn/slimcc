@@ -1867,6 +1867,8 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("alias");
     PutAttr("aligned");
     PutAttr("cleanup");
+    PutAttr("common");
+    PutAttr("nocommon");
     PutAttr("constructor");
     PutAttr("destructor");
     PutAttr("gnu_inline");

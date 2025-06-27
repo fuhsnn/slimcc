@@ -283,6 +283,8 @@ struct Obj {
   // Global variable
   bool is_tentative;
   bool is_tls;
+  bool is_common;
+  bool is_nocommon;
   char *section_name;
   char *init_data;
   Relocation *rel;
