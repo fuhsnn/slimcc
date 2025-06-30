@@ -76,6 +76,7 @@ typedef struct Type Type;
 typedef struct Node Node;
 typedef struct Member Member;
 typedef struct Relocation Relocation;
+typedef struct LocalLabel LocalLabel;
 
 //
 // alloc.c
@@ -409,6 +410,8 @@ typedef enum {
   ND_DO,        // "do"
   ND_SWITCH,    // "switch"
   ND_BLOCK,     // { ... }
+  ND_BREAK,
+  ND_CONT,
   ND_GOTO,      // "goto"
   ND_GOTO_EXPR, // "goto" labels-as-values
   ND_LABEL,     // Labeled statement
@@ -460,10 +463,6 @@ struct Node {
   Node *init;
   Node *inc;
 
-  // "break" and "continue" labels
-  char *brk_label;
-  char *cont_label;
-
   // Block or statement expression
   Node *body;
 
@@ -474,9 +473,6 @@ struct Node {
   Obj *ret_buffer;
   Obj *args;
 
-  // Goto or labeled statement, or labels-as-values
-  Token *labels;
-  char **indir_label;
   char *unique_label;
   Node *goto_next;
 
@@ -523,6 +519,8 @@ struct Scope {
   Scope *sibling_next;
 
   Obj *locals;
+  LocalLabel *labels;
+  Node *gotos;
   bool is_temporary;
   // C has two block scopes; one is for variables/typedefs and
   // the other is for struct/union/enum tags.

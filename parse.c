@@ -85,6 +85,12 @@ struct InitDesg {
   Obj *var;
 };
 
+struct LocalLabel {
+  LocalLabel *next;
+  Token *name;
+  Node *label;
+};
+
 typedef enum {
   EV_CONST,     // constant expression
   EV_LABEL,     // relocation label
@@ -104,11 +110,9 @@ typedef struct {
 typedef struct JumpContext JumpContext;
 struct JumpContext {
   JumpContext *next;
-  char **brk_label;
-  char **cont_label;
   DeferStmt *defr_end;
   Token *labels;
-  Node *switch_node;
+  Node *node;
 } *jump_ctx;
 
 struct {
@@ -189,6 +193,8 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 static Node *calc_vla(Type *ty, Token *tok);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 static Node *new_node(NodeKind kind, Token *tok);
+static void resolve_local_gotos(Node *node);
+static void push_goto(Node *node);
 
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
@@ -342,6 +348,12 @@ static Node *new_boolean(bool val, Token *tok) {
 static Node *new_var_node(Obj *var, Token *tok) {
   Node *node = new_node(ND_VAR, tok);
   node->var = var;
+  return node;
+}
+
+static Node *new_label(Token *tok) {
+  Node *node = new_node(ND_LABEL, tok);
+  node->defr_start = current_defr;
   return node;
 }
 
@@ -2459,11 +2471,8 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
   AsmParam head = {0};
   AsmParam *cur = &head;
   while (comma_list(rest, &tok, ")", cur != &head)) {
-    Node *node = new_node(ND_GOTO, tok);
-    node->labels = ident_tok(&tok, tok);
-    node->goto_next = gotos;
-    gotos = node;
-
+    Node *node = new_node(ND_GOTO, ident_tok(&tok, tok));
+    push_goto(node);
     cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
     cur->arg = node;
   }
@@ -2509,8 +2518,27 @@ static Node *asm_stmt(Token **rest, Token *tok) {
   return node;
 }
 
+static LocalLabel *find_local_label(Scope *sc, Token *tok) {
+  for (LocalLabel *ll = sc->labels; ll; ll = ll->next)
+    if (equal_tok(ll->name, tok))
+      return ll;
+  return NULL;
+}
+
+static void push_goto(Node *node) {
+  for (Scope *sc = scope; sc; sc = sc->parent) {
+    if (find_local_label(sc, node->tok)) {
+      node->goto_next = sc->gotos;
+      sc->gotos = node;
+      return;
+    }
+  }
+  node->goto_next = gotos;
+  gotos = node;
+}
+
 static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
-  Node *node = NULL;
+  Node *case_node = NULL;
   Node *active_sw = NULL;
 
   Token head = {0};
@@ -2518,36 +2546,51 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
 
   for (;;) {
     if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-      if (!node)
-        node = new_node(ND_LABEL, tok);
-      if (!node->unique_label && !is_defer_context)
-        node->unique_label = new_unique_name();;
+      Token *start = tok;
       cur = cur->label_next = tok;
       tok = tok->next->next;
+
+      LocalLabel *ll = NULL;
+      for (Scope *sc = scope; sc; sc = sc->parent)
+        if ((ll = find_local_label(sc, start)))
+          break;
+
+      if (ll) {
+        if (ll->label)
+          error_tok(tok, "duplicated label");
+        (*cur_node) = (*cur_node)->next = ll->label = new_label(tok);
+        continue;
+      }
+
+      if (!is_defer_context) {
+        Node *node = new_label(start);
+        node->unique_label = new_unique_name();
+        node->goto_next = labels;
+        (*cur_node) = (*cur_node)->next = labels = node;
+      }
       continue;
     }
 
     if (equal(tok, "case") || equal(tok, "default")) {
-      if (!node)
-        node = new_node(ND_LABEL, tok);
+      if (!case_node) {
+        (*cur_node) = (*cur_node)->next = case_node = new_label(tok);
 
-      if (!active_sw) {
         JumpContext *ctx = jump_ctx;
         for (; ctx; ctx = ctx->next)
-          if (ctx->switch_node)
+          if (ctx->node->kind == ND_SWITCH)
             break;
         if (!ctx)
           error_tok(tok, "stray case");
         if (jump_ctx->defr_end != current_defr)
           error_tok(tok, "illegal jump");
-        active_sw = ctx->switch_node;
+        active_sw = ctx->node;
       }
 
       if (equal(tok, "default")) {
         if (active_sw->default_label)
           error_tok(tok, "duplicated defualt");
 
-        active_sw->default_label = node;
+        active_sw->default_label = case_node;
         tok = skip(tok->next, ":");
         continue;
       }
@@ -2580,7 +2623,7 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
       if (opt_optimize) {
         CaseRange *lo_adj = NULL, *hi_adj = NULL;
         for (CaseRange *cr = active_sw->cases; cr; cr = cr->next) {
-          if (cr->label != node)
+          if (cr->label != case_node)
             break;
           if (less_eq(ty, cr->hi, lo) && (uint64_t)cr->hi + 1 == lo)
             lo_adj = cr;
@@ -2606,19 +2649,14 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
       }
 
       CaseRange *cr = ast_arena_malloc(sizeof(CaseRange));
-      cr->label = node;
+      cr->label = case_node;
       cr->lo = lo;
       cr->hi = hi;
       cr->next = active_sw->cases;
       active_sw->cases = cr;
       continue;
     }
-    if (node) {
-      node->labels = head.label_next;
-      node->defr_start = current_defr;
-      node->goto_next = labels;
-      (*cur_node) = (*cur_node)->next = labels = node;
-    }
+
     cur->label_next = NULL;
     *rest = tok;
     return head.label_next;
@@ -2642,8 +2680,7 @@ static void loop_body(Token **rest, Token *tok, Node *node, Token *label_list) {
   jump_ctx = &ctx;
 
   ctx.labels = label_list;
-  ctx.brk_label = &node->brk_label;
-  ctx.cont_label = &node->cont_label;
+  ctx.node = node;
   ctx.defr_end = current_defr;
 
   node->then = secondary_block(rest, tok);
@@ -2658,7 +2695,7 @@ static JumpContext *resolve_labeled_jump(Token **rest, Token *tok, bool is_cont)
   *rest = skip(tok->next, ";");
 
   for (JumpContext *ctx = jump_ctx; ctx; ctx = ctx->next) {
-    if (is_cont && ctx->switch_node)
+    if (is_cont && ctx->node->kind == ND_SWITCH)
       continue;
     if (!name)
       return ctx;
@@ -2718,11 +2755,10 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     if (!is_integer(node->cond->ty))
       error_tok(tok, "controlling expression not integer");
 
-    JumpContext ctx = {.next = jump_ctx, .switch_node = node};
+    JumpContext ctx = {.next = jump_ctx, .node = node};
     jump_ctx = &ctx;
 
     ctx.labels = label_list;
-    ctx.brk_label = &node->brk_label;
     ctx.defr_end = current_defr;
 
     node->then = secondary_block(rest, tok);
@@ -2809,25 +2845,24 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       *rest = skip(tok, ";");
       return node;
     }
-
-    Node *node = new_node(ND_GOTO, tok);
-    node->labels = ident_tok(&tok, tok->next);
-    node->goto_next = gotos;
+    Node *node = new_node(ND_GOTO, ident_tok(&tok, tok->next));
     node->defr_start = current_defr;
-    gotos = node;
+
+    push_goto(node);
     *rest = skip(tok, ";");
     return node;
   }
 
   if (equal(tok, "break") || equal(tok, "continue")) {
-    Node *node = new_node(ND_GOTO, tok);
-
     bool is_cont = equal(tok, "continue");
+    Node *node = new_node(is_cont ? ND_CONT : ND_BREAK, tok);
     JumpContext *ctx = resolve_labeled_jump(rest, tok, is_cont);
 
-    node->indir_label = is_cont ? ctx->cont_label : ctx->brk_label;
     node->defr_end = ctx->defr_end;
     node->defr_start = current_defr;
+
+    node->goto_next = ctx->node->goto_next;
+    ctx->node->goto_next = node;
     return node;
   }
 
@@ -2847,11 +2882,26 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   return expr_stmt(rest, tok);
 }
 
+static void local_labels(Token **rest, Token *tok) {
+  while (consume(&tok, tok, "__label__")) {
+    bool first = true;
+    for (; comma_list(&tok, &tok, ";", !first); first = false) {
+      LocalLabel *ll = ast_arena_calloc(sizeof(LocalLabel));
+      ll->name = ident_tok(&tok, tok);
+      ll->next = scope->labels;
+      scope->labels = ll;
+    }
+  }
+  *rest = tok;
+}
+
 // compound-stmt = (typedef | declaration | stmt)* "}"
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   Node *node = new_node(kind, tok);
   node->defr_end = current_defr;
   enter_scope();
+
+  local_labels(&tok, tok);
 
   Node head = {0};
   Node *cur = &head;
@@ -2895,6 +2945,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
 
   node->defr_start = current_defr;
   current_defr = node->defr_end;
+  resolve_local_gotos(node);
   leave_scope();
 
   if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
@@ -3567,8 +3618,6 @@ static Node *atomic_op(Node *binary, bool return_old) {
               tok);
 
   Node *loop = new_node(ND_DO, tok);
-  loop->brk_label = new_unique_name();
-  loop->cont_label = new_unique_name();
 
   Node *body = new_binary(ND_ASSIGN,
                           new_var_node(new, tok),
@@ -4031,10 +4080,8 @@ static Node *unary(Token **rest, Token *tok) {
 
   // [GNU] labels-as-values
   if (equal(tok, "&&")) {
-    Node *node = new_node(ND_LABEL_VAL, tok);
-    node->labels = ident_tok(rest, tok->next);
-    node->goto_next = gotos;
-    gotos = node;
+    Node *node = new_node(ND_LABEL_VAL, ident_tok(rest, tok->next));
+    push_goto(node);
     dont_dealloc_vla = true;
     return node;
   }
@@ -4965,38 +5012,51 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
   return node;
 }
 
-// This function matches gotos or labels-as-values with labels.
-//
-// We cannot resolve gotos as we parse a function because gotos
-// can refer a label that appears later in the function.
-// So, we need to do this after we parse the entire function.
-static void resolve_goto_labels(void) {
+static void resolve_goto_defer(Node *node, DeferStmt *dst_dfr) {
+  if (!dst_dfr)
+    return;
+
+  DeferStmt *dfr = node->defr_start;
+  for (; dfr; dfr = dfr->next)
+    if (dfr == dst_dfr)
+      break;
+  if (!dfr)
+    error_tok(node->tok->next, "illegal jump");
+
+  node->defr_end = dfr;
+}
+
+static void resolve_gotos(void) {
   for (Node *x = gotos; x; x = x->goto_next) {
     Node *dest = NULL;
-    for (Node *lbls = labels; lbls && !dest; lbls = lbls->goto_next)
-      for (Token *t = lbls->labels; t && !dest; t = t->label_next)
-        if (equal_tok(t, x->labels))
-          dest = lbls;
-
+    for (Node *lbl = labels; lbl; lbl = lbl->goto_next) {
+      if (!equal_tok(lbl->tok, x->tok))
+        continue;
+      dest = lbl;
+      break;
+    }
     if (!dest)
-      error_tok(x->tok->next, "use of undeclared label");
-    if (!dest->unique_label)
-      error_tok(x->tok->next, "label cannot be a goto target");
+      error_tok(x->tok, "use of undeclared label");
 
     x->unique_label = dest->unique_label;
-    if (!dest->defr_start)
-      continue;
-
-    DeferStmt *defr= x->defr_start;
-    for (; defr; defr = defr->next)
-      if (defr == dest->defr_start)
-        break;
-    if (!defr)
-      error_tok(x->tok->next, "illegal jump");
-
-    x->defr_end = defr;
+    resolve_goto_defer(x, dest->defr_start);
   }
   gotos = labels = NULL;
+}
+
+static void resolve_local_gotos(Node *node) {
+  for (Node *x = scope->gotos; x; x = x->goto_next) {
+    LocalLabel *ll = find_local_label(scope, x->tok);
+    if (!ll || !ll->label)
+      error_tok(x->tok, "use of undeclared local label");
+
+    x->default_label = ll->label;
+    resolve_goto_defer(x, ll->label->defr_start);
+  }
+
+  for (LocalLabel *ll = scope->labels; ll; ll = ll->next)
+    if (ll->label)
+      node = node->goto_next = ll->label;
 }
 
 static Obj *find_func(char *name) {
@@ -5077,7 +5137,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->dealloc_vla = true;
 
   leave_scope();
-  resolve_goto_labels();
+  resolve_gotos();
   current_fn = NULL;
 
   emit_text(fn);

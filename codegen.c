@@ -199,6 +199,34 @@ static int64_t count(void) {
   return i++;
 }
 
+static char *goto_label(Node *node) {
+  if (node->unique_label)
+    return node->unique_label;
+  if (node->default_label)
+    return node->default_label->unique_label;
+  internal_error();
+}
+
+static void name_labels(Node *node) {
+  for (Node *n = node->goto_next; n; n = n->goto_next)
+    n->unique_label = new_unique_name();
+}
+
+static void name_brk_cont(Node *node, char *bg, char *brk, char *cont, int64_t c) {
+  snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, c);
+  if (bg)
+    snprintf(bg, STRBUF_SZ, ".L.begin.%"PRIi64, c);
+  if (cont)
+    snprintf(cont, STRBUF_SZ, ".L.cont.%"PRIi64, c);
+
+  for (Node *n = node->goto_next; n; n = n->goto_next) {
+    if (n->kind == ND_BREAK)
+      n->unique_label = brk;
+    else
+      n->unique_label = cont;
+  }
+}
+
 static char *tmpbuf(int sz) {
   tmpbuf_sz = MAX(tmpbuf_sz, sz);
   return "__BUF";
@@ -2210,6 +2238,7 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   }
   case ND_STMT_EXPR:
+    name_labels(node);
     for (Node *n = node->body; n; n = n->next) {
       if (!n->next && n->kind == ND_EXPR_STMT)
         gen_expr(n->lhs);
@@ -2295,7 +2324,7 @@ static void gen_expr2(Node *node, bool is_void) {
     }
     return;
   case ND_LABEL_VAL:
-    Printftn("lea %s(%%rip), %%rax", node->unique_label);
+    Printftn("lea %s(%%rip), %%rax", goto_label(node));
     return;
   case ND_CAS: {
     gen_expr(node->cas_addr);
@@ -2464,17 +2493,12 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_FOR: {
-    int64_t c = count();
-    char begin[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
-    snprintf(begin, STRBUF_SZ, ".L.begin.%"PRIi64, c);
-    snprintf(cont, STRBUF_SZ, ".L.cont.%"PRIi64, c);
-    snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, c);
-    node->cont_label = &cont[0];
-    node->brk_label = &brk[0];
+    char bg[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
+    name_brk_cont(node, bg, brk, cont, count());
 
     if (node->init)
       gen_stmt(node->init);
-    Printfsn("%s:", begin);
+    Printfsn("%s:", bg);
     if (node->cond)
       gen_cond(node->cond, false, brk);
     gen_stmt(node->then);
@@ -2482,29 +2506,25 @@ static void gen_stmt(Node *node) {
     if (node->inc)
       gen_void_expr(node->inc);
     gen_defr(node);
-    Printftn("jmp %s", begin);
+    Printftn("jmp %s", bg);
     Printfsn("%s:", brk);
     return;
   }
   case ND_DO: {
-    int64_t c = count();
-    char begin[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
-    snprintf(begin, STRBUF_SZ, ".L.begin.%"PRIi64, c);
-    snprintf(cont, STRBUF_SZ, ".L.cont.%"PRIi64, c);
-    snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, c);
-    node->cont_label = &cont[0];
-    node->brk_label = &brk[0];
+    char bg[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
+    name_brk_cont(node, bg, brk, cont, count());
 
-    Printfsn("%s:", begin);
+    Printfsn("%s:", bg);
     gen_stmt(node->then);
     Printfsn("%s:", cont);
-    gen_cond(node->cond, true, begin);
+    gen_cond(node->cond, true, bg);
     Printfsn("%s:", brk);
     return;
   }
   case ND_SWITCH: {
     gen_expr(node->cond);
 
+    int64_t c = count(), cnt = 0;
     char *ax, *cx, *dx;
     if (node->cond->ty->size == 8)
       ax = "%rax", cx = "%rcx", dx = "%rdx";
@@ -2518,64 +2538,56 @@ static void gen_stmt(Node *node) {
 
       if (label != cr->label) {
         label = cr->label;
-        label->indir_label = arena_malloc(&ast_arena, sizeof(char **));
-        *label->indir_label = new_unique_name();
+        label->unique_label = format(".L.case%"PRIi64".%"PRIi64, cnt++, c);
       }
 
       if (cr->hi == cr->lo) {
         imm_cmp(ax, dx, cr->lo);
-        Printftn("je %s", *label->indir_label);
+        Printftn("je %s", label->unique_label);
         continue;
       }
       if (cr->lo == 0) {
         imm_cmp(ax, dx, cr->hi);
-        Printftn("jbe %s", *label->indir_label);
+        Printftn("jbe %s", label->unique_label);
         continue;
       }
       Printftn("mov %s, %s", ax, cx);
       imm_sub(cx, dx, cr->lo);
       imm_cmp(cx, dx, cr->hi - cr->lo);
-      Printftn("jbe %s", *label->indir_label);
+      Printftn("jbe %s", label->unique_label);
     }
+
+    char brk[STRBUF_SZ];
+    name_brk_cont(node, NULL, brk, NULL, c);
 
     if (node->default_label) {
-      node->default_label->indir_label = arena_malloc(&ast_arena, sizeof(char **));
-      *node->default_label->indir_label = new_unique_name();
-
-      Printftn("jmp %s", *node->default_label->indir_label);
+      node->default_label->unique_label = format(".L.default.%"PRIi64, c);
+      Printftn("jmp %s", node->default_label->unique_label);
+    } else {
+      Printftn("jmp %s", brk);
     }
-    char brk[STRBUF_SZ];
-    snprintf(brk, STRBUF_SZ, ".L.brk.%"PRIi64, count());
-    node->brk_label = &brk[0];
-
-    Printftn("jmp %s", brk);
     gen_stmt(node->then);
     Printfsn("%s:", brk);
     return;
   }
   case ND_BLOCK:
+    name_labels(node);
     for (Node *n = node->body; n; n = n->next)
       gen_stmt(n);
     gen_defr(node);
     return;
+  case ND_BREAK:
+  case ND_CONT:
   case ND_GOTO:
     gen_defr(node);
-    if (node->indir_label)
-      Printftn("jmp %s", *node->indir_label);
-    else if (node->unique_label)
-      Printftn("jmp %s", node->unique_label);
-    else
-      internal_error();
+    Printftn("jmp %s", goto_label(node));
     return;
   case ND_GOTO_EXPR:
     gen_expr(node->lhs);
     Printstn("jmp *%%rax");
     return;
   case ND_LABEL:
-    if (node->indir_label)
-      Printftn("%s:", *node->indir_label);
-    if (node->unique_label)
-      Printfsn("%s:", node->unique_label);
+    Printfsn("%s:", node->unique_label);
     return;
   case ND_RETURN: {
     if (!node->lhs) {
@@ -4026,8 +4038,8 @@ static void asm_outputs(Node *node) {
   }
 }
 
-static bool named_op(char *p, Token *tok, char **rest) {
-  if (!strncmp(p, tok->loc, tok->len) && p[tok->len] == ']') {
+static bool named_op(char **rest, char *p, Token *tok) {
+  if (tok && !strncmp(p, tok->loc, tok->len) && p[tok->len] == ']') {
     *rest = &p[tok->len + 1];
     return true;
   }
@@ -4039,13 +4051,11 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
     for (int i = 0; i < asm_ops.cnt; i++) {
       AsmParam *op = asm_ops.data[i];
       if (is_label) {
-        for (Token *t = op->arg->labels; t; t = t->label_next)
-          if (named_op(p + 1, t, rest))
-            return op;
+        if (named_op(rest, p + 1, op->arg->tok))
+          return op;
       } else {
-        if (op->name)
-          if (named_op(p + 1, op->name, rest))
-            return op;
+        if (named_op(rest, p + 1, op->name))
+          return op;
       }
     }
   } else if (Isdigit(*p)) {
@@ -4092,13 +4102,13 @@ static void asm_body(Node *node) {
 
     if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
       AsmParam *ap = find_op(p + 1, &p, node->asm_str, true);
-      if (!ap->arg->unique_label)
+      if (ap->arg->kind != ND_GOTO)
         error_tok(ap->arg->tok, "not a label");
 
       if (node->asm_outputs)
         Printf("%df", ap->label_id);
       else
-        Printf("%s", ap->arg->unique_label);
+        Printf("%s", goto_label(ap->arg));
       continue;
     }
 
@@ -4239,7 +4249,7 @@ static void gen_asm(Node *node) {
     Printftn("lea %df(%%rip), %s; jmp %df", fallthrough_label, tmp_gp, meet_label);
     for (AsmParam *ap = node->asm_labels; ap; ap = ap->next) {
       Printftn("%d:", ap->label_id);
-      Printftn("lea %s(%%rip), %s", ap->arg->unique_label, tmp_gp);
+      Printftn("lea %s(%%rip), %s", goto_label(ap->arg), tmp_gp);
       Printftn("jmp %df", meet_label);
     }
     Printftn("%d:", meet_label);

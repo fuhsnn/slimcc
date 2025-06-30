@@ -37,6 +37,95 @@ int label_in_secondary_block(int i) {
   return 0;
 }
 
+int local_labels(void) {
+  __label__ d;
+
+  int cnt = 0;
+
+  int a_looped = 0;
+  int b_looped = 0;
+  int d_looped = 0;
+  int f_looped = 0;
+  int g_looped = 0;
+
+  { __label__ a; goto a; a: }
+  a:;
+  { __label__ a; goto a; a: }
+
+  { __label__ b; goto b; b: }
+  { b: }
+  { __label__ b; goto b; b: }
+
+  if (!a_looped++) {
+    cnt++;
+    goto a;
+  }
+  if (!b_looped++) {
+    cnt++;
+    goto b;
+  }
+
+  {
+    __label__ c;
+    {
+      goto c;
+      { __label__ c; { goto c; } c: }
+      cnt -= 10;
+      c:
+      cnt++;
+    }
+  }
+  c:
+
+  int p_loop = 0;
+
+  goto d;
+  {
+    __label__ f;
+#ifdef NOTCLANG
+    __label__ decl_only;
+#endif
+
+    cnt -= 10;
+    { d: }
+    e:
+    f:
+    g:
+
+    cnt++;
+
+    if (!d_looped++)
+      goto d;
+
+    if (!f_looped++)
+      goto f;
+
+    if (!g_looped++)
+      goto g;
+
+    void *p;
+
+    switch (p_loop++) {
+      case 0:
+        p = &&d;
+        break;
+      case 1:
+        p = &&f;
+        break;
+      case 2:
+        p = &&g;
+        break;
+      default:
+        p = &&end;
+    }
+    goto *p;
+    cnt++;
+  }
+  end:
+
+  return cnt;
+}
+
 int main(void){
   ASSERT(2, ({ uint32_t i=0; switch(i){case 0 ...0xFFFFFFFF: i=2;} i; }));
   ASSERT(2, ({ int32_t i=0; switch(i){case 0x80000000 ...0x7FFFFFFF: i=2;} i; }));
@@ -52,6 +141,7 @@ int main(void){
   ASSERT(1, label_in_secondary_block(2));
   ASSERT(1, label_in_secondary_block(3));
   ASSERT(77, c23_label());
+  ASSERT(10, local_labels());
 
   printf("OK\n");
 }
