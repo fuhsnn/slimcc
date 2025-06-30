@@ -130,6 +130,24 @@ int asm_goto_output(int *arg){
   return *arg + 30;
 }
 
+int asm_goto_local_label(void) {
+#define LE_OR_QUIT(_v) do { __label__ LE;                    \
+    __asm goto ("cmpl $10, %[val]; jle %l[LE]; jmp %l[QUIT]" \
+      ::[val]"r"(_v) : "cc" : LE, QUIT);                     \
+    LE:                                                      \
+  } while (0)
+
+  int cnt = 0;
+  LE_OR_QUIT(9);
+  cnt += 1;
+  LE_OR_QUIT(10);
+  cnt += 10;
+  LE_OR_QUIT(11);
+  cnt += 100;
+QUIT:
+  return cnt;
+}
+
 void x87_clobber(void) {
   volatile long double f1;
   volatile double f2;
@@ -307,6 +325,8 @@ int main(void) {
   ASSERT(13, asm_goto_output(&(int){7}));
   ASSERT(19, asm_goto_output(&(int){6}));
   ASSERT(30, asm_goto_output(&(int){5}));
+
+  ASSERT(11, asm_goto_local_label());
 
   printf("OK\n");
 }
