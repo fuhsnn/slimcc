@@ -4,7 +4,7 @@ RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y --no-install-recommends \
  make cmake pkg-config \
  autoconf autopoint automake gettext texinfo \
- git curl ca-certificates \
+ git curl ca-certificates wget unzip \
  clang libclang-rt-19-dev \
  # Nuklear (sync with ccpp.yml)
  glslc liballegro5-dev liballegro-image5-dev liballegro-ttf5-dev libcairo2-dev libglfw3 libglfw3-dev \
@@ -14,7 +14,11 @@ RUN apt-get install -y --no-install-recommends \
  # C3
  zlib1g zlib1g-dev libllvm19 llvm llvm-dev llvm-runtime liblld-dev liblld-19 libpolly-19-dev \
  # redis/valkey
- tcl-dev
+ tcl-dev \
+ # liballegro5
+ xvfb xauth \
+ # msgpack
+ libgtest-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

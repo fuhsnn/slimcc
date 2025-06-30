@@ -74,9 +74,16 @@ install_libtool() {
 # tests
 
 test_bash() {
- url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3-rc2.tar.gz bash
+ url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3.tar.gz bash
  fix_and_configure
  make test
+}
+
+test_bearssl() {
+ url_tar https://bearssl.org/bearssl-0.6.tar.gz bearssl
+ make CC=$CC LDDLL=$CC LD=$CC
+ build/testcrypto all
+ build/testx509
 }
 
 test_bfs() {
@@ -98,6 +105,22 @@ test_blake2() {
  make CC=$CC check
 }
 
+test_busybox() {
+ git_fetch https://github.com/sailfishos-mirror/busybox 142ac2d796dddea50d8926d1747523182c12d097 busybox
+ sed -i 's|-Wp,-MD,|-MD -MF |g' scripts/Makefile.lib
+ sed -i 's|-Wp,-MD,|-MD -MF |g' scripts/Makefile.host
+ sed -i 's|LDLIBS += rt|LDLIBS += rt resolv|g' Makefile.flags
+ sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha1_hwaccel_x86-64.S
+ sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha256_hwaccel_x86-64.S
+ sed -i 's|BUG_xatou32_unimplemented()|0|g' include/xatonum.h
+ sed -i 's|BUG_bb_strtou32_unimplemented()|0|g' include/xatonum.h
+ sed -i 's|\tgcc |$CC |g' testsuite/testing.sh
+ replace_line "# if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#if 1" libbb/hash_md5_sha.c
+ make CC=$CC HOSTCC=$CC defconfig
+ make CC=$CC HOSTCC=$CC
+ make CC=$CC HOSTCC=$CC SKIP_KNOWN_BUGS=1 test
+}
+
 test_bzip2() {
  url_tar https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz bzip2
  make CC=$CC test
@@ -116,7 +139,7 @@ test_c23doku() {
 }
 
 test_c3() {
- git_fetch https://github.com/fuhsnn/c3c ffafc6c366b86c736b185eabbebeb1fc03878756 c3c
+ git_fetch https://github.com/c3lang/c3c 1b8355ff07a89e2c14166111c7191c5fd3e20d6b c3c
  replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
  mkdir build && cd build
  cmake ../ -DCMAKE_C_COMPILER=$CC
@@ -126,8 +149,22 @@ test_c3() {
  ../build/c3c compile-run -O1 src/test_suite_runner.c3 -- ../build/c3c test_suite/
 }
 
+test_calc() {
+ git_fetch https://github.com/lcn2/calc 41951e2c09a57389e604aedafbb12eb2b4020ba4 calc
+ make CC=$CC LCC=$CC MAN=true check
+}
+
 test_cello() {
  git_fetch https://github.com/orangeduck/Cello 61ee5c3d9bca98fd68af575e9704f5f02533ae26 cello
+ make check
+}
+
+test_cjson() {
+ git_fetch https://github.com/DaveGamble/cJSON 8f2beb57ddad1f94bed899790b00f46df893ccac cjson
+ replace_line "#if (defined(__GNUC__) || defined(__SUNPRO_CC) || defined (__SUNPRO_C)) && defined(CJSON_API_VISIBILITY)" "#if 1" cJSON.h
+ sed -i 's/if defined(__GNUC__) || defined(__ghs__)/if 1/g' tests/unity/src/unity_internals.h
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC
  make check
 }
 
@@ -249,6 +286,31 @@ test_janet() {
  make test
 }
 
+test_jemalloc() {
+ git_fetch https://github.com/jemalloc/jemalloc 1972241cd204c60fb5b66f23c48a117879636161 jemalloc
+ sed -i 's|ATOMIC_VAR_INIT||g' include/jemalloc/internal/atomic_c11.h
+ autoconf
+ ./configure --disable-cxx
+ make check
+}
+
+test_lame() {
+ url_tar https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download lame
+ fix_and_configure
+ make test
+}
+
+test_liballegro5() {
+ git_fetch https://github.com/liballeg/allegro5 c870f466638b345639b46628e4d421443aacff71 liballegro5
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
+ make VERBOSE=1
+ make run_standalone_tests
+ . ../tests/grab_bitmap_suites.sh
+ find ../tests -name '*.ini' | grep -v 'compressed' | xargs xvfb-run tests/test_driver --save_on_failure --xvfb | tee /tmp/test_out || true
+ grep -q 'failed tests: 0' /tmp/test_out
+}
+
 test_libarchive() {
  url_tar https://github.com/libarchive/libarchive/releases/download/v3.8.1/libarchive-3.8.1.tar.gz libarchive
  replace_line "#elif defined(__GNUC__)" "#elif 1" libarchive/archive_blake2.h
@@ -275,6 +337,12 @@ test_libgmp() {
  url_xz https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp
  fix_and_configure
  make && make check
+}
+
+test_libjpeg() {
+ url_tar https://www.ijg.org/files/jpegsrc.v9f.tar.gz libjpeg
+ fix_and_configure
+ make check
 }
 
 test_libjsonc() {
@@ -309,7 +377,7 @@ test_libpcre2() {
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.49
+ github_tar pnggroup libpng v1.6.50
  fix_and_configure
  make test
 }
@@ -327,6 +395,15 @@ test_libressl() {
  make check
 }
 
+test_libsamplerate() {
+ git_fetch https://github.com/libsndfile/libsamplerate 15c392d47e71b9395a759544b3818a1235fe1a1d libsamplerate
+ replace_line "#   define HAVE_SSE2_INTRINSICS" "" src/common.h
+ libtoolize
+ sh autogen.sh
+ fix_and_configure
+ make test
+}
+
 test_libsodium() {
  url_tar https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz libsodium
  fix_and_configure
@@ -340,6 +417,20 @@ test_libuev() {
  github_tar troglobit libuev v2.4.1
  libtoolize
  autoreconf -fi
+ fix_and_configure
+ make check
+}
+
+test_libuv() {
+ url_tar https://github.com/libuv/libuv/archive/refs/tags/v1.51.0.tar.gz libuv
+ replace_line "#elif __GNUC__ >= 4" "#elif 1" include/uv.h
+ # https://github.com/libuv/libuv/issues/2635#issuecomment-575109464
+ sed -i 's|TEST_DECLARE   (udp_multicast_join)||g' test/test-list.h
+ sed -i 's|TEST_DECLARE   (udp_multicast_join6)||g' test/test-list.h
+ sed -i 's|TEST_ENTRY  (udp_multicast_join)||g' test/test-list.h
+ sed -i 's|TEST_ENTRY  (udp_multicast_join6)||g' test/test-list.h
+ libtoolize
+ sh autogen.sh
  fix_and_configure
  make check
 }
@@ -389,8 +480,19 @@ test_mimalloc() {
  make && make test
 }
 
+test_msgpack() {
+ github_tar msgpack msgpack-c c-6.1.0
+ sed -i 's|__sync_sub_and_fetch(ptr, 1)|(--*(_Atomic unsigned*)(ptr))|g' cmake/sysdep.h.in
+ sed -i 's|__sync_add_and_fetch(ptr, 1)|(++*(_Atomic unsigned*)(ptr))|g' cmake/sysdep.h.in
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DMSGPACK_32BIT=OFF -DBUILD_SHARED_LIBS=ON \
+  -DMSGPACK_CHAR_SIGN=signed -DMSGPACK_BUILD_EXAMPLES=ON -DMSGPACK_BUILD_TESTS=ON
+ make
+ make test
+}
+
 test_muon() {
- git_fetch https://github.com/muon-build/muon 0cdfd4b4ccd1fa7f9585aa4741ff44c0ebc6cf2b muon
+ git_fetch https://github.com/muon-build/muon e6038ff33267ebf035d4aa839d7815fb34c427b0 muon
  sh ./bootstrap.sh build
  build/muon-bootstrap setup build
  sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
@@ -431,9 +533,7 @@ test_oniguruma() {
 }
 
 test_jq() {
- git_fetch https://github.com/jqlang/jq 499c91bca9d4d027833bc62787d1bb075c03680e jq
- libtoolize
- autoreconf -fi
+ url_tar https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-1.8.1.tar.gz jq
  fix_and_configure
  make check
 }
@@ -450,7 +550,7 @@ test_openssh() {
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.5.0
+ github_tar openssl openssl openssl-3.5.1
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -468,7 +568,7 @@ test_pdpmake() {
 }
 
 test_perl() {
- github_tar perl perl5 v5.40.2
+ github_tar perl perl5 v5.42.0
  # https://github.com/Perl/perl5/blob/80f266d3fc15255d56d2bebebceba52614f04943/.github/workflows/testsuite.yml#L810
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
@@ -483,7 +583,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.1.32
+ github_tar php php-src php-8.1.33
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
 
@@ -563,7 +663,9 @@ test_scrapscript() {
 }
 
 test_sokol() {
- git_fetch https://github.com/fuhsnn/sokol eccb38d4775736a0046eb6fb326588cde231658f sokol
+ git_fetch https://github.com/fuhsnn/sokol da4efba3e39ea65e51954109faac3daa757f0839 sokol
+ sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.0|g' tests/ext/CMakeLists.txt
+
  mkdir cmakebuild && cd cmakebuild
  cmake ../tests/ -DCMAKE_C_COMPILER=$CC -DSOKOL_BACKEND=SOKOL_GLCORE
  make VERBOSE=1 && ./sokol-test
@@ -614,10 +716,41 @@ test_vim() {
  make && make testtiny
 }
 
+test_wasm3() {
+ git_fetch https://github.com/wasm3/wasm3 79d412ea5fcf92f0efe658d52827a0e0a96ff442 wasm3
+ sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
+ use_stdbit "#include <limits.h>" source/m3_exec.h
+ mkdir build
+ $CC -O3 -g0 -s -Isource -Dd_m3HasWASI source/*.c platforms/app/main.c -lm -o build/wasm3
+ cd test
+ python3 run-wasi-test.py
+ python3 run-spec-test.py
+}
+
 test_wget() {
  url_tar https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.0.tar.gz wget
  fix_and_configure
  make check
+}
+
+test_wuffs() {
+ git_fetch https://github.com/google/wuffs 67e9078eabcbda867ccc9fa912d81cba4fb0aa89 wuffs
+ sed -i 's|Building (C)|Build CC:$CC|g' ./build-example.sh
+ ./build-example.sh convert-to-nia
+ ./build-example.sh gifplayer
+ ./build-example.sh mzcat
+ ./build-example.sh stb-imagedumper
+ ./build-example.sh zcat
+ CXX=clang++ ./build-example.sh crc32 #required for tests below
+
+ # taken from build-all.sh
+ script/print-mzcat-checksums.sh | diff --unified test/mzcat-checksums-of-data.txt /dev/stdin
+ script/print-nia-checksums.sh | diff --unified test/nia-checksums-of-data.txt /dev/stdin
+}
+
+test_xxhash() {
+ git_fetch https://github.com/Cyan4973/xxHash 38d555879fddae7300ece2c0820b3332c1d5748f xxhash
+ make CC=$CC check
 }
 
 test_xz() {
@@ -625,6 +758,14 @@ test_xz() {
  mkdir cmakebuild && cd cmakebuild
  cmake ../ -DCMAKE_C_COMPILER=$CC
  make && make test
+}
+
+test_yash() {
+ github_tar magicant yash 2.59
+ ./configure
+ sed -i 's| docs$||g' Makefile
+ sed -i 's| sigquit[1-8]-p.tst||g' tests/Makefile # extremely slow in CI
+ make test
 }
 
 test_zlib() {
@@ -647,6 +788,13 @@ test_zstd() {
  github_tar facebook zstd v1.5.7
  replace_line "#if defined(__ELF__) && defined(__GNUC__)" "#if 1" lib/decompress/huf_decompress_amd64.S
  make check
+}
+
+build_dash() {
+ git_fetch https://git.kernel.org/pub/scm/utils/dash/dash.git b4ef25d7466c2f85247c6271a47c6ccc064b4625 dash
+ sh autogen.sh
+ ./configure
+ make
 }
 
 build_erlang() {
@@ -674,6 +822,20 @@ build_gcc() {
  export MAKEINFO=missing
  ../configure --enable-languages=c,c++ --disable-multilib --disable-bootstrap
  make
+}
+
+build_libev() {
+ url_tar https://dist.schmorp.de/libev/libev-4.33.tar.gz libev
+ fix_and_configure
+ make
+}
+
+build_luajit() {
+ git_fetch https://github.com/LuaJIT/LuaJIT f9140a622a0c44a99efb391cc1c2358bc8098ab7 luajit
+ sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
+ replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
+ use_stdbit "#include <stdlib.h>" src/lj_def.h
+ make CC=$CC
 }
 
 build_nano() {

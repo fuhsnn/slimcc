@@ -527,6 +527,7 @@ static int parse_args(int argc, char **argv) {
         !strcmp(argv[i], "-fno-lto") ||
         !strcmp(argv[i], "-fno-asynchronous-unwind-tables") ||
         !strcmp(argv[i], "-fno-delete-null-pointer-checks") ||
+        !strcmp(argv[i], "-fno-exceptions") ||
         !strcmp(argv[i], "-fno-omit-frame-pointer") ||
         !strcmp(argv[i], "-fno-stack-protector") ||
         !strcmp(argv[i], "-fno-strict-aliasing") ||

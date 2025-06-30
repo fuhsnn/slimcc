@@ -44,11 +44,16 @@ jobs:
           - { vm: interop, proj: test_c3 }
           - { vm: interop, proj: test_flex }
           - { vm: interop, proj: test_imagemagick }
+          - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
+          - { vm: interop, proj: test_msgpack }
           - { vm: interop, proj: test_muon }
           - { vm: interop, proj: test_redis }
           - { vm: interop, proj: test_sokol }
           - { vm: interop, proj: test_valkey }
+          - { vm: interop, proj: test_wasm3 }
+          - { vm: interop, proj: test_wuffs }
+          - { vm: interop, proj: build_luajit }
           - { vm: interop, proj: build_ncurses }
           - { vm: interop, proj: build_nuklear }
           - { vm: interop, proj: build_q2rtx }
@@ -57,10 +62,14 @@ jobs:
           - { vm: interop, proj: build_sdl3 }
           - { vm: interop, proj: build_yquake2 }
           - { vm: main, proj: test_bash }
+          - { vm: main, proj: test_bearssl }
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
+          - { vm: main, proj: test_busybox }
           - { vm: main, proj: test_bzip2 }
+          - { vm: main, proj: test_calc }
           - { vm: main, proj: test_cello }
+          - { vm: main, proj: test_cjson }
           - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_curl }
@@ -75,10 +84,13 @@ jobs:
           - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
           - { vm: main, proj: test_janet }
+          - { vm: main, proj: test_jemalloc }
           - { vm: main, proj: test_jq }
+          - { vm: main, proj: test_lame }
           - { vm: main, proj: test_libarchive }
           - { vm: main, proj: test_libevent }
           - { vm: main, proj: test_libgmp }
+          - { vm: main, proj: test_libjpeg }
           - { vm: main, proj: test_libjsonc }
           - { vm: main, proj: test_liblz4 }
           - { vm: main, proj: test_libmpc }
@@ -87,8 +99,10 @@ jobs:
           - { vm: main, proj: test_libpng }
           - { vm: main, proj: test_libpsl }
           - { vm: main, proj: test_libressl }
+          - { vm: main, proj: test_libsamplerate }
           - { vm: main, proj: test_libsodium }
           - { vm: main, proj: test_libuev }
+          - { vm: main, proj: test_libuv }
           - { vm: main, proj: test_libxml }
           - { vm: main, proj: test_lua }
           - { vm: main, proj: test_memcached }
@@ -116,13 +130,17 @@ jobs:
           - { vm: main, proj: test_toybox }
           - { vm: main, proj: test_vim }
           - { vm: main, proj: test_wget }
+          - { vm: main, proj: test_xxhash }
           - { vm: main, proj: test_xz }
+          - { vm: main, proj: test_yash }
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
+          - { vm: main, proj: build_dash }
           - { vm: main, proj: build_erlang }
           - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
+          - { vm: main, proj: build_libev }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_zig }

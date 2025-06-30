@@ -31,7 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # jq
  libonig-dev \
  # pixman, freetype
- libpng-dev
+ libpng-dev \
+ # yash
+ ed \
+ # busybox
+ zip
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
@@ -48,6 +52,7 @@ RUN ! command -v gcc-12
 ENV CC=/work/slimcc/slimcc
 
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+ENV LANG=en_US.UTF-8
 
 RUN bash scripts/linux_thirdparty.bash install_libtool
 
