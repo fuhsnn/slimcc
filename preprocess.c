@@ -70,6 +70,7 @@ Token *last_alloc_tok;
 Token *tok_freelist;
 
 static char *base_file;
+struct tm *cur_time;
 
 static Token *preprocess2(Token *tok);
 static Token *preprocess3(Token *tok);
@@ -230,9 +231,12 @@ static char *quote_string(char *str) {
   return buf;
 }
 
+static Token *new_str_token2(char *str, Token *tmpl) {
+  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, str), NULL);
+}
+
 static Token *new_str_token(char *str, Token *tmpl) {
-  char *buf = quote_string(str);
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, buf), NULL);
+  return new_str_token2(quote_string(str), tmpl);
 }
 
 // Copy all tokens until the next newline, terminate them with
@@ -1554,20 +1558,58 @@ static Token *counter_macro(Token *start) {
   return tok;
 }
 
+// __DATE__ is expanded to the current date, e.g. "May 17 2020".
+static Token *date_macro(Token *start) {
+  static char *str;
+  if (!str) {
+    if (!cur_time)
+      cur_time = localtime(&(time_t){time(NULL)});
+
+    static char mon[][4] = {
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    };
+    str = format("\"%s %2d %d\"",
+      mon[cur_time->tm_mon], cur_time->tm_mday, cur_time->tm_year + 1900);
+  }
+  Token *tok = new_str_token2(str, start);
+  tok->next = start->next;
+  return tok;
+}
+
+// __TIME__ is expanded to the current time, e.g. "13:34:03".
+static Token *time_macro(Token *start) {
+  static char *str;
+  if (!str) {
+    if (!cur_time)
+      cur_time = localtime(&(time_t){time(NULL)});
+
+    str = format("\"%02d:%02d:%02d\"",
+      cur_time->tm_hour, cur_time->tm_min, cur_time->tm_sec);
+  }
+  Token *tok = new_str_token2(str, start);
+  tok->next = start->next;
+  return tok;
+}
+
 // __TIMESTAMP__ is expanded to a string describing the last
 // modification time of the current file. E.g.
 // "Fri Jul 24 01:32:50 2020"
 static Token *timestamp_macro(Token *start) {
-  Token *tok;
-  struct stat st;
-  if (stat(start->file->name, &st) != 0) {
-    tok = new_str_token("??? ??? ?? ??:??:?? ????", start);
-  } else {
-    char buf[30];
-    ctime_r(&st.st_mtime, buf);
-    buf[24] = '\0';
-    tok = new_str_token(buf, start);
+  static char *str;
+  static char buf[30];
+  if (!str) {
+    struct stat st;
+    if (stat(start->file->name, &st) != 0) {
+      str = "\"??? ??? ?? ??:??:?? ????\"";
+    } else {
+      ctime_r(&st.st_mtime, &buf[1]);
+      buf[0] = buf[25] = '\"';
+      buf[26] = '\0';
+      str = buf;
+    }
   }
+  Token *tok = new_str_token2(str, start);
   tok->next = start->next;
   return tok;
 }
@@ -1715,21 +1757,6 @@ static Token *has_builtin_macro(Token *start) {
   return tok2;
 }
 
-// __DATE__ is expanded to the current date, e.g. "May 17 2020".
-static char *format_date(struct tm *tm) {
-  static char mon[][4] = {
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  };
-
-  return format("\"%s %2d %d\"", mon[tm->tm_mon], tm->tm_mday, tm->tm_year + 1900);
-}
-
-// __TIME__ is expanded to the current time, e.g. "13:34:03".
-static char *format_time(struct tm *tm) {
-  return format("\"%02d:%02d:%02d\"", tm->tm_hour, tm->tm_min, tm->tm_sec);
-}
-
 void init_macros(void) {
   arena_on(&pp_arena);
 
@@ -1768,6 +1795,8 @@ void init_macros(void) {
 
   define_macro("__slimcc__", "1");
 
+  add_builtin("__DATE__", date_macro, true);
+  add_builtin("__TIME__", time_macro, true);
   add_builtin("__FILE__", file_macro, true);
   add_builtin("__LINE__", line_macro, true);
   add_builtin("__COUNTER__", counter_macro, true);
@@ -1782,11 +1811,6 @@ void init_macros(void) {
   add_builtin("__has_builtin", has_builtin_macro, true);
   add_builtin("__has_include", has_include_macro, true);
   add_builtin("__has_embed", has_embed_macro, true);
-
-  time_t now = time(NULL);
-  struct tm *tm = localtime(&now);
-  define_macro("__DATE__", format_date(tm));
-  define_macro("__TIME__", format_time(tm));
 }
 
 typedef enum {
