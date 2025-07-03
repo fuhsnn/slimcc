@@ -34,6 +34,7 @@ bool opt_fdefer_ts;
 static StringArray opt_imacros;
 static StringArray opt_include;
 bool opt_E;
+bool opt_dM;
 static bool opt_P;
 static bool opt_M;
 static bool opt_MD;
@@ -257,6 +258,11 @@ static int parse_args(int argc, char **argv) {
 
     if (!strcmp(argv[i], "-P")) {
       opt_P = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-dM")) {
+      opt_dM = true;
       continue;
     }
 
@@ -540,6 +546,9 @@ static int parse_args(int argc, char **argv) {
     input_cnt++;
   }
 
+  if (!opt_E && opt_dM)
+    error("option -dM without -E not supported");
+
   if (!opt_nostdinc)
     platform_stdinc_paths(&sysincl_paths);
 
@@ -572,6 +581,13 @@ static FILE *open_file(char *path) {
   if (!out)
     error("cannot open output file: %s: %s", path, strerror(errno));
   return out;
+}
+
+static void close_file(FILE *file) {
+  if (file == stdout)
+    fflush(file);
+  else
+    fclose(file);
 }
 
 static bool endswith(char *p, char *q) {
@@ -656,9 +672,7 @@ static void print_linemarker(FILE *out, Token *tok) {
 }
 
 // Print tokens to stdout. Used for -E.
-static void print_tokens(Token *tok, char *path) {
-  FILE *out = open_file(path);
-
+static void print_tokens(Token *tok, FILE *out) {
   int line = 0;
   File *markerfile = NULL;
   tok->at_bol = false;
@@ -690,11 +704,6 @@ static void print_tokens(Token *tok, char *path) {
     fprintf(out, "%.*s", tok->len, tok->loc);
   }
   fprintf(out, "\n");
-
-  if (out == stdout)
-    fflush(out);
-  else
-    fclose(out);
 }
 
 bool in_sysincl_path(char *path) {
@@ -829,22 +838,23 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
       return;
   }
 
-  // If -E is given, print out preprocessed C code as a result.
+  FILE *out = open_file(output_file);
+
   if (opt_E) {
-    print_tokens(tok, output_file);
+    if (opt_dM)
+      dump_defines(out);
+    else
+      print_tokens(tok, out);
+
+    close_file(out);
     return;
   }
 
   Obj *prog = parse(tok);
 
-  // Write the asembly text to a file.
-  FILE *out = open_file(output_file);
   codegen(prog, out);
 
-  if (out == stdout)
-    fflush(out);
-  else
-    fclose(out);
+  close_file(out);
 }
 
 void run_assembler_gnustyle( StringArray *args, char *input, char *output) {
