@@ -510,6 +510,8 @@ struct Node {
 
   // Arithmetic Assignment
   NodeKind arith_kind;
+
+  bool no_label;
 };
 
 // Represents a block scope.
@@ -523,6 +525,8 @@ struct Scope {
   LocalLabel *labels;
   Node *gotos;
   bool is_temporary;
+  bool has_label;
+
   // C has two block scopes; one is for variables/typedefs and
   // the other is for struct/union/enum tags.
   HashMap vars;

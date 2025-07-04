@@ -213,12 +213,15 @@ static void enter_tmp_scope(void) {
   scope->is_temporary = true;
 }
 
-static void leave_scope(void) {
+static bool leave_scope(void) {
   if (current_fn) {
     free(scope->vars.buckets);
     free(scope->tags.buckets);
   }
+  bool has_label = scope->has_label;
   scope = scope->parent;
+  scope->has_label |= has_label;
+  return !has_label;
 }
 
 static DeferStmt *new_block_scope(void) {
@@ -227,18 +230,20 @@ static DeferStmt *new_block_scope(void) {
 }
 
 static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
-  leave_scope();
+  bool no_label = leave_scope();
 
   if (stmt_node->kind == ND_RETURN || stmt_node->kind == ND_GOTO)
     current_defr = defr;
 
-  if (defr == current_defr && !stmt_node->next)
+  if (defr == current_defr && !stmt_node->next) {
+    stmt_node->no_label = no_label;
     return stmt_node;
-
+  }
   Node *blk = new_node(ND_BLOCK, stmt_node->tok);
   blk->defr_start = current_defr;
   blk->defr_end = current_defr = defr;
   blk->body = stmt_node;
+  blk->no_label = no_label;
   return blk;
 }
 
@@ -355,6 +360,7 @@ static Node *new_var_node(Obj *var, Token *tok) {
 static Node *new_label(Token *tok) {
   Node *node = new_node(ND_LABEL, tok);
   node->defr_start = current_defr;
+  scope->has_label = true;
   return node;
 }
 
@@ -2949,7 +2955,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   node->defr_start = current_defr;
   current_defr = node->defr_end;
   resolve_local_gotos(node);
-  leave_scope();
+  node->no_label = leave_scope();
 
   if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
     add_type(cur->lhs);

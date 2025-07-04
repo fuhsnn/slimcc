@@ -144,6 +144,7 @@ static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
 static void gen_void_expr(Node *node);
 static void gen_void_assign(Node *node);
+static bool gen_stmt_opt(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
@@ -2471,6 +2472,8 @@ static void gen_expr(Node *node) {
 static void gen_stmt(Node *node) {
   if (opt_g)
     print_loc(node->tok);
+  if (opt_optimize && gen_stmt_opt(node))
+    return;
 
   switch (node->kind) {
   case ND_NULL_STMT:
@@ -3311,6 +3314,31 @@ static bool gen_bool_opt(Node *node) {
   if (flip)
     Printstn("xor $1, %%al");
   return true;
+}
+
+static bool gen_stmt_opt(Node *node) {
+  int64_t val;
+  if (node->kind == ND_IF && is_const_expr(node->cond, &val)) {
+    if (!val && node->then->no_label) {
+      if (node->els)
+        gen_stmt(node->els);
+      return true;
+    }
+    if (val) {
+      gen_stmt(node->then);
+
+      if (node->els && !node->els->no_label) {
+        char else_label[STRBUF_SZ];
+        snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, count());
+
+        Printftn("jmp %s", else_label);
+        gen_stmt(node->els);
+        Printftn("%s:", else_label);
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 static bool gen_expr_opt(Node *node) {
