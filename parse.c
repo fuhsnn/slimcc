@@ -2911,7 +2911,8 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
 
     if (equal(tok, "}"))
       break;
-
+    if (consume(&tok, tok, ";"))
+      continue;
     if (pragma_pack(&tok, tok))
       continue;
     if (static_assertion(&tok, tok))
@@ -4096,6 +4097,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
 
   while (!equal(tok, "}")) {
+    if (consume(&tok, tok, ";"))
+      continue;
     if (pragma_pack(&tok, tok))
       continue;
     if (static_assertion(&tok, tok))
