@@ -37,6 +37,7 @@ typedef struct {
   bool is_tls;
   bool is_constexpr;
   bool is_weak;
+  bool is_packed;
   bool is_common;
   bool is_nocommon;
   bool is_gnu_inline;
@@ -806,6 +807,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   attr_aligned(tok, &attr->align, kind);
   attr_cleanup(tok, kind, &attr->cleanup_fn);
   bool_attr(tok, kind, "weak", &attr->is_weak);
+  bool_attr(tok, kind, "packed", &attr->is_packed);
   bool_attr(tok, kind, "common", &attr->is_common);
   bool_attr(tok, kind, "nocommon", &attr->is_nocommon);
   bool_attr(tok, kind, "gnu_inline", &attr->is_gnu_inline);
@@ -4123,6 +4125,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
       Member *mem = ast_arena_calloc(sizeof(Member));
       mem->alt_align = attr.align;
+      mem->is_packed = attr.is_packed;
       mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
       if (mem->name && !current_fn)
         mem->name->is_live = true;
@@ -4138,6 +4141,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           error_tok(tok, "bit-field with negative width");
         attr_aligned(tok, &mem->alt_align, TK_ATTR);
       }
+      bool_attr(tok, TK_ATTR, "packed", &mem->is_packed);
+      bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
       cur = cur->next = mem;
     }
   }
@@ -4232,7 +4237,8 @@ static Type *struct_decl(Type *ty, int alt_align) {
   int pack_align = pragma_pack_get(ty);
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    int mem_align = (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
+    int mem_align = mem->is_packed ? 1 :
+      (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
 
     if (!mem->is_bitfield || mem->name) {
       alt_align = MAX(alt_align, mem_align);
@@ -4278,7 +4284,8 @@ static Type *union_decl(Type *ty, int alt_align) {
   int pack_align = pragma_pack_get(ty);
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    int mem_align = (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
+    int mem_align = mem->is_packed ? 1 :
+      (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
 
     if (!mem->is_bitfield || mem->name) {
       alt_align = MAX(alt_align, mem_align);

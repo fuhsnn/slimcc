@@ -647,6 +647,7 @@ struct Member {
   int idx;
   int offset;
   int alt_align;
+  bool is_packed;
 
   // Bitfield
   bool is_bitfield;
