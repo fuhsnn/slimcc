@@ -33,7 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # pixman, freetype
  libpng-dev \
  # yash
- ed
+ ed \
+ # busybox
+ zip
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

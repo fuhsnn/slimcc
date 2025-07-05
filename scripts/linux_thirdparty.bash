@@ -105,6 +105,22 @@ test_blake2() {
  make CC=$CC check
 }
 
+test_busybox() {
+ git_fetch https://github.com/sailfishos-mirror/busybox 142ac2d796dddea50d8926d1747523182c12d097 busybox
+ sed -i 's|-Wp,-MD,|-MD -MF |g' scripts/Makefile.lib
+ sed -i 's|-Wp,-MD,|-MD -MF |g' scripts/Makefile.host
+ sed -i 's|LDLIBS += rt|LDLIBS += rt resolv|g' Makefile.flags
+ sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha1_hwaccel_x86-64.S
+ sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha256_hwaccel_x86-64.S
+ sed -i 's|BUG_xatou32_unimplemented()|0|g' include/xatonum.h
+ sed -i 's|BUG_bb_strtou32_unimplemented()|0|g' include/xatonum.h
+ sed -i 's|\tgcc |$CC |g' testsuite/testing.sh
+ replace_line "# if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#if 1" libbb/hash_md5_sha.c
+ make CC=$CC HOSTCC=$CC defconfig
+ make CC=$CC HOSTCC=$CC
+ make CC=$CC HOSTCC=$CC SKIP_KNOWN_BUGS=1 test
+}
+
 test_bzip2() {
  url_tar https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz bzip2
  make CC=$CC test
