@@ -65,6 +65,7 @@ jobs:
           - { vm: main, proj: test_bearssl }
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
+          - { vm: main, proj: test_busybox }
           - { vm: main, proj: test_bzip2 }
           - { vm: main, proj: test_calc }
           - { vm: main, proj: test_cello }
