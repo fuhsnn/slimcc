@@ -48,11 +48,13 @@ jobs:
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_msgpack }
           - { vm: interop, proj: test_muon }
+          - { vm: interop, proj: test_quickjs }
           - { vm: interop, proj: test_redis }
           - { vm: interop, proj: test_sokol }
           - { vm: interop, proj: test_valkey }
           - { vm: interop, proj: test_wasm3 }
           - { vm: interop, proj: test_wuffs }
+          - { vm: interop, proj: build_glfw }
           - { vm: interop, proj: build_luajit }
           - { vm: interop, proj: build_ncurses }
           - { vm: interop, proj: build_nuklear }
@@ -72,8 +74,10 @@ jobs:
           - { vm: main, proj: test_cjson }
           - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_cpio }
+          - { vm: main, proj: test_cproc }
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
+          - { vm: main, proj: test_elk }
           - { vm: main, proj: test_file }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
@@ -104,10 +108,13 @@ jobs:
           - { vm: main, proj: test_libuev }
           - { vm: main, proj: test_libuv }
           - { vm: main, proj: test_libxml }
+          - { vm: main, proj: test_libyaml }
           - { vm: main, proj: test_lua }
+          - { vm: main, proj: test_mawk }
           - { vm: main, proj: test_memcached }
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_mruby }
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_noplate }
           - { vm: main, proj: test_ocaml }
@@ -142,6 +149,7 @@ jobs:
           - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
           - { vm: main, proj: build_libev }
+          - { vm: main, proj: build_lynx }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_zig }
