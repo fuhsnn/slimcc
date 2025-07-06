@@ -35,7 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # yash
  ed \
  # busybox
- zip
+ zip \
+ # ruby
+ ruby ruby-psych libyaml-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

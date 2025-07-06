@@ -122,6 +122,7 @@ jobs:
           - { vm: main, proj: test_postgres }
           - { vm: main, proj: test_python }
           - { vm: main, proj: test_qbe_hare }
+          - { vm: main, proj: test_ruby }
           - { vm: main, proj: test_scrapscript }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }

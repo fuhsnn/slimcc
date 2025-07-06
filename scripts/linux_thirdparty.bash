@@ -583,9 +583,14 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.1.33
+ github_tar php php-src php-8.5.0alpha1
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
- replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
+ replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
+ sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
+ sed -i 's|#if __has_feature(c_atomic) && defined(__clang__)|#if 1\n#include <stdatomic.h>|g' Zend/zend_atomic.h
+ sed -i 's|__c11_atomic_init(|atomic_store(|g' Zend/zend_atomic.h
+ sed -i 's|__c11_atomic_|atomic_|g' Zend/zend_atomic.h
+ sed -i 's|, __ATOMIC_SEQ_CST||g' Zend/zend_atomic.h
 
  # don't work in CI https://github.com/php/php-src/blob/17187c4646f3293e1de8df3f26d56978d45186d6/.github/actions/test-linux/action.yml#L40
  export SKIP_IO_CAPTURE_TESTS=1
@@ -597,9 +602,11 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_17_5
+ github_tar postgres postgres REL_18_BETA1
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
+ replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
+ replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics/arch-x86.h
  ./configure && make && make check
 }
 
@@ -625,7 +632,7 @@ test_qbe_hare() {
 }
 
 test_redis() {
- github_tar redis redis 8.0.2
+ github_tar redis redis 8.0.3
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm__ volatile|g' deps/hdr_histogram/hdr_atomic.h
  sed -i 's|__sync_add_and_fetch(field, value)|*(_Atomic int64_t*)field+=value|g' deps/hdr_histogram/hdr_atomic.h
@@ -654,6 +661,13 @@ test_valkey() {
  make V=1 CC=$CC OPTIMIZATION=-O MALLOC=libc test
 }
 
+test_ruby() {
+ git_fetch https://github.com/fuhsnn/ruby 58b2dc6766006bed249db5557dbc33cd3a3e1eb1 ruby
+ sh autogen.sh
+ cflags=-fPIC cxxflags=-fPIC ./configure
+ make check -j4
+}
+
 test_scrapscript() {
  git_fetch https://github.com/tekknolagi/scrapscript 467a577f1fa389f91b0ecda180b23daaa2b43fa2 scrapscript
  curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -678,7 +692,7 @@ test_sqlite() {
 }
 
 test_tcl() {
- github_tar tcltk tcl core-9-0-1
+ github_tar tcltk tcl core-9-0-2
  ./unix/configure
  rm ./tests/socket.test # fails under su
  make test | tee __testlog
