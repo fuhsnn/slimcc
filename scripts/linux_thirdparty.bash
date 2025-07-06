@@ -184,6 +184,12 @@ test_cpio() {
  make check
 }
 
+test_cproc() {
+ git_fetch https://github.com/michaelforney/cproc 049d4d0df33dba8525d542c3627019e282c1ebed cproc
+ ./configure --host=x86_64-linux-gnu
+ make CFLAGS=-std=c99 check
+}
+
 test_curl() {
  url_tar https://github.com/curl/curl/releases/download/curl-8_14_1/curl-8.14.1.tar.gz curl
  fix_configure ./configure
@@ -222,7 +228,7 @@ test_gawk() {
 }
 
 test_git() {
- github_tar git git v2.50.0
+ github_tar git git v2.50.1
  make CC="$CC" test -j2
 }
 
@@ -248,6 +254,7 @@ test_go() {
  sed -i 's|\"-ggdb\",||g' src/cmd/dist/build.c
  sed -i 's|\"-pipe\",||g' src/cmd/dist/build.c
  sed -i 's|vadd(&gccargs, \"-fmessage-length=0\");||g' src/cmd/dist/build.c
+ rm src/runtime/pprof/pprof_test.go # flaky (cpu load sensitive)
  cd src/
  GO14TESTS=1 ./all.bash
 }
@@ -444,12 +451,25 @@ test_libxml() {
  make check
 }
 
+test_libyaml() {
+ git_fetch https://github.com/yaml/libyaml 840b65c40675e2d06bf40405ad3f12dec7f35923 libyaml
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC
+ make && make test
+}
+
 test_lua() {
  url_tar https://lua.org/ftp/lua-5.4.8.tar.gz lua
  cd src && make CC="$CC" linux-readline
  url_tar https://www.lua.org/tests/lua-5.4.8-tests.tar.gz luatests
  cd libs && make CC="$CC" && cd ../
  ../lua -e"_port=true" all.lua # assertion at files.lua:84 fail in CI
+}
+
+test_mawk() {
+ github_tar ThomasDickey mawk-snapshots t20250131
+ ./configure
+ make check
 }
 
 test_memcached() {
@@ -631,6 +651,12 @@ test_qbe_hare() {
  make CC="$CC" QBE=../qbe check
 }
 
+test_quickjs() {
+ git_fetch https://github.com/bellard/quickjs 1fdc768fdc8571300755cdd3e4654ce99c0255ce quickjs
+ use_stdbit "#include <stdlib.h>" cutils.h
+ make CC=$CC test
+}
+
 test_redis() {
  github_tar redis redis 8.0.3
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
@@ -662,7 +688,7 @@ test_valkey() {
 }
 
 test_ruby() {
- git_fetch https://github.com/fuhsnn/ruby 58b2dc6766006bed249db5557dbc33cd3a3e1eb1 ruby
+ git_fetch https://github.com/fuhsnn/ruby ea5a30895842e0f7e557f47f4b67a3d090a7abd5 ruby
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  make check -j4
@@ -784,7 +810,7 @@ test_yash() {
 
 test_zlib() {
  github_tar madler zlib v1.3.1
- ./configure
+ CFLAGS=-fPIC ./configure
  make test
 }
 
@@ -838,6 +864,12 @@ build_gcc() {
  make
 }
 
+build_glfw() {
+ git_fetch https://github.com/glfw/glfw 506c11ba43b901dbcc4d90449f46de67cf000af4 glfw
+ cmake ./ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
+ make
+}
+
 build_libev() {
  url_tar https://dist.schmorp.de/libev/libev-4.33.tar.gz libev
  fix_and_configure
@@ -852,13 +884,19 @@ build_luajit() {
  make CC=$CC
 }
 
+build_lynx() {
+ github_tar ThomasDickey lynx-snapshots v2-9-2l
+ ./configure
+ make
+}
+
 build_nano() {
  url_tar https://www.nano-editor.org/dist/v8/nano-8.5.tar.gz nano
  ./configure && make
 }
 
 build_ncurses() {
- url_tar https://ftpmirror.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz ncurses
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250705
  ./configure
  make V=1
 }
