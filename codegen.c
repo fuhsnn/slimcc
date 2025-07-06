@@ -3630,7 +3630,8 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
     for (; *p; p++) {
       switch (*p) {
       case '=':
-      case '+': continue;
+      case '+':
+      case '%': continue;
       case '&': ap->is_early_clobber = true; continue;
       case 'm':
       case 'o': ap->is_mem = true; continue;
