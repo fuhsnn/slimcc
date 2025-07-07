@@ -1958,9 +1958,15 @@ static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
 
 static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
   bool first = true;
-  for (; tok->kind != TK_EOF; first = false) {
-    if (!first)
-      tok = skip(tok, ",");
+  for (;; first = false) {
+    bool has_comma = false;
+    while (consume(&tok, tok, ","))
+      has_comma = true;
+
+    if (tok->kind == TK_EOF)
+      break;
+    if (!first && !has_comma)
+      error_tok(tok, "expected ','");
 
     Token *vendor = NULL;
     if (tok->kind == TK_IDENT && equal(tok->next, ":")) {

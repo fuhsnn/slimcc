@@ -49,9 +49,12 @@ void packed(void) {
   ASSERT(12, ({ typedef struct [[packed]] { char a; int b[2]; } T; sizeof(T); }));
   EASSERT(4, offsetof(struct [[packed]] { char a; int b[2]; }, b));
 
-  ASSERT(9, ({ struct {  struct { char m2; long m5;  } __attribute__((packed)); } T; sizeof(T); }));
+  ASSERT(9, ({ struct {  struct { char m2; long long m5;  } __attribute__((packed)); } T; sizeof(T); }));
   ASSERT(2, ({ typedef struct { struct { int :9, m16; } __attribute__((packed)); } T; offsetof(T, m16); }));
-  ASSERT(12, ({ struct __attribute__((packed)) { long :48, :46; } a; sizeof(a); }));
+  ASSERT(12, ({ struct __attribute__((packed)) { long long :48, :46; } a; sizeof(a); }));
+
+  ASSERT(1, ({ typedef struct { char c; long long __attribute__((,,packed,,)) i; } S; offsetof(S, i); }));
+  ASSERT(9, ({ typedef struct { char c; long long i [[,,gnu::packed,,gnu::packed,,]]; } S; sizeof(S); }));
 }
 
 int main() {
