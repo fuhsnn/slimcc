@@ -270,12 +270,8 @@ static Type *find_tag(Token *tok) {
   return NULL;
 }
 
-static Type *get_first_64bit_int(bool is_unsigned) {
-  if (ty_long->size == 8)
-    return is_unsigned ? ty_ulong : ty_long;
-  if (ty_llong->size == 8)
-    return is_unsigned ? ty_ullong : ty_llong;
-  internal_error();
+static Type *find_tag_in_scope(Token *tok) {
+  return hashmap_get2(&scope->tags, tok->loc, tok->len);
 }
 
 static int32_t bitfield_footprint(Member *mem) {
@@ -1448,14 +1444,10 @@ static Type *typename(Token **rest, Token *tok) {
   return declarator(rest, tok, ty, NULL);
 }
 
-static void update_enum_ty(Type *decl_ty, Type *ty, bool is_unspec) {
-  for (Type *ty2 = decl_ty; ty2; ty2 = ty2->decl_next) {
-    ty2->kind = ty->kind;
-    ty2->is_unsigned = ty->is_unsigned;
-    ty2->size = ty->size;
-    ty2->align = MAX(ty2->align, ty->align);
-    ty2->origin = ty;
-    ty2->is_unspec_enum = is_unspec;
+static void new_enum(Type **ty) {
+  if (!*ty) {
+    *ty = new_type(TY_ENUM, -1, 1);
+    (*ty)->is_int_enum = true;
   }
 }
 
@@ -1479,34 +1471,30 @@ static Type *enum_specifier(Token **rest, Token *tok) {
         error_tok(tag, "not an enum tag");
       return ty2;
     }
-    if (!ty)
-      ty = new_type(TY_ENUM, -1, 1);
+    new_enum(&ty);
     push_tag_scope(tag, ty);
     return ty;
   }
   tok = skip(tok, "{");
 
+  Type *tag_ty = NULL;
   if (tag) {
-    Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
-    if (ty2) {
-      if (ty2->kind == TY_STRUCT || ty2->kind == TY_UNION)
+    tag_ty = find_tag_in_scope(tag);
+    if (tag_ty) {
+      if (tag_ty->kind == TY_STRUCT || tag_ty->kind == TY_UNION)
         error_tok(tag, "not an enum tag");
-      if ((!ty && ty2->kind != TY_ENUM) ||
-        (ty && (ty->kind != ty2->kind || ty->is_unsigned != ty2->is_unsigned)))
+      if ((!ty && tag_ty->kind != TY_ENUM) ||
+        (ty && (ty->kind != tag_ty->kind || ty->is_unsigned != tag_ty->is_unsigned)))
         error_tok(tag, "enum redeclared with incompatible type");
-      ty = ty2;
+      ty = tag_ty;
     }
   }
-  if (!ty)
-    ty = new_type(TY_ENUM, -1, 1);
+  new_enum(&ty);
 
-  bool has_type = (ty->kind != TY_ENUM);
-  if (!has_type)
-    update_enum_ty(ty, ty_uint, true);
+  if (tag && !tag_ty)
+    push_tag_scope(tag, ty);
 
-  bool need_u32 = false;
-  bool need_u64 = false;
-  bool need_i64 = false;
+  EnumType ety = ETY_I8;
   bool been_neg = false;
 
   uint64_t val = 0;
@@ -1517,21 +1505,42 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     char *name = get_ident(tok);
     tok = tok->next;
 
-    if (consume(&tok, tok, "=")) {
+    if (!consume(&tok, tok, "=")) {
+      if (is_ovf)
+        error_tok(tok, "enum value overflowed");
+    } else {
       Type *val_ty = NULL;
       val = const_expr2(&tok, tok, &val_ty);
 
-      if (!val_ty->is_unsigned && (int64_t)val < 0) {
-        need_i64 = (int64_t)val < INT32_MIN;
-        is_neg = been_neg = true;
+      if ((is_neg = (!val_ty->is_unsigned && (int64_t)val < 0))) {
+        been_neg = true;
+
+        if ((int64_t)val < INT8_MIN) {
+          if ((int64_t)val >= INT16_MIN)
+            ety = MAX(ety, ETY_I16);
+          else if ((int64_t)val >= INT32_MIN)
+            ety = MAX(ety, ETY_I32);
+          else
+            ety = MAX(ety, ETY_I64);
+        }
       }
-    } else if (is_ovf) {
-      error_tok(tok, "enum value overflowed");
     }
 
-    if (!is_neg && (val > INT32_MAX)) {
-      need_u64 = val > UINT32_MAX;
-      need_u32 = true;
+    if (!is_neg && val > INT8_MAX) {
+      if (val <= UINT8_MAX)
+        ety = MAX(ety, ETY_U8);
+      else if (val <= INT16_MAX)
+        ety = MAX(ety, ETY_I16);
+      else if (val <= UINT16_MAX)
+        ety = MAX(ety, ETY_U16);
+      else if (val <= INT32_MAX)
+        ety = MAX(ety, ETY_I32);
+      else if (val <= UINT32_MAX)
+        ety = MAX(ety, ETY_U32);
+      else if (val <= INT64_MAX)
+        ety = MAX(ety, ETY_I64);
+      else
+        ety = ETY_U64;
     }
     VarScope *sc = push_scope(name);
     sc->enum_ty = ty;
@@ -1543,26 +1552,31 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   if (first)
     error_tok(tok, "empty enum specifier");
 
-  if (has_type) {
-    if ((ty->is_unsigned && (been_neg || (ty->size < 8 && need_u64))) ||
-      (!ty->is_unsigned && (need_u64 || (ty->size < 8 && (need_u32 || need_i64)))))
+  if (ty->kind != TY_ENUM) {
+    if ((ty->is_unsigned && been_neg) ||
+      (ty->size < enum_ty[ety]->size) ||
+      ((ty->size == enum_ty[ety]->size) && (ty->is_unsigned < enum_ty[ety]->is_unsigned)))
       error_tok(tok, "enum value out of type range");
-  } else {
-    Type *enum_ty;
-    bool is_unspec = false;
-    if (been_neg)
-      enum_ty = (need_u64 || need_u32 || need_i64) ? get_first_64bit_int(false) : ty_int;
-    else if (need_u64)
-      enum_ty = get_first_64bit_int(true);
-    else if (need_u32)
-      enum_ty = ty_uint;
-    else
-      enum_ty = ty_uint, is_unspec = true;
-
-    update_enum_ty(ty, enum_ty, is_unspec);
+    return ty;
   }
-  if (tag)
-    push_tag_scope(tag, ty);
+  if (!opt_short_enums)
+    ety = MAX(ety, ety_of_int);
+
+  bool is_int = ety <= ety_of_int;
+  if ((been_neg && (ety & 1)) || (!been_neg && !(ety & 1))) {
+    ety++;
+    if (ety > ETY_U64)
+      error_tok(tok, "unsupported enum value range");
+  }
+
+  Type *base_ty = enum_ty[ety];
+  for (Type *t = ty; t; t = t->decl_next) {
+    t->kind = base_ty->kind;
+    t->is_unsigned = base_ty->is_unsigned;
+    t->size = base_ty->size;
+    t->align = MAX(t->align, base_ty->align);
+    t->is_int_enum = is_int;
+  }
   return ty;
 }
 
@@ -4216,7 +4230,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   ty->tag = tag;
   tag->is_live = true;
 
-  Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
+  Type *ty2 = find_tag_in_scope(tag);
   if (ty2) {
     if (ty2->size < 0) {
       for (Type *t = ty2; t; t = t->decl_next) {
@@ -4955,7 +4969,7 @@ static Node *primary(Token **rest, Token *tok) {
         return new_var_node(sc->var, tok);
       if (sc->enum_ty) {
         Node *n = new_num(sc->enum_val, tok);
-        n->ty = (sc->enum_ty->is_unspec_enum) ? ty_int : sc->enum_ty;
+        n->ty = (sc->enum_ty->is_int_enum) ? ty_int : sc->enum_ty;
         return n;
       }
     }

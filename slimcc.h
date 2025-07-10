@@ -570,6 +570,17 @@ int eval_bitint_cmp(int32_t bits, void *lp, void *rp, bool is_unsigned);
 //
 
 typedef enum {
+  ETY_I8 = 0,
+  ETY_U8,
+  ETY_I16,
+  ETY_U16,
+  ETY_I32,
+  ETY_U32,
+  ETY_I64,
+  ETY_U64,
+} EnumType;
+
+typedef enum {
   TY_VOID,
   TY_BOOL,
   TY_PCHAR,
@@ -602,7 +613,7 @@ struct Type {
   bool is_const;
   bool is_volatile;
   bool is_restrict;
-  bool is_unspec_enum;
+  bool is_int_enum;
   Type *origin;       // for type compatibility check
   Type *decl_next;    // forward declarations
   Token *tag;
@@ -689,6 +700,9 @@ extern Type *ty_ptrdiff_t;
 extern Type *ty_char16_t;
 extern Type *ty_char32_t;
 extern Type *ty_wchar_t;
+
+extern Type *enum_ty[8];
+extern EnumType ety_of_int;
 
 bool is_pow_of_two(uint64_t val);
 bool is_integer(Type *ty);
@@ -798,6 +812,7 @@ extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
 extern bool opt_fdefer_ts;
+extern bool opt_short_enums;
 
 extern bool opt_pie;
 extern bool opt_nopie;

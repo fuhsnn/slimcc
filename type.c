@@ -30,6 +30,9 @@ Type *ty_char16_t;
 Type *ty_char32_t;
 Type *ty_wchar_t;
 
+Type *enum_ty[8];
+EnumType ety_of_int;
+
 void init_ty_lp64(void) {
   define_macro("_LP64", "1");
   define_macro("__LP64__", "1");
@@ -51,6 +54,17 @@ void init_ty_lp64(void) {
   ty_char16_t = ty_ushort;
   ty_char32_t = ty_uint;
   ty_wchar_t = ty_int;
+
+  enum_ty[ETY_I8] = ty_char;
+  enum_ty[ETY_U8] = ty_uchar;
+  enum_ty[ETY_I16] = ty_short;
+  enum_ty[ETY_U16] = ty_ushort;
+  enum_ty[ETY_I32] = ty_int;
+  enum_ty[ETY_U32] = ty_uint;
+  enum_ty[ETY_I64] = ty_long;
+  enum_ty[ETY_U64] = ty_ulong;
+
+  ety_of_int = ETY_I32;
 }
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {
