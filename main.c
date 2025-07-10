@@ -30,6 +30,7 @@ bool opt_cc1_asm_pp;
 char *opt_visibility;
 StdVer opt_std;
 bool opt_fdefer_ts;
+bool opt_short_enums;
 
 static StringArray opt_imacros;
 static StringArray opt_include;
@@ -425,7 +426,8 @@ static int parse_args(int argc, char **argv) {
         set_bool(arg, b, "plt", &opt_use_plt) ||
         set_bool(arg, b, "function-sections", &opt_func_sections) ||
         set_bool(arg, b, "data-sections", &opt_data_sections) ||
-        set_bool(arg, b, "emulated-tls", &opt_femulated_tls))
+        set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
+        set_bool(arg, b, "short-enums", &opt_short_enums))
         continue;
 
       if (b) {
