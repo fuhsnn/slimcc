@@ -631,6 +631,12 @@ test_qbe_hare() {
  make CC="$CC" QBE=../qbe check
 }
 
+test_quickjs() {
+ git_fetch https://github.com/bellard/quickjs 1fdc768fdc8571300755cdd3e4654ce99c0255ce quickjs
+ use_stdbit "#include <stdlib.h>" cutils.h
+ make CC=$CC test
+}
+
 test_redis() {
  github_tar redis redis 8.0.3
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
