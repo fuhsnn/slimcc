@@ -436,6 +436,7 @@ typedef enum {
   ND_ARITH_ASSIGN,
   ND_POST_INCDEC,
   ND_CKD_ARITH,
+  ND_FRAME_ADDR,
   ND_RTN_ADDR,
 } NodeKind;
 
