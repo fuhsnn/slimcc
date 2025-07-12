@@ -245,14 +245,43 @@ static void cast_if_not(Type *ty, Node **node) {
     *node = new_cast(*node, ty);
 }
 
-static bool is_qual_compatible(Type *t1, Type *t2) {
+bool match_enum_val(EnumVal **e, int64_t val, Token *name) {
+  for (EnumVal *ev = *e; ev; ev = ev->next) {
+    if ((ev->val == val) && equal_tok(ev->name, name)) {
+      if (ev == *e)
+        (*e) = (*e)->next;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_enum_compat(EnumVal *ev1, EnumVal *ev2) {
+  int64_t cnt = 0;
+  for (EnumVal *ev = ev2; ev; ev = ev->next)
+    cnt++;
+
+  for (; ev1; ev1 = ev1->next) {
+    if (!match_enum_val(&ev2, ev1->val, ev1->name))
+      return false;
+    cnt--;
+  }
+  return !cnt;
+}
+
+static bool is_tag_compat(Type *t1, Type *t2) {
+  return opt_std >= STD_C23 &&
+    t1->tag && t2->tag && equal_tok(t1->tag, t2->tag);
+}
+
+static bool is_qual_compat(Type *t1, Type *t2) {
   return t1->is_atomic == t2->is_atomic &&
     t1->is_const == t2->is_const &&
     t1->is_volatile == t2->is_volatile &&
     t1->is_restrict == t2->is_restrict;
 }
 
-static bool is_record_compatible(Type *t1, Type *t2) {
+static bool is_record_compat(Type *t1, Type *t2) {
   if (t1->align != t2->align ||
     t1->is_flexible != t2->is_flexible ||
     t1->is_packed != t2->is_packed)
@@ -281,8 +310,7 @@ static bool is_record_compatible(Type *t1, Type *t2) {
       if (!mem1->name != !t1->tag || !mem2->name != !t2->tag ||
         (t1->tag && !equal_tok(t1->tag, t2->tag)))
         return false;
-      if (!is_qual_compatible(t1, t2) ||
-        !is_record_compatible(t1, t2))
+      if (!is_qual_compat(t1, t2) || !is_record_compat(t1, t2))
         return false;
     } else {
       if (!is_compatible2(t1, t2))
@@ -295,7 +323,7 @@ static bool is_record_compatible(Type *t1, Type *t2) {
 }
 
 bool is_compatible2(Type *t1, Type *t2) {
-  return is_qual_compatible(t1, t2) && is_compatible(t1, t2);
+  return is_qual_compat(t1, t2) && is_compatible(t1, t2);
 }
 
 bool is_compatible(Type *t1, Type *t2) {
@@ -307,6 +335,10 @@ bool is_compatible(Type *t1, Type *t2) {
 
   if (t2->origin)
     return is_compatible(t1, t2->origin);
+
+  if (t1->is_enum && t2->is_enum)
+    return t1->is_int_enum == t2->is_int_enum &&
+      is_tag_compat(t1, t2) && is_enum_compat(t1->enums, t2->enums);
 
   if ((t1->kind == TY_VLA && is_array(t2)) ||
     (is_array(t1) && t2->kind == TY_VLA))
@@ -353,10 +385,7 @@ bool is_compatible(Type *t1, Type *t2) {
            t1->array_len == t2->array_len;
   case TY_STRUCT:
   case TY_UNION:
-    if (opt_std >= STD_C23 && t1->tag && t2->tag &&
-      equal_tok(t1->tag, t2->tag)) {
-      return is_record_compatible(t1, t2);
-    }
+    return is_tag_compat(t1, t2) && is_record_compat(t1, t2);
   }
   return false;
 }

@@ -77,6 +77,7 @@ typedef struct Node Node;
 typedef struct Member Member;
 typedef struct Relocation Relocation;
 typedef struct LocalLabel LocalLabel;
+typedef struct EnumVal EnumVal;
 
 //
 // alloc.c
@@ -580,6 +581,12 @@ typedef enum {
   ETY_U64,
 } EnumType;
 
+struct EnumVal {
+  EnumVal *next;
+  Token *name;
+  int64_t val;
+};
+
 typedef enum {
   TY_VOID,
   TY_BOOL,
@@ -614,9 +621,11 @@ struct Type {
   bool is_volatile;
   bool is_restrict;
   bool is_int_enum;
+  bool is_enum;
   Type *origin;       // for type compatibility check
   Type *decl_next;    // forward declarations
   Token *tag;
+  EnumVal *enums;
 
   // Pointer-to or array-of type. We intentionally use the same member
   // to represent pointer/array duality in C.
@@ -735,6 +744,7 @@ void cvqual_type(Type **ty_p, Type *ty2);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
 Node *assign_cast(Type *to, Node *expr);
+bool match_enum_val(EnumVal **e, int64_t val, Token *name);
 
 //
 // codegen.c
