@@ -1746,6 +1746,7 @@ static Token *has_builtin_macro(Token *start) {
     equal(tok, "__builtin_constant_p") ||
     equal(tok, "__builtin_expect") ||
     equal(tok, "__builtin_extract_return_addr") ||
+    equal(tok, "__builtin_frame_address") ||
     equal(tok, "__builtin_offsetof") ||
     equal(tok, "__builtin_add_overflow") ||
     equal(tok, "__builtin_sub_overflow") ||

@@ -2374,6 +2374,15 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->lhs);
     builtin_alloca(node);
     return;
+  case ND_FRAME_ADDR:
+    if (!node->val) {
+      Printstn("movq %%rbp, %%rax");
+      return;
+    }
+    Printstn("movq (%%rbp), %%rax");
+    for (int64_t i = 1; i < node->val; i++)
+      Printstn("movq (%%rax), %%rax");
+    return;
   case ND_RTN_ADDR:
     if (!node->val) {
       Printstn("movq 8(%%rbp), %%rax");

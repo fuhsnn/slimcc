@@ -4641,6 +4641,16 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     return node;
   }
 
+  if (equal(tok, "__builtin_frame_address")) {
+    Node *node = new_node(ND_FRAME_ADDR, tok);
+    node->ty = pointer_to(ty_void);
+    tok = skip(tok->next, "(");
+    if (!is_const_expr(expr(&tok, tok), &node->val))
+      error_tok(tok, "expected integer constant expression");
+    *rest = skip(tok, ")");
+    return node;
+  }
+
   if (equal(tok, "__builtin_return_address")) {
     Node *node = new_node(ND_RTN_ADDR, tok);
     node->ty = pointer_to(ty_void);
