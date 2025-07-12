@@ -1460,9 +1460,12 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   }
 
   Type *ty = NULL;
-  if (consume(&tok, tok, ":"))
+  if (consume(&tok, tok, ":")) {
     ty = unqual(typename(&tok, tok));
-
+    ty = copy_type(ty);
+    ty->is_enum = true;
+    ty->tag = tag;
+  }
   if (tag && !equal(tok, "{")) {
     *rest = tok;
     Type *ty2 = find_tag(tag);
@@ -1480,13 +1483,15 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   Type *tag_ty = NULL;
   if (tag) {
     tag_ty = find_tag_in_scope(tag);
+
     if (tag_ty) {
       if (tag_ty->kind == TY_STRUCT || tag_ty->kind == TY_UNION)
         error_tok(tag, "not an enum tag");
-      if ((!ty && tag_ty->kind != TY_ENUM) ||
+      if ((!ty && tag_ty->kind != TY_ENUM && opt_std < STD_C23) ||
         (ty && (ty->kind != tag_ty->kind || ty->is_unsigned != tag_ty->is_unsigned)))
         error_tok(tag, "enum redeclared with incompatible type");
-      ty = tag_ty;
+      if (!tag_ty->enums)
+        ty = tag_ty;
     }
   }
   new_enum(&ty);
@@ -1497,12 +1502,15 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   EnumType ety = ETY_I8;
   bool been_neg = false;
 
+  EnumVal head = {0};
+  EnumVal *cur = &head;
+
   uint64_t val = 0;
   bool is_neg = false;
   bool is_ovf = false;
   bool first = true;
   for (; comma_list(rest, &tok, "}", !first); first = false) {
-    char *name = get_ident(tok);
+    Token *name_tok = tok;
     tok = tok->next;
 
     if (!consume(&tok, tok, "=")) {
@@ -1542,23 +1550,35 @@ static Type *enum_specifier(Token **rest, Token *tok) {
       else
         ety = ETY_U64;
     }
-    VarScope *sc = push_scope(name);
+    if (opt_std >= STD_C23) {
+      cur = cur->next = ast_arena_malloc(sizeof(EnumVal));
+      cur->val = val;
+      cur->name = name_tok;
+    }
+    VarScope *sc = push_scope(get_ident(name_tok));
     sc->enum_ty = ty;
     sc->enum_val = val++;
     is_ovf = !is_neg && val == 0;
     is_neg = (int64_t)val < 0;
   }
-
   if (first)
     error_tok(tok, "empty enum specifier");
+
+  cur->next = NULL;
+  ty->enums = head.next;
 
   if (ty->kind != TY_ENUM) {
     if ((ty->is_unsigned && been_neg) ||
       (ty->size < enum_ty[ety]->size) ||
       ((ty->size == enum_ty[ety]->size) && (ty->is_unsigned < enum_ty[ety]->is_unsigned)))
       error_tok(tok, "enum value out of type range");
+
+    if (tag_ty && tag_ty != ty)
+      if (!(opt_std >= STD_C23 && is_compatible(tag_ty, ty)))
+        error_tok(tag, "tag redeclaration");
     return ty;
   }
+
   if (!opt_short_enums)
     ety = MAX(ety, ETY_I32);
 
@@ -1576,7 +1596,12 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     t->size = base_ty->size;
     t->align = MAX(t->align, base_ty->align);
     t->is_int_enum = is_int;
+    t->is_enum = true;
+    t->tag = tag;
   }
+  if (tag_ty && tag_ty != ty)
+    if (!(opt_std >= STD_C23 && is_compatible(tag_ty, ty)))
+      error_tok(tag, "tag redeclaration");
   return ty;
 }
 
