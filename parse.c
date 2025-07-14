@@ -1332,12 +1332,13 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   if (is_const_expr(expr, &array_len)) {
     if (array_len < 0)
       error_tok(expr->tok, "size of array is negative");
-    if (ty->kind != TY_VLA)
-      return array_of(ty, array_len);
+    if (ty->kind == TY_VLA)
+      return vla_of(ty, NULL, array_len);
+    return array_of(ty, array_len);
   }
   if (is_constant_context())
     error_tok(tok, "variably-modified type in constant context");
-  return vla_of(ty, expr);
+  return vla_of(ty, expr, 0);
 }
 
 static void pointer_qualifiers(Token **rest, Token *tok, Type *ty) {
@@ -1653,9 +1654,8 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
 }
 
 static Node *vla_count(Type *ty, Token *tok, bool is_void) {
-  int64_t val;
-  if (is_const_expr(ty->vla_len, &val))
-    return is_void ? NULL : new_size_t(val, tok);
+  if (!ty->vla_len)
+    return is_void ? NULL : new_size_t(ty->array_len, tok);
 
   if (ty->vla_cnt)
     return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
@@ -4985,9 +4985,8 @@ static Node *primary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
 
-      if (ty->kind == TY_VLA)
-        if (!is_const_expr(ty->vla_len, &(int64_t){0}))
-          return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
+      if (ty->kind == TY_VLA && ty->vla_len)
+        return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
     }
     if (ty->kind == TY_VLA)
       return vla_count(ty, start, false);

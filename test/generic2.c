@@ -122,6 +122,11 @@ int main(int argc, char**argv) {
 
   ASSERT(1, ({ int vla[argc]; _Generic(vla, int*:1 ); }) );
 
+  SASSERT(0 == _Generic(int[2][argc], int[4][2]:1, default:0));
+  SASSERT(1 == _Generic(int[argc][2], int[4][2]:1, default:0));
+  SASSERT(1 == _Generic(int[4][argc], int[4][2]:1, default:0));
+  SASSERT(0 == _Generic(int[argc][4], int[4][2]:1, default:0));
+
   ASSERT(1, ({ const int *p; _Generic(p, int const *:1, int *:0);}));
   ASSERT(1, ({ volatile int *p; _Generic(p, int *:0, int volatile *:1);}));
   ASSERT(1, ({ _Atomic int *p; _Generic(p, int *:0, int _Atomic *:1);}));
@@ -147,4 +152,3 @@ int main(int argc, char**argv) {
 
   printf("OK\n");
 }
-

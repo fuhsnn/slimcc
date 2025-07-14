@@ -269,6 +269,15 @@ static bool is_enum_compat(EnumVal *ev1, EnumVal *ev2) {
   return !cnt;
 }
 
+static int64_t *get_arr_len(Type *ty, int64_t *val) {
+  if ((ty->kind == TY_ARRAY && ty->array_len >= 0) ||
+    (ty->kind == TY_VLA && !ty->vla_len)) {
+    *val = ty->array_len;
+    return val;
+  }
+  return NULL;
+}
+
 static bool is_tag_compat(Type *t1, Type *t2) {
   return opt_std >= STD_C23 &&
     t1->tag && t2->tag && equal_tok(t1->tag, t2->tag);
@@ -340,9 +349,14 @@ bool is_compatible(Type *t1, Type *t2) {
     return t1->is_int_enum == t2->is_int_enum &&
       is_tag_compat(t1, t2) && is_enum_compat(t1->enums, t2->enums);
 
-  if ((t1->kind == TY_VLA && is_array(t2)) ||
-    (is_array(t1) && t2->kind == TY_VLA))
-    return is_compatible2(t1->base, t2->base);
+  if (is_array(t1) && is_array(t2)) {
+    int64_t *len1 = get_arr_len(t1, &(int64_t){0});
+    int64_t *len2 = get_arr_len(t2, &(int64_t){0});
+
+    if (!len1 || !len2 || *len1 == *len2)
+      return is_compatible2(t1->base, t2->base);
+    return false;
+  }
 
   if (t1->kind != t2->kind)
     return false;
@@ -378,11 +392,6 @@ bool is_compatible(Type *t1, Type *t2) {
         return false;
     return p1 == NULL && p2 == NULL;
   }
-  case TY_ARRAY:
-    if (!is_compatible2(t1->base, t2->base))
-      return false;
-    return t1->array_len < 0 || t2->array_len < 0 ||
-           t1->array_len == t2->array_len;
   case TY_STRUCT:
   case TY_UNION:
     return is_tag_compat(t1, t2) && is_record_compat(t1, t2);
@@ -442,10 +451,13 @@ Type *array_of(Type *base, int64_t len) {
   return ty;
 }
 
-Type *vla_of(Type *base, Node *len) {
+Type *vla_of(Type *base, Node *len, int64_t arr_len) {
   Type *ty = new_type(TY_VLA, 8, 8);
   ty->base = base;
-  ty->vla_len = len;
+  if (len)
+    ty->vla_len = len;
+  else
+    ty->array_len = arr_len;
   return ty;
 }
 

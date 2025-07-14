@@ -18,6 +18,10 @@
 #define NOTCLANG
 #endif
 
+#if __GNUC__ >= 14
+#pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
+#endif
+
 extern
 #if defined __cplusplus
 "C"

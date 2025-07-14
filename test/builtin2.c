@@ -29,6 +29,7 @@ int va_expr_in_arg(int i, ...) {
   __builtin_va_copy(ap2, ap);
   ASSERT(1, !memcmp(ap,ap2,sizeof(__builtin_va_list)));
   __builtin_c23_va_start(ap);
+  __builtin_c23_va_start(ap, i);
   __builtin_va_end((i += 13, ap));
   return i;
 }
@@ -75,6 +76,12 @@ int main(void) {
   ASSERT(324, ({int x = 5, y = 3; runtime_ofs(x,5,y); }));
   ASSERT(100, ({int x = 1, y = 5, z = 3; runtime_ofs(x,y,z); }));
   ASSERT(222, ({int y = 6; runtime_ofs(3,y,5); }));
+
+  {
+    int i;
+    SASSERT(0 == __builtin_types_compatible_p(int[4][i], int[2][i]));
+    SASSERT(0 == __builtin_types_compatible_p(int[i][4], int[i][2]));
+  }
 
   printf("OK\n");
 }
