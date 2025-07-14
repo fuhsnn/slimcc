@@ -1467,6 +1467,10 @@ static bool chk_enum_tag(Type *tag_ty, Type *fixed_ty, Token *tag) {
 }
 
 static Type *enum_specifier(Token **rest, Token *tok) {
+  bool is_packed = false;
+  bool_attr(tok, TK_ATTR, "packed", &is_packed);
+  bool_attr(tok, TK_BATTR, "packed", &is_packed);
+
   // Read a tag.
   Token *tag = NULL;
   if (tok->kind == TK_IDENT) {
@@ -1527,7 +1531,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   bool is_neg = false;
   bool is_ovf = false;
   bool first = true;
-  for (; comma_list(rest, &tok, "}", !first); first = false) {
+  for (; comma_list(&tok, &tok, "}", !first); first = false) {
     Token *name = ident_tok(&tok, tok);
 
     if (!consume(&tok, tok, "=")) {
@@ -1590,6 +1594,9 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   if (first)
     error_tok(tok, "empty enum specifier");
 
+  bool_attr(tok, TK_ATTR, "packed", &is_packed);
+  *rest = tok;
+
   if (opt_std >= STD_C23) {
     if (tag_enum_cnt) {
       if (tag_enum_cnt != decl_enum_cnt)
@@ -1608,7 +1615,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     return ty;
   }
 
-  if (!opt_short_enums)
+  if (!(is_packed || opt_short_enums))
     ety = MAX(ety, ety_of_int);
 
   bool is_int = ety <= ety_of_int;
