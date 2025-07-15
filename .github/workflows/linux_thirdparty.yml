@@ -46,6 +46,7 @@ jobs:
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
+          - { vm: interop, proj: test_micropython }
           - { vm: interop, proj: test_msgpack }
           - { vm: interop, proj: test_muon }
           - { vm: interop, proj: test_quickjs }
@@ -78,7 +79,9 @@ jobs:
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_doom }
           - { vm: main, proj: test_elk }
+          - { vm: main, proj: test_espruino }
           - { vm: main, proj: test_file }
+          - { vm: main, proj: test_fossil }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_glib }
@@ -152,6 +155,7 @@ jobs:
           - { vm: main, proj: build_lynx }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_stb }
+          - { vm: main, proj: build_tin }
           - { vm: main, proj: build_zig }
     steps:
       - name: Download artifact

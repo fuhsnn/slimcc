@@ -17,6 +17,20 @@ fix_and_configure() {
 use_stdbit() {
  sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
 
+ sed -i 's|__builtin_ctzll(|(int)stdc_trailing_zeros_ull(|g' "$2"
+ sed -i 's|__builtin_ctzl(|(int)stdc_trailing_zeros_ul(|g' "$2"
+ sed -i 's|__builtin_ctz(|(int)stdc_trailing_zeros_ui(|g' "$2"
+ sed -i 's|__builtin_clzll(|(int)stdc_leading_zeros_ull(|g' "$2"
+ sed -i 's|__builtin_clzl(|(int)stdc_leading_zeros_ul(|g' "$2"
+ sed -i 's|__builtin_clz(|(int)stdc_leading_zeros_ui(|g' "$2"
+ sed -i 's|__builtin_popcountll(|(int)stdc_count_ones_ull(|g' "$2"
+ sed -i 's|__builtin_popcountl(|(int)stdc_count_ones_ul(|g' "$2"
+ sed -i 's|__builtin_popcount(|(int)stdc_count_ones_ui(|g' "$2"
+}
+
+use_stdbit2() {
+ sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
+
  sed -i 's|__builtin_ctzll|(int)stdc_trailing_zeros_ull|g' "$2"
  sed -i 's|__builtin_ctzl|(int)stdc_trailing_zeros_ul|g' "$2"
  sed -i 's|__builtin_ctz|(int)stdc_trailing_zeros_ui|g' "$2"
@@ -52,15 +66,27 @@ git_fetch() {
 }
 
 url_tar() {
-  mkdir -p "$2"
-  curl --retry 5 --retry-delay 60 -fL "$1" | tar xz -C "$2" --strip-components=1
-  cd "$2"
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar xz -C "$2" --strip-components=1
+ cd "$2"
+}
+
+url_bz() {
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar x --bz -C "$2" --strip-components=1
+ cd "$2"
+}
+
+url_lz() {
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar x --lzip -C "$2" --strip-components=1
+ cd "$2"
 }
 
 url_xz() {
-  mkdir -p "$2"
-  curl --retry 5 --retry-delay 60 -fL "$1" | tar x --xz -C "$2" --strip-components=1
-  cd "$2"
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar x --xz -C "$2" --strip-components=1
+ cd "$2"
 }
 
 install_libtool() {
@@ -94,7 +120,7 @@ test_bfs() {
 }
 
 test_bison() {
- url_xz https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.xz bison
+ url_lz https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.lz bison
  ./configure
  make check
 }
@@ -127,15 +153,8 @@ test_bzip2() {
 }
 
 test_c23doku() {
- git_fetch https://github.com/fuhsnn/c23doku 5ff41e96002f14c59c33f43dd4b7849c025382ae c23doku
- "$CC" -std=c23 brute_force.c -I 12x12_simple/ -o run
- ./run | md5sum | grep -q 4fa4c109fbe377d4314b191b7a508f4a
- "$CC" -std=c23 brute_force.c -I 16x16_embed/ -o run
- ./run | md5sum | grep -q 2cf4c7aecbcd621395471be3a140d66e
- "$CC" -std=c23 graph_color.c -I 9x9_antibrute/ -o run
- ./run | md5sum | grep -q 990e2d99fface43030c1246a820db879
- "$CC" -std=c23 graph_color.c -I 9x9_tdoku/ -o run
- ./run | md5sum | grep -q d89988b8b41f9c9485de73894a203b2e
+ git_fetch https://github.com/fuhsnn/c23doku c0bd5daa91f4ffa0e06f418850111691577cd365 c23doku
+ CC=$CC sh test.sh
 }
 
 test_c3() {
@@ -179,7 +198,7 @@ test_coreutils() {
 }
 
 test_cpio() {
- url_tar https://ftpmirror.gnu.org/gnu/cpio/cpio-2.15.tar.gz cpio
+ url_bz https://ftpmirror.gnu.org/gnu/cpio/cpio-2.15.tar.bz2 cpio
  ./configure
  make check
 }
@@ -191,7 +210,7 @@ test_cproc() {
 }
 
 test_curl() {
- url_tar https://github.com/curl/curl/releases/download/curl-8_14_1/curl-8.14.1.tar.gz curl
+ url_xz https://github.com/curl/curl/releases/download/curl-8_15_0/curl-8.15.0.tar.xz curl
  fix_configure ./configure
  ./configure --with-openssl
  make && make test
@@ -210,6 +229,15 @@ test_elk() {
  CFLAGS='-O -ffunction-sections -fdata-sections' make -C test test elk
 }
 
+test_espruino() {
+ # build process needs .git/
+ git_fetch https://github.com/espruino/Espruino 08502f84a2706a72c6ad0a525d93ec3c74f09565 espruino
+ rm -r tests/manual/ tests/*_FAIL.js tests/test_tensorflow.js
+ sed -i 's|-lstdc++|-lc|g' make/family/LINUX.make
+ BOARD=LINUX PYTHON=python3 USE_TENSORFLOW=0 make CC=$CC LD=$CC V=1 -j1
+ ./bin/espruino --test-all
+}
+
 test_file() {
  github_tar file file FILE5_46
  libtoolize
@@ -225,8 +253,14 @@ test_flex() {
  make check
 }
 
+test_fossil() {
+ github_tar drhsqlite fossil-mirror version-2.26
+ CC_FOR_BUILD=$CC ./configure --json
+ make test
+}
+
 test_gawk() {
- url_xz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz gawk
+ url_lz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.lz gawk
  fix_configure extension/configure
  ./configure --disable-pma # pma segfault in docker
  make check
@@ -249,7 +283,7 @@ test_glib() {
 }
 
 test_gmake() {
- url_tar https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
+ url_lz https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.lz gmake
  fix_and_configure
  make check
 }
@@ -448,7 +482,7 @@ test_libuv() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.14.4
+ github_tar GNOME libxml2 v2.14.5
  libtoolize
  sh autogen.sh
  fix_configure ./configure
@@ -492,6 +526,16 @@ test_metalang99() {
  sh scripts/test-all.sh
  github_tar hirrolot metalang99 v1.13.5
  sh scripts/test-all.sh
+}
+
+test_micropython() {
+ github_clone micropython micropython v1.25.0
+ use_stdbit "#include <stdbool.h>" py/misc.h
+ replace_line "#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 8)" "#if 1" py/nlrx64.c
+ sed -i 's|defined(LFS2_NO_INTRINSICS)|1|g' lib/littlefs/lfs2_util.h
+ make -C ports/unix/ CC=$CC VARIANT=standard V=1 test_full
+ cd tests
+ MICROPY_CPYTHON3=python3 MICROPY_MICROPYTHON=../ports/unix/build-standard/micropython ./run-multitests.py multi_net/*.py
 }
 
 test_mimalloc() {
@@ -614,7 +658,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0alpha1
+ github_tar php php-src php-8.5.0alpha2
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -633,7 +677,7 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_18_BETA1
+ github_tar postgres postgres REL_18_BETA2
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
@@ -699,7 +743,7 @@ test_valkey() {
 }
 
 test_ruby() {
- git_fetch https://github.com/fuhsnn/ruby ea5a30895842e0f7e557f47f4b67a3d090a7abd5 ruby
+ git_fetch https://github.com/ruby/ruby 86320a53002a3adaf35ad7434c70e86747a8b345 ruby
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  make check -j4
@@ -723,7 +767,7 @@ test_sokol() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.50.2
+ github_tar sqlite sqlite version-3.50.3
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
@@ -770,7 +814,7 @@ test_vim() {
 test_wasm3() {
  git_fetch https://github.com/wasm3/wasm3 79d412ea5fcf92f0efe658d52827a0e0a96ff442 wasm3
  sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
- use_stdbit "#include <limits.h>" source/m3_exec.h
+ use_stdbit2 "#include <limits.h>" source/m3_exec.h
  mkdir build
  $CC -O3 -g0 -s -Isource -Dd_m3HasWASI source/*.c platforms/app/main.c -lm -o build/wasm3
  cd test
@@ -779,7 +823,7 @@ test_wasm3() {
 }
 
 test_wget() {
- url_tar https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.0.tar.gz wget
+ url_lz https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.0.tar.lz wget
  fix_and_configure
  make check
 }
@@ -865,7 +909,7 @@ build_freetype() {
 }
 
 build_gcc() {
- url_tar https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.gz gcc47
+ url_bz https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.bz2 gcc47
  export -f fix_configure
  find . -name 'configure' -exec bash -c 'fix_configure "$0"' {} \;
  sed -i 's/^\s*struct ucontext/ucontext_t/g' ./libgcc/config/i386/linux-unwind.h
@@ -907,7 +951,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250705
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250712
  ./configure
  make V=1
 }
@@ -958,7 +1002,7 @@ build_sdl3() {
  github_tar libsdl-org SDL release-3.2.18
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD'
+ cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu
  make VERBOSE=1
 }
 
@@ -967,6 +1011,12 @@ build_stb() {
  sed -i 's|-DSTB_DIVIDE_TEST|-DSTB_DIVIDE_TEST -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' tests/Makefile
  sed -i 's|$(CC) $(INCLUDES) $(CPPFLAGS) -std=c++0x test_cpp_compilation.cpp -lm -lstdc++||g' tests/Makefile
  make -C tests
+}
+
+build_tin() {
+ github_tar ThomasDickey tin-beta-snapshots v2_6_5-20250707
+ ./configure
+ make build
 }
 
 build_yquake2() {
