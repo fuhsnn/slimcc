@@ -955,7 +955,7 @@ build_raylib_raygui() {
 }
 
 build_sdl3() {
- github_tar libsdl-org SDL release-3.2.16
+ github_tar libsdl-org SDL release-3.2.18
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  mkdir cmakebuild && cd cmakebuild
  cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD'
