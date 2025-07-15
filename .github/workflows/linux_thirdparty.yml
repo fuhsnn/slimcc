@@ -152,6 +152,7 @@ jobs:
           - { vm: main, proj: build_lynx }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_stb }
+          - { vm: main, proj: build_tin }
           - { vm: main, proj: build_zig }
     steps:
       - name: Download artifact

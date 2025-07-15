@@ -191,7 +191,7 @@ test_cproc() {
 }
 
 test_curl() {
- url_tar https://github.com/curl/curl/releases/download/curl-8_14_1/curl-8.14.1.tar.gz curl
+ url_xz https://github.com/curl/curl/releases/download/curl-8_15_0/curl-8.15.0.tar.xz curl
  fix_configure ./configure
  ./configure --with-openssl
  make && make test
@@ -448,7 +448,7 @@ test_libuv() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.14.4
+ github_tar GNOME libxml2 v2.14.5
  libtoolize
  sh autogen.sh
  fix_configure ./configure
@@ -614,7 +614,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0alpha1
+ github_tar php php-src php-8.5.0alpha2
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -633,7 +633,7 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_18_BETA1
+ github_tar postgres postgres REL_18_BETA2
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
@@ -699,7 +699,7 @@ test_valkey() {
 }
 
 test_ruby() {
- git_fetch https://github.com/fuhsnn/ruby ea5a30895842e0f7e557f47f4b67a3d090a7abd5 ruby
+ git_fetch https://github.com/ruby/ruby 86320a53002a3adaf35ad7434c70e86747a8b345 ruby
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  make check -j4
@@ -907,7 +907,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250705
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250712
  ./configure
  make V=1
 }
@@ -958,7 +958,7 @@ build_sdl3() {
  github_tar libsdl-org SDL release-3.2.18
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD'
+ cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu
  make VERBOSE=1
 }
 
@@ -967,6 +967,12 @@ build_stb() {
  sed -i 's|-DSTB_DIVIDE_TEST|-DSTB_DIVIDE_TEST -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' tests/Makefile
  sed -i 's|$(CC) $(INCLUDES) $(CPPFLAGS) -std=c++0x test_cpp_compilation.cpp -lm -lstdc++||g' tests/Makefile
  make -C tests
+}
+
+build_tin() {
+ github_tar ThomasDickey tin-beta-snapshots v2_6_5-20250707
+ ./configure
+ make build
 }
 
 build_yquake2() {
