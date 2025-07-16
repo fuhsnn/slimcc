@@ -269,11 +269,10 @@ static bool is_enum_compat(EnumVal *ev1, EnumVal *ev2) {
   return !cnt;
 }
 
-static int64_t *get_arr_len(Type *ty, int64_t *val) {
+static int64_t *get_arr_len(Type *ty) {
   if ((ty->kind == TY_ARRAY && ty->array_len >= 0) ||
     (ty->kind == TY_VLA && !ty->vla_len)) {
-    *val = ty->array_len;
-    return val;
+    return &ty->array_len;
   }
   return NULL;
 }
@@ -350,8 +349,8 @@ bool is_compatible(Type *t1, Type *t2) {
       is_tag_compat(t1, t2) && is_enum_compat(t1->enums, t2->enums);
 
   if (is_array(t1) && is_array(t2)) {
-    int64_t *len1 = get_arr_len(t1, &(int64_t){0});
-    int64_t *len2 = get_arr_len(t2, &(int64_t){0});
+    int64_t *len1 = get_arr_len(t1);
+    int64_t *len2 = get_arr_len(t2);
 
     if (!len1 || !len2 || *len1 == *len2)
       return is_compatible2(t1->base, t2->base);
@@ -412,7 +411,7 @@ Type *ptr_decay(Type *ty) {
     cvqual_type(&pty->base, ty);
     return pty;
   }
-  else if (ty->kind == TY_FUNC)
+  if (ty->kind == TY_FUNC)
     return pointer_to(ty);
   return ty;
 }

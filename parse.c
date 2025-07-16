@@ -2232,7 +2232,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
   if (init->kind == INIT_LIST) {
     if (ty->kind == TY_ARRAY) {
       for (int i = 0; i < ty->array_len; i++) {
-        InitDesg desg2 = {desg, i};
+        InitDesg desg2 = {.next = desg, .idx = i};
         expr = create_lvar_init(expr, &init->mem_arr[i], ty->base, &desg2, tok);
       }
       return expr;
@@ -2242,7 +2242,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
         if (ty->kind == TY_UNION && init->initmem != mem)
           continue;
 
-        InitDesg desg2 = {desg, 0, mem};
+        InitDesg desg2 = {.next = desg, .member = mem};
         expr = create_lvar_init(expr, &init->mem_arr[mem->idx], mem->ty, &desg2, tok);
       }
       return expr;
@@ -2279,7 +2279,7 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer init = {0};
   initializer(rest, tok, &init, var);
 
-  InitDesg desg = {NULL, 0, NULL, var};
+  InitDesg desg = {.var = var};
   Node head = {0};
   create_lvar_init(&head, &init, var->ty, &desg, tok);
   free_initializers(&init);
