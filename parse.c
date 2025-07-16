@@ -197,10 +197,6 @@ static Node *new_node(NodeKind kind, Token *tok);
 static void resolve_local_gotos(Node *node);
 static void push_goto(Node *node);
 
-static int align_down(int n, int align) {
-  return align_to(n - align + 1, align);
-}
-
 static void enter_scope(void) {
   Scope *sc = ast_arena_calloc(sizeof(Scope));
   sc->parent = scope;
@@ -272,10 +268,6 @@ static Type *find_tag(Token *tok) {
 
 static Type *find_tag_in_scope(Token *tok) {
   return hashmap_get2(&scope->tags, tok->loc, tok->len);
-}
-
-static int32_t bitfield_footprint(Member *mem) {
-  return align_to(mem->bit_width + mem->bit_offset, 8) / 8;
 }
 
 static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
@@ -2331,8 +2323,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
           continue;
 
         Initializer *init2 = &init->mem_arr[mem->idx];
-        if (mem->is_bitfield &&
-          ((init2->kind == INIT_EXPR || init2->kind == INIT_TOK))) {
+        if (mem->is_bitfield && (init2->kind == INIT_EXPR || init2->kind == INIT_TOK)) {
           Node *node = init_num_tok(init2, &(Node){.kind = ND_NUM, .tok = init2->tok});
           node = assign_cast(mem->ty, node);
 
@@ -2344,11 +2335,34 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
             free(val);
             continue;
           }
-          uint64_t oldval = read_buf(loc, mem->ty->size);
-          uint64_t newval = eval(node);
-          uint64_t mask = (1L << mem->bit_width) - 1;
-          uint64_t combined = oldval | ((newval & mask) << mem->bit_offset);
-          memcpy(loc, &combined, mem->ty->size);
+          uint64_t val = eval(node);
+          if (mem->is_aligned_bitfiled) {
+            int sz = next_pow_of_two(mem->bit_offset + mem->bit_width) / 8;
+            uint64_t oldval = read_buf(loc, sz);
+            uint64_t mask = (1L << mem->bit_width) - 1;
+            uint64_t combined = oldval | ((val & mask) << mem->bit_offset);
+            memcpy(loc, &combined, sz);
+            continue;
+          }
+          int rem = mem->bit_offset + mem->bit_width;
+          if (mem->bit_offset) {
+            int shft = 8 - mem->bit_offset;
+            *loc = ((uint8_t)(*loc << shft) >> shft) | (val << mem->bit_offset);
+            val >>= shft;
+            rem -= 8;
+            loc++;
+          }
+          for (int start = rem; rem > 0; rem -= 8, loc++) {
+            if (rem != start)
+              val >>= 8;
+            if (rem >= 8) {
+              *loc = val;
+              continue;
+            }
+            val &= (1 << rem) - 1;
+            *loc = (*loc >> rem) << rem | val;
+            break;
+          }
           continue;
         }
         cur = write_gvar_data(cur, init2, mem->ty, buf, offset + mem->offset, ev_kind);
@@ -3423,16 +3437,30 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
       char *data = eval_constexpr_data(node);
       if (data) {
-        int64_t val = eval_sign_extend(ty, read_buf(data, ty->size));
-        if (is_bitfield(node)) {
-          int unused_msb = 64 - node->member->bit_width;
-          val <<= (unused_msb - node->member->bit_offset);
+        if (!is_bitfield(node))
+          return eval_sign_extend(ty, read_buf(data, ty->size));
 
-          if (ty->is_unsigned)
-            return (uint64_t)val >> unused_msb;
-          return val >> unused_msb;
+        Member *mem = node->member;
+        uint64_t val = 0;
+        if (mem->is_aligned_bitfiled) {
+          val = read_buf(data, next_pow_of_two(mem->bit_offset + mem->bit_width) / 8);
+          val <<= (64 - mem->bit_width - mem->bit_offset);
+        } else {
+          int pofs = bitfield_footprint(mem) - 1;
+          for (int start = pofs; pofs >= !!mem->bit_offset; pofs--) {
+            if (pofs != start)
+              val <<= 8;
+            val |= (uint8_t)data[pofs];
+          }
+          if (mem->bit_offset) {
+            val <<= 8 - mem->bit_offset;
+            val |= (uint8_t)*data >> mem->bit_offset;
+          }
+          val <<= (64 - mem->bit_width);
         }
-        return val;
+        if (ty->is_unsigned)
+          return (uint64_t)val >> (64 - mem->bit_width);
+        return (int64_t)val >> (64 - mem->bit_width);
       }
     }
   }
@@ -4202,6 +4230,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         if (t->kind == TY_VLA)
           error_tok(tok, "members cannot be of variably-modified type");
 
+      bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
+
       if (consume(&tok, tok, ":")) {
         mem->is_bitfield = true;
         mem->bit_width = const_expr(&tok, tok);
@@ -4209,8 +4239,9 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           error_tok(tok, "bit-field with negative width");
         attr_aligned(tok, &mem->alt_align, TK_ATTR);
       }
+
       bool_attr(tok, TK_ATTR, "packed", &mem->is_packed);
-      bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
+
       cur = cur->next = mem;
     }
   }
@@ -4324,13 +4355,29 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
         bits = align_to(bits, mem->ty->size * 8);
         continue;
       }
-      int sz = mem->ty->size;
-      if (!pack_align)
-        if (bits / (sz * 8) != (bits + mem->bit_width - 1) / (sz * 8))
-          bits = align_to(bits, sz * 8);
+      if (mem->is_packed || pack_align) {
+        int ceil = align_to(bits + mem->bit_width, 8);
+        for (int rsz = 8; rsz <= 64; rsz *= 2) {
+          if (ceil % rsz != 0)
+            break;
+          int mofs = (ceil - rsz) / 8;
+          if (mofs * 8 > bits)
+            continue;
+          mem->offset = mofs;
+          mem->is_aligned_bitfiled = true;
+          break;
+        }
+        if (!mem->is_aligned_bitfiled)
+          mem->offset = bits / 8;
+      } else {
+        int bsz = mem->ty->size * 8;
+        if (bits / bsz != (bits + mem->bit_width - 1) / bsz)
+          bits = align_to(bits, bsz);
+        mem->offset = bits / bsz * mem->ty->size;
+        mem->is_aligned_bitfiled = true;
+      }
 
-      mem->offset = align_down(bits / 8, sz);
-      mem->bit_offset = bits % (sz * 8);
+      mem->bit_offset = bits - mem->offset * 8;
       bits += mem->bit_width;
       continue;
     }

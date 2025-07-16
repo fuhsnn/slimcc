@@ -158,6 +158,20 @@ bool is_pow_of_two(uint64_t val) {
   return !(val & (val - 1));
 }
 
+int next_pow_of_two(int val) {
+  if (val > 32)
+    return 64;
+  if (val > 16)
+    return 32;
+  if (val > 8)
+    return 16;
+  return 8;
+}
+
+int32_t bitfield_footprint(Member *mem) {
+  return align_to(mem->bit_width + mem->bit_offset, 8) / 8;
+}
+
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
   return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||

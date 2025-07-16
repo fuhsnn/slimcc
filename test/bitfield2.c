@@ -154,6 +154,73 @@ static void aligned_store(void) {
   ASSERT(1, (s.u2 == 0));
 }
 
+static int packed_fields() {
+
+#define PACKED_CHK2(T,N,va,vb,vc) do { \
+    { T N = {va,vb,vc}; ASSERT(1, N.a == va && N.b == vb && N.c == vc); } \
+    { constexpr T N = {va,vb,vc}; SASSERT(N.a == va && N.b == vb && N.c == vc); } \
+  } while(0)
+
+#define PACKED_CHK(T,N,S) do {  \
+    SASSERT(sizeof(T) == S);  \
+    PACKED_CHK2(T,N, -1,0,0); \
+    PACKED_CHK2(T,N, 0,-1,0); \
+    PACKED_CHK2(T,N, 0,0,-1); \
+  } while(0)
+
+  {
+    struct S {
+      char a:7;
+      long b:63;
+      char c:2;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed1, 9);
+  }
+  {
+    struct S {
+      int a:7, b:22, c:3;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed2, 4);
+  }
+  {
+    struct S {
+      int a : 3, b : 3, c : 3;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed3, 2);
+  }
+  {
+    struct S {
+      int a : 17, b : 4, c : 3;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed4, 3);
+  }
+  {
+    struct S {
+      int a : 20;
+      int b;
+      int c : 22;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed5, 10);
+  }
+  {
+    struct S {
+      int a : 30;
+      int b : 27;
+      int c : 3;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed6, 8);
+  }
+  {
+    struct S {
+      short a;
+      __attribute__((packed))int b : 24;
+      char c;
+    };
+    PACKED_CHK(struct S, packed7, 6);
+  }
+  return 1;
+}
+
 int main(void) {
   bitextract();
   struct_init();
@@ -164,6 +231,7 @@ int main(void) {
   uninit_global();
   operand_promotion();
   aligned_store();
+  ASSERT(1, packed_fields());
 
   printf("OK\n");
 

@@ -10,6 +10,13 @@
 #define STRBUF_SZ2 208
 
 typedef enum {
+  REGSZ_8 = 0,
+  REGSZ_16,
+  REGSZ_32,
+  REGSZ_64,
+} RegSz;
+
+typedef enum {
   REG_X64_NULL = 0,
   REG_X64_AX,
   REG_X64_CX,
@@ -328,6 +335,16 @@ static bool is_int_to_int_cast(Node *node) {
 
 static bool has_defr(Node *node) {
   return node->defr_start != node->defr_end;
+}
+
+static RegSz bitwidth_to_regsz(int bits) {
+  switch(bits) {
+  case 64: return REGSZ_64;
+  case 32: return REGSZ_32;
+  case 16: return REGSZ_16;
+  case 8: return REGSZ_8;
+  }
+  internal_error();
 }
 
 static Type *bitwidth_to_ty(int width, bool is_unsigned) {
@@ -743,6 +760,8 @@ static void gen_bitfield_load(Node *node, int ofs) {
 
   if (mem->ty->kind == TY_BITINT) {
     Printftn("mov %%rax, %s", argreg64[1]);
+    if (ofs)
+      Printftn("add $%d, %s", ofs, argreg64[1]);
     Printftn("movl $%"PRIi32", %s", (int32_t)mem->ty->bit_cnt, argreg32[0]);
     Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[2]);
     load_val2(ty_int, mem->bit_width, argreg32[3], NULL);
@@ -753,19 +772,104 @@ static void gen_bitfield_load(Node *node, int ofs) {
     return;
   }
 
-  Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
-  if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
-    load2(alt_ty, ofs + mem->bit_offset / 8, "%rax");
+  if (mem->is_aligned_bitfiled) {
+    int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
+    load2(bitwidth_to_ty(p2bits, mem->ty->is_unsigned), ofs, "%rax");
+
+    if (mem->bit_width == mem->ty->size * 8)
+      return;
+
+    int lshft = 64 - mem->bit_width - mem->bit_offset;
+    int rshft = 64 - mem->bit_width;
+    if (lshft)
+      Printftn("shl $%d, %%rax", lshft);
+    Printftn("%s $%d, %%rax", mem->ty->is_unsigned ? "shr" : "sar", rshft);
     return;
   }
-  load2(mem->ty, ofs, "%rax");
+  Printstn("movq %%rax, %%rdx");
 
-  char *ax = regop_ax(mem->ty);
-  int shft = ((mem->ty->size == 8) ? 64 : 32) - mem->bit_width;
-  if (shft - mem->bit_offset)
-    Printftn("shl $%d, %s", shft - mem->bit_offset, ax);
-  Printftn("%s $%d, %s", (mem->ty->is_unsigned ? "shr" : "sar"), shft, ax);
-  return;
+  int pofs = bitfield_footprint(mem) - 1;
+  for (int start = pofs; pofs >= !!mem->bit_offset; pofs--) {
+    if (pofs != start)
+      Printstn("shlq $8, %%rax");
+    Printftn("movb %d(%%rdx), %%al", pofs + ofs);
+  }
+  if (mem->bit_offset) {
+    Printftn("shlq $%d, %%rax", 8 - mem->bit_offset);
+    Printftn("movb %d(%%rdx), %%dl", ofs);
+    Printftn("shrb $%d, %%dl", mem->bit_offset);
+    Printstn("orb %%dl, %%al");
+  }
+  if (mem->bit_width < 64) {
+    int shft = 64 - mem->bit_width;
+    Printftn("shl $%d, %%rax", shft);
+    Printftn("%s $%d, %%rax", mem->ty->is_unsigned ? "shr" : "sar", shft);
+  }
+}
+
+static void gen_bitfield_store2(char *ptr, Reg r_val, Reg r_tmp, Member *mem) {
+  if (mem->is_aligned_bitfiled) {
+    int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
+    RegSz rsz = bitwidth_to_regsz(p2bits);
+    char *tmp = regs[r_tmp][rsz];
+    char *val = regs[r_val][rsz];
+
+    if (mem->bit_width == p2bits) {
+      Printftn("mov %s, (%s)", val, ptr);
+      return;
+    }
+    uint64_t msk = (((uint64_t)1 << mem->bit_width) - 1) << mem->bit_offset;
+    msk = (int64_t)(~msk << (64 - p2bits)) >> (64 - p2bits);
+
+    load_val2(bitwidth_to_ty(p2bits, false), msk, regs[r_tmp][REGSZ_32], regs[r_tmp][REGSZ_64]);
+
+    Printftn("and %s, (%s)", tmp, ptr);
+    Printftn("mov %s, %s", val, tmp);
+
+    int lshft = p2bits - mem->bit_width;
+    int rshft = p2bits - mem->bit_width - mem->bit_offset;
+    if (lshft)
+      Printftn("shl $%d, %s", lshft, tmp);
+    if (rshft)
+      Printftn("shr $%d, %s", rshft, tmp);
+    Printftn("or %s, (%s)", tmp, ptr);
+    return;
+  }
+  char *valb = regs[r_val][REGSZ_8];
+  char *valq = regs[r_val][REGSZ_64];
+  char *tmpb = regs[r_tmp][REGSZ_8];
+  char *tmpq = regs[r_tmp][REGSZ_64];
+
+  int rem = mem->bit_offset + mem->bit_width;
+  int pofs = 0;
+  if (mem->bit_offset) {
+    Printftn("shlb $%d, (%s)", 8 - mem->bit_offset, ptr);
+    Printftn("shrb $%d, (%s)", 8 - mem->bit_offset, ptr);
+    Printftn("movb %s, %s", valb, tmpb);
+    Printftn("shlb $%d, %s", mem->bit_offset, tmpb);
+    Printftn("orb %s, (%s)", tmpb, ptr);
+    Printftn("movq %s, %s", valq, tmpq);
+    Printftn("shrq $%d, %s", 8 - mem->bit_offset, tmpq);
+    pofs++;
+    rem -= 8;
+  } else {
+    Printftn("mov %s, %s", valq, tmpq);
+  }
+
+  for (int start = rem; rem > 0; rem -= 8, pofs++) {
+    if (rem != start)
+      Printftn("shrq $8, %s", tmpq);
+
+    if (rem >= 8) {
+      Printftn("movb %s, %d(%s)", tmpb, pofs, ptr);
+      continue;
+    }
+    Printftn("shrb $%d, %d(%s)", rem, pofs, ptr);
+    Printftn("shlb $%d, %d(%s)", rem, pofs, ptr);
+    Printftn("andb $%d, %s", (1 << rem) - 1, tmpb);
+    Printftn("orb %s, %d(%s)", tmpb, pofs, ptr);
+    return;
+  }
 }
 
 static void gen_bitfield_store(Node *node, bool is_void) {
@@ -788,44 +892,13 @@ static void gen_bitfield_store(Node *node, bool is_void) {
     return;
   }
 
-  Type *alt_ty = bitwidth_to_ty(mem->bit_width, mem->ty->is_unsigned);
-  if (alt_ty && (mem->bit_offset == (mem->bit_offset / 8 * 8))) {
-    char *reg = pop_inreg(tmpreg64[0]);
-    store2(alt_ty, mem->bit_offset / 8, reg);
-
-    if (!is_void && alt_ty->size < 4)
-      cast_extend_int32(alt_ty, reg_ax(alt_ty->size), "%eax");
-    return;
-  }
-
-  char *ax, *dx, *cx;
-  if (mem->ty->size == 8)
-    ax = "%rax", cx = "%rcx", dx = "%rdx";
-  else
-    ax = "%eax", cx = "%ecx", dx = "%edx";
-
-  Printftn("mov %s, %s", ax, cx);
-  imm_and(cx, dx, (1LL << mem->bit_width) - 1);
-
   char *ptr = pop_inreg(tmpreg64[0]);
-  load2(mem->ty, 0, ptr);
+  gen_bitfield_store2(ptr, REG_X64_AX, REG_X64_DX, mem);
 
-  uint64_t msk = ~(((1ULL << mem->bit_width) - 1) << mem->bit_offset);
-  if (mem->ty->size == 4 && (mem->bit_width + mem->bit_offset == 32))
-    msk = (uint32_t)msk;
-  imm_and(ax, dx, msk);
-
-  if (mem->bit_offset)
-    Printftn("shl $%d, %s", mem->bit_offset, cx);
-  Printftn("or %s, %s", cx, ax);
-
-  store2(mem->ty, 0, ptr);
-
-  if (!is_void) {
-    int shft = ((mem->ty->size == 8) ? 64 : 32) - mem->bit_width;
-    if (shft - mem->bit_offset)
-      Printftn("shl $%d, %s", shft - mem->bit_offset, ax);
-    Printftn("%s $%d, %s", (mem->ty->is_unsigned ? "shr" : "sar"), shft, ax);
+  if (!is_void && mem->bit_width < 64) {
+    int shft = 64 - mem->bit_width;
+    Printftn("shl $%d, %%rax", shft);
+    Printftn("%s $%d, %%rax", mem->ty->is_unsigned ? "shr" : "sar", shft);
   }
 }
 
@@ -3991,36 +4064,6 @@ static void asm_reg_output(AsmParam *ap, Reg tmpreg) {
   error_tok(ap->arg->tok, "unsupported operand size");
 }
 
-static bool asm_bitfield_out(AsmParam *ap, Reg tmpreg) {
-  if (!is_bitfield(ap->arg))
-    return false;
-
-  Member *mem = ap->arg->member;
-  char *val = regs[ap->reg][3];
-  char *tmp = regs[tmpreg][3];
-
-  Printftn("shl $%d, %s", (64 - mem->bit_width), val);
-  Printftn("shr $%d, %s", (64 - mem->bit_width - mem->bit_offset), val);
-
-  if (mem->bit_width + mem->bit_offset != 64) {
-    Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), tmp);
-    Printftn("mov (%s), %s", tmp, reg_sz(tmpreg, mem->ty->size));
-    Printftn("shr $%d, %s", (mem->bit_width + mem->bit_offset), tmp);
-    Printftn("shl $%d, %s", (mem->bit_width + mem->bit_offset), tmp);
-    Printftn("or %s, %s", tmp, val);
-  }
-  if (mem->bit_offset) {
-    Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), tmp);
-    Printftn("mov (%s), %s", tmp, reg_sz(tmpreg, mem->ty->size));
-    Printftn("shl $%d, %s", (64 - mem->bit_offset), tmp);
-    Printftn("shr $%d, %s", (64 - mem->bit_offset), tmp);
-    Printftn("or %s, %s", tmp, val);
-  }
-  Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), tmp);
-  Printftn("mov %s, (%s)", reg_sz(ap->reg, mem->ty->size), tmp);
-  return true;
-}
-
 static Reg get_input_reg(AsmParam *ap) {
   if (ap->kind == ASMOP_REG && *ap->constraint->str != '=')
     return ap->reg;
@@ -4103,16 +4146,29 @@ static void asm_save_out_x87(Node *node, int in_cnt) {
   }
 }
 
+static void asm_save_out_bitfield(AsmParam *ap, Reg r1, Reg r2) {
+  Member *mem = ap->arg->member;
+  char *ptr = regs[r2][3];
+
+  Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), ptr);
+
+  gen_bitfield_store2(ptr, ap->reg, r1, mem);
+  return;
+}
+
 static void asm_save_out(Node *node) {
-  Reg freereg = node->asm_ctx->output_tmp1;
+  Reg r1 = node->asm_ctx->output_tmp1;
+  Reg r2 = node->asm_ctx->output_tmp2;
 
   for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG) {
       if (is_x87_reg(ap->reg))
         continue;
-      if (asm_bitfield_out(ap, freereg))
+      if (is_bitfield(ap->arg)) {
+        asm_save_out_bitfield(ap, r1, r2);
         continue;
-      asm_reg_output(ap, freereg);
+      }
+      asm_reg_output(ap, r1);
       continue;
     }
   }

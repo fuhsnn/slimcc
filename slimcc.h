@@ -673,6 +673,7 @@ struct Member {
 
   // Bitfield
   bool is_bitfield;
+  bool is_aligned_bitfiled;
   int bit_offset;
   int bit_width;
 };
@@ -723,6 +724,8 @@ bool is_const_expr(Node *node, int64_t *val);
 bool is_const_double(Node *node, long double *fval);
 bool is_nullptr(Node *node);
 bool is_ptr(Type *ty);
+int next_pow_of_two(int val);
+int32_t bitfield_footprint(Member *mem);
 void init_ty_lp64(void);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
