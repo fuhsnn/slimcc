@@ -4210,6 +4210,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         if (t->kind == TY_VLA)
           error_tok(tok, "members cannot be of variably-modified type");
 
+      bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
+
       if (consume(&tok, tok, ":")) {
         mem->is_bitfield = true;
         mem->bit_width = const_expr(&tok, tok);
@@ -4217,8 +4219,9 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           error_tok(tok, "bit-field with negative width");
         attr_aligned(tok, &mem->alt_align, TK_ATTR);
       }
+
       bool_attr(tok, TK_ATTR, "packed", &mem->is_packed);
-      bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
+
       cur = cur->next = mem;
     }
   }
@@ -4331,7 +4334,7 @@ static Type *struct_decl(Type *ty, int alt_align) {
         continue;
       }
       int sz = mem->ty->size;
-      if (!pack_align)
+      if (!(mem->is_packed || pack_align))
         if (bits / (sz * 8) != (bits + mem->bit_width - 1) / (sz * 8))
           bits = align_to(bits, sz * 8);
 

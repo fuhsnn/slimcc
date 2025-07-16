@@ -55,6 +55,9 @@ void packed(void) {
 
   ASSERT(1, ({ typedef struct { char c; long long __attribute__((,,packed,,)) i; } S; offsetof(S, i); }));
   ASSERT(9, ({ typedef struct { char c; long long i [[,,gnu::packed,,gnu::packed,,]]; } S; sizeof(S); }));
+
+  ASSERT(6, ({ typedef struct { short s; int i [[gnu::packed]] : 24; char c; } S; sizeof(S); }));
+  ASSERT(6, ({ typedef struct { char c; int i : 24 __attribute__((packed)); short s; } S; sizeof(S); }));
 }
 
 int main() {
