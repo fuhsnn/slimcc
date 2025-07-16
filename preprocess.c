@@ -2008,6 +2008,7 @@ static Token *preprocess3(Token *tok) {
 
   Token attr_head = {0};
   Token *attr_cur = &attr_head;
+  bool add_newline = false;
 
   while (tok->kind != TK_EOF) {
     Token *start = tok;
@@ -2039,6 +2040,7 @@ static Token *preprocess3(Token *tok) {
         for (Token *t = start; t != tok; t = t->next)
           t->alloc_next = NULL;
         stash_attr(start, &attr_head, &attr_cur);
+        add_newline = true;
         continue;
       }
       if (equal(tok, "message"))
@@ -2065,6 +2067,11 @@ static Token *preprocess3(Token *tok) {
     stash_attr(tok, &attr_head, &attr_cur);
     cur = cur->next = tok;
     tok = tok->next;
+
+    if (add_newline) {
+      add_newline = false;
+      cur->at_bol = true;
+    }
     continue;
   }
   cur->next = tok;
