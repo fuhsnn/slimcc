@@ -8,6 +8,7 @@ int ptr_arith(void) {
     ASSERT(4, (long)p);
 #endif
     ASSERT(0, (long)p2);
+  return 1;
 }
 
 int f32(void) {
@@ -18,6 +19,7 @@ int f32(void) {
   ASSERT(1, 8.0f == atomic_fetch_sub(&f, 2.0f));
   ASSERT(1, 6.0f == f);
 #endif
+  return 1;
 }
 
 int f64(void) {
@@ -28,12 +30,13 @@ int f64(void) {
   ASSERT(1, 7.0 == atomic_fetch_add(&d, 2.0));
   ASSERT(1, 9.0 == d);
 #endif
+  return 1;
 }
 
 int main(void) {
-  ptr_arith();
-  f32();
-  f64();
+  ASSERT(1, ptr_arith());
+  ASSERT(1, f32());
+  ASSERT(1, f64());
 
   printf("OK\n");
 }

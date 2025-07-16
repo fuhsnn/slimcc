@@ -65,6 +65,15 @@ int main(void) {
 #pragma pack(8)
  { struct S { int a : 21, b : 21, c : 21; }; SASSERT(sizeof(struct S) == 8); SASSERT(_Alignof(struct S) == 4); }
 
+#if defined(__slimcc__) || defined(_MSC_VER)
+#pragma pack(1)
+  struct S {
+    char a;
+    _Alignas(1024) char b;
+  };
+  static_assert(2048 == sizeof(struct S));
+#endif
+
   printf("OK\n");
 }
 

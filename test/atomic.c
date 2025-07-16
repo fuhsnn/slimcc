@@ -11,21 +11,21 @@ static int incr(_Atomic int *p) {
   return newval;
 }
 
-static int add1(void *arg) {
+static void *add1(void *arg) {
   _Atomic int *x = arg;
   for (int i = 0; i < 1000*1000; i++)
     incr(x);
   return 0;
 }
 
-static int add2(void *arg) {
+static void *add2(void *arg) {
   _Atomic int *x = arg;
   for (int i = 0; i < 1000*1000; i++)
     (*x)++;
   return 0;
 }
 
-static int add3(void *arg) {
+static void *add3(void *arg) {
   _Atomic int *x = arg;
   for (int i = 0; i < 1000*1000; i++)
     *x += 5;
