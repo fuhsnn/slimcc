@@ -87,13 +87,13 @@ int main() {
   EASSERT(4, sizeof(float));
   EASSERT(8, sizeof(double));
 
-  EASSERT(4, sizeof(1f+2));
+  EASSERT(4, sizeof(1.f+2));
   EASSERT(8, sizeof(1.0+2));
-  EASSERT(4, sizeof(1f-2));
+  EASSERT(4, sizeof(1.f-2));
   EASSERT(8, sizeof(1.0-2));
-  EASSERT(4, sizeof(1f*2));
+  EASSERT(4, sizeof(1.f*2));
   EASSERT(8, sizeof(1.0*2));
-  EASSERT(4, sizeof(1f/2));
+  EASSERT(4, sizeof(1.f/2));
   EASSERT(8, sizeof(1.0/2));
 
   EASSERT(16, sizeof(long double));

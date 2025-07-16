@@ -84,7 +84,7 @@ int main() {
   0x10.1p0;
   .1E4f;
 
-  EASSERT(4, sizeof(8f));
+  EASSERT(4, sizeof(8.f));
   EASSERT(4, sizeof(0.3F));
   EASSERT(8, sizeof(0.));
   EASSERT(8, sizeof(.0));

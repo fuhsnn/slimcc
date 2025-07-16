@@ -33,7 +33,21 @@ bool fn() {
 
 #include "test.h"
 
+int ty_of_unqua(const int i1) {
+  typeof_unqual(i1) i2;
+
+  SASSERT(!__builtin_types_compatible_p(typeof(&i1), int *));
+  SASSERT(__builtin_types_compatible_p(typeof(&i1), int const*));
+
+  SASSERT(__builtin_types_compatible_p(typeof(&i2), int *));
+  SASSERT(!__builtin_types_compatible_p(typeof(&i2), int const*));
+
+  return i1;
+}
+
 int main() {
   ASSERT(true, fn());
+  ASSERT(1, ty_of_unqua(1));
+
   printf("OK\n");
 }
