@@ -78,6 +78,7 @@ typedef struct Member Member;
 typedef struct Relocation Relocation;
 typedef struct LocalLabel LocalLabel;
 typedef struct EnumVal EnumVal;
+typedef struct AsmContext AsmContext;
 
 //
 // alloc.c
@@ -486,16 +487,13 @@ struct Node {
   DeferStmt *defr_start;
   DeferStmt *defr_end;
 
-  // "asm" string literal
+  // "asm" blocks
   Token *asm_str;
   AsmParam *asm_outputs;
   AsmParam *asm_inputs;
   Token *asm_clobbers;
   AsmParam *asm_labels;
-  int output_tmp_gp;
-  int alt_frame_ptr;
-  int alt_frame_ptr2;
-  int clobber_mask;
+  AsmContext *asm_ctx; // backend defined
 
   // Atomic compare-and-swap
   Node *cas_addr;
