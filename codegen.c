@@ -3747,9 +3747,11 @@ static void asm_assign_oprands2(Reg *reg_list, size_t bofs) {
 
 static void asm_assign_oprands(void) {
   static Reg highbyte[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_BX, REG_X64_NULL};
-  static Reg legacy[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI, REG_X64_BX, REG_X64_BP, REG_X64_NULL};
+  static Reg legacy[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI,
+    REG_X64_BX, REG_X64_BP, REG_X64_NULL};
   static Reg free[] = {
-    REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI, REG_X64_R8, REG_X64_R9, REG_X64_R10, REG_X64_R11, REG_X64_NULL};
+    REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI,
+    REG_X64_R8, REG_X64_R9, REG_X64_R10, REG_X64_R11, REG_X64_NULL};
 
   asm_assign_oprands2(highbyte, offsetof(AsmParam, is_gp_highbyte));
   asm_assign_oprands2(legacy, offsetof(AsmParam, is_gp_legacy));
@@ -3775,6 +3777,26 @@ static void asm_assign_oprands(void) {
   }
 }
 
+static void asm_prepare_args(Node *node) {
+  for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next) {
+    if (ap->kind == ASMOP_REG)
+      ptr_convert(&ap->arg);
+    if (has_memop(ap->arg))
+      continue;
+    if (ap->kind == ASMOP_REG)
+      ap->var = new_lvar(NULL, ap->arg->ty);
+    else if (ap->kind == ASMOP_MEM)
+      ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
+  }
+  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+    if (ap->kind == ASMOP_REG)
+      ptr_convert(&ap->arg);
+    if (has_memop(ap->arg))
+      continue;
+    ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
+  }
+}
+
 static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
   for (Reg r = REG_X64_AX; r <= REG_X64_R15; r++) {
     if (use1[r] || (use2 && use2[r]))
@@ -3787,20 +3809,7 @@ static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
   error_tok(tok, "out of registers");
 }
 
-void prepare_inline_asm(Node *node) {
-  for (int i = 0; i < REG_X64_END; i++)
-    asm_use.in[i] = asm_use.out[i] = false;
-
-  asm_fill_ops(node);
-
-  int x87_clobber = 0;
-  asm_clobbers(node->asm_clobbers, &x87_clobber);
-
-  asm_constraint(node->asm_inputs, x87_clobber);
-  asm_constraint(node->asm_outputs, 0);
-
-  asm_assign_oprands();
-
+static void asm_prepare_regs(Node *node) {
   if (asm_use.in[REG_X64_BP] || asm_use.out[REG_X64_BP])
     node->alt_frame_ptr = acquire_gp(asm_use.in, asm_use.out, node->tok);
   if (asm_use.in[REG_X64_BX] || asm_use.out[REG_X64_BX])
@@ -3818,24 +3827,25 @@ void prepare_inline_asm(Node *node) {
   for (Reg r = REG_X64_R12; r <= REG_X64_BP; r++)
     if (asm_use.in[r] || asm_use.out[r])
       node->clobber_mask |= 1U << r;
+}
 
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
-    if (ap->kind == ASMOP_REG)
-      ptr_convert(&ap->arg);
-    if (has_memop(ap->arg))
-      continue;
-    ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
-  }
-  for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next) {
-    if (ap->kind == ASMOP_REG)
-      ptr_convert(&ap->arg);
-    if (has_memop(ap->arg))
-      continue;
-    if (ap->kind == ASMOP_REG)
-      ap->var = new_lvar(NULL, ap->arg->ty);
-    else if (ap->kind == ASMOP_MEM)
-      ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
-  }
+void prepare_inline_asm(Node *node) {
+  for (int i = 0; i < REG_X64_END; i++)
+    asm_use.in[i] = asm_use.out[i] = false;
+
+  asm_fill_ops(node);
+
+  int x87_clobber = 0;
+  asm_clobbers(node->asm_clobbers, &x87_clobber);
+
+  asm_constraint(node->asm_inputs, x87_clobber);
+  asm_constraint(node->asm_outputs, 0);
+
+  asm_assign_oprands();
+
+  asm_prepare_args(node);
+
+  asm_prepare_regs(node);
 }
 
 static char *reg_high_byte(Reg reg) {
@@ -4034,7 +4044,7 @@ static int asm_x87_inputs(void) {
   return cnt;
 }
 
-static void asm_x87_outputs(Node *node, int in_cnt) {
+static void asm_save_outputs_x87(Node *node, int in_cnt) {
   AsmParam *sort_buf[8] = {0};
   int out_cnt = 0;
   for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
@@ -4294,8 +4304,8 @@ static void gen_asm(Node *node) {
     Printftn("push %s", tmp_gp);
   }
 
+  asm_save_outputs_x87(node, x87_depth);
   asm_outputs(node);
-  asm_x87_outputs(node, x87_depth);
 
   clobber_all_regs();
   asm_pop_frame_ptr(node, prev_lvar_ptr);
