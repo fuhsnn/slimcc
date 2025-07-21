@@ -182,8 +182,8 @@ static Node *mul(Token **rest, Token *tok);
 static Node *cast(Token **rest, Token *tok);
 static Member *get_struct_member(Type *ty, Token *tok);
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind);
-static Type *struct_decl(Type *ty, int alt_align);
-static Type *union_decl(Type *ty, int alt_align);
+static Type *struct_decl(Type *ty, int alt_align, int pack_align);
+static Type *union_decl(Type *ty, int alt_align, int pack_align);
 static Node *postfix(Node *node, Token **rest, Token *tok);
 static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
@@ -679,14 +679,6 @@ static void pragma_pack_set(int val) {
     pack_stk.cnt = 1;
   }
   pack_stk.data[pack_stk.cnt - 1] = val;
-}
-
-static int pragma_pack_get(Type *ty) {
-  if (ty->is_packed)
-    return 1;
-  if (pack_stk.cnt)
-    return pack_stk.data[pack_stk.cnt - 1];
-  return 0;
 }
 
 static bool pragma_pack(Token **rest, Token *tok) {
@@ -4241,8 +4233,9 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *ty = new_type(kind, -1, 1);
 
-  bool_attr(tok, TK_ATTR, "packed", &ty->is_packed);
-  bool_attr(tok, TK_BATTR, "packed", &ty->is_packed);
+  bool is_packed = false;
+  bool_attr(tok, TK_ATTR, "packed", &is_packed);
+  bool_attr(tok, TK_BATTR, "packed", &is_packed);
 
   int alt_align = 0;
   attr_aligned(tok, &alt_align, TK_ATTR);
@@ -4272,13 +4265,16 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   struct_members(&tok, tok, ty);
 
   attr_aligned(tok, &alt_align, TK_ATTR);
-  bool_attr(tok, TK_ATTR, "packed", &ty->is_packed);
+  bool_attr(tok, TK_ATTR, "packed", &is_packed);
   *rest = tok;
 
+  int pack_align = is_packed ? 1 :
+    pack_stk.cnt ? pack_stk.data[pack_stk.cnt - 1] : 0;
+
   if (kind == TY_STRUCT)
-    ty = struct_decl(ty, alt_align);
+    ty = struct_decl(ty, alt_align, pack_align);
   else
-    ty = union_decl(ty, alt_align);
+    ty = union_decl(ty, alt_align, pack_align);
 
   if (!tag)
     return ty;
@@ -4294,7 +4290,6 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
         t->align = MAX(t->align, ty->align);
         t->members = ty->members;
         t->is_flexible = ty->is_flexible;
-        t->is_packed = ty->is_packed;
         t->origin = ty;
         t->tag = tag;
       }
@@ -4308,9 +4303,8 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   return ty;
 }
 
-static Type *struct_decl(Type *ty, int alt_align) {
+static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
   int bits = 0;
-  int pack_align = pragma_pack_get(ty);
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
     int mem_align = mem->is_packed ? 1 :
@@ -4356,9 +4350,7 @@ static Type *struct_decl(Type *ty, int alt_align) {
   return ty;
 }
 
-static Type *union_decl(Type *ty, int alt_align) {
-  int pack_align = pragma_pack_get(ty);
-
+static Type *union_decl(Type *ty, int alt_align, int pack_align) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
     int mem_align = mem->is_packed ? 1 :
       (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
