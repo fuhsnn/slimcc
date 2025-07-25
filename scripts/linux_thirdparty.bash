@@ -66,15 +66,27 @@ git_fetch() {
 }
 
 url_tar() {
-  mkdir -p "$2"
-  curl --retry 5 --retry-delay 60 -fL "$1" | tar xz -C "$2" --strip-components=1
-  cd "$2"
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar xz -C "$2" --strip-components=1
+ cd "$2"
+}
+
+url_bz() {
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar x --bz -C "$2" --strip-components=1
+ cd "$2"
+}
+
+url_lz() {
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar x --lzip -C "$2" --strip-components=1
+ cd "$2"
 }
 
 url_xz() {
-  mkdir -p "$2"
-  curl --retry 5 --retry-delay 60 -fL "$1" | tar x --xz -C "$2" --strip-components=1
-  cd "$2"
+ mkdir -p "$2"
+ curl --retry 5 --retry-delay 90 -fL "$1" | tar x --xz -C "$2" --strip-components=1
+ cd "$2"
 }
 
 install_libtool() {
@@ -108,7 +120,7 @@ test_bfs() {
 }
 
 test_bison() {
- url_xz https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.xz bison
+ url_lz https://ftpmirror.gnu.org/gnu/bison/bison-3.8.2.tar.lz bison
  ./configure
  make check
 }
@@ -186,7 +198,7 @@ test_coreutils() {
 }
 
 test_cpio() {
- url_tar https://ftpmirror.gnu.org/gnu/cpio/cpio-2.15.tar.gz cpio
+ url_bz https://ftpmirror.gnu.org/gnu/cpio/cpio-2.15.tar.bz2 cpio
  ./configure
  make check
 }
@@ -248,7 +260,7 @@ test_fossil() {
 }
 
 test_gawk() {
- url_xz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz gawk
+ url_lz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.lz gawk
  fix_configure extension/configure
  ./configure --disable-pma # pma segfault in docker
  make check
@@ -271,7 +283,7 @@ test_glib() {
 }
 
 test_gmake() {
- url_tar https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.gz gmake
+ url_lz https://ftpmirror.gnu.org/gnu/make/make-4.4.1.tar.lz gmake
  fix_and_configure
  make check
 }
@@ -811,7 +823,7 @@ test_wasm3() {
 }
 
 test_wget() {
- url_tar https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.0.tar.gz wget
+ url_lz https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.0.tar.lz wget
  fix_and_configure
  make check
 }
@@ -897,7 +909,7 @@ build_freetype() {
 }
 
 build_gcc() {
- url_tar https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.gz gcc47
+ url_bz https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.bz2 gcc47
  export -f fix_configure
  find . -name 'configure' -exec bash -c 'fix_configure "$0"' {} \;
  sed -i 's/^\s*struct ucontext/ucontext_t/g' ./libgcc/config/i386/linux-unwind.h

@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  gcc-12 \
  file binutils libc-dev libgcc-12-dev \
  make cmake pkg-config \
+ zip lzip \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates locales \
  tcl-dev bison flex re2c \
@@ -34,8 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  libpng-dev \
  # yash
  ed \
- # busybox
- zip \
  # ruby
  ruby ruby-psych libyaml-dev
 
