@@ -299,6 +299,7 @@ struct Obj {
   // Function
   bool is_inline;
   bool only_inline;
+  bool is_naked;
   bool returns_twice;
   bool dont_reuse_stk;
   bool dealloc_vla;

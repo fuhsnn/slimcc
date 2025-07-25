@@ -1936,6 +1936,7 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("constructor");
     PutAttr("destructor");
     PutAttr("gnu_inline");
+    PutAttr("naked");
     PutAttr("packed");
     PutAttr("returns_twice");
     PutAttr("section");

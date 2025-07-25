@@ -337,6 +337,11 @@ static bool has_defr(Node *node) {
   return node->defr_start != node->defr_end;
 }
 
+static bool is_plain_asm(Node *node) {
+  return !node->asm_outputs && !node->asm_inputs &&
+    !node->asm_clobbers && !node->asm_labels;
+}
+
 static RegSz bitwidth_to_regsz(int bits) {
   switch(bits) {
   case 64: return REGSZ_64;
@@ -2559,6 +2564,25 @@ static void gen_expr(Node *node) {
   return;
 }
 
+static void gen_stmt_naked(Node *node) {
+  switch (node->kind) {
+  case ND_NULL_STMT:
+    return;
+  case ND_BLOCK:
+    if (has_defr(node))
+      break;
+    for (Node *n = node->body; n; n = n->next)
+      gen_stmt_naked(n);
+    return;
+  case ND_ASM:
+    if (!is_plain_asm(node))
+      break;
+    gen_asm(node);
+    return;
+  }
+  error_tok(node->tok, "unsupported statement in naked function");
+}
+
 static void gen_stmt(Node *node) {
   if (opt_g)
     print_loc(node->tok);
@@ -4357,8 +4381,7 @@ static void asm_pop_frame_ptr(Node *node, char *prev) {
 }
 
 static void gen_asm(Node *node) {
-  if (!node->asm_outputs && !node->asm_inputs &&
-    !node->asm_clobbers && !node->asm_labels) {
+  if (is_plain_asm(node)) {
     Printftn("%s", node->asm_str->str);
     return;
   }
@@ -4631,6 +4654,13 @@ typedef struct {
   size_t buflen;
 } FuncObj;
 
+static void emit_text_end(Obj *fn) {
+  Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
+
+  fclose(output_file);
+  output_file = NULL;
+}
+
 void emit_text(Obj *fn) {
   FuncObj *fnobj = fn->output = malloc(sizeof(FuncObj));
   output_file = open_memstream(&fnobj->buf, &fnobj->buflen);
@@ -4653,6 +4683,13 @@ void emit_text(Obj *fn) {
     Printstn(".text");
   Printftn(".type \"%s\", @function", asm_name(fn));
   Printfsn("\"%s\":", asm_name(fn));
+
+  if (fn->is_naked) {
+    gen_stmt_naked(fn->body);
+
+    emit_text_end(fn);
+    return;
+  }
 
   bool rtn_by_stk = is_mem_class(fn->ty->return_ty);
   int gp_count = rtn_by_stk;
@@ -4775,10 +4812,9 @@ void emit_text(Obj *fn) {
     Printstn("mov -8(%%rbp), %%rbx");
   Printstn("leave");
   Printstn("ret");
-  Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
 
-  fclose(output_file);
-  output_file = NULL;
+  current_fn = NULL;
+  emit_text_end(fn);
 
   {
     char fmtbuf[STRBUF_SZ];
@@ -4794,7 +4830,6 @@ void emit_text(Obj *fn) {
         memset(p, ' ', len - 1);
     }
   }
-  current_fn = NULL;
 }
 
 // Logic should be in sync with gen_funcall_args()
