@@ -643,8 +643,10 @@ void run_subprocess(char **argv) {
 
   // Wait for the child process to finish.
   int status;
-  if (wait(&status) <= 0 || status != 0)
+  if (wait(&status) <= 0 || status != 0) {
+    fprintf(stderr, "exec failed: %s\n", argv[0]);
     exit(1);
+  }
 }
 
 static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
