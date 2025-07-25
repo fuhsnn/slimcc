@@ -1355,12 +1355,16 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
 
   if (consume(&tok, tok, "[")) {
     Type *qty = NULL;
-    if (tok->kind == TK_TYPEKW && !equal(tok, "static")) {
+    bool has_static = consume(&tok, tok, "static");
+    if (tok->kind == TK_TYPEKW) {
       qty = new_type(TY_VOID, 0, 0);
       pointer_qualifiers(&tok, tok, qty);
+      if (!has_static)
+        has_static = consume(&tok, tok, "static");
     }
-    consume(&tok, tok, "static");
     Type *ty2 = array_dimensions(rest, tok, ty);
+    if (has_static && ty2->array_len < 0)
+      error_tok(tok, "'static' requires an array size");
     ty2->qty = qty;
     return ty2;
   }

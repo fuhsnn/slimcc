@@ -1,6 +1,6 @@
 #include "test.h"
 
-void paramty(int a[volatile], int sz, int b[const restrict static sz]) {
+void paramty(int a[volatile], int sz, int b[static const restrict sz]) {
   SASSERT(1 == _Generic(a, int *: 1, int volatile*: 0));
   SASSERT(1 == _Generic(a, int volatile*: 0, int *: 1));
 
