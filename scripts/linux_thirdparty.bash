@@ -241,6 +241,12 @@ test_flex() {
  make check
 }
 
+test_fossil() {
+ github_tar drhsqlite fossil-mirror version-2.26
+ CC_FOR_BUILD=$CC ./configure --json
+ make test
+}
+
 test_gawk() {
  url_xz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz gawk
  fix_configure extension/configure

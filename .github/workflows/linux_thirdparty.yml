@@ -81,6 +81,7 @@ jobs:
           - { vm: main, proj: test_elk }
           - { vm: main, proj: test_espruino }
           - { vm: main, proj: test_file }
+          - { vm: main, proj: test_fossil }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_glib }
