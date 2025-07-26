@@ -2179,7 +2179,9 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   var->ty = init->ty;
 
   if (ty->kind == TY_STRUCT && ty->is_flexible) {
+    Type *orig = ty->origin ? ty->origin : ty;
     ty = copy_type(ty);
+    ty->origin = orig;
 
     Member head = {0};
     Member *cur = &head;

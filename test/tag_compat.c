@@ -71,6 +71,20 @@ int flexible(void) {
   TAG_COMPAT_CHK(1, flex, typeof(flex2) );
   free(flex), free(flex2);
 
+  {
+    struct S { char c; char arr[]; };
+    const struct S s0;
+    static struct S { char c; char arr[]; } s = {1,{2,3,4}};
+    typedef struct S ST;
+    static_assert(_Generic(s0, typeof(s):1));
+    static_assert(_Generic(s0, ST:1));
+    {
+      static const struct S s2 = {1,{1,2,3,4,5}};
+      static_assert(_Generic(s2, ST:1));
+      static_assert(_Generic(s2, typeof(s):1));
+      static_assert(_Generic(typeof(s2), typeof(s0):1));
+    }
+  }
   return 1;
 }
 
