@@ -787,6 +787,8 @@ void add_type(Node *node) {
       error_tok(node->cas_addr->tok, "pointer expected");
     node->ty = node->lhs->ty->base;
     return;
+  case ND_NULL_EXPR:
+  case ND_THREAD_FENCE:
   case ND_VA_START:
   case ND_VA_COPY:
     node->ty = ty_void;

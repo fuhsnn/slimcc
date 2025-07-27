@@ -4824,6 +4824,12 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     return atomic_op(binary, true);
   }
 
+  if (equal(tok, "__builtin_atomic_thread_fence")) {
+    Node *node = new_node(ND_THREAD_FENCE, tok);
+    *rest = skip(skip(tok->next, "("), ")");
+    return node;
+  }
+
   if (equal(tok, "__builtin_constant_p")) {
     Node *node = new_node(ND_NUM, tok);
     tok = skip(tok->next, "(");
@@ -4885,7 +4891,6 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 
   if (equal(tok, "__builtin_unreachable")) {
     Node *node = new_node(ND_NULL_EXPR, tok);
-    node->ty = ty_void;
     *rest = skip(skip(tok->next, "("), ")");
     return node;
   }

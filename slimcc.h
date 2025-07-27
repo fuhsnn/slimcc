@@ -441,6 +441,7 @@ typedef enum {
   ND_CKD_ARITH,
   ND_FRAME_ADDR,
   ND_RTN_ADDR,
+  ND_THREAD_FENCE,
 } NodeKind;
 
 typedef struct CaseRange CaseRange;

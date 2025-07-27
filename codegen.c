@@ -2455,6 +2455,9 @@ static void gen_expr2(Node *node, bool is_void) {
     Printftn("xchg %s, (%s)", reg_ax(sz), reg);
     return;
   }
+  case ND_THREAD_FENCE:
+    Printstn("mfence");
+    return;
   case ND_ALLOCA:
   case ND_ALLOCA_ZINIT:
     gen_expr(node->lhs);
