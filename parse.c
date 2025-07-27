@@ -1299,23 +1299,23 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
 
 // array-dimensions = ("static" | "restrict")* const-expr? "]" type-suffix
 static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
-  if (consume(&tok, tok, "]") ||
-      (equal(tok, "*") && consume(&tok, tok->next, "]"))) {
-    if (equal(tok, "["))
-      ty = array_dimensions(&tok, tok->next, ty);
-    *rest = tok;
-    return array_of(ty, -1);
+  Node *expr = NULL;
+  if (!(consume(&tok, tok, "]") || (equal(tok, "*") && consume(&tok, tok->next, "]")))) {
+    expr = assign(&tok, tok);
+    add_type(expr);
+    if (!is_integer(expr->ty))
+      error_tok(tok, "size of array not integer");
+    tok = skip(tok, "]");
   }
-
-  Node *expr = assign(&tok, tok);
-  add_type(expr);
-  if (!is_integer(expr->ty))
-    error_tok(tok, "size of array not integer");
-  tok = skip(tok, "]");
 
   if (equal(tok, "["))
     ty = array_dimensions(&tok, tok->next, ty);
+  if (ty->size < 0)
+    error_tok(tok, "array has incomplete type");
+
   *rest = tok;
+  if (!expr)
+    return array_of(ty, -1);
 
   int64_t array_len;
   if (is_const_expr(expr, &array_len)) {
