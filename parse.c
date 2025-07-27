@@ -63,7 +63,8 @@ struct Initializer {
 
   enum {
     INIT_NONE = 0,
-    INIT_FLEXIBLE,
+    INIT_FLEX,
+    INIT_FLEX_NESTED,
     INIT_LIST,
     INIT_EXPR,
     INIT_TOK
@@ -480,14 +481,10 @@ static void free_initializers(Initializer *init) {
   }
 }
 
-static void new_initializer(Initializer *init, Type *ty, bool is_flexible) {
+static void new_initializer(Initializer *init, Type *ty, bool let_flexible) {
   init->ty = ty;
 
   if (ty->kind == TY_ARRAY) {
-    if (is_flexible && ty->size < 0) {
-      init->kind = INIT_FLEXIBLE;
-      return;
-    }
     init->kind = INIT_LIST;
     init->mem_arr = ty->array_len ? calloc(ty->array_len, sizeof(Initializer)) : NULL;
     init->mem_cnt = ty->array_len;
@@ -509,9 +506,9 @@ static void new_initializer(Initializer *init, Type *ty, bool is_flexible) {
     for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
       Initializer *child = &init->mem_arr[mem->idx];
 
-      if (!mem->next && ty->kind == TY_STRUCT && is_flexible && ty->is_flexible) {
+      if (!mem->next && ty->is_flexible) {
         child->ty = mem->ty;
-        child->kind = INIT_FLEXIBLE;
+        child->kind = let_flexible ? INIT_FLEX : INIT_FLEX_NESTED;
         break;
       }
       new_initializer(child, mem->ty, false);
@@ -1868,7 +1865,7 @@ static void string_initializer(Token *tok, Initializer *init) {
   if (tok->ty->base->size != init->ty->base->size)
     error_tok(tok, "array initialization with string of different character size");
 
-  if (init->kind == INIT_FLEXIBLE)
+  if (init->kind == INIT_FLEX)
     new_initializer(init, array_of(init->ty->base, tok->ty->array_len), false);
 
   int len = MIN(init->ty->array_len, tok->ty->array_len);
@@ -2011,7 +2008,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
 // of initializer elements.
 static int count_array_init_elements(Token *tok, Type *ty) {
   Initializer dummy = {0};
-  new_initializer(&dummy, ty->base, true);
+  new_initializer(&dummy, ty->base, false);
 
   int i = 0, max = 0;
   while (comma_list(&tok, &tok, "}", i)) {
@@ -2061,27 +2058,32 @@ static void list_initializer(Token **rest, Token *tok, Initializer *init, int id
 //             | struct-initializer | union-initializer
 //             | assign
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
-  if (init->ty->kind == TY_ARRAY && is_integer(init->ty->base)) {
-    Token *str_tok;
-    Token *tok2;
-    if (equal(tok, "{") && is_str_tok(&tok2, tok->next, &str_tok)) {
-      if (consume(rest, tok2, "}")) {
+  if (init->ty->kind == TY_ARRAY) {
+    if (init->kind == INIT_FLEX_NESTED) {
+      if (consume(&tok, tok, "{") && consume(rest, tok, "}"))
+        return;
+      error_tok(tok, "nested initialization of flexible array member");
+    }
+
+    if (is_integer(init->ty->base)) {
+      Token *str_tok;
+      Token *tok2;
+      if (equal(tok, "{") && is_str_tok(&tok2, tok->next, &str_tok)) {
+        if (consume(rest, tok2, "}")) {
+          string_initializer(str_tok, init);
+          return;
+        }
+      } else if (is_str_tok(rest, tok, &str_tok)) {
         string_initializer(str_tok, init);
         return;
       }
-    } else if (is_str_tok(rest, tok, &str_tok)) {
-      string_initializer(str_tok, init);
-      return;
     }
-  }
 
-  if (init->ty->kind == TY_ARRAY) {
     bool has_brace = consume(&tok, tok, "{");
-    if (init->kind == INIT_FLEXIBLE) {
+    if (init->kind == INIT_FLEX) {
       int len = count_array_init_elements(tok, init->ty);
       new_initializer(init, array_of(init->ty->base, len), false);
     }
-
     if (has_brace)
       braced_initializer(rest, tok, init);
     else
@@ -2174,11 +2176,17 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     return;
   }
 
-  new_initializer(init, ty, true);
+  if (ty->kind == TY_ARRAY && ty->size < 0) {
+    init->ty = ty;
+    init->kind = INIT_FLEX;
+  } else {
+    new_initializer(init, ty, true);
+  }
+
   initializer2(rest, tok, init);
   var->ty = init->ty;
 
-  if (ty->kind == TY_STRUCT && ty->is_flexible) {
+  if (ty->is_flexible) {
     Type *orig = ty->origin ? ty->origin : ty;
     ty = copy_type(ty);
     ty->origin = orig;
@@ -2221,7 +2229,7 @@ static Node *init_num_tok(Initializer *init, Node *node) {
 }
 
 static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
-  if (init->kind == INIT_NONE || init->kind == INIT_FLEXIBLE)
+  if (init->kind == INIT_NONE || init->kind == INIT_FLEX || init->kind == INIT_FLEX_NESTED)
     return expr;
 
   if (init->kind == INIT_LIST) {
@@ -2317,7 +2325,7 @@ static long double read_double_buf(char *buf, Type *ty) {
 
 static Relocation *
 write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int offset, EvalKind ev_kind) {
-  if (init->kind == INIT_NONE || init->kind == INIT_FLEXIBLE)
+  if (init->kind == INIT_NONE || init->kind == INIT_FLEX || init->kind == INIT_FLEX_NESTED)
     return cur;
 
   if (init->kind == INIT_LIST) {
@@ -5000,7 +5008,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (ty->size < 0)
       error_tok(tok, "sizeof applied to incomplete type");
 
-    if (ty->kind == TY_STRUCT && ty->is_flexible) {
+    if (ty->is_flexible) {
       Member *mem = ty->members;
       while (mem->next)
         mem = mem->next;

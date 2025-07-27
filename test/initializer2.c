@@ -47,6 +47,45 @@ int c23_zinit(void) {
   return 1;
 }
 
+int flexible_structs(void) {
+  struct S {
+    char c;
+    char arr[];
+  };
+
+  static struct S arr1[] = {1, {}, 2, {}, 3};
+  ASSERT(1, arr1[0].c);
+  ASSERT(2, arr1[1].c);
+  ASSERT(3, arr1[2].c);
+  ASSERT(2, &arr1[2] - &arr1[0]);
+
+  static struct S s3 = {42, {}};
+
+  struct S arr2[3];
+  arr2[2].c = arr1[0].c;
+  arr2[1] = arr1[2];
+  arr2[0] = s3;
+  ASSERT(42, arr2[0].c);
+  ASSERT(3, arr2[1].c);
+  ASSERT(1, arr2[2].c);
+
+  union U {
+    char arr[2];
+    struct S s;
+  };
+  union U u1 = {0};
+  ASSERT(0, u1.arr[0]);
+  ASSERT(0, u1.arr[1]);
+  u1.s = s3;
+  ASSERT(42, u1.arr[0]);
+  ASSERT(0, u1.arr[1]);
+
+  union U u2 = {.s = s3};
+  ASSERT(42, u2.arr[0]);
+
+  return 1;
+}
+
 int main(void) {
   ASSERT(3, *p1);
 
@@ -94,8 +133,8 @@ int main(void) {
     ASSERT(7, s[1].b.i);
     ASSERT(0, s[1].j);
   }
-
   ASSERT(1, c23_zinit());
+  ASSERT(1, flexible_structs());
 
   printf("OK\n");
 }
