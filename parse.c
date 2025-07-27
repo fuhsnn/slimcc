@@ -2229,10 +2229,23 @@ static Node *init_num_tok(Initializer *init, Node *node) {
 }
 
 static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
-  if (init->kind == INIT_NONE || init->kind == INIT_FLEX || init->kind == INIT_FLEX_NESTED)
+  switch (init->kind) {
+  case INIT_NONE:
+  case INIT_FLEX:
+  case INIT_FLEX_NESTED:
     return expr;
+  case INIT_TOK:
+  case INIT_EXPR: {
+    Node *node = init_num_tok(init, new_node(ND_NUM, init->tok));
 
-  if (init->kind == INIT_LIST) {
+    if (ty->kind == TY_ARRAY)
+      error_tok(node->tok, "array initializer must be an initializer list");
+
+    Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), node, tok);
+    add_type(n);
+    return expr->next = n;
+  }
+  case INIT_LIST: {
     if (ty->kind == TY_ARRAY) {
       for (int i = 0; i < ty->array_len; i++) {
         InitDesg desg2 = {.next = desg, .idx = i};
@@ -2251,20 +2264,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
       return expr;
     }
   }
-
-  if (init->kind == INIT_EXPR || init->kind == INIT_TOK) {
-    if (init->kind == INIT_TOK) {
-      init->expr = init_num_tok(init, new_node(ND_NUM, init->tok));
-      init->kind = INIT_EXPR;
-    }
-    if (ty->kind == TY_ARRAY)
-      error_tok(init->expr->tok, "array initializer must be an initializer list");
-
-    Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), init->expr, tok);
-    add_type(n);
-    return expr->next = n;
   }
-
   internal_error();
 }
 
@@ -2325,10 +2325,79 @@ static long double read_double_buf(char *buf, Type *ty) {
 
 static Relocation *
 write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int offset, EvalKind ev_kind) {
-  if (init->kind == INIT_NONE || init->kind == INIT_FLEX || init->kind == INIT_FLEX_NESTED)
+  switch (init->kind) {
+  case INIT_NONE:
+  case INIT_FLEX:
+  case INIT_FLEX_NESTED:
     return cur;
+  case INIT_TOK:
+  case INIT_EXPR: {
+    Node *node = init_num_tok(init, &(Node){.kind = ND_NUM, .tok = init->tok});
+    node = assign_cast(ty, node);
 
-  if (init->kind == INIT_LIST) {
+    if (ty->kind == TY_ARRAY)
+      error_tok(node->tok, "array initializer must be an initializer list");
+
+    // Direct initialization with a const variable
+    if (init->kind == INIT_EXPR) {
+      int sofs;
+      Obj *var = NULL;
+      if (is_compatible(ty, init->expr->ty))
+        var = eval_var(init->expr, &sofs, false);
+
+      if (var && var->init_data && !var->is_weak &&
+        (is_const_var(var) || var->is_compound_lit)) {
+        Relocation *srel= var->rel;
+        while (srel && srel->offset < sofs)
+          srel = srel->next;
+
+        for (int pos = 0; pos < ty->size && (pos + sofs) < var->ty->size;) {
+          if (srel && srel->offset == (pos + sofs)) {
+            cur = cur->next = ast_arena_calloc(sizeof(Relocation));
+            cur->offset = (pos + offset);
+            cur->label = srel->label;
+            cur->addend = srel->addend;
+            srel = srel->next;
+            pos += 8;
+          } else {
+            buf[(pos + offset)] = var->init_data[(pos + sofs)];
+            pos++;
+          }
+        }
+        return cur;
+      }
+    }
+
+    if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
+      EvalContext ctx = {.kind = (ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
+      int64_t val = eval2(node, &ctx);
+      if (ctx.label) {
+        Relocation *rel = ast_arena_calloc(sizeof(Relocation));
+        rel->offset = offset;
+        rel->label = ctx.label;
+        rel->addend = val;
+        return cur->next = rel;
+      }
+      memcpy(buf + offset, &val, ty->size);
+      return cur;
+    }
+
+    switch (ty->kind) {
+    case TY_FLOAT: BUFF_CAST(float, (buf + offset)) = eval_double(node); return cur;
+    case TY_DOUBLE: BUFF_CAST(double, (buf + offset)) = eval_double(node); return cur;
+    case TY_LDOUBLE: BUFF_CAST(long double, (buf + offset)) = eval_double(node); return cur;
+    case TY_BITINT: {
+      uint64_t *data = eval_bitint(node);
+      if (ty->bit_cnt < ty->size * 8)
+        eval_bitint_sign_ext(ty->bit_cnt, data, ty->size * 8, ty->is_unsigned);
+      memcpy(buf + offset, data, ty->size);
+      free(data);
+      return cur;
+    }
+    }
+    error_tok(node->tok, "unknown initializer");
+  }
+  case INIT_LIST: {
     if (ty->kind == TY_ARRAY) {
       int sz = ty->base->size;
       for (int i = 0; i < ty->array_len; i++)
@@ -2389,79 +2458,6 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
       return cur;
     }
   }
-
-  if (init->kind == INIT_EXPR || init->kind == INIT_TOK) {
-    Node *node = init_num_tok(init, &(Node){.kind = ND_NUM, .tok = init->tok});
-    node = assign_cast(ty, node);
-
-    if (ty->kind == TY_ARRAY)
-      error_tok(node->tok, "array initializer must be an initializer list");
-
-    // Direct initialization with a const variable
-    if (init->kind == INIT_EXPR) {
-      int sofs;
-      Obj *var = NULL;
-      if (is_compatible(ty, init->expr->ty))
-        var = eval_var(init->expr, &sofs, false);
-
-      if (var && var->init_data && !var->is_weak &&
-        (is_const_var(var) || var->is_compound_lit)) {
-        Relocation *srel= var->rel;
-        while (srel && srel->offset < sofs)
-          srel = srel->next;
-
-        for (int pos = 0; pos < ty->size && (pos + sofs) < var->ty->size;) {
-          if (srel && srel->offset == (pos + sofs)) {
-            cur = cur->next = ast_arena_calloc(sizeof(Relocation));
-            cur->offset = (pos + offset);
-            cur->label = srel->label;
-            cur->addend = srel->addend;
-
-            srel = srel->next;
-            pos += 8;
-          } else {
-            buf[(pos + offset)] = var->init_data[(pos + sofs)];
-            pos++;
-          }
-        }
-        return cur;
-      }
-    }
-
-    if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
-      EvalContext ctx = {.kind = (ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
-      int64_t val = eval2(node, &ctx);
-      if (ctx.label) {
-        Relocation *rel = ast_arena_calloc(sizeof(Relocation));
-        rel->offset = offset;
-        rel->label = ctx.label;
-        rel->addend = val;
-        return cur->next = rel;
-      }
-      memcpy(buf + offset, &val, ty->size);
-      return cur;
-    }
-
-    switch (ty->kind) {
-    case TY_FLOAT:
-      BUFF_CAST(float, (buf + offset)) = eval_double(node);
-      return cur;
-    case TY_DOUBLE:
-      BUFF_CAST(double, (buf + offset)) = eval_double(node);
-      return cur;
-    case TY_LDOUBLE:
-      BUFF_CAST(long double, (buf + offset)) = eval_double(node);
-      return cur;
-    case TY_BITINT: {
-      uint64_t *data = eval_bitint(node);
-      if (ty->bit_cnt < ty->size * 8)
-        eval_bitint_sign_ext(ty->bit_cnt, data, ty->size * 8, ty->is_unsigned);
-      memcpy(buf + offset, data, ty->size);
-      free(data);
-      return cur;
-    }
-    }
-    error_tok(node->tok, "unknown initializer");
   }
   internal_error();
 }
