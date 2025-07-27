@@ -31,6 +31,7 @@ char *opt_visibility;
 StdVer opt_std;
 bool opt_fdefer_ts;
 bool opt_short_enums;
+bool opt_ms_anon_struct;
 
 static StringArray opt_imacros;
 static StringArray opt_include;
@@ -428,6 +429,9 @@ static int parse_args(int argc, char **argv) {
         set_bool(arg, b, "data-sections", &opt_data_sections) ||
         set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
         set_bool(arg, b, "short-enums", &opt_short_enums))
+        continue;
+
+      if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct))
         continue;
 
       if (b) {

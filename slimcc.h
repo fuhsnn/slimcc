@@ -824,6 +824,7 @@ extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
 extern bool opt_fdefer_ts;
 extern bool opt_short_enums;
+extern bool opt_ms_anon_struct;
 
 extern bool opt_pie;
 extern bool opt_nopie;

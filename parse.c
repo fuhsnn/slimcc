@@ -607,8 +607,10 @@ static Token *str_tok(Token **rest, Token *tok) {
   return tok;
 }
 
-static void push_tag_scope(Token *tok, Type *ty) {
-  hashmap_put2(&scope->tags, tok->loc, tok->len, ty);
+static void push_tag_scope(Token *tag, Type *ty) {
+  tag->is_live = true;
+  ty->tag = tag;
+  hashmap_put2(&scope->tags, tag->loc, tag->len, ty);
 }
 
 static void chain_expr(Node **lhs, Node *rhs) {
@@ -1435,7 +1437,7 @@ static Type *typename(Token **rest, Token *tok) {
   return declarator(rest, tok, ty, NULL);
 }
 
-static void new_enum(Type **ty, Token *tag) {
+static void new_enum(Type **ty) {
   if (*ty) {
     (*ty) = copy_type(unqual(*ty));
   } else {
@@ -1443,7 +1445,6 @@ static void new_enum(Type **ty, Token *tag) {
     (*ty)->is_int_enum = true;
   }
   (*ty)->is_enum = true;
-  (*ty)->tag = tag;
 }
 
 static bool chk_enum_tag(Type *tag_ty, Type *fixed_ty, Token *tag) {
@@ -1482,7 +1483,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     if (chk_enum_tag(tag_ty, ty, tag))
       return tag_ty;
 
-    new_enum(&ty, tag);
+    new_enum(&ty);
     push_tag_scope(tag, ty);
     return ty;
   }
@@ -1507,7 +1508,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     }
     ty = tag_ty;
   } else {
-    new_enum(&ty, tag);
+    new_enum(&ty);
     if (tag)
       push_tag_scope(tag, ty);
   }
@@ -4221,8 +4222,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     Type *basety = declspec(&tok, tok, &attr);
 
     // Anonymous struct member
-    if (equal(tok, ";") &&
-      (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
+    if (equal(tok, ";") && (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
+      if (basety->size < 0)
+        error_tok(tok, "member has incomplete type");
+      if (basety->tag && !opt_ms_anon_struct)
+        error_tok(tok, "enable MSVC anonymous struct extension with `-fms-anon-struct`");
       Member *mem = ast_arena_calloc(sizeof(Member));
       mem->ty = basety;
 
@@ -4325,9 +4329,6 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   if (!tag)
     return ty;
 
-  ty->tag = tag;
-  tag->is_live = true;
-
   Type *ty2 = find_tag_in_scope(tag);
   if (ty2) {
     if (ty2->size < 0) {
@@ -4337,10 +4338,10 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
         t->members = ty->members;
         t->is_flexible = ty->is_flexible;
         t->origin = ty;
-        t->tag = tag;
       }
       return ty2;
     }
+    ty->tag = tag;
     if (!(opt_std >= STD_C23 && is_compatible(ty, ty2)))
       error_tok(tag, "tag redeclaration");
     return ty2;
