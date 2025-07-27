@@ -480,6 +480,8 @@ Node *assign_cast(Type *to_ty, Node *expr) {
       expr = new_cast(expr, to_ty);
     else
       error_tok(expr->tok, "invalid assignment");
+  } else if (expr->ty->size != to_ty->size) {
+    error_tok(expr->tok, "invalid assignment");
   }
   return expr;
 }

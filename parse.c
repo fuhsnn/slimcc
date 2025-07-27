@@ -2162,8 +2162,8 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     init->ty = ty;
     init->kind = INIT_EXPR;
     init->expr = assign(rest, tok);
-    add_type(init->expr);
-    *ty = *ptr_decay(init->expr->ty);
+    ptr_convert(&init->expr);
+    *ty = *init->expr->ty;
 
     ty->origin = init->expr->ty->origin ? init->expr->ty->origin : init->expr->ty;
     ty->is_atomic = is_atomic;
