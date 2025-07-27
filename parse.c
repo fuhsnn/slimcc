@@ -489,7 +489,7 @@ static void new_initializer(Initializer *init, Type *ty, bool let_flexible) {
     init->mem_arr = ty->array_len ? calloc(ty->array_len, sizeof(Initializer)) : NULL;
     init->mem_cnt = ty->array_len;
 
-    for (int i = 0; i < ty->array_len; i++)
+    for (int i = 0; i < init->mem_cnt; i++)
       new_initializer(&init->mem_arr[i], ty->base, false);
     return;
   }
@@ -2192,15 +2192,9 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     ty = copy_type(ty);
     ty->origin = orig;
 
-    Member head = {0};
-    Member *cur = &head;
-    for (Member *mem = ty->members; mem; mem = mem->next) {
-      cur = cur->next = ast_arena_malloc(sizeof(Member));
-      *cur = *mem;
-    }
-    cur->ty = init->mem_arr[cur->idx].ty;
-    ty->size += cur->ty->size;
-    ty->members = head.next;
+    Initializer *i = &init->mem_arr[init->mem_cnt - 1];
+    if (i->kind == INIT_LIST)
+      ty->size += i->ty->size;
     var->ty = ty;
   }
 }
@@ -2248,7 +2242,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
   }
   case INIT_LIST: {
     if (ty->kind == TY_ARRAY) {
-      for (int i = 0; i < ty->array_len; i++) {
+      for (int i = 0; i < init->mem_cnt; i++) {
         InitDesg desg2 = {.next = desg, .idx = i};
         expr = create_lvar_init(expr, &init->mem_arr[i], ty->base, &desg2, tok);
       }
@@ -2401,7 +2395,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   case INIT_LIST: {
     if (ty->kind == TY_ARRAY) {
       int sz = ty->base->size;
-      for (int i = 0; i < ty->array_len; i++)
+      for (int i = 0; i < init->mem_cnt; i++)
         cur = write_gvar_data(cur, &init->mem_arr[i], ty->base, buf, offset + sz * i, ev_kind);
       return cur;
     }
@@ -4209,6 +4203,7 @@ static Node *unary(Token **rest, Token *tok) {
 static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {0};
   Member *cur = &head;
+  Token *flex_tok = NULL;
 
   while (!equal(tok, "}")) {
     if (consume(&tok, tok, ";"))
@@ -4258,24 +4253,25 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           error_tok(tok, "bit-field with negative width");
         attr_aligned(tok, &mem->alt_align, TK_ATTR);
       }
-
       bool_attr(tok, TK_ATTR, "packed", &mem->is_packed);
-
       cur = cur->next = mem;
+
+      if (mem->ty->size < 0) {
+        if (mem->ty->kind == TY_ARRAY && ty->kind == TY_STRUCT && !flex_tok) {
+          flex_tok = tok;
+          continue;
+        }
+        error_tok(flex_tok ? flex_tok : tok, "member has incomplete type");
+      }
     }
   }
+  *rest = tok->next;
 
-  // If the last element is an array of incomplete type, it's
-  // called a "flexible array member". It should behave as if
-  // if were a zero-sized array.
-  if (cur != &head && cur->ty->kind == TY_ARRAY && cur->ty->array_len < 0) {
-    if (ty->kind != TY_STRUCT)
-      error_tok(tok, "flexible array member not allowed in union");
-    cur->ty = array_of(cur->ty->base, 0);
+  if (flex_tok) {
+    if (cur->ty->size >= 0)
+      error_tok(flex_tok, "member has incomplete type");
     ty->is_flexible = true;
   }
-
-  *rest = tok->next;
   ty->members = head.next;
 }
 
@@ -4398,8 +4394,13 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
       continue;
     }
     bits = align_to(bits, mem_align * 8);
-
     mem->offset = bits / 8;
+
+    if (mem->ty->size < 0)  {
+      if (!mem->next && ty->is_flexible)
+        break;
+      internal_error();
+    }
     bits += mem->ty->size * 8;
   }
   ty->size = MAX(ty->size, 0);
@@ -5002,16 +5003,10 @@ static Node *primary(Token **rest, Token *tok) {
     if (ty->kind == TY_VLA)
       return vla_size(ty, tok);
 
+    if (ty->is_flexible && ty->origin)
+      ty = ty->origin;
     if (ty->size < 0)
       error_tok(tok, "sizeof applied to incomplete type");
-
-    if (ty->is_flexible) {
-      Member *mem = ty->members;
-      while (mem->next)
-        mem = mem->next;
-      if (mem->ty->kind == TY_ARRAY)
-        return new_size_t((ty->size - mem->ty->size), start);
-    }
     return new_size_t(ty->size, start);
   }
 
