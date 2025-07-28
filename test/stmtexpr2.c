@@ -12,6 +12,8 @@ int main() {
   ASSERT(11, ({ ({ struct S s2 = s1; s2; }).a; }));
   ASSERT(-22, ({ ({ struct S s2 = s1; s2; }); }).b );
 
+  ASSERT(42, (s1.b = 42, ({s1;}) ).b );
+
   ASSERT(11, ({ ({(struct S){11,22}; }).a; }));
   ASSERT(22, ({ ({(struct S){11,22}; }); }).b );
 

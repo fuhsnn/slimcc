@@ -973,18 +973,16 @@ static void gen_addr(Node *node) {
     gen_addr(node->rhs);
     return;
   case ND_MEMBER:
-    switch (node->lhs->kind) {
-    case ND_FUNCALL:
-    case ND_ASSIGN:
-    case ND_COND:
-    case ND_STMT_EXPR:
-    case ND_VA_ARG:
-      gen_expr(node->lhs);
-      imm_add("%rax", "%rdx", node->member->offset);
-      return;
-    default:
-      gen_addr(node->lhs);
-      imm_add("%rax", "%rdx", node->member->offset);
+    gen_addr(node->lhs);
+    imm_add("%rax", "%rdx", node->member->offset);
+    return;
+  case ND_ASSIGN:
+  case ND_COND:
+  case ND_FUNCALL:
+  case ND_STMT_EXPR:
+  case ND_VA_ARG:
+    if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION) {
+      gen_expr(node);
       return;
     }
   }
