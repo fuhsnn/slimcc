@@ -36,7 +36,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # yash
  ed \
  # ruby
- ruby ruby-psych libyaml-dev
+ ruby ruby-psych libyaml-dev \
+ # samba
+ libgnutls28-dev libparse-yapp-perl libacl1-dev libpam0g-dev python3-cryptography python3-pyasn1 python3-iso8601 \
+ # libpsl
+ libunistring-dev \
+ # binutils
+ dejagnu libzstd-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

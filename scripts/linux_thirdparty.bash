@@ -4,14 +4,14 @@ set -o pipefail
 # utilities
 
 fix_configure() {
- sed -i 's/^\s*lt_prog_compiler_wl=$/lt_prog_compiler_wl=-Wl,/g' "$1"
- sed -i 's/^\s*lt_prog_compiler_pic=$/lt_prog_compiler_pic=-fPIC/g' "$1"
- sed -i 's/^\s*lt_prog_compiler_static=$/lt_prog_compiler_static=-static/g' "$1"
+ find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_wl=$|lt_prog_compiler_wl=-Wl,|g' {} +
+ find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_pic=$|lt_prog_compiler_pic=-fPIC|g' {} +
+ find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_static=$|lt_prog_compiler_static=-static|g' {} +
 }
 
 fix_and_configure() {
- fix_configure ./configure
- ./configure
+ fix_configure
+ ./configure $@
 }
 
 use_stdbit() {
@@ -91,7 +91,6 @@ url_xz() {
 
 install_libtool() {
  url_xz https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz __libtool
- fix_configure libltdl/configure
  fix_and_configure
  make  install
  cd ../ && rm -rf __libtool
@@ -117,6 +116,34 @@ test_bfs() {
  sed -i 's|-std=c17|-std=c23|g' build/flags.mk
  ./configure
  make check
+}
+
+test_binutils() {
+ url_lz https://ftpmirror.gnu.org/gnu/binutils/binutils-2.45.tar.lz binutils
+ sed -i 's|^# define __attribute__(x)$||g' include/ansidecl.h
+
+ (cd ld/testsuite && find . -name '*.c' -exec sed -i 's|^#pragma weak.*|__attribute__((weak))|g' {} +)
+ sed -i 's|\[at_least_gcc_version 5 1\]|1|g' ld/testsuite/ld-elf/linux-x86.exp
+ sed -i 's|__builtin_abort ();|{void abort();abort();}|g' ld/testsuite/ld-x86-64/plt-main3.c
+ sed -i 's|__builtin_abort ();|{void abort();abort();}|g' ld/testsuite/ld-x86-64/plt-main4.c
+ # tests depend on printf() being converted to puts
+ sed -i 's|printf (\"PASS\\n\")|puts(\"PASS\")|g' ld/testsuite/ld-elf/pr25617-1a.c
+ # tests depend on asm name NOT being double quoted (which we always do)
+ sed -i 's|(long) &size_of_bar|({long v;__asm(\"lea bar@SIZE(%%rip),%0\":\"=r\"(v)); v;})|g' ld/testsuite/ld-size/size-7a.c
+ sed -i 's|(long) &size_of_bar|({long v;__asm(\"lea bar@SIZE(%%rip),%0\":\"=r\"(v)); v;})|g' ld/testsuite/ld-size/size-8a.c
+ # tests depend on -fasynchronous-unwind-tables
+ sed -i 's|3f|..|g' ld/testsuite/ld-x86-64/plt-main-ibt.dd
+ # tests depend on GCC's instruction selection behavior
+ sed -i 's|{error_output \"pr22001-1b.err\"}||g' ld/testsuite/ld-x86-64/x86-64.exp
+ # tests depend on debug info
+ rm ld/testsuite/ld-elf/compress.exp
+ rm binutils/testsuite/binutils-all/addr2line.exp
+ replace_line "test_objdump_S" "" binutils/testsuite/binutils-all/objdump.exp
+ replace_line "readelf_wi_test" "" binutils/testsuite/binutils-all/readelf.exp
+ sed -i 's|beginwarn.c:7:|beginwarn.o:|g' ld/testsuite/ld-elf/shared.exp
+
+ fix_and_configure --disable-gprofng
+ make && make check
 }
 
 test_bison() {
@@ -211,8 +238,7 @@ test_cproc() {
 
 test_curl() {
  url_xz https://github.com/curl/curl/releases/download/curl-8_15_0/curl-8.15.0.tar.xz curl
- fix_configure ./configure
- ./configure --with-openssl
+ fix_and_configure --with-openssl
  make && make test
 }
 
@@ -248,7 +274,7 @@ test_file() {
 
 test_flex() {
  url_tar https://github.com/westes/flex/files/981163/flex-2.6.4.tar.gz flex
- fix_configure ./configure
+ fix_configure
  CC_FOR_BUILD=$CC ./configure
  make check
 }
@@ -261,8 +287,7 @@ test_fossil() {
 
 test_gawk() {
  url_lz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.lz gawk
- fix_configure extension/configure
- ./configure --disable-pma # pma segfault in docker
+ fix_and_configure --disable-pma # pma segfault in docker
  make check
 }
 
@@ -485,7 +510,7 @@ test_libxml() {
  github_tar GNOME libxml2 v2.14.5
  libtoolize
  sh autogen.sh
- fix_configure ./configure
+ fix_configure
  CFLAGS=-D_FILE_OFFSET_BITS=64 ./configure
  make check
 }
@@ -512,7 +537,7 @@ test_mawk() {
 }
 
 test_memcached() {
- github_tar memcached memcached 1.6.38
+ github_tar memcached memcached 1.6.39
  sed -i "s/defined(__has_builtin)/0/g" crc32c.c
  sh autogen.sh
  CFLAGS=-D_GNU_SOURCE ./configure
@@ -594,8 +619,7 @@ test_noplate() {
 
 test_ocaml() {
  github_tar ocaml ocaml 5.3.0
- fix_configure ./configure
- ./configure --enable-ocamltest --disable-ocamldoc --disable-debugger --disable-native-compiler
+ fix_and_configure --enable-ocamltest --disable-ocamldoc --disable-debugger --disable-native-compiler
  make -j2  && make -C testsuite parallel -j2
 }
 
@@ -671,8 +695,7 @@ test_php() {
  export SKIP_IO_CAPTURE_TESTS=1
 
  ./buildconf --force
- fix_configure ./configure
- ./configure --disable-opcache
+ fix_and_configure --disable-opcache
  make test NO_INTERACTION=1
 }
 
@@ -749,6 +772,18 @@ test_ruby() {
  make check -j4
 }
 
+test_samba() {
+ github_tar samba-team samba samba-4.22.3
+ sed -i 's|conf.fatal|print|g' buildtools/wafsamba/generic_cc.py
+ sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
+ sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
+ sed -i 's|__sync_synchronize()|__asm volatile(\"mfence\":::\"memory\")|g' third_party/socket_wrapper/socket_wrapper.c
+ sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
+ replace_line "#if defined(__clang__) || defined(__GNUC__) || defined(__SUNPRO_C)" "#if 1" third_party/heimdal/include/heim_threads.h
+ ./configure --without-json --without-ad-dc --enable-selftest --without-ldap --without-ldb-lmdb --without-ads --with-shared-modules='!vfs_snapper,!vfs_nfs4acl_xattr'
+ LD_LIBRARY_PATH=$PWD/bin/default/lib/util:$PWD/bin/default/libcli/util:$PWD/bin/default/librpc:$PWD/bin/default/nsswitch/libwbclient:$PWD/bin/default/source3:$PWD/bin/default/source3/libsmb make quicktest -j2
+}
+
 test_scrapscript() {
  git_fetch https://github.com/tekknolagi/scrapscript 467a577f1fa389f91b0ecda180b23daaa2b43fa2 scrapscript
  curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -767,7 +802,7 @@ test_sokol() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.50.3
+ github_tar sqlite sqlite version-3.50.4
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
@@ -781,7 +816,7 @@ test_tcl() {
 }
 
 test_tinycc() {
- git_fetch https://github.com/TinyCC/tinycc 83de532563c6d922c6262dea757a22cb90d06101 tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 666e88ee2a66366a81497b4e927b02c69f18a165 tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
@@ -910,8 +945,7 @@ build_freetype() {
 
 build_gcc() {
  url_bz https://ftpmirror.gnu.org/gnu/gcc/gcc-4.7.4/gcc-4.7.4.tar.bz2 gcc47
- export -f fix_configure
- find . -name 'configure' -exec bash -c 'fix_configure "$0"' {} \;
+ fix_configure
  sed -i 's/^\s*struct ucontext/ucontext_t/g' ./libgcc/config/i386/linux-unwind.h
  mkdir buildonly && cd "$_"
  export MAKEINFO=missing
@@ -940,7 +974,7 @@ build_luajit() {
 }
 
 build_lynx() {
- github_tar ThomasDickey lynx-snapshots v2-9-2l
+ github_tar ThomasDickey lynx-snapshots v2-9-2p
  ./configure
  make
 }
@@ -951,7 +985,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250712
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250726
  ./configure
  make V=1
 }

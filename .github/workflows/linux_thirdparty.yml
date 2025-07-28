@@ -66,6 +66,7 @@ jobs:
           - { vm: interop, proj: build_yquake2 }
           - { vm: main, proj: test_bash }
           - { vm: main, proj: test_bearssl }
+          - { vm: main, proj: test_binutils }
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_busybox }
@@ -133,6 +134,7 @@ jobs:
           - { vm: main, proj: test_python }
           - { vm: main, proj: test_qbe_hare }
           - { vm: main, proj: test_ruby }
+          - { vm: main, proj: test_samba }
           - { vm: main, proj: test_scrapscript }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }
