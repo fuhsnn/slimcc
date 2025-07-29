@@ -535,10 +535,7 @@ Obj *new_lvar(char *name, Type *ty) {
 }
 
 static Obj *new_gvar(char *name, Type *ty) {
-  Obj *var = new_var(name, ty, calloc(1, sizeof(Obj)));
-  var->next = globals;
-  globals = var;
-  return var;
+  return globals = globals->next = new_var(name, ty, calloc(1, sizeof(Obj)));
 }
 
 char *new_unique_name(void) {
@@ -5384,11 +5381,10 @@ static Token *free_parsed_tok(Token *tok, Token *end) {
 
 // program = (typedef | function-definition | global-variable)*
 Obj *parse(Token *tok) {
-  globals = NULL;
+  Obj glb_head = {0};
+  globals = &glb_head;
 
   Token *free_head = tok;
-  Obj head = {0};
-  Obj *cur = &head;
   while (tok->kind != TK_EOF) {
     if (free_alloc)
       free_head = free_parsed_tok(free_head, tok);
@@ -5397,9 +5393,9 @@ Obj *parse(Token *tok) {
       continue;
 
     if (equal_kw(tok, "asm") || equal(tok, "__asm") || equal(tok, "__asm__")) {
-      cur = cur->next = calloc(1, sizeof(Obj));
-      cur->asm_str = str_tok(&tok, skip(tok->next, "("));
-      cur->asm_str->is_live = true;
+      globals = globals->next = calloc(1, sizeof(Obj));
+      globals->asm_str = str_tok(&tok, skip(tok->next, "("));
+      globals->asm_str->is_live = true;
       tok = skip(tok, ")");
       continue;
     }
@@ -5417,11 +5413,14 @@ Obj *parse(Token *tok) {
 
       static_assertion(&tok, tok);
 
-      while (globals != last) {
-        Obj *tmp = globals;
-        globals = globals->next;
+      for (Obj *obj = last->next; obj;) {
+        Obj *tmp = obj;
+        obj = obj->next;
         free(tmp);
       }
+      globals = last;
+      last->next = NULL;
+
       arena_off(&ast_arena);
       arena_off(&node_arena);
       continue;
@@ -5442,11 +5441,10 @@ Obj *parse(Token *tok) {
     arena_off(&node_arena);
   }
 
-  for (Obj *var = globals; var; var = var->next)
+  for (Obj *var = glb_head.next; var; var = var->next)
     if (var->is_definition && var->ty->kind == TY_FUNC &&
       (var->is_referenced || !(var->is_static && var->is_inline)))
       mark_fn_live(var);
 
-  cur->next = globals;
-  return head.next;
+  return glb_head.next;
 }
