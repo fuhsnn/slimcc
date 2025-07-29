@@ -9,8 +9,7 @@ void platform_init(void) {
 
   init_ty_lp64();
 
-  opt_use_as = "gas";
-  opt_use_ld = "ld";
+  default_as = "gas";
 
   opt_femulated_tls = true;
   set_fpie("1");

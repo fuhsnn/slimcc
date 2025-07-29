@@ -58,8 +58,10 @@ bool opt_s;
 bool opt_nostartfiles;
 bool opt_nodefaultlibs;
 bool opt_nolibc;
-char *opt_use_ld = "ld";
-char *opt_use_as = "as";
+char *default_ld = "ld";
+char *default_as = "as";
+static char *opt_use_ld;
+static char *opt_use_as;
 static char *opt_MF;
 static char *opt_MT;
 static char *opt_o;
@@ -220,11 +222,15 @@ static char *quote_makefile(char *s) {
   return buf;
 }
 
-static int parse_args(int argc, char **argv) {
+static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   char *arg;
-  StringArray idirafter = {0};
   int input_cnt = 0;
+  char *opt_B = NULL;
+  bool has_wl = false;
   bool opt_nostdinc = false;
+  StringArray libpath = {0};
+  StringArray isystem = {0};
+  StringArray idirafter = {0};
 
   for (int i = 1; i < argc; i++) {
     if (*argv[i] == '\0')
@@ -268,18 +274,21 @@ static int parse_args(int argc, char **argv) {
       continue;
     }
 
+    if (take_arg_s(argv, &i, &opt_B, "-B"))
+      continue;
+
     if (take_arg_s(argv, &i, &arg, "-I")) {
       add_include_path(&include_paths, arg);
       continue;
     }
 
     if (take_arg_s(argv, &i, &arg, "-isystem")) {
-      add_include_path(&sysincl_paths, arg);
+      strarray_push(&isystem, arg);
       continue;
     }
 
     if (take_arg_s(argv, &i, &arg, "-idirafter")) {
-      add_include_path(&idirafter, arg);
+      strarray_push(&idirafter, arg);
       continue;
     }
 
@@ -315,8 +324,8 @@ static int parse_args(int argc, char **argv) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-L")) {
-      strarray_push(&ld_paths, "-L");
-      strarray_push(&ld_paths, arg);
+      strarray_push(&libpath, "-L");
+      strarray_push(&libpath, arg);
       continue;
     }
 
@@ -325,16 +334,25 @@ static int parse_args(int argc, char **argv) {
 
     if (startswith(argv[i], &arg, "-Wl,")) {
       strarray_push(&input_args, argv[i]);
+      has_wl = true;
       continue;
     }
 
     if (take_arg_s(argv, &i, &arg, "-l")) {
       strarray_push(&input_args, format("-Wl,-l%s", arg));
+      has_wl = true;
       continue;
     }
 
     if (take_arg(argv, &i, &arg, "-Xlinker")) {
       strarray_push(&input_args, format("-Wl,%s", arg));
+      has_wl = true;
+      continue;
+    }
+
+    if (take_arg_s(argv, &i, &arg, "-z")) {
+      strarray_push(&input_args, format("-Wl,-z,%s", arg));
+      has_wl = true;
       continue;
     }
 
@@ -556,6 +574,26 @@ static int parse_args(int argc, char **argv) {
   if (!opt_E && opt_dM)
     error("option -dM without -E not supported");
 
+  if (opt_B) {
+    char *as_b = format("%s/%s", opt_B, default_as);
+    char *ld_b = format("%s/%s", opt_B, default_ld);
+    if (file_exists(as_b)) default_as = as_b;
+    if (file_exists(ld_b)) default_ld = ld_b;
+
+    strarray_push(&ld_paths, "-L");
+    strarray_push(&ld_paths, opt_B);
+
+    add_include_path(&sysincl_paths, opt_B);
+  }
+
+  for (int i = 0; i < libpath.len; i++) {
+    strarray_push(&ld_paths, "-L");
+    strarray_push(&ld_paths, libpath.data[i]);
+  }
+
+  for (int i = 0; i < isystem.len; i++)
+    add_include_path(&sysincl_paths, isystem.data[i]);
+
   if (!opt_nostdinc)
     platform_stdinc_paths(&sysincl_paths);
 
@@ -577,7 +615,13 @@ static int parse_args(int argc, char **argv) {
   for (int i = 0; i < sysincl_paths.len; i++)
     strarray_push(&include_paths, sysincl_paths.data[i]);
 
-  return input_cnt;
+  if (input_cnt < 1 && !has_wl)
+    error("no input files");
+  else if (input_cnt > 1 && opt_o && (opt_c || opt_S || opt_E))
+    error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
+
+  *no_fork = (input_cnt == 1);
+  *run_ld = has_wl && !(opt_c || opt_S || opt_E);
 }
 
 static FILE *open_file(char *path) {
@@ -869,7 +913,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 void run_assembler_gnustyle( StringArray *args, char *input, char *output) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_as);
+  strarray_push(&arr, opt_use_as ? opt_use_as : default_as);
   strarray_push(&arr, input);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
@@ -988,7 +1032,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
   char *ldso_path, char *libpath, char *gcc_libpath) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_ld);
+  strarray_push(&arr, opt_use_ld ? opt_use_ld : default_ld);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
   strarray_push(&arr, "-m");
@@ -1106,14 +1150,9 @@ int main(int argc, char **argv) {
   init_macros();
   platform_init();
 
-  int input_cnt = parse_args(argc, argv);
-  if (input_cnt < 1)
-    error("no input files");
-  else if (input_cnt > 1 && opt_o && (opt_c || opt_S || opt_E))
-    error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
+  bool run_ld, no_fork;
+  parse_args(argc, argv, &run_ld, &no_fork);
 
-  bool no_fork = (input_cnt == 1);
-  bool run_ld = false;
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
 

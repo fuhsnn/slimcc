@@ -840,5 +840,5 @@ extern bool opt_s;
 extern bool opt_nostartfiles;
 extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
-extern char *opt_use_ld;
-extern char *opt_use_as;
+extern char *default_ld;
+extern char *default_as;
