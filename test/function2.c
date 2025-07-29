@@ -196,6 +196,11 @@ static int va_fn(...) {
   return sum;
 }
 
+static int incomplete_param(struct S *p, struct S2 *p2, struct S2 { char c[7]; } *p3) {
+  struct S { char c[3]; };
+  return sizeof(*p) * 100 + sizeof(*p2) * 10 + sizeof(*p3);
+}
+
 int main(void) {
   G g[] = {10,11,12,13,14,15};
   F f[] = {20,21,22,23,24,25,26,27};
@@ -349,6 +354,8 @@ Aligned1024 s = {.c = 77};
     ASSERT(37, fn_ptr(13,24));
   }
 #endif
+
+  ASSERT(377, incomplete_param(0, 0, 0));
 
   printf("OK\n");
 

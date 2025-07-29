@@ -2990,10 +2990,9 @@ static void local_labels(Token **rest, Token *tok) {
 }
 
 // compound-stmt = (typedef | declaration | stmt)* "}"
-static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
+static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   Node *node = new_node(kind, tok);
   node->defr_end = current_defr;
-  enter_scope();
 
   local_labels(&tok, tok);
 
@@ -3057,6 +3056,11 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   node->body = head.next;
   *rest = tok->next;
   return node;
+}
+
+static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
+  enter_scope();
+  return compound_stmt2(rest, tok, kind);
 }
 
 // expr-stmt = expr? ";"
@@ -5273,8 +5277,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     enter_scope();
     ty->scopes = scope;
   }
-
-  fn->body = compound_stmt(rest, tok->next, ND_BLOCK);
+  fn->body = compound_stmt2(rest, tok->next, ND_BLOCK);
 
   if (ty->pre_calc) {
     Node *calc = new_unary(ND_EXPR_STMT, ty->pre_calc, tok);
@@ -5286,7 +5289,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     (opt_reuse_stack && !current_fn->dont_reuse_stk))
     fn->dealloc_vla = true;
 
-  leave_scope();
   resolve_gotos();
   current_fn = NULL;
 

@@ -475,15 +475,20 @@ Type *vla_of(Type *base, Node *len, int64_t arr_len) {
 
 Node *assign_cast(Type *to_ty, Node *expr) {
   add_type(expr);
-  if (!is_compatible(to_ty, expr->ty)) {
-    if (is_numeric(to_ty) || is_ptr(to_ty))
-      expr = new_cast(expr, to_ty);
-    else
-      error_tok(expr->tok, "invalid assignment");
-  } else if (expr->ty->size != to_ty->size) {
-    error_tok(expr->tok, "invalid assignment");
+
+  if (is_ptr(to_ty)) {
+    ptr_convert(&expr);
+    if (is_ptr(expr->ty))
+      return expr;
+    if (is_nullptr(expr))
+      return new_cast(expr, to_ty);
+  } else if (is_compatible(to_ty, expr->ty)) {
+    if (expr->ty->size == to_ty->size)
+      return expr;
+  } else if (is_numeric(to_ty)) {
+    return new_cast(expr, to_ty);
   }
-  return expr;
+  error_tok(expr->tok, "invalid assignment");
 }
 
 static int int_rank(Type *t) {
