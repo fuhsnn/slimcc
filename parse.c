@@ -1724,25 +1724,20 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (!name)
     error_tok(tok, "variable name omitted");
 
-  Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
-  DeclAttr(attr_cleanup, &cleanup_fn);
-
   if (attr && attr->is_static) {
     if (ty->kind == TY_VLA)
       error_tok(tok, "variable length arrays cannot be 'static'");
 
     // static local variable
     Obj *var = new_static_lvar(ty);
+    push_scope(get_ident(name))->var = var;
+    symbol_attr(&tok, tok, var, attr, name);
     var->is_tls = attr->is_tls;
     var->alt_align = alt_align;
-    push_scope(get_ident(name))->var = var;
 
     if (attr->is_constexpr) {
       constexpr_initializer(&tok, skip(tok, "="), var, var);
-      *rest = tok;
-      return expr;
-    }
-    if (equal(tok, "=")) {
+    } else if (equal(tok, "=")) {
       bool ctx = is_global_init_context;
       is_global_init_context = true;
       gvar_initializer(&tok, tok->next, var);
@@ -1751,6 +1746,9 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     *rest = tok;
     return expr;
   }
+
+  Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
+  DeclAttr(attr_cleanup, &cleanup_fn);
 
   if (ty->kind == TY_VLA) {
     fn_use_vla = true;
@@ -5337,16 +5335,13 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       symbol_attr(&tok, tok, var, attr, name);
     }
     var->is_definition = is_definition;
-    var->is_static = attr->is_static;
+    var->is_static = attr->is_static || attr->is_constexpr;
     var->is_tls = attr->is_tls;
     var->alt_align = alt_align;
 
-    if (attr->is_constexpr) {
+    if (attr->is_constexpr)
       constexpr_initializer(&tok, skip(tok, "="), var, var);
-      var->is_static = true;
-      continue;
-    }
-    if (equal(tok, "="))
+    else if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
     else if (is_definition)
       var->is_tentative = true;
