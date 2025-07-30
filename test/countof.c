@@ -33,6 +33,10 @@ int fn_to_be_called(int i) {
   return i * 7;
 }
 
+static int array_param(int n, char p[const n]) {
+  return _Countof(p);
+}
+
 int main(void) {
   ASSERT(5, vla(3));
 
@@ -42,6 +46,8 @@ int main(void) {
   DASSERT(4 == _Countof "foo");
 
   ASSERT(42, _Countof(int[fn_to_be_called(6)]));
+
+  ASSERT(13, array_param(13, 0));
 
   printf("OK\n");
 }
