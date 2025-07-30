@@ -421,6 +421,10 @@ Type *ptr_decay(Type *ty) {
   }
   if (ty->kind == TY_FUNC)
     return pointer_to(ty);
+  if (ty->kind == TY_PTR && ty->apty) {
+    ty = copy_type(ty);
+    ty->apty = NULL;
+  }
   return ty;
 }
 

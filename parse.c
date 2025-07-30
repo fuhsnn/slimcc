@@ -1202,6 +1202,9 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
       param_ty->is_const = ty->qty->is_const;
       param_ty->is_volatile = ty->qty->is_volatile;
       param_ty->is_restrict = ty->qty->is_restrict;
+
+      if (ty->qty->is_const)
+        param_ty->apty = ty;
     }
 
     char *var_name = name ? get_ident(name) : NULL;
@@ -4951,6 +4954,8 @@ static Node *primary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
 
+      if (ty->apty)
+        ty = ty->apty;
       if (ty->kind == TY_VLA && ty->vla_len)
         return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
     }

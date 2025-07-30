@@ -712,6 +712,7 @@ struct Type {
 
   // Function parameter
   Type *qty;
+  Type *apty;
 
   // Function type
   Scope *scopes;
