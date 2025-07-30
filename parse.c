@@ -526,12 +526,16 @@ static Obj *new_var(char *name, Type *ty, Obj *var) {
   return var;
 }
 
-Obj *new_lvar(char *name, Type *ty) {
+static Obj *new_lvar2(char *name, Type *ty, Scope *sc) {
   Obj *var = new_var(name, ty, ast_arena_calloc(sizeof(Obj)));
   var->is_local = true;
-  var->next = scope->locals;
-  scope->locals = var;
+  var->next = sc->locals;
+  sc->locals = var;
   return var;
+}
+
+Obj *new_lvar(char *name, Type *ty) {
+  return new_lvar2(name, ty, scope);
 }
 
 static Obj *new_gvar(char *name, Type *ty) {
@@ -1648,11 +1652,11 @@ static Node *vla_count(Type *ty, Token *tok, bool is_void) {
   if (ty->vla_cnt)
     return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
 
-  Scope *cur_sc = scope;
-  while (scope->parent && scope->parent->parent)
-    scope = scope->parent;
-  ty->vla_cnt = new_lvar(NULL, ty_size_t);
-  scope = cur_sc;
+  Scope *sc = scope;
+  while (sc->parent && sc->parent->parent)
+    sc = sc->parent;
+
+  ty->vla_cnt = new_lvar2(NULL, ty_size_t, sc);
   return new_binary(ND_ASSIGN, new_var_node(ty->vla_cnt, tok), ty->vla_len, tok);
 }
 
@@ -4737,11 +4741,9 @@ static Node *compound_literal(Token **rest, Token *tok) {
   while (sc->is_temporary)
     sc = sc->parent;
 
-  Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
+  Obj *var = new_lvar2(NULL, ty, sc);
   var->is_compound_lit = true;
-  var->is_local = true;
-  var->next = sc->locals;
-  sc->locals = var;
+
   Node *init;
   if (attr.is_constexpr) {
     Obj *init_var = new_anon_gvar(ty);
