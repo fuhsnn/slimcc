@@ -1118,7 +1118,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
 static FileType get_file_type(char *filename) {
   if (endswith(filename, ".a"))
     return FILE_AR;
-  if (endswith(filename, ".so"))
+  if (endswith(filename, ".so") || endswith(filename, ".dso"))
     return FILE_DSO;
   if (endswith(filename, ".o") || endswith(filename, ".lo"))
     return FILE_OBJ;
