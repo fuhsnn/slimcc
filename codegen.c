@@ -4666,7 +4666,9 @@ void emit_text(Obj *fn) {
 
   emit_symbol(fn);
 
-  if (opt_func_sections)
+  if (fn->section_name)
+    Printftn(".section \"%s\",\"ax\",@progbits", fn->section_name);
+  else if (opt_func_sections)
     Printftn(".section .text.\"%s\",\"ax\",@progbits", asm_name(fn));
   else
     Printstn(".text");
