@@ -4561,16 +4561,11 @@ static void emit_data(Obj *var) {
     Printf(".\"%s\"", asm_name(var));
 
   if (var->is_tls)
-    Prints(",\"awT\"");
+    Printssn(",\"awT\"");
   else if (use_rodata)
-    Prints(",\"a\"");
+    Printssn(",\"a\"");
   else
-    Prints(",\"aw\"");
-
-  if (!use_rodata && use_bss)
-    Printssn(",@nobits");
-  else
-    Printssn(",@progbits");
+    Printssn(",\"aw\"");
 
   Printftn(".type \"%s\", @object", asm_name(var));
   Printftn(".size \"%s\", %"PRIi64, asm_name(var), sz);
