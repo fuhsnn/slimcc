@@ -210,6 +210,16 @@ static char *asm_name(Obj *var) {
   return var->asm_name ? var->asm_name : var->name;
 }
 
+static int get_align(Obj *var) {
+  if (var->ty->kind == TY_VLA)
+    return 8;
+  if (var->alt_align)
+    return var->alt_align;
+  if (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
+    return MAX(16, var->ty->align);
+  return var->ty->align;
+}
+
 static int64_t count(void) {
   static int64_t i = 1;
   return i++;
@@ -1620,7 +1630,7 @@ static void builtin_alloca(Node *node) {
   Printstn("mov %%rsp, %%rcx");
   Printstn("sub %%rax, %%rsp");
 
-  int align = node->var ? MAX(node->var->align, 16) : 16;
+  int align = node->var ? MAX(node->var->alt_align, 16) : 16;
   Printftn("and $-%d, %%rsp", align);
   Printstn("sub %%rsp, %%rcx");
 
@@ -4435,7 +4445,7 @@ static int get_lvar_align(Scope *scp, int align) {
   for (Obj *var = scp->locals; var; var = var->next) {
     if (var->pass_by_stack)
       continue;
-    align = MAX(align, var->align);
+    align = MAX(align, get_align(var));
   }
   for (Scope *sub = scp->children; sub; sub = sub->sibling_next)
     align = MAX(align, get_lvar_align(sub, align));
@@ -4449,21 +4459,8 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
       var->ptr = "%rbp";
       continue;
     }
-
-    // AMD64 System V ABI has a special alignment rule for an array of
-    // length at least 16 bytes. We need to align such array to at least
-    // 16-byte boundaries. See p.14 of
-    // https://github.com/hjl-tools/x86-psABI/wiki/x86-64-psABI-draft.pdf.
-    int align;
-    if (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
-      align = MAX(16, var->align);
-    else if (var->ty->kind == TY_VLA)
-      align = 8;
-    else
-      align = var->align;
-
     bottom += var->ty->size;
-    bottom = align_to(bottom, align);
+    bottom = align_to(bottom, get_align(var));
     var->ofs = -bottom;
     var->ptr = lvar_ptr;
   }
@@ -4498,14 +4495,10 @@ static void emit_symbol(Obj *var) {
 
 static void emit_data(Obj *var) {
   int64_t sz = var->ty->size;
-  int align = var->align;
 
-  if (var->ty->kind == TY_ARRAY) {
+  if (var->ty->kind == TY_ARRAY)
     if (sz < 0 && var->is_tentative)
       sz = var->ty->base->size;
-    if (sz >= 16)
-      align = MAX(16, align);
-  }
 
   if (sz < 0)
     error("object \'%s\' has incomplete type", asm_name(var));
@@ -4526,7 +4519,7 @@ static void emit_data(Obj *var) {
     Printstn(".align 8");
     Printfsn("\"%s\":", name_v);
     Printftn(".quad %" PRIi64, sz);
-    Printftn(".quad %d", align);
+    Printftn(".quad %d", get_align(var));
     Printstn(".quad 0");
     Printftn(".quad \"%s\"", name_t);
 
@@ -4539,7 +4532,7 @@ static void emit_data(Obj *var) {
 
   if (var->is_tentative && !(var->is_tls || var->is_weak || var->section_name) &&
     (var->is_common || (!var->is_nocommon && opt_fcommon))) {
-    Printftn(".comm \"%s\", %"PRIi64", %d", asm_name(var), sz, align);
+    Printftn(".comm \"%s\", %"PRIi64", %d", asm_name(var), sz, get_align(var));
     return;
   }
 
@@ -4569,7 +4562,7 @@ static void emit_data(Obj *var) {
 
   Printftn(".type \"%s\", @object", asm_name(var));
   Printftn(".size \"%s\", %"PRIi64, asm_name(var), sz);
-  Printftn(".align %d", align);
+  Printftn(".align %d", get_align(var));
   Printfsn("\"%s\":", asm_name(var));
 
   if (sz == 0)

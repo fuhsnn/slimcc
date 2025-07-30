@@ -262,7 +262,7 @@ struct Obj {
   bool is_local; // local or global/function
   bool is_compound_lit;
   bool is_string_lit;
-  int align;     // alignment
+  int alt_align;
 
   Token *asm_str;
 

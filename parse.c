@@ -520,7 +520,6 @@ static void new_initializer(Initializer *init, Type *ty, bool let_flexible) {
 static Obj *new_var(char *name, Type *ty, Obj *var) {
   var->name = name;
   var->ty = ty;
-  var->align = ty->align;
   if (name)
     push_scope(name)->var = var;
   return var;
@@ -1735,8 +1734,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     // static local variable
     Obj *var = new_static_lvar(ty);
     var->is_tls = attr->is_tls;
-    if (alt_align)
-      var->align = alt_align;
+    var->alt_align = alt_align;
     push_scope(get_ident(name))->var = var;
 
     if (attr->is_constexpr) {
@@ -1764,8 +1762,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
 
     if (cleanup_fn)
       defr_cleanup(node->var, cleanup_fn, tok);
-    if (alt_align)
-      node->var->align = alt_align;
+    node->var->alt_align = alt_align;
 
     if (equal(tok, "=")) {
       tok = skip(skip(tok->next, "{"), "}");
@@ -1777,8 +1774,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
 
   Obj *var = new_lvar(get_ident(name), ty);
-  if (alt_align)
-    var->align = alt_align;
+  var->alt_align = alt_align;
 
   if (cleanup_fn)
     defr_cleanup(var, cleanup_fn, tok);
@@ -2172,9 +2168,6 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     ty->is_const = is_const;
     ty->is_volatile = is_volatile;
     ty->is_restrict = is_restrict;
-
-    if (!var->align)
-      var->align = ty->align;
     return;
   }
 
@@ -2490,8 +2483,6 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
   init_var->init_data = var->constexpr_data = buf;
   init_var->rel = head.next;
   var->ty = init_var->ty;
-  if (!var->align)
-    var->align = init_var->align;
 }
 
 // Returns true if a given token represents a type.
@@ -4724,8 +4715,9 @@ static Node *compound_literal(Token **rest, Token *tok) {
       is_global_init_context = true;
 
     Obj *var = new_anon_gvar(ty);
-    var->is_tls = attr.is_tls;
     var->is_compound_lit = true;
+    var->is_tls = attr.is_tls;
+    var->alt_align = attr.align;
 
     if (attr.is_constexpr)
       constexpr_initializer(rest, tok, var, var);
@@ -4743,6 +4735,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
 
   Obj *var = new_lvar2(NULL, ty, sc);
   var->is_compound_lit = true;
+  var->alt_align = attr.align;
 
   Node *init;
   if (attr.is_constexpr) {
@@ -5026,7 +5019,7 @@ static Node *primary(Token **rest, Token *tok) {
       case ND_MEMBER:
         return new_size_t(MAX(node->member->ty->align, node->member->alt_align), tok);
       case ND_VAR:
-        return new_size_t(node->var->align, tok);
+        return new_size_t(node->var->alt_align ? node->var->alt_align : node->var->ty->align, tok);
       }
       add_type(node);
       ty = node->ty;
@@ -5346,8 +5339,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     var->is_definition = is_definition;
     var->is_static = attr->is_static;
     var->is_tls = attr->is_tls;
-    if (alt_align)
-      var->align = alt_align;
+    var->alt_align = alt_align;
 
     if (attr->is_constexpr) {
       constexpr_initializer(&tok, skip(tok, "="), var, var);

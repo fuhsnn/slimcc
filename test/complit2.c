@@ -84,6 +84,9 @@ int main() {
   ASSERT(1, static_complit_counter());
   ASSERT(4, static_complit_counter2());
 
+  ASSERT(0, 1023 & (long long)&(int _Alignas(1024) static){});
+  ASSERT(0, 1023 & (long long)&(int _Alignas(1024)){});
+
   constexpr_complit_adr(0, NULL, NULL);
 
   printf("OK\n");
