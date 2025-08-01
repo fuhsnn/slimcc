@@ -4788,6 +4788,20 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     return node;
   }
 
+  if (equal(tok, "__builtin_atomic_chk")) {
+    tok = skip(tok->next, "(");
+    Node *node = assign(&tok, tok);
+    *rest = skip(tok, ")");
+    add_type(node);
+    if (node->ty->kind != TY_PTR || node->ty->base == TY_VOID)
+      error_tok(tok, "expected pointer to non-void type");
+    if (!node->ty->base->is_atomic) {
+      node->ty = pointer_to(new_qualified_type(node->ty->base));
+      node->ty->base->is_atomic = true;
+    }
+    return node;
+  }
+
   if (!strncmp(tok->loc, "__builtin_atomic_fetch_", 23)) {
     Token *start = tok;
     tok = skip(tok->next, "(");

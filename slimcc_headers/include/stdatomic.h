@@ -28,11 +28,11 @@ typedef enum {
 #define atomic_signal_fence(order)
 #define atomic_is_lock_free(x) 1
 
-#define atomic_load(addr) (*(addr))
-#define atomic_store(addr, val) (*(addr) = (val))
+#define atomic_load(addr) (*__builtin_atomic_chk(addr))
+#define atomic_store(addr, val) (*__builtin_atomic_chk(addr) = (val))
 
-#define atomic_load_explicit(addr, order) (*(addr))
-#define atomic_store_explicit(addr, val, order) (*(addr) = (val))
+#define atomic_load_explicit(addr, order) atomic_load(addr)
+#define atomic_store_explicit(addr, val, order) atomic_store(addr, val)
 
 #define atomic_fetch_add(addr, val) __builtin_atomic_fetch_add(addr, val)
 #define atomic_fetch_sub(addr, val) __builtin_atomic_fetch_sub(addr, val)
@@ -62,9 +62,9 @@ typedef enum {
 #define atomic_exchange_explicit(obj, val, order) __builtin_atomic_exchange((obj), (val))
 
 #define atomic_flag_test_and_set(obj) atomic_exchange((obj), 1)
-#define atomic_flag_test_and_set_explicit(obj, order) atomic_exchange((obj), 1)
-#define atomic_flag_clear(obj) (*(obj) = 0)
-#define atomic_flag_clear_explicit(obj, order) (*(obj) = 0)
+#define atomic_flag_test_and_set_explicit(obj, order) atomic_flag_test_and_set(obj)
+#define atomic_flag_clear(obj) (*__builtin_atomic_chk(obj) = 0)
+#define atomic_flag_clear_explicit(obj, order) atomic_flag_clear(obj)
 
 typedef _Atomic _Bool atomic_flag;
 typedef _Atomic _Bool atomic_bool;
