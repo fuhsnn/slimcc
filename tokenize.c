@@ -539,9 +539,7 @@ static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
 
   uint64_t accum = 0;
   for (size_t i = 0; i < cnt; i++) {
-    uint64_t prod = (uint64_t)base * buf[i];
-    accum += prod;
-
+    accum += (uint64_t)base * buf[i];
     buf[i] = (uint32_t)accum;
     accum >>= 32;
   }
