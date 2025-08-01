@@ -3,9 +3,7 @@
 **/*.o
 **/*.s
 **/a.out
-/tmp*
-/thirdparty
-/slimcc
 /test/*.exe
-/test/c23/*.exe
-/stage2
+/slimcc
+/slimcc-stage2
+/slimcc-asan

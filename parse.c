@@ -4852,19 +4852,19 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 static Node *primary(Token **rest, Token *tok) {
   Token *start = tok;
 
-  if (equal(tok, "(") && is_typename(tok->next))
-    return compound_literal(rest, tok);
-
-  if (equal(tok, "(") && equal(tok->next, "{")) {
-    if (is_constant_context())
-      error_tok(tok, "statement expresssion in constant context");
-
-    Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
-    *rest = skip(tok, ")");
-    return node;
-  }
-
   if (equal(tok, "(")) {
+    if (is_typename(tok->next))
+      return compound_literal(rest, tok);
+
+    if (equal(tok->next, "{")) {
+      if (is_constant_context())
+        error_tok(tok, "statement expresssion in constant context");
+
+      Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
+      *rest = skip(tok, ")");
+      return node;
+    }
+
     Node *node = expr(&tok, tok->next);
     *rest = skip(tok, ")");
     return node;

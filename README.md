@@ -14,7 +14,7 @@ Compiling real C projects with slimcc has been a major focus, the [CI workflow](
  - Core system commands (GNU coreutils, busybox, toybox)
  - Developer tools (binutils, Bash, Curl, Git, jq, wget, Zsh)
  - Programming languages (Python, Go, Lua, Perl, Ruby, PHP, Ocaml, Zig)
- - Game dev libraries (SDL3, stb, raylib, sokol)
+ - Gamedev/graphics libraries (SDL3, glfw, stb, raylib, sokol)
  - Critical infrastructure softwares (Redis, Valkey, Nginx, PostgreSQL)
 
 [slimcc-musl-bootstrap](https://github.com/fuhsnn/slimcc-musl-bootstrap) is a minimal statically-linked chroot environment with `musl`, `binutils`, `toybox` entirely compiled with slimcc.
