@@ -7,8 +7,6 @@
 
 #include_next <sys/cdefs.h>
 
-#define __inline inline
-
 #undef _Alignas
 #undef _Alignof
 #undef _Noreturn

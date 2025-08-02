@@ -1786,11 +1786,6 @@ void init_macros(void) {
   define_macro("__C99_MACRO_WITH_VA_ARGS", "1");
   define_macro("__USER_LABEL_PREFIX__", "");
 
-  define_macro("__alignof__", "_Alignof");
-  define_macro("__const__", "const");
-  define_macro("__inline__", "inline");
-  define_macro("__signed__", "signed");
-
   define_macro("unix", "1");
   define_macro("__unix", "1");
   define_macro("__unix__", "1");

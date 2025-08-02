@@ -3,7 +3,6 @@
 
 #include_next <sys/cdefs.h>
 
-#define __inline inline
 #define __returns_twice __attribute__((returns_twice))
 #define __only_inline extern __inline __attribute__((__gnu_inline__))
 #define __packed        __attribute__((__packed__))

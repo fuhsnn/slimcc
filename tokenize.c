@@ -262,45 +262,91 @@ TokenKind ident_keyword(Token *tok) {
   if (map.capacity == 0) {
     static char *kw[] = {
       "return", "if", "else", "for", "while", "do", "goto", "break", "continue",
-      "switch", "case", "default", "_Alignof", "sizeof", "__asm", "__asm__",
-      "_Static_assert", "_Countof",
+      "switch", "case", "default", "sizeof",
+      "_Countof",
       "__label__",
-      "_Defer",
     };
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
       hashmap_put(&map, kw[i], (void *)TK_KEYWORD);
 
     static char *ty_kw[] = {
-      "void", "_Bool", "char", "short", "int", "long", "struct", "union",
-      "typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
-      "const", "auto", "register", "restrict", "__restrict", "__restrict__",
-      "_Noreturn", "float", "double", "inline", "__auto_type",
-      "_Thread_local", "__thread", "_Atomic", "__typeof", "__typeof__",
-      "volatile", "__volatile", "__volatile__",
+      "void", "char", "short", "int", "long", "struct", "union",
+      "typedef", "enum", "static", "extern", "unsigned",
+      "auto", "register",
+      "_Noreturn", "float", "double", "__auto_type",
+      "_Atomic",
       "_BitInt"
     };
     for (int i = 0; i < sizeof(ty_kw) / sizeof(*ty_kw); i++)
       hashmap_put(&map, ty_kw[i], (void *)TK_TYPEKW);
 
-    if (!is_iso_std)
-      hashmap_put(&map, "asm", (void *)TK_KEYWORD);
-    if (!is_iso_std || opt_std >= STD_C23)
-      hashmap_put(&map, "typeof", (void *)TK_TYPEKW);
     if (opt_std >= STD_C23) {
-      hashmap_put(&map, "alignof", (void *)TK_KEYWORD);
       hashmap_put(&map, "false", (void *)TK_KEYWORD);
       hashmap_put(&map, "true", (void *)TK_KEYWORD);
       hashmap_put(&map, "nullptr", (void *)TK_KEYWORD);
-      hashmap_put(&map, "static_assert", (void *)TK_KEYWORD);
 
-      hashmap_put(&map, "alignas", (void *)TK_TYPEKW);
-      hashmap_put(&map, "bool", (void *)TK_TYPEKW);
       hashmap_put(&map, "constexpr", (void *)TK_TYPEKW);
-      hashmap_put(&map, "thread_local", (void *)TK_TYPEKW);
       hashmap_put(&map, "typeof_unqual", (void *)TK_TYPEKW);
     }
+
+    if (!is_iso_std)
+      hashmap_put(&map, "asm", (void *)TK_asm);
+    hashmap_put(&map, "__asm", (void *)TK_asm);
+    hashmap_put(&map, "__asm__", (void *)TK_asm);
+
+    if (opt_std >= STD_C23)
+      hashmap_put(&map, "thread_local", (void *)TK_thread_local);
+    hashmap_put(&map, "_Thread_local", (void *)TK_thread_local);
+    hashmap_put(&map, "__thread", (void *)TK_thread_local);
+
+    if (opt_std >= STD_C23)
+      hashmap_put(&map, "alignas", (void *)TK_alignas);
+    hashmap_put(&map, "_Alignas", (void *)TK_alignas);
+
+    if (opt_std >= STD_C23)
+      hashmap_put(&map, "alignof", (void *)TK_alignof);
+    hashmap_put(&map, "__alignof", (void *)TK_alignof);
+    hashmap_put(&map, "__alignof__", (void *)TK_alignof);
+    hashmap_put(&map, "_Alignof", (void *)TK_alignof);
+
+    if (opt_std >= STD_C23)
+      hashmap_put(&map, "bool", (void *)TK_bool);
+    hashmap_put(&map, "_Bool", (void *)TK_bool);
+
+    if (!is_iso_std || opt_std >= STD_C23)
+      hashmap_put(&map, "typeof", (void *)TK_typeof);
+    hashmap_put(&map, "__typeof", (void *)TK_typeof);
+    hashmap_put(&map, "__typeof__", (void *)TK_typeof);
+
+    if (!(is_iso_std && opt_std == STD_C89))
+      hashmap_put(&map, "inline", (void *)TK_inline);
+    hashmap_put(&map, "__inline", (void *)TK_inline);
+    hashmap_put(&map, "__inline__", (void *)TK_inline);
+
+    hashmap_put(&map, "const", (void *)TK_const);
+    hashmap_put(&map, "__const", (void *)TK_const);
+    hashmap_put(&map, "__const__", (void *)TK_const);
+
+    if (opt_std > STD_C89)
+      hashmap_put(&map, "restrict", (void *)TK_restrict);
+    hashmap_put(&map, "__restrict", (void *)TK_restrict);
+    hashmap_put(&map, "__restrict__", (void *)TK_restrict);
+
+    hashmap_put(&map, "volatile", (void *)TK_volatile);
+    hashmap_put(&map, "__volatile", (void *)TK_volatile);
+    hashmap_put(&map, "__volatile__", (void *)TK_volatile);
+
+    hashmap_put(&map, "signed", (void *)TK_signed);
+    hashmap_put(&map, "__signed", (void *)TK_signed);
+    hashmap_put(&map, "__signed__", (void *)TK_signed);
+
+    if (opt_std >= STD_C23)
+      hashmap_put(&map, "static_assert", (void *)TK_static_assert);
+    hashmap_put(&map, "_Static_assert", (void *)TK_static_assert);
+
     if (opt_fdefer_ts)
-      hashmap_put(&map, "defer", (void *)TK_KEYWORD);
+      hashmap_put(&map, "defer", (void *)TK_defer);
+    hashmap_put(&map, "_Defer", (void *)TK_defer);
   }
   void *val = hashmap_get2(&map, tok->loc, tok->len);
   return val ? (TokenKind)(intptr_t)val : TK_IDENT;
