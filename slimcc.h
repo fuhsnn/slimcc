@@ -151,7 +151,6 @@ typedef enum {
   TK_IDENT,   // Identifiers
   TK_PUNCT,   // Punctuators
   TK_KEYWORD, // Keywords
-  TK_TYPEKW,  // Keywords
   TK_STR,     // String literals
   TK_INT_NUM, // Integer Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
@@ -160,6 +159,63 @@ typedef enum {
   TK_ATTR,    // GNU attribute
   TK_BATTR,   // C23 attribute
   TK_EOF,     // End-of-file markers
+
+  TK_return,
+  TK_if,
+  TK_else,
+  TK_for,
+  TK_while,
+  TK_do,
+  TK_goto,
+  TK_break,
+  TK_continue,
+  TK_switch,
+  TK_case,
+  TK_default,
+  TK_sizeof,
+  TK_Generic,
+  TK_Countof,
+  TK_alignof,
+  TK_asm,
+  TK_static_assert,
+  TK_true,
+  TK_false,
+  TK_nullptr,
+  TK_defer,
+
+  TK_TYPEKW,
+  TK_void,
+  TK_char,
+  TK_short,
+  TK_int,
+  TK_long,
+  TK_float,
+  TK_double,
+  TK_unsigned,
+  TK_struct,
+  TK_union,
+  TK_enum,
+  TK_typedef,
+  TK_static,
+  TK_extern,
+  TK_auto,
+  TK_register,
+  TK_Atomic,
+  TK_Noreturn,
+  TK_BitInt,
+  TK_auto_type,
+  TK_alignas,
+  TK_bool,
+  TK_const,
+  TK_constexpr,
+  TK_inline,
+  TK_restrict,
+  TK_signed,
+  TK_typeof,
+  TK_typeof_unqual,
+  TK_thread_local,
+  TK_volatile,
+  TK_TYPEKW_END,
 } TokenKind;
 
 typedef struct File File;

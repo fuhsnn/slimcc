@@ -385,10 +385,8 @@ static Token *read_const_expr(Token *tok) {
       continue;
     }
 
-    if (opt_std >= STD_C23 && equal(tok, "true"))
-      to_int_token(tok, 1);
-    else if (tok->kind == TK_IDENT)
-      to_int_token(tok, 0);
+    if (tok->kind == TK_IDENT)
+      to_int_token(tok, equal(tok, "true") && opt_std >= STD_C23);
 
     cur = cur->next = tok;
     tok = tok->next;
@@ -1785,11 +1783,6 @@ void init_macros(void) {
 
   define_macro("__C99_MACRO_WITH_VA_ARGS", "1");
   define_macro("__USER_LABEL_PREFIX__", "");
-
-  define_macro("__alignof__", "_Alignof");
-  define_macro("__const__", "const");
-  define_macro("__inline__", "inline");
-  define_macro("__signed__", "signed");
 
   define_macro("unix", "1");
   define_macro("__unix", "1");
