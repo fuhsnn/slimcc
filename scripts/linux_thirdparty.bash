@@ -185,7 +185,7 @@ test_c23doku() {
 }
 
 test_c3() {
- git_fetch https://github.com/c3lang/c3c 1b8355ff07a89e2c14166111c7191c5fd3e20d6b c3c
+ github_tar c3lang c3c v0.7.4
  replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
  mkdir build && cd build
  cmake ../ -DCMAKE_C_COMPILER=$CC
@@ -355,6 +355,20 @@ test_janet() {
  # Enable computed goto
  replace_line "#if defined(__GNUC__) && !defined(__EMSCRIPTEN__)" "#if 1" src/core/vm.c
  make test
+}
+
+test_jansson() {
+ github_tar akheron jansson v2.14.1
+ replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/jansson.h
+ sed -i 's|volatile size_t refcount|_Atomic volatile size_t refcount|g' src/jansson.h
+ sed -i 's|__atomic_add_fetch(&json->refcount, 1, __ATOMIC_ACQUIRE)|(++json->refcount)|g' src/jansson.h
+ sed -i 's|__atomic_sub_fetch(&json->refcount, 1, __ATOMIC_RELEASE)|(--json->refcount)|g' src/jansson.h
+ sed -i 's|^#include <stdio.h>|#include <stdatomic.h>\n#include <stdio.h>|g' src/hashtable_seed.c
+ sed -i 's|__atomic_test_and_set|atomic_flag_test_and_set_explicit|g' src/hashtable_seed.c
+ sed -i 's|__atomic_load_n|atomic_load_explicit|g' src/hashtable_seed.c
+ sed -i 's|__atomic_store_n|atomic_store_explicit|g' src/hashtable_seed.c
+ cmake . -DCMAKE_C_COMPILER=$CC -DJANSSON_BUILD_DOCS=OFF -DCMAKE_C_FLAGS=-lm -DHAVE_ATOMIC_BUILTINS=1
+ make && make test
 }
 
 test_jemalloc() {

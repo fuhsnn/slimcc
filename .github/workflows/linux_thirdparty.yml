@@ -92,6 +92,7 @@ jobs:
           - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
           - { vm: main, proj: test_janet }
+          - { vm: main, proj: test_jansson }
           - { vm: main, proj: test_jemalloc }
           - { vm: main, proj: test_jq }
           - { vm: main, proj: test_lame }
