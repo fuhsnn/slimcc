@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  make cmake pkg-config \
  zip lzip \
  autoconf autopoint automake gettext texinfo \
- git curl ca-certificates locales \
+ git curl ca-certificates wget locales \
  tcl-dev bison flex re2c \
  libcurl4-openssl-dev libssl-dev libexpat1-dev zlib1g-dev libicu-dev \
  libncurses-dev libreadline-dev libpsl-dev libffi-dev libxml2-dev libsqlite3-dev \

@@ -1,103 +1,6 @@
 set -eu
 set -o pipefail
 
-# utilities
-
-fix_configure() {
- find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_wl=$|lt_prog_compiler_wl=-Wl,|g' {} +
- find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_pic=$|lt_prog_compiler_pic=-fPIC|g' {} +
- find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_static=$|lt_prog_compiler_static=-static|g' {} +
-}
-
-fix_and_configure() {
- fix_configure
- ./configure $@
-}
-
-use_stdbit() {
- sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
-
- sed -i 's|__builtin_ctzll(|(int)stdc_trailing_zeros_ull(|g' "$2"
- sed -i 's|__builtin_ctzl(|(int)stdc_trailing_zeros_ul(|g' "$2"
- sed -i 's|__builtin_ctz(|(int)stdc_trailing_zeros_ui(|g' "$2"
- sed -i 's|__builtin_clzll(|(int)stdc_leading_zeros_ull(|g' "$2"
- sed -i 's|__builtin_clzl(|(int)stdc_leading_zeros_ul(|g' "$2"
- sed -i 's|__builtin_clz(|(int)stdc_leading_zeros_ui(|g' "$2"
- sed -i 's|__builtin_popcountll(|(int)stdc_count_ones_ull(|g' "$2"
- sed -i 's|__builtin_popcountl(|(int)stdc_count_ones_ul(|g' "$2"
- sed -i 's|__builtin_popcount(|(int)stdc_count_ones_ui(|g' "$2"
-}
-
-use_stdbit2() {
- sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
-
- sed -i 's|__builtin_ctzll|(int)stdc_trailing_zeros_ull|g' "$2"
- sed -i 's|__builtin_ctzl|(int)stdc_trailing_zeros_ul|g' "$2"
- sed -i 's|__builtin_ctz|(int)stdc_trailing_zeros_ui|g' "$2"
- sed -i 's|__builtin_clzll|(int)stdc_leading_zeros_ull|g' "$2"
- sed -i 's|__builtin_clzl|(int)stdc_leading_zeros_ul|g' "$2"
- sed -i 's|__builtin_clz|(int)stdc_leading_zeros_ui|g' "$2"
- sed -i 's|__builtin_popcountll|(int)stdc_count_ones_ull|g' "$2"
- sed -i 's|__builtin_popcountl|(int)stdc_count_ones_ul|g' "$2"
- sed -i 's|__builtin_popcount|(int)stdc_count_ones_ui|g' "$2"
-}
-
-replace_line() {
- sed -i s/^"$1"$/"$2"/g "$3"
-}
-
-github_tar() {
-  mkdir -p "$2"
-  curl --retry 5 --retry-delay 60 -fL https://github.com/"$1"/"$2"/archive/refs/tags/"$3".tar.gz | tar xz -C "$2" --strip-components=1
-  cd "$2"
-}
-
-github_clone() {
-  git clone --depth 1 --recurse-submodules --shallow-submodules --branch "$3" https://github.com/"$1"/"$2"
-  cd "$2"
-}
-
-git_fetch() {
- mkdir -p "$3" && cd "$3"
- git init
- git remote add origin "$1"
- git fetch --depth 1 origin "$2"
- git checkout FETCH_HEAD
-}
-
-url_tar() {
- mkdir -p "$2"
- curl --retry 5 --retry-delay 90 -fL "$1" | tar xz -C "$2" --strip-components=1
- cd "$2"
-}
-
-url_bz() {
- mkdir -p "$2"
- curl --retry 5 --retry-delay 90 -fL "$1" | tar x --bz -C "$2" --strip-components=1
- cd "$2"
-}
-
-url_lz() {
- mkdir -p "$2"
- curl --retry 5 --retry-delay 90 -fL "$1" | tar x --lzip -C "$2" --strip-components=1
- cd "$2"
-}
-
-url_xz() {
- mkdir -p "$2"
- curl --retry 5 --retry-delay 90 -fL "$1" | tar x --xz -C "$2" --strip-components=1
- cd "$2"
-}
-
-install_libtool() {
- url_xz https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz __libtool
- fix_and_configure
- make  install
- cd ../ && rm -rf __libtool
-}
-
-# tests
-
 test_bash() {
  url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3.tar.gz bash
  fix_and_configure
@@ -165,8 +68,6 @@ test_busybox() {
  sed -i 's|LDLIBS += rt|LDLIBS += rt resolv|g' Makefile.flags
  sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha1_hwaccel_x86-64.S
  sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha256_hwaccel_x86-64.S
- sed -i 's|BUG_xatou32_unimplemented()|0|g' include/xatonum.h
- sed -i 's|BUG_bb_strtou32_unimplemented()|0|g' include/xatonum.h
  sed -i 's|\tgcc |$CC |g' testsuite/testing.sh
  replace_line "# if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#if 1" libbb/hash_md5_sha.c
  make CC=$CC HOSTCC=$CC defconfig
@@ -185,7 +86,7 @@ test_c23doku() {
 }
 
 test_c3() {
- git_fetch https://github.com/c3lang/c3c 1b8355ff07a89e2c14166111c7191c5fd3e20d6b c3c
+ github_tar c3lang c3c v0.7.4
  replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
  mkdir build && cd build
  cmake ../ -DCMAKE_C_COMPILER=$CC
@@ -404,10 +305,32 @@ test_libexpat() {
  make check
 }
 
+test_libgc() {
+ git_fetch https://github.com/bdwgc/bdwgc 9d83c00b5c146863397c31dbac0892c762e7530f libgc
+ sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
+ use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
+ sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
+ use_stdatomic '#include <stdarg.h>' cord/cordxtra.c
+ sed -i 's|defined(__GNUC__)|1|g' cord/cordprnt.c
+ libtoolize
+ sh autogen.sh
+ fix_and_configure --disable-dynamic-loading --enable-threads=posix --with-libatomic-ops=none
+ make check
+}
+
 test_libgmp() {
  url_xz https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp
  fix_and_configure
  make && make check
+}
+
+test_libjansson() {
+ github_tar akheron jansson v2.14.1
+ replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/jansson.h
+ convert_atomic_x_fetch src/jansson.h
+ use_stdatomic "#include <stdio.h>" src/hashtable_seed.c
+ cmake . -DCMAKE_C_COMPILER=$CC -DJANSSON_BUILD_DOCS=OFF -DCMAKE_C_FLAGS=-lm -DHAVE_ATOMIC_BUILTINS=1
+ make && make test
 }
 
 test_libjpeg() {
@@ -536,6 +459,13 @@ test_mawk() {
  make check
 }
 
+test_mbedtls() {
+ url_bz https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.0.0-beta/mbedtls-4.0.0-beta.tar.bz2 mbedtls
+ replace_line "    (defined(__GNUC__) || defined(__clang__)) && defined(MBEDTLS_ARCH_IS_X64)" "1" tf-psa-crypto/drivers/builtin/src/aesni.h
+ cmake . -DCMAKE_C_COMPILER=$CC
+ make && ctest -j2
+}
+
 test_memcached() {
  github_tar memcached memcached 1.6.39
  sed -i "s/defined(__has_builtin)/0/g" crc32c.c
@@ -582,8 +512,7 @@ test_mruby() {
 
 test_msgpack() {
  github_tar msgpack msgpack-c c-6.1.0
- sed -i 's|__sync_sub_and_fetch(ptr, 1)|(--*(_Atomic unsigned*)(ptr))|g' cmake/sysdep.h.in
- sed -i 's|__sync_add_and_fetch(ptr, 1)|(++*(_Atomic unsigned*)(ptr))|g' cmake/sysdep.h.in
+ convert_atomic_x_fetch cmake/sysdep.h.in
  mkdir cmakebuild && cd cmakebuild
  cmake ../ -DCMAKE_C_COMPILER=$CC -DMSGPACK_32BIT=OFF -DBUILD_SHARED_LIBS=ON \
   -DMSGPACK_CHAR_SIGN=signed -DMSGPACK_BUILD_EXAMPLES=ON -DMSGPACK_BUILD_TESTS=ON
@@ -610,6 +539,12 @@ test_nginx() {
  cd ../
  git_fetch https://github.com/nginx/nginx-tests 7f1e88e10dca8e4c135ab9e688df0c2484091125 nginx-tests
  prove .
+}
+
+test_nob() {
+ git_fetch https://github.com/fuhsnn/nob.h aa89f4588ef4e16d4df354671fe6eb700a978a0b nob
+ cd run_tests
+ CC="$CC -fdefer-ts" bash ./run.sh
 }
 
 test_noplate() {
@@ -649,7 +584,7 @@ test_openssh() {
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.5.1
+ github_tar openssl openssl openssl-3.5.2
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -682,7 +617,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0alpha2
+ github_tar php php-src php-8.5.0alpha4
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -695,7 +630,9 @@ test_php() {
  export SKIP_IO_CAPTURE_TESTS=1
 
  ./buildconf --force
- fix_and_configure --disable-opcache
+ fix_configure
+ coverage=(--enable-pcntl --enable-zend-test --with-bz2 --with-curl --with-ffi --with-gettext --with-gmp --with-openssl --with-readline --with-sodium --with-zlib)
+ CFLAGS=-fdisable-visibility ./configure "${coverage[@]}"
  make test NO_INTERACTION=1
 }
 
@@ -709,7 +646,7 @@ test_postgres() {
 }
 
 test_python() {
- github_tar python cpython v3.13.5
+ github_tar python cpython v3.13.6
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
@@ -736,10 +673,10 @@ test_quickjs() {
 }
 
 test_redis() {
- github_tar redis redis 8.0.3
+ github_tar redis redis 8.2.0
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
- sed -i 's|asm volatile|__asm__ volatile|g' deps/hdr_histogram/hdr_atomic.h
- sed -i 's|__sync_add_and_fetch(field, value)|*(_Atomic int64_t*)field+=value|g' deps/hdr_histogram/hdr_atomic.h
+ sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
+ convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
  use_stdbit "#include <stdint.h>" deps/hdr_histogram/hdr_histogram.c
  use_stdbit "#include <stdint.h>" src/util.h
  use_stdbit "#include <stdint.h>" src/dict.c
@@ -753,8 +690,8 @@ test_redis() {
 test_valkey() {
  github_tar valkey-io valkey 8.1.2
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
- sed -i 's|asm volatile|__asm__ volatile|g' deps/hdr_histogram/hdr_atomic.h
- sed -i 's|__sync_add_and_fetch(field, value)|*(_Atomic int64_t*)field+=value|g' deps/hdr_histogram/hdr_atomic.h
+ sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
+ convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
  use_stdbit "#include <stdint.h>" deps/hdr_histogram/hdr_histogram.c
  use_stdbit "#include <stdint.h>" src/dict.c
  sed -i 's|builtin_ctzll|__builtin_ctzll|g' src/hyperloglog.c
@@ -777,7 +714,7 @@ test_samba() {
  sed -i 's|conf.fatal|print|g' buildtools/wafsamba/generic_cc.py
  sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
  sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
- sed -i 's|__sync_synchronize()|__asm volatile(\"mfence\":::\"memory\")|g' third_party/socket_wrapper/socket_wrapper.c
+ use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
  replace_line "#if defined(__clang__) || defined(__GNUC__) || defined(__SUNPRO_C)" "#if 1" third_party/heimdal/include/heim_threads.h
  ./configure --without-json --without-ad-dc --enable-selftest --without-ldap --without-ldb-lmdb --without-ads --with-shared-modules='!vfs_snapper,!vfs_nfs4acl_xattr'
@@ -993,6 +930,8 @@ build_ncurses() {
 build_nuklear() {
  github_tar Immediate-Mode-UI Nuklear 4.12.7
  rm -r demo/sfml_opengl*
+ find demo/sdl_*/Makefile -exec sed -i 's|std=c89 |std=c89 -DSDL_INLINE=__inline |g' {} +
+ find demo/*/sdl/Makefile -exec sed -i 's|std=c89 |std=c89 -DSDL_INLINE=__inline |g' {} +
  sed -i 's|CFLAGS+=|CFLAGS+=-DSDL_DISABLE_IMMINTRIN_H |g' demo/rawfb/sdl/Makefile
  use_stdbit "#include <X11/Xlib.h>" demo/rawfb/x11/nuklear_xlib.h
  sed -i 's|-std=c99|-DSTBI_NO_SIMD -std=c99|g' demo/glfw_opengl2/Makefile
@@ -1033,7 +972,7 @@ build_raylib_raygui() {
 }
 
 build_sdl3() {
- github_tar libsdl-org SDL release-3.2.18
+ github_tar libsdl-org SDL release-3.2.20
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  mkdir cmakebuild && cd cmakebuild
  cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu
@@ -1067,6 +1006,155 @@ build_zig() {
  "$CC" bootstrap.c -o _bootstrap
  ./_bootstrap
  ./zig2 test --show-builtin
+}
+
+# utilities
+
+fix_configure() {
+ find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_wl=$|lt_prog_compiler_wl=-Wl,|g' {} +
+ find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_pic=$|lt_prog_compiler_pic=-fPIC|g' {} +
+ find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_static=$|lt_prog_compiler_static=-static|g' {} +
+}
+
+fix_and_configure() {
+ fix_configure
+ ./configure $@
+}
+
+replace_line() {
+ sed -i s/^"$1"$/"$2"/g "$3"
+}
+
+wget_timeout_noretry() {
+ wget -c -4 -T10 -t1 $@
+}
+
+wget_loop() {
+ while ! wget_timeout_noretry "$1" -O "$2"; do
+  sleep 10
+ done
+}
+
+get_tar() {
+  mkdir "$2"
+  local F="$2".tar"$1"
+
+  if ! [ -f $F ]; then
+   wget_loop "$3" $F
+  fi
+  tar -xf $F -C "$2" --strip-components=1
+  cd "$2"
+}
+
+github_clone() {
+  git clone --depth 1 --recurse-submodules --shallow-submodules --branch "$3" https://github.com/"$1"/"$2"
+  cd "$2"
+}
+
+git_fetch() {
+ mkdir -p "$3" && cd "$3"
+ git init
+ git remote add origin "$1"
+ git fetch --depth 1 origin "$2"
+ git checkout FETCH_HEAD
+}
+
+github_tar() {
+ get_tar .gz "$2" https://github.com/"$1"/"$2"/archive/refs/tags/"$3".tar.gz
+}
+
+url_tar() {
+ get_tar .gz "$2" "$1"
+}
+
+url_bz() {
+ get_tar .bz "$2" "$1"
+}
+
+url_lz() {
+ get_tar .lz "$2" "$1"
+}
+
+url_xz() {
+ get_tar .xz "$2" "$1"
+}
+
+install_libtool() {
+ url_xz https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz __libtool
+ fix_and_configure
+ make  install
+ cd ../ && rm -rf __libtool
+}
+
+use_stdatomic() {
+ sed -i 's|^'"$1"'|#include <stdatomic.h>\n'"$1"'|g' "$2"
+
+ sed -i 's|__ATOMIC_RELAXED|memory_order_relaxed|g' "$2"
+ sed -i 's|__ATOMIC_CONSUME|memory_order_consume|g' "$2"
+ sed -i 's|__ATOMIC_ACQUIRE|memory_order_acquire|g' "$2"
+ sed -i 's|__ATOMIC_RELEASE|memory_order_release|g' "$2"
+ sed -i 's|__ATOMIC_ACQ_REL|memory_order_acq_rel|g' "$2"
+ sed -i 's|__ATOMIC_SEQ_CST|memory_order_seq_cst|g' "$2"
+
+ sed -i 's|__atomic_load_n|atomic_load_explicit|g' "$2"
+ sed -i 's|__atomic_store_n|atomic_store_explicit|g' "$2"
+
+ sed -i 's|__atomic_clear|atomic_flag_clear_explicit|g' "$2"
+ sed -i 's|__atomic_test_and_set|atomic_flag_test_and_set_explicit|g' "$2"
+ sed -i 's|__atomic_signal_fence|atomic_signal_fence|g' "$2"
+ sed -i 's|__atomic_thread_fence|atomic_thread_fence|g' "$2"
+
+ sed -i 's|__atomic_fetch_add|atomic_fetch_add_explicit|g' "$2"
+ sed -i 's|__atomic_fetch_sub|atomic_fetch_sub_explicit|g' "$2"
+ sed -i 's|__atomic_fetch_or|atomic_fetch_or_explicit|g' "$2"
+ sed -i 's|__atomic_fetch_xor|atomic_fetch_xor_explicit|g' "$2"
+ sed -i 's|__atomic_fetch_and|atomic_fetch_and_explicit|g' "$2"
+
+ sed -i 's|__sync_synchronize()|atomic_thread_fence(memory_order_seq_cst)|g' "$2"
+
+ convert_atomic_x_fetch "$2"
+}
+
+convert_atomic_x_fetch() {
+ sed -i 's|__atomic_add_fetch|__builtin_atomic_arith_add|g' "$1"
+ sed -i 's|__atomic_sub_fetch|__builtin_atomic_arith_sub|g' "$1"
+ sed -i 's|__atomic_or_fetch|__builtin_atomic_arith_or|g' "$1"
+ sed -i 's|__atomic_xor_fetch|__builtin_atomic_arith_xor|g' "$1"
+ sed -i 's|__atomic_and_fetch|__builtin_atomic_arith_and|g' "$1"
+
+ sed -i 's|__sync_add_and_fetch|__builtin_atomic_arith_add|g' "$1"
+ sed -i 's|__sync_sub_and_fetch|__builtin_atomic_arith_sub|g' "$1"
+ sed -i 's|__sync_or_and_fetch|__builtin_atomic_arith_or|g' "$1"
+ sed -i 's|__sync_and_and_fetch|__builtin_atomic_arith_xor|g' "$1"
+ sed -i 's|__sync_xor_and_fetch|__builtin_atomic_arith_and|g' "$1"
+}
+
+use_stdbit() {
+ sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
+
+ sed -i 's|__builtin_ctzll(|(int)stdc_trailing_zeros_ull(|g' "$2"
+ sed -i 's|__builtin_ctzl(|(int)stdc_trailing_zeros_ul(|g' "$2"
+ sed -i 's|__builtin_ctz(|(int)stdc_trailing_zeros_ui(|g' "$2"
+ sed -i 's|__builtin_clzll(|(int)stdc_leading_zeros_ull(|g' "$2"
+ sed -i 's|__builtin_clzl(|(int)stdc_leading_zeros_ul(|g' "$2"
+ sed -i 's|__builtin_clz(|(int)stdc_leading_zeros_ui(|g' "$2"
+ sed -i 's|__builtin_popcountll(|(int)stdc_count_ones_ull(|g' "$2"
+ sed -i 's|__builtin_popcountl(|(int)stdc_count_ones_ul(|g' "$2"
+ sed -i 's|__builtin_popcount(|(int)stdc_count_ones_ui(|g' "$2"
+}
+
+use_stdbit2() {
+ sed -i 's|^'"$1"'|#include <stdbit.h>\n'"$1"'|g' "$2"
+
+ sed -i 's|__builtin_ctzll|(int)stdc_trailing_zeros_ull|g' "$2"
+ sed -i 's|__builtin_ctzl|(int)stdc_trailing_zeros_ul|g' "$2"
+ sed -i 's|__builtin_ctz|(int)stdc_trailing_zeros_ui|g' "$2"
+ sed -i 's|__builtin_clzll|(int)stdc_leading_zeros_ull|g' "$2"
+ sed -i 's|__builtin_clzl|(int)stdc_leading_zeros_ul|g' "$2"
+ sed -i 's|__builtin_clz|(int)stdc_leading_zeros_ui|g' "$2"
+ sed -i 's|__builtin_popcountll|(int)stdc_count_ones_ull|g' "$2"
+ sed -i 's|__builtin_popcountl|(int)stdc_count_ones_ul|g' "$2"
+ sed -i 's|__builtin_popcount|(int)stdc_count_ones_ui|g' "$2"
 }
 
 # run a test
