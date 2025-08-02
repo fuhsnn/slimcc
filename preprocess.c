@@ -563,7 +563,7 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
 
     MacroArg *ap = &ctx.args[idx];
     if (is_va_arg && equal(tok, ")"))
-      ctx.omit_comma = (opt_std != STD_NONE && idx == 0) ? false : true;
+      ctx.omit_comma = !(is_iso_std && idx == 0);
     else if (idx)
       tok = skip(tok, ",");
 
@@ -2082,6 +2082,12 @@ static Token *preprocess3(Token *tok) {
 // Entry point function of the preprocessor.
 Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
   base_file = input_file;
+
+  if (opt_std == STD_C89) {
+    Macro *m = hashmap_get(&macros, "__STDC_VERSION__");
+    if (m && m->handler)
+      undef_macro("__STDC_VERSION__");
+  }
 
   if (imacros_tok)
     imacros_tok = preprocess2(imacros_tok);

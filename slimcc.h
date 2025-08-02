@@ -784,7 +784,6 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output);
 // main.c
 //
 typedef enum {
-  STD_NONE = 0,
   STD_C89,
   STD_C99,
   STD_C11,
@@ -823,6 +822,7 @@ extern bool opt_werror;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
+extern bool is_iso_std;
 extern bool opt_fdefer_ts;
 extern bool opt_short_enums;
 extern bool opt_ms_anon_struct;

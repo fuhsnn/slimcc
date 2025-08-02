@@ -28,7 +28,8 @@ bool opt_data_sections;
 bool opt_werror;
 bool opt_cc1_asm_pp;
 char *opt_visibility;
-StdVer opt_std;
+StdVer opt_std = STD_C17;
+bool is_iso_std;
 bool opt_fdefer_ts;
 bool opt_short_enums;
 bool opt_ms_anon_struct;
@@ -161,19 +162,24 @@ static bool set_true(char *p, char *str, bool *opt) {
   return set_bool(p, true, str, opt);
 }
 
-static void set_std(int val) {
-  if (val == 89 || val == 90)
-    opt_std = STD_C89;
-  else if (val == 99)
-    opt_std = STD_C99;
-  else if (val == 11)
-    opt_std = STD_C11;
-  else if (val == 17 || val == 18)
-    opt_std = STD_C17;
-  else if (val == 23)
-    opt_std = STD_C23;
-  else
-    error("unknown c standard");
+static void set_std(bool is_iso, char *arg) {
+  char *end;
+  int val = strtoul(arg, &end, 10);
+
+  if (end - arg == 2) {
+    is_iso_std = is_iso;
+
+    switch (val) {
+    case 89:
+    case 90: opt_std = STD_C89; return;
+    case 99: opt_std = STD_C99; return;
+    case 11: opt_std = STD_C11; return;
+    case 17:
+    case 18: opt_std = STD_C17; return;
+    case 23: opt_std = STD_C23; return;
+    }
+  }
+  error("unknown c standard");
 }
 
 void set_fpic(char *lvl) {
@@ -423,16 +429,20 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (!strcmp(argv[i], "-ansi")) {
-      set_std(89);
+      set_std(true, "89");
       define_macro_cli("__STRICT_ANSI__");
       continue;
-    } else if (startswith(argv[i], &arg, "-std=c") ||
-      startswith(argv[i], &arg, "--std=c")) {
-      set_std(strtoul(arg, NULL, 10));
-      continue;
-    } else if (!strcmp(argv[i], "--std")) {
-      if (startswith(argv[++i], &arg, "c")) {
-        set_std(strtoul(arg, NULL, 10));
+    }
+
+    if (startswith(argv[i], &arg, "-std=") ||
+      startswith(argv[i], &arg, "--std=") ||
+      take_arg(argv, &i, &arg, "--std")) {
+      if (startswith(arg, &arg, "c")) {
+        set_std(true, arg);
+        continue;
+      }
+      if (startswith(arg, &arg, "gnu")) {
+        set_std(false, arg);
         continue;
       }
       error("unknown c standard");
@@ -544,7 +554,6 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
 
     // These options are ignored for now.
     if (startswith(argv[i], &arg, "-W") ||
-        startswith(argv[i], &arg, "-std=") ||
         startswith(argv[i], &arg, "-march=") ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
