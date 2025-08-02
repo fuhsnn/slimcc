@@ -357,6 +357,20 @@ test_janet() {
  make test
 }
 
+test_jansson() {
+ github_tar akheron jansson v2.14.1
+ replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/jansson.h
+ sed -i 's|volatile size_t refcount|_Atomic volatile size_t refcount|g' src/jansson.h
+ sed -i 's|__atomic_add_fetch(&json->refcount, 1, __ATOMIC_ACQUIRE)|(++json->refcount)|g' src/jansson.h
+ sed -i 's|__atomic_sub_fetch(&json->refcount, 1, __ATOMIC_RELEASE)|(--json->refcount)|g' src/jansson.h
+ sed -i 's|^#include <stdio.h>|#include <stdatomic.h>\n#include <stdio.h>|g' src/hashtable_seed.c
+ sed -i 's|__atomic_test_and_set|atomic_flag_test_and_set_explicit|g' src/hashtable_seed.c
+ sed -i 's|__atomic_load_n|atomic_load_explicit|g' src/hashtable_seed.c
+ sed -i 's|__atomic_store_n|atomic_store_explicit|g' src/hashtable_seed.c
+ cmake . -DCMAKE_C_COMPILER=$CC -DJANSSON_BUILD_DOCS=OFF -DCMAKE_C_FLAGS=-lm -DHAVE_ATOMIC_BUILTINS=1
+ make && make test
+}
+
 test_jemalloc() {
  git_fetch https://github.com/jemalloc/jemalloc 1972241cd204c60fb5b66f23c48a117879636161 jemalloc
  sed -i 's|ATOMIC_VAR_INIT||g' include/jemalloc/internal/atomic_c11.h
