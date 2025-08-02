@@ -563,7 +563,7 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
 
     MacroArg *ap = &ctx.args[idx];
     if (is_va_arg && equal(tok, ")"))
-      ctx.omit_comma = (opt_std != STD_NONE && idx == 0) ? false : true;
+      ctx.omit_comma = !(is_iso_std && idx == 0);
     else if (idx)
       tok = skip(tok, ",");
 

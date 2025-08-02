@@ -282,9 +282,9 @@ TokenKind ident_keyword(Token *tok) {
     for (int i = 0; i < sizeof(ty_kw) / sizeof(*ty_kw); i++)
       hashmap_put(&map, ty_kw[i], (void *)TK_TYPEKW);
 
-    if (opt_std == STD_NONE)
+    if (!is_iso_std)
       hashmap_put(&map, "asm", (void *)TK_KEYWORD);
-    if (opt_std == STD_NONE || opt_std >= STD_C23)
+    if (!is_iso_std || opt_std >= STD_C23)
       hashmap_put(&map, "typeof", (void *)TK_TYPEKW);
     if (opt_std >= STD_C23) {
       hashmap_put(&map, "alignof", (void *)TK_KEYWORD);
