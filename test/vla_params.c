@@ -61,7 +61,7 @@ _Bool z = 1;
 void
 fn_oldstyle(a, b, c, d, z)
 float c;
-uint8_t b,d;
+register uint8_t b,d;
 int16_t (*a)[++b][(__typeof__(b))c][d++];
 {
   ASSERT(720, sizeof(*a));

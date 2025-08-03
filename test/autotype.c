@@ -30,6 +30,8 @@ int main(void) {
   ASSERT(19, sp->i[13]);
 
   typedef char foo;
+  auto foo f0;
+  static_assert(_Generic(f0, char:1));
   {
     __auto_type foo = 0L;
     static_assert(_Generic(foo, long:1));

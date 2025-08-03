@@ -27,15 +27,24 @@ typedef struct {
   int64_t enum_val;
 } VarScope;
 
+enum {
+  SC_AUTO      = 1,
+  SC_CONSTEXPR = 1 << 1,
+  SC_EXTERN    = 1 << 2,
+  SC_REGISTER  = 1 << 3,
+  SC_STATIC    = 1 << 4,
+  SC_THREAD    = 1 << 5,
+  SC_TYPEDEF   = 1 << 6,
+  SC_ALL       = (1 << 7) - 1,
+  SC_NONE      = 0,
+};
+
+typedef uint8_t StorageClass;
+
 // Variable attributes such as typedef or extern.
 typedef struct {
-  bool is_typedef;
-  bool is_static;
-  bool is_extern;
+  StorageClass strg;
   bool is_inline;
-  bool is_register;
-  bool is_tls;
-  bool is_constexpr;
   bool is_weak;
   bool is_packed;
   bool is_common;
@@ -145,13 +154,10 @@ static bool is_defer_context;
 static bool *eval_recover;
 
 static bool is_typename(Token *tok);
-static Type *declspec(Token **rest, Token *tok, VarAttr *attr);
 static Type *typename(Token **rest, Token *tok);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
-static Type *type_suffix(Token **rest, Token *tok, Type *ty);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
-static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
@@ -847,11 +853,26 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
   if (equal(tok, "{")) {
     bool is_gnu_inline = attr->is_gnu_inline;
     DeclAttr(bool_attr, "gnu_inline", &is_gnu_inline);
-    fn->only_inline = is_gnu_inline && attr->is_inline && attr->is_extern;
+    fn->only_inline = is_gnu_inline && attr->is_inline && (attr->strg & SC_EXTERN);
   }
 }
 
-static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
+static bool chk_storage_class(uint8_t msk, StorageClass allow) {
+  if (msk == SC_NONE)
+    return false;
+  if (msk & ~allow)
+    return true;
+  if (msk & SC_AUTO)
+    return msk & SC_TYPEDEF;
+  if (msk & SC_CONSTEXPR)
+    return msk & ~(SC_CONSTEXPR | SC_AUTO | SC_REGISTER | SC_STATIC);
+  if (msk & SC_THREAD)
+    return msk & ~(SC_THREAD | SC_STATIC | SC_EXTERN);
+  return 1 < ((bool)(msk & SC_EXTERN) + (bool)(msk & SC_REGISTER) +
+    (bool)(msk & SC_STATIC) + (bool)(msk & SC_TYPEDEF));
+}
+
+static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx) {
   enum {
     VOID     = 1 << 0,
     BOOL     = 1 << 2,
@@ -867,98 +888,43 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     BITINT   = 1 << 19,
   };
 
-  if (attr)
-    tyspec_attr(tok, attr, TK_BATTR);
-
   Type *ty = NULL;
   int counter = 0;
   bool is_atomic = false;
   bool is_const = false;
   bool is_restrict = false;
   bool is_volatile = false;
-  bool is_auto = false;
+
+  if (tok->attr_next)
+    tyspec_attr(tok, attr, TK_BATTR);
+
   for (;;) {
-    if (attr)
+    if (tok->attr_next)
       tyspec_attr(tok, attr, TK_ATTR);
 
-    if (!is_typename(tok))
-      break;
-
-    // Handle storage class specifiers.
-    switch (tok->kind) {
-    case TK_typedef:
-    case TK_static:
-    case TK_extern:
-    case TK_inline:
-    case TK_thread_local:
-      if (!attr)
-        error_tok(tok, "storage class specifier is not allowed in this context");
-
-      switch (tok->kind) {
-      case TK_typedef: attr->is_typedef = true; break;
-      case TK_static: attr->is_static = true; break;
-      case TK_extern: attr->is_extern = true; break;
-      case TK_inline: attr->is_inline = true; break;
-      case TK_thread_local: attr->is_tls = true; break;
-      }
-
-      if (attr->is_typedef &&
-          attr->is_static + attr->is_extern + attr->is_inline + attr->is_tls > 1)
-        error_tok(tok, "typedef may not be used together with static,"
-                  " extern, inline, __thread or _Thread_local");
-      tok = tok->next;
-      continue;
-    }
-
-    if (tok->kind == TK_constexpr) {
-      if (!attr)
-        error_tok(tok, "constexpr not allowed in this context");
-      attr->is_constexpr = true;
-      is_const = true;
-      tok = tok->next;
-      continue;
-    }
-
-    if (tok->kind == TK_register) {
-      tok = tok->next;
-      if (attr) {
-        attr->is_register = true;
+    TokenKind tk_kind = tok->kind;
+    if (!(tk_kind >= TK_TYPEKW && tk_kind < TK_TYPEKW_END)) {
+      if (!ty && (ty = find_typedef(tok))) {
+        tok = tok->next;
+        counter |= OTHER;
         continue;
       }
+      break;
     }
+    tok = tok->next;
 
-    if (tok->kind == TK_Noreturn) {
-      tok = tok->next;
-      continue;
-    }
-
-    if (tok->kind == TK_auto || tok->kind == TK_auto_type) {
-      if (tok->kind == TK_auto_type || opt_std >= STD_C23)
-        is_auto = true;
-      tok = tok->next;
-      continue;
-    }
-
-    if (tok->kind == TK_Atomic) {
-      tok = tok->next;
-      if (consume(&tok, tok , "(")) {
-        ty = typename(&tok, tok);
-        tok = skip(tok, ")");
-      }
-      is_atomic = true;
-      continue;
-    }
-
-    switch (tok->kind) {
-    case TK_const: is_const = true; tok = tok->next; continue;
-    case TK_restrict: is_restrict = true; tok = tok->next; continue;
-    case TK_volatile: is_volatile = true; tok = tok->next; continue;
-    }
-
-    if (tok->kind == TK_alignas) {
-      if (!attr)
-        error_tok(tok, "_Alignas is not allowed in this context");
-      tok = skip(tok->next, "(");
+    switch (tk_kind) {
+    case TK_auto: attr->strg |= SC_AUTO; continue;
+    case TK_constexpr: attr->strg |= SC_CONSTEXPR; is_const = true; continue;
+    case TK_extern: attr->strg |= SC_EXTERN; continue;
+    case TK_register: attr->strg |= SC_REGISTER; continue;
+    case TK_static: attr->strg |= SC_STATIC; continue;
+    case TK_typedef: attr->strg |= SC_TYPEDEF; continue;
+    case TK_thread_local: attr->strg |= SC_THREAD; continue;
+    case TK_inline: attr->is_inline = true; continue;
+    case TK_Noreturn: continue;
+    case TK_alignas: {
+      tok = skip(tok, "(");
       int align;
       if (is_typename(tok))
         align = typename(&tok, tok)->align;
@@ -968,40 +934,42 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       tok = skip(tok, ")");
       continue;
     }
-
-    Type *ty2 = find_typedef(tok);
-    if (ty2) {
-      if (counter || is_auto)
-        break;
-      ty = ty2;
-      tok = tok->next;
-      counter += OTHER;
-      continue;
     }
 
-    switch (tok->kind) {
-    case TK_struct:
-    case TK_union:
-    case TK_enum:
-    case TK_typeof:
-    case TK_typeof_unqual: {
-      if (counter)
-        error_tok(tok, "invalid type");
-      counter += OTHER;
-
-      switch (tok->kind) {
-      case TK_struct: ty = struct_union_decl(&tok, tok->next, TY_STRUCT); break;
-      case TK_union: ty = struct_union_decl(&tok, tok->next, TY_UNION); break;
-      case TK_enum: ty = enum_specifier(&tok, tok->next); break;
-      case TK_typeof: ty = typeof_specifier(&tok, tok->next); break;
-      case TK_typeof_unqual: ty = unqual(typeof_specifier(&tok, tok->next)); break;
+    switch (tk_kind) {
+    case TK_const: is_const = true; continue;
+    case TK_restrict: is_restrict = true; continue;
+    case TK_volatile: is_volatile = true; continue;
+    case TK_Atomic: {
+      is_atomic = true;
+      if (consume(&tok, tok , "(")) {
+        if (ty)
+          error_tok(tok, "invalid type");
+        ty = typename(&tok, tok);
+        tok = skip(tok, ")");
+        counter |= OTHER;
       }
       continue;
     }
     }
 
-    // Handle built-in types.
-    switch (tok->kind) {
+    if (!ty) {
+      switch (tk_kind) {
+      case TK_struct: ty = struct_union_decl(&tok, tok, TY_STRUCT); break;
+      case TK_union: ty = struct_union_decl(&tok, tok, TY_UNION); break;
+      case TK_enum: ty = enum_specifier(&tok, tok); break;
+      case TK_typeof: ty = typeof_specifier(&tok, tok); break;
+      case TK_typeof_unqual: ty = unqual(typeof_specifier(&tok, tok)); break;
+      case TK_auto_type: ty = new_type(TY_AUTO, -1, 0); break;
+      }
+      if (ty) {
+        counter |= OTHER;
+        continue;
+      }
+    }
+
+    switch (tk_kind) {
+    default: error_tok(tok, "invalid type");
     case TK_void: counter += VOID; break;
     case TK_bool: counter += BOOL; break;
     case TK_char: counter += CHAR; break;
@@ -1013,123 +981,83 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     case TK_signed: counter |= SIGNED; break;
     case TK_unsigned: counter |= UNSIGNED; break;
     case TK_BitInt: {
-      counter |= BITINT;
-      int64_t width = const_expr(&tok, skip(tok->next, "("));
-      ty = new_bitint(width, tok);
-      skip(tok, ")");
+      counter += BITINT;
+      ty = new_bitint(const_expr(&tok, skip(tok, "(")), tok);
+      tok = skip(tok, ")");
       break;
     }
-    default:
-      internal_error();
     }
 
     switch (counter) {
-    case VOID:
-      ty = ty_void;
-      break;
-    case BOOL:
-      ty = ty_bool;
-      break;
-    case CHAR:
-      ty = ty_pchar;
-      break;
-    case SIGNED + CHAR:
-      ty = ty_char;
-      break;
-    case UNSIGNED + CHAR:
-      ty = ty_uchar;
-      break;
+    default: error_tok(tok, "invalid type");
+    case VOID: ty = ty_void; break;
+    case BOOL: ty = ty_bool; break;
+    case CHAR: ty = ty_pchar; break;
+    case SIGNED + CHAR: ty = ty_char; break;
+    case UNSIGNED + CHAR: ty = ty_uchar; break;
     case SHORT:
     case SHORT + INT:
     case SIGNED + SHORT:
-    case SIGNED + SHORT + INT:
-      ty = ty_short;
-      break;
+    case SIGNED + SHORT + INT: ty = ty_short; break;
     case UNSIGNED + SHORT:
-    case UNSIGNED + SHORT + INT:
-      ty = ty_ushort;
-      break;
+    case UNSIGNED + SHORT + INT: ty = ty_ushort; break;
     case INT:
     case SIGNED:
-    case SIGNED + INT:
-      ty = ty_int;
-      break;
+    case SIGNED + INT: ty = ty_int; break;
     case UNSIGNED:
-    case UNSIGNED + INT:
-      ty = ty_uint;
-      break;
+    case UNSIGNED + INT: ty = ty_uint; break;
     case LONG:
     case LONG + INT:
     case SIGNED + LONG:
-    case SIGNED + LONG + INT:
-      ty = ty_long;
-      break;
+    case SIGNED + LONG + INT: ty = ty_long; break;
     case LONG + LONG:
     case LONG + LONG + INT:
     case SIGNED + LONG + LONG:
-    case SIGNED + LONG + LONG + INT:
-      ty = ty_llong;
-      break;
+    case SIGNED + LONG + LONG + INT: ty = ty_llong; break;
     case UNSIGNED + LONG:
-    case UNSIGNED + LONG + INT:
-      ty = ty_ulong;
-      break;
+    case UNSIGNED + LONG + INT: ty = ty_ulong; break;
     case UNSIGNED + LONG + LONG:
-    case UNSIGNED + LONG + LONG + INT:
-      ty = ty_ullong;
-      break;
-    case FLOAT:
-      ty = ty_float;
-      break;
-    case DOUBLE:
-      ty = ty_double;
-      break;
-    case LONG + DOUBLE:
-      ty = ty_ldouble;
-      break;
+    case UNSIGNED + LONG + LONG + INT: ty = ty_ullong; break;
+    case FLOAT: ty = ty_float; break;
+    case DOUBLE: ty = ty_double; break;
+    case LONG + DOUBLE: ty = ty_ldouble; break;
     case BITINT:
-    case BITINT + SIGNED:
-      break;
-    case BITINT + UNSIGNED:
-      ty->is_unsigned = true;
-      break;
-    default:
-      error_tok(tok, "invalid type");
+    case BITINT + SIGNED: break;
+    case BITINT + UNSIGNED: ty->is_unsigned = true; break;
     }
-
-    tok = tok->next;
   }
-
   *rest = tok;
 
-  if (!ty && is_auto) {
-    if (tok->kind != TK_IDENT || !equal(tok->next, "="))
-      error_tok(tok, "unsupported form for type inference");
-    ty = new_type(TY_AUTO, -1, 0);
-  }
+  if (chk_storage_class(attr->strg, ctx))
+    error_tok(tok, "invalid storage class");
 
   if (!ty) {
-    if (opt_std != STD_C89) {
+    if (opt_std == STD_C89) {
+      ty = ty_int;
+    } else if (opt_std >= STD_C23 && (attr->strg & SC_AUTO)) {
+      ty = new_type(TY_AUTO, -1, 0);
+    } else {
       if (tok->kind == TK_IDENT)
         error_tok(tok, "unknown type name");
       error_tok(tok, "implicit int only supported under -std=c89");
     }
-    ty = ty_int;
   }
+
+  if (ty->kind == TY_AUTO)
+    if (tok->kind != TK_IDENT || !equal(tok->next, "="))
+      error_tok(tok, "unsupported form for type inference");
 
   if (ty->kind == TY_BITINT)
     if (ty->bit_cnt < (1 + !ty->is_unsigned))
       error_tok(tok, "invalid bit width for _BitInt");
 
   if (is_atomic || is_const || is_volatile || is_restrict) {
-    Type *ty2 = new_qualified_type(ty);
-    ty2->is_atomic = is_atomic;
-    ty2->is_const = is_const;
-    ty2->is_volatile = is_volatile;
-    ty2->is_restrict = is_restrict;
-    return ty2;
+    ty = new_qualified_type(ty);
+    ty->is_atomic = is_atomic;
+    ty->is_const = is_const;
+    ty->is_volatile = is_volatile;
+    ty->is_restrict = is_restrict;
   }
-
   return ty;
 }
 
@@ -1142,7 +1070,8 @@ static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
   Node *expr = NULL;
 
   while (is_typename(tok)) {
-    Type *basety = declspec(&tok, tok, NULL);
+    Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
+
     do {
       Token *name = NULL;
       Type *ty = declarator(&tok, tok, basety, &name);
@@ -1224,8 +1153,8 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
       *rest = skip(tok->next, ")");
       break;
     }
+    Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
 
-    Type *ty = declspec(&tok, tok, NULL);
     Token *name = NULL;
     ty = declarator(&tok, tok, ty, &name);
 
@@ -1384,7 +1313,7 @@ static Type *declarator2(Token **rest, Token *tok, Type *basety, Token **name, i
 
 // type-name = declspec abstract-declarator
 static Type *typename(Token **rest, Token *tok) {
-  Type *ty = declspec(&tok, tok, NULL);
+  Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
   return declarator(rest, tok, ty, NULL);
 }
 
@@ -1675,7 +1604,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (!name)
     error_tok(tok, "variable name omitted");
 
-  if (attr && attr->is_static) {
+  if (attr && (attr->strg & SC_STATIC)) {
     if (ty->kind == TY_VLA)
       error_tok(tok, "variable length arrays cannot be 'static'");
 
@@ -1683,10 +1612,10 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     Obj *var = new_static_lvar(ty);
     push_scope(get_ident(name))->var = var;
     symbol_attr(&tok, tok, var, attr, name);
-    var->is_tls = attr->is_tls;
+    var->is_tls = attr->strg & SC_THREAD;
     var->alt_align = alt_align;
 
-    if (attr->is_constexpr) {
+    if (attr->strg & SC_CONSTEXPR) {
       constexpr_initializer(&tok, skip(tok, "="), var, var);
     } else if (equal(tok, "=")) {
       bool ctx = is_global_init_context;
@@ -1728,12 +1657,12 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (cleanup_fn)
     defr_cleanup(var, cleanup_fn, tok);
 
-  if (attr->is_register && tok->kind == TK_asm) {
+  if ((attr->strg & SC_REGISTER) && tok->kind == TK_asm) {
     var->asm_str = str_tok(&tok, skip(tok->next, "("));
     tok = skip(tok, ")");
   }
 
-  if (attr && attr->is_constexpr) {
+  if (attr && (attr->strg & SC_CONSTEXPR)) {
     Obj *init_var = new_static_lvar(ty);
     constexpr_initializer(&tok, skip(tok, "="), init_var, var);
     chain_expr(&expr, new_binary(ND_ASSIGN,
@@ -1764,7 +1693,7 @@ static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int claus
     clause++;
 
     VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr);
+    Type *basety = declspec(&tok, tok, &attr, SC_AUTO | SC_CONSTEXPR | SC_REGISTER);
 
     chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
     for (; consume(&tok, tok, ","); var = NULL)
@@ -1785,14 +1714,20 @@ static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int claus
   return n;
 }
 
-// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
-static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
+static Node *declaration(Token **rest, Token *tok) {
+  VarAttr attr = {0};
+  Type *basety = declspec(&tok, tok, &attr, SC_ALL);
+
+  if (attr.strg & SC_EXTERN) {
+    global_declaration(rest, tok, basety, &attr);
+    return NULL;
+  }
+  if (attr.strg & SC_TYPEDEF)
+    return parse_typedef(rest, tok, basety, &attr);
+
   Node *expr = NULL;
-
-  bool first = true;
-  for (; comma_list(rest, &tok, ";", !first); first = false)
-    chain_expr(&expr, declaration2(&tok, tok, basety, attr, &(Obj *){0}));
-
+  for (bool first = true; comma_list(rest, &tok, ";", !first); first = false)
+    chain_expr(&expr, declaration2(&tok, tok, basety, &attr, &(Obj *){0}));
   return expr;
 }
 
@@ -2793,9 +2728,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     if (!static_assertion(&tok, tok)) {
       if (is_typename(tok)) {
-        VarAttr attr = {0};
-        Type *basety = declspec(&tok, tok, &attr);
-        Node *expr = declaration(&tok, tok, basety, &attr);
+        Node *expr = declaration(&tok, tok);
         if (expr)
           node->init = new_unary(ND_EXPR_STMT, expr, tok);
       } else {
@@ -2935,27 +2868,17 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
     if (static_assertion(&tok, tok))
       continue;
 
-    if (!is_typename(tok)) {
-      cur = cur->next = stmt(&tok, tok, label_list);
-      add_type(cur);
-      continue;
+    Node *node;
+    if (is_typename(tok)) {
+      Node *expr = declaration(&tok, tok);
+      if (!expr)
+        continue;
+      node = new_unary(ND_EXPR_STMT, expr, tok);
+    } else {
+      node = stmt(&tok, tok, label_list);
     }
-
-    VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr);
-
-    Node *init_expr = NULL;
-    if (attr.is_extern)
-      global_declaration(&tok, tok, basety, &attr);
-    else if (attr.is_typedef)
-      init_expr = parse_typedef(&tok, tok, basety, &attr);
-    else
-      init_expr = declaration(&tok, tok, basety, &attr);
-
-    if (init_expr) {
-      cur = cur->next = new_unary(ND_EXPR_STMT, init_expr, tok);
-      add_type(cur);
-    }
+    cur = cur->next = node;
+    add_type(cur);
   }
 
   if (cur->kind == ND_RETURN || cur->kind == ND_GOTO)
@@ -4142,7 +4065,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       continue;
 
     VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr);
+    Type *basety = declspec(&tok, tok, &attr, SC_NONE);
 
     // Anonymous struct member
     if (equal(tok, ";") && (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
@@ -4634,24 +4557,26 @@ static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
 static Node *compound_literal(Token **rest, Token *tok) {
   Token *start = tok;
   VarAttr attr = {0};
-  Type *ty = declspec(&tok, tok->next, &attr);
+  Type *ty = declspec(&tok, tok->next, &attr,
+    SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
+
   ty = declarator(&tok, tok, ty, NULL);
   tok = skip(tok, ")");
 
   if (ty->kind == TY_VLA)
     error_tok(tok, "compound literals cannot be VLA");
 
-  if (is_constant_context() || attr.is_static) {
+  if (is_constant_context() || (attr.strg & SC_STATIC)) {
     bool set_ctx = !is_constant_context();
     if (set_ctx)
       is_global_init_context = true;
 
     Obj *var = new_anon_gvar(ty);
     var->is_compound_lit = true;
-    var->is_tls = attr.is_tls;
+    var->is_tls = attr.strg & SC_THREAD;
     var->alt_align = attr.align;
 
-    if (attr.is_constexpr)
+    if (attr.strg & SC_CONSTEXPR)
       constexpr_initializer(rest, tok, var, var);
     else
       gvar_initializer(rest, tok, var);
@@ -4670,7 +4595,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
   var->alt_align = attr.align;
 
   Node *init;
-  if (attr.is_constexpr) {
+  if (attr.strg & SC_CONSTEXPR) {
     Obj *init_var = new_anon_gvar(ty);
     is_global_init_context = true;
 
@@ -5176,14 +5101,14 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
   if (!fn) {
     fn = new_gvar(name_str, ty);
 
-    if (attr->is_static || (attr->is_inline && !attr->is_extern))
+    if ((attr->strg & SC_STATIC) || (attr->is_inline && !(attr->strg & SC_EXTERN)))
       fn->is_static = true;
 
     if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
       strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
       fn->returns_twice = true;
   } else {
-    if (!fn->is_static && attr->is_static)
+    if (!fn->is_static && (attr->strg & SC_STATIC))
       error_tok(name, "static declaration follows a non-static declaration");
     if (!is_compatible(fn->ty, ty))
       error_tok(name, "function prototype mismatch");
@@ -5257,7 +5182,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     if (!name)
       error_tok(tok, "variable name omitted");
 
-    bool is_definition = !attr->is_extern;
+    bool is_definition = !(attr->strg & SC_EXTERN);
     if (!is_definition && equal(tok, "="))
       is_definition = true;
 
@@ -5278,11 +5203,11 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       symbol_attr(&tok, tok, var, attr, name);
     }
     var->is_definition = is_definition;
-    var->is_static = attr->is_static || attr->is_constexpr;
-    var->is_tls = attr->is_tls;
+    var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
+    var->is_tls = attr->strg & SC_THREAD;
     var->alt_align = alt_align;
 
-    if (attr->is_constexpr)
+    if (attr->strg & SC_CONSTEXPR)
       constexpr_initializer(&tok, skip(tok, "="), var, var);
     else if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
@@ -5359,10 +5284,10 @@ Obj *parse(Token *tok) {
     }
 
     VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr);
+    Type *basety = declspec(&tok, tok, &attr, SC_ALL);
 
     // Typedef
-    if (attr.is_typedef) {
+    if (attr.strg & SC_TYPEDEF) {
       parse_typedef(&tok, tok, basety, &attr);
       arena_off(&node_arena);
       continue;

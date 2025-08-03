@@ -126,6 +126,22 @@ int local_labels(void) {
   return cnt;
 }
 
+static int for_decl(long i) {
+  {
+    typedef long T;
+    for (typedef char T;;) {
+      T v;
+      SASSERT(_Generic(v, char:1));
+      break;
+    }
+  }
+  {
+    for (extern long for_decl_g;;)
+      return for_decl_g == i;
+  }
+}
+long for_decl_g;
+
 int main(void){
   ASSERT(2, ({ uint32_t i=0; switch(i){case 0 ...0xFFFFFFFF: i=2;} i; }));
   ASSERT(2, ({ int32_t i=0; switch(i){case 0x80000000 ...0x7FFFFFFF: i=2;} i; }));
@@ -136,6 +152,8 @@ int main(void){
   ASSERT(2, ({ int32_t i=-1; switch(i){case -1 ...(int64_t)-1: i=2;} i; }));
 
   ASSERT(2, ({ int64_t i=0; switch(0x123456789){case 0x123456789: i=2;} i; }));
+
+  ASSERT(1, for_decl(for_decl_g = 42));
 
   ASSERT(0, label_in_secondary_block(1));
   ASSERT(1, label_in_secondary_block(2));
