@@ -3685,6 +3685,17 @@ static bool is_x87_reg(Reg reg) {
   return REG_X64_X87_ST0 <= reg && reg <= REG_X64_X87_ST7;
 }
 
+static char *gcc_reg_id(char *loc, Token *tok) {
+  // FIXED_REGISTERS in gcc/config/i386/i386.h
+  // LLVM call these GCCRegNames
+  static char *names[] = {"ax", "dx", "cx", "bx", "si", "di"};
+
+  unsigned long idx = strtoul(loc, NULL, 10);
+  if (idx >= 6)
+    error_tok(tok, "unknown gcc register id");
+  return names[idx];
+}
+
 static Reg ident_gp_reg(char *loc) {
   static HashMap map;
   if (map.capacity == 0) {
@@ -3702,9 +3713,12 @@ static Reg ident_gp_reg(char *loc) {
 }
 
 static Reg ident_reg(char *str, Token *tok) {
-  while (*str == '%')
-    str++;
-
+  if (Isdigit(*str)) {
+    str = gcc_reg_id(str, tok);
+  } else {
+    while (*str == '%')
+      str++;
+  }
   Reg gpreg = ident_gp_reg(str);
   if (gpreg)
     return gpreg;
