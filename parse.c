@@ -1658,7 +1658,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     defr_cleanup(var, cleanup_fn, tok);
 
   if ((attr->strg & SC_REGISTER) && tok->kind == TK_asm) {
-    var->asm_str = str_tok(&tok, skip(tok->next, "("));
+    var->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
     tok = skip(tok, ")");
   }
 
@@ -5250,9 +5250,10 @@ Obj *parse(Token *tok) {
       continue;
 
     if (tok->kind == TK_asm) {
-      globals = globals->next = calloc(1, sizeof(Obj));
-      globals->asm_str = str_tok(&tok, skip(tok->next, "("));
-      globals->asm_str->is_live = true;
+      static Type ty = {.kind = TY_ASM};
+      Obj *obj = new_gvar(NULL, &ty);
+      obj->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
+      obj->is_definition = true;
       tok = skip(tok, ")");
       continue;
     }

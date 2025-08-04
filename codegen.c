@@ -3701,21 +3701,20 @@ static Reg ident_gp_reg(char *loc) {
   return (intptr_t)hashmap_get(&map, loc);
 }
 
-static Reg ident_reg(Token *tok) {
-  char *loc = tok->str;
-  while (*loc == '%')
-    loc++;
+static Reg ident_reg(char *str, Token *tok) {
+  while (*str == '%')
+    str++;
 
-  Reg gpreg = ident_gp_reg(loc);
+  Reg gpreg = ident_gp_reg(str);
   if (gpreg)
     return gpreg;
 
-  if (!strncmp(loc, "xmm", 3) || !strncmp(loc, "ymm", 3) || !strncmp(loc, "zmm", 3))
-    return REG_X64_XMM0 + strtoul(&loc[3], NULL, 10);
+  if (!strncmp(str, "xmm", 3) || !strncmp(str, "ymm", 3) || !strncmp(str, "zmm", 3))
+    return REG_X64_XMM0 + strtoul(&str[3], NULL, 10);
 
-  if (!strncmp(loc, "st", 2)) {
-    if (loc[2] == '(') {
-      unsigned long num = strtoul(&loc[3], NULL, 10);
+  if (!strncmp(str, "st", 2)) {
+    if (str[2] == '(') {
+      unsigned long num = strtoul(&str[3], NULL, 10);
       return REG_X64_X87_ST0 + MIN(num, 7);
     }
     return REG_X64_X87_ST0;
@@ -3737,7 +3736,7 @@ static void asm_clobbers(Token *tok, int *x87_clobber) {
     if (equal(tok, "\"memory\""))
       continue;
 
-    Reg r = ident_reg(tok);
+    Reg r = ident_reg(tok->str, tok);
     if (r == REG_X64_SP)
       continue;
     if (is_x87_reg(r)) {
@@ -3859,8 +3858,8 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       ap->kind = ASMOP_MEM;
       continue;
     }
-    if (ap->arg->kind == ND_VAR && ap->arg->var->asm_str) {
-      Reg r = ident_reg(ap->arg->var->asm_str);
+    if (ap->arg->kind == ND_VAR && ap->arg->var->asm_name) {
+      Reg r = ident_reg(ap->arg->var->asm_name, ap->arg->tok);
       if ((is_gp_reg(r) && !ap->is_gp) || (is_xmm_reg(r) && !ap->is_fp) ||
         (is_x87_reg(r) && !ap->is_x87))
         error_tok(ap->arg->tok, "constraint mismatch with variable register");
@@ -4920,13 +4919,13 @@ int codegen(Obj *prog, FILE *out) {
   }
 
   for (Obj *var = prog; var; var = var->next) {
-    if (var->asm_str) {
-      Printfsn("%s", var->asm_str->str);
-      continue;
-    }
     if (!var->is_definition) {
       if (var->is_weak || var->alias_name)
         emit_symbol(var);
+      continue;
+    }
+    if (var->ty->kind == TY_ASM) {
+      Printfsn("%s", var->asm_name);
       continue;
     }
     if (var->ty->kind == TY_FUNC) {

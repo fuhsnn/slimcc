@@ -320,8 +320,6 @@ struct Obj {
   bool is_string_lit;
   int alt_align;
 
-  Token *asm_str;
-
   // Local variable
   int ofs;
   char *ptr;
@@ -665,6 +663,7 @@ typedef enum {
   TY_UNION,
   TY_BITINT,
   TY_AUTO,
+  TY_ASM,
 } TypeKind;
 
 struct Type {
