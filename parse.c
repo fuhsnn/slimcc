@@ -3606,6 +3606,38 @@ static Node *atomic_op(Node *binary, bool return_old) {
   return node;
 }
 
+static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
+  Token *start = tok;
+  tok = skip(tok->next, "(");
+  Node *obj = new_unary(ND_DEREF, assign(&tok, tok), start);
+  tok = skip(tok, ",");
+  Node *val = assign(&tok, tok);
+  if (consume(&tok, tok, ","))
+    ident_tok(&tok, tok);
+  *rest = skip(tok, ")");
+
+  Node *binary;
+  char *loc = start->loc + 23;
+  int len = start->len - 23;
+
+  if (!strncmp("add", loc, len))
+    binary = new_add(obj, val, start);
+  else if (!strncmp("sub", loc, len))
+    binary = new_sub(obj, val, start);
+  else if (!strncmp("and", loc, len))
+    binary = new_binary(ND_BITAND, obj, val, start);
+  else if (!strncmp("or", loc, len))
+    binary = new_binary(ND_BITOR, obj, val, start);
+  else if (!strncmp("xor", loc, len))
+    binary = new_binary(ND_BITXOR, obj, val, start);
+  else
+    error_tok(start, "unsupported atomic op");
+
+  add_type(binary->lhs);
+  add_type(binary->rhs);
+  return atomic_op(binary, return_old);
+}
+
 static Node *to_assign(Node *binary) {
   add_type(binary->lhs);
 
@@ -4661,35 +4693,11 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     return node;
   }
 
-  if (!strncmp(tok->loc, "__builtin_atomic_fetch_", 23)) {
-    Token *start = tok;
-    tok = skip(tok->next, "(");
-    Node *obj = new_unary(ND_DEREF, assign(&tok, tok), start);
-    tok = skip(tok, ",");
-    Node *val = assign(&tok, tok);
-    *rest = skip(tok, ")");
+  if (!strncmp(tok->loc, "__builtin_atomic_arith_", 23))
+    return atomic_builtin_op(rest, tok, false);
 
-    Node *binary;
-    char *loc = start->loc + 23;
-    int len = start->len - 23;
-
-    if (!strncmp("add", loc, len))
-      binary = new_add(obj, val, start);
-    else if (!strncmp("sub", loc, len))
-      binary = new_sub(obj, val, start);
-    else if (!strncmp("and", loc, len))
-      binary = new_binary(ND_BITAND, obj, val, start);
-    else if (!strncmp("or", loc, len))
-      binary = new_binary(ND_BITOR, obj, val, start);
-    else if (!strncmp("xor", loc, len))
-      binary = new_binary(ND_BITXOR, obj, val, start);
-    else
-      error_tok(start, "unsupported atomic fetch op");
-
-    add_type(binary->lhs);
-    add_type(binary->rhs);
-    return atomic_op(binary, true);
-  }
+  if (!strncmp(tok->loc, "__builtin_atomic_fetch_", 23))
+    return atomic_builtin_op(rest, tok, true);
 
   if (equal(tok, "__builtin_atomic_thread_fence")) {
     Node *node = new_node(ND_THREAD_FENCE, tok);
