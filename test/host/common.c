@@ -11,25 +11,24 @@ void test_assert(int expected, int actual, char *code) {
   }
 }
 
-static int static_fn() { return 5; }
+static int static_fn(void) { return 5; }
 int ext1 = 5;
 int *ext2 = &ext1;
 int ext3 = 7;
 int ext_fn1(int x) { return x; }
 int ext_fn2(int x) { return x; }
 static int common_local;
-_Thread_local int extern_tls;
 
-int false_fn() { return 512; }
-int true_fn() { return 513; }
-int char_fn() { return (2<<8)+3; }
-int short_fn() { return (2<<16)+5; }
+int false_fn(void) { return 512; }
+int true_fn(void) { return 513; }
+int char_fn(void) { return (2<<8)+3; }
+int short_fn(void) { return (2<<16)+5; }
 
-int uchar_fn() { return (2<<10)-1-4; }
-int ushort_fn() { return (2<<20)-1-7; }
+int uchar_fn(void) { return (2<<10)-1-4; }
+int ushort_fn(void) { return (2<<20)-1-7; }
 
-int schar_fn() { return (2<<10)-1-4; }
-int sshort_fn() { return (2<<20)-1-7; }
+int schar_fn(void) { return (2<<10)-1-4; }
+int sshort_fn(void) { return (2<<20)-1-7; }
 
 int add_all(int n, ...) {
   va_list ap;
@@ -168,21 +167,21 @@ float struct_test121(
 
 
 typedef struct {
-  char _Alignas(1024) c;
-} Aligned1024;
+  char c[999];
+} BigStruct;
 
 int struct_test131(G g0,G g1,G g2,G g3,G g4,F f0,F f1,F f2,F f3,F f4,F f5, int i0, int i1, ... ) {
   va_list ap;
   va_start(ap, i1);
   long double ret = i0 + i1;
   ret += va_arg(ap, long double);
-  ret += va_arg(ap, Aligned1024).c;
+  ret += va_arg(ap, BigStruct).c[123];
   ret += va_arg(ap, int);
   ret += va_arg(ap, double);
   ret += va_arg(ap, double);
   ret += va_arg(ap, double);
   ret += va_arg(ap, double);
-  ret += va_arg(ap, Aligned1024).c;
+  ret += va_arg(ap, BigStruct).c[456];
   ret += va_arg(ap, long double);
   va_end(ap);
   return ret;

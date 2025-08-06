@@ -65,21 +65,21 @@ float struct_test120(
 
 
 typedef struct {
-  char _Alignas(1024) c;
-} Aligned1024;
+  char c[999];
+} BigStruct;
 extern int struct_test131(G g0,G g1,G g2,G g3,G g4,F f0,F f1,F f2,F f3,F f4,F f5,int i0,int i1,...);
 int struct_test130(G g0,G g1,G g2,G g3,G g4,F f0,F f1,F f2,F f3,F f4,F f5,int i0,int i1,...) {
   va_list ap;
   va_start(ap, i1);
   long double ret = i0 + i1;
   ret += va_arg(ap, long double);
-  ret += va_arg(ap, Aligned1024).c;
+  ret += va_arg(ap, BigStruct).c[123];
   ret += va_arg(ap, int);
   ret += va_arg(ap, double);
   ret += va_arg(ap, double);
   ret += va_arg(ap, double);
   ret += va_arg(ap, double);
-  ret += va_arg(ap, Aligned1024).c;
+  ret += va_arg(ap, BigStruct).c[456];
   ret += va_arg(ap, long double);
   va_end(ap);
   return ret;
@@ -242,36 +242,36 @@ as[0],
 f[6], f[7],
 as[1]));
 
-Aligned1024 s = {.c = 77};
+  BigStruct s = {.c[123] = 123, .c[456] = 78 };
 
-  ASSERT(257, struct_test131(
+  ASSERT(304, struct_test131(
     g[0], g[1], g[2], g[3], g[4],
     f[0], f[1], f[2], f[3], f[4], f[5],
     (int) 11,
     (int) 22,
     (long double) 2.3,
-    s, // (Aligned1024)
+    s,
     (int) 33,
     (double) 4.5,
     (double) 5.6,
     (double) 6.7,
     (double) 7.8,
-    s, // (Aligned1024)
+    s,
     (long double) 11.1));
 
-  ASSERT(257, struct_test130(
+  ASSERT(304, struct_test130(
     g[0], g[1], g[2], g[3], g[4],
     f[0], f[1], f[2], f[3], f[4], f[5],
     (int) 11,
     (int) 22,
     (long double) 2.3,
-    s, // (Aligned1024)
+    s,
     (int) 33,
     (double) 4.5,
     (double) 5.6,
     (double) 6.7,
     (double) 7.8,
-    s, // (Aligned1024)
+    s,
     (long double) 11.1));
 
     {
