@@ -79,6 +79,10 @@ test-asan: $(TESTS_ASAN)
 	$(MAKE) slimcc CC=./slimcc-asan -B
 	./slimcc-asan -hashmap-test
 
+test-abi: slimcc-asan test/host/common.o
+	bash scripts/test_abi.bash $(PWD)/slimcc-asan $(CC)
+	bash scripts/test_abi.bash $(CC) $(PWD)/slimcc-asan
+
 # Misc.
 
 test-all: test test-stage2
