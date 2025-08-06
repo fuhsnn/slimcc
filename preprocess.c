@@ -368,26 +368,32 @@ static Token *read_const_expr(Token *tok) {
     if (expand_macro(&tok, tok, false))
       continue;
 
-    // "defined(foo)" or "defined foo" becomes "1" if macro "foo"
-    // is defined. Otherwise "0".
-    if (equal(tok, "defined")) {
-      Token *start = tok;
-      tok = tok->next;
-      bool has_paren = consume(&tok, tok, "(");
+    switch (tok->kind) {
+    case TK_IDENT:
+      if (equal(tok, "defined")) {
+        Token *start = tok;
+        tok = tok->next;
+        bool has_paren = consume(&tok, tok, "(");
 
-      if (tok->kind != TK_IDENT)
-        error_tok(start, "macro name must be an identifier");
+        if (tok->kind != TK_IDENT)
+          error_tok(start, "macro name must be an identifier");
 
-      to_int_token(start, !!find_macro(tok));
-      cur = cur->next = start;
-      tok = tok->next;
-      if (has_paren)
-        tok = skip(tok, ")");
-      continue;
-    }
-
-    if (tok->kind == TK_IDENT)
+        to_int_token(start, !!find_macro(tok));
+        cur = cur->next = start;
+        tok = tok->next;
+        if (has_paren)
+          tok = skip(tok, ")");
+        continue;
+      }
       to_int_token(tok, equal(tok, "true") && opt_std >= STD_C23);
+      break;
+    case TK_INT_NUM:
+    case TK_PP_NUM:
+    case TK_PUNCT:
+      break;
+    default:
+      error_tok(tok, "invalid token in preprocessor expression");
+    }
 
     cur = cur->next = tok;
     tok = tok->next;
