@@ -47,6 +47,7 @@ lt_prog_compiler_static=
  - CMake `find_package()` might fail to find installed libraries, help it with `-DCMAKE_PREFIX_PATH`.
  - Meson: see https://github.com/mesonbuild/meson/issues/5406. Try [Muon](https://github.com/muon-build/muon) or hope for slimcc to join the club.
  - Projects with deep GCC assumptions might actually work if you carefully opt in/out of `#if __GNUC__` blocks, see the [CI test scripts](https://github.com/fuhsnn/slimcc/blob/main/scripts/linux_thirdparty.bash) for a taste of hacks that can be done.
+ - Some projects adopt an idiom that globally set `-fvisibility=hidden` then selectively export public API with `__attribute__((visibility("default")))`. slimcc support both, yet a problem arises when the former is probed by build system while the latter hardcoded in `#if __GNUC__` blocks regardless of the build system's decision. An option `-fdisable-visibility` is added to simply disable both features to prevent the conflict.
 
 ## How optimized is the compiler?
 The coding style is highly influenced by `chibicc`, which means in the eyes of C veterans there might be all kinds of inefficiencies in the name of readability. While micro-optimizing is fun, I only commit changes that noticeably improve fully-optimized builds.

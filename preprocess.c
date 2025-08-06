@@ -1915,9 +1915,10 @@ static void join_adjacent_string_literals(Token *tok) {
 }
 
 static bool is_gnu_attr(Token *tok) {
-#define PutAttr(str)                 \
-  hashmap_put(&map, str, (void *)1); \
-  hashmap_put(&map, "__" str "__", (void *)1)
+#define PutAttr(str) do {                        \
+    hashmap_put(&map, str, (void *)1);           \
+    hashmap_put(&map, "__" str "__", (void *)1); \
+  } while(0)
 
   static HashMap map;
   if (map.capacity == 0) {
@@ -1933,8 +1934,10 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("packed");
     PutAttr("returns_twice");
     PutAttr("section");
-    PutAttr("visibility");
     PutAttr("weak");
+
+    if (!opt_disable_visibility)
+      PutAttr("visibility");
   }
   return hashmap_get2(&map, tok->loc, tok->len);
 }

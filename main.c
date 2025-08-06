@@ -33,6 +33,7 @@ bool is_iso_std;
 bool opt_fdefer_ts;
 bool opt_short_enums;
 bool opt_ms_anon_struct;
+bool opt_disable_visibility;
 
 static StringArray opt_imacros;
 static StringArray opt_include;
@@ -493,6 +494,10 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
           opt_reuse_stack = !strcmp(arg, "all");
           continue;
         }
+
+        if (set_true(arg, "disable-visibility", &opt_disable_visibility))
+          continue;
+
         if (startswith(arg, &opt_visibility, "visibility=") ||
           startswith(arg, &opt_use_as, "use-as="))
           continue;
@@ -582,6 +587,9 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
 
   if (!opt_E && opt_dM)
     error("option -dM without -E not supported");
+
+  if (opt_disable_visibility && opt_visibility)
+    error("-fvisibility disabled with -fdisable-visibility");
 
   if (opt_B) {
     char *as_b = format("%s/%s", opt_B, default_as);

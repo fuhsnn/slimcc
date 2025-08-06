@@ -881,6 +881,7 @@ extern bool is_iso_std;
 extern bool opt_fdefer_ts;
 extern bool opt_short_enums;
 extern bool opt_ms_anon_struct;
+extern bool opt_disable_visibility;
 
 extern bool opt_pie;
 extern bool opt_nopie;
