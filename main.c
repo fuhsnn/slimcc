@@ -735,16 +735,25 @@ static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
 }
 
 static void print_linemarker(FILE *out, Token *tok) {
-  char *name = tok->file->name;
+  char *name = NULL;
+  File **files = get_input_files();
+  for (int i = 0; files[i]; i++) {
+    if (files[i]->file_no == tok->display_file_no) {
+      name = files[i]->name;
+      break;
+    }
+  }
+  if (!name)
+    internal_error();
   if (!strcmp(name, "-"))
     name = "<stdin>";
-  fprintf(out, "\n# %d \"%s\"\n", tok->line_no, name);
+  fprintf(out, "\n# %d \"%s\"\n", tok->display_line_no, name);
 }
 
 // Print tokens to stdout. Used for -E.
 static void print_tokens(Token *tok, FILE *out) {
   int line = 0;
-  File *markerfile = NULL;
+  int markerfile = 0;
   tok->at_bol = false;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
@@ -753,20 +762,18 @@ static void print_tokens(Token *tok, FILE *out) {
       line++;
     }
     if (!opt_P) {
-      Token *orig = tok->origin ? tok->origin : tok;
-
-      if (markerfile != orig->file) {
-        markerfile = orig->file;
-        print_linemarker(out, orig);
+      if (markerfile != tok->display_file_no) {
+        markerfile = tok->display_file_no;
+        print_linemarker(out, tok);
       } else {
-        int diff = orig->line_no - line;
+        int diff = tok->display_line_no - line;
         if (diff > 0 && diff <= 8)
-          while (line++ < orig->line_no)
+          while (line++ < tok->display_line_no)
             fprintf(out, "\n");
         else if (diff)
-          print_linemarker(out, orig);
+          print_linemarker(out, tok);
       }
-      line = orig->line_no;
+      line = tok->display_line_no;
     }
     if (tok->has_space)
       fprintf(out, " ");

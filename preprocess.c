@@ -108,8 +108,9 @@ Token *skip_line(Token *tok) {
 }
 
 static Token *get_line(Token **cur, Token *tok) {
+  (*cur)->next = tok;
   do {
-    (*cur) = (*cur)->next = tok;
+    (*cur) = tok;
     tok = tok->next;
   } while (!tok->at_bol);
   return tok;
@@ -1269,6 +1270,17 @@ static void read_line_marker(Token **rest, Token *tok) {
   start->file->display_file = add_input_file(tok->str, NULL, NULL);
 }
 
+static void finalize_tok(Token *tok) {
+  Token *orig = tok;
+  if (tok->origin) {
+    orig = tok->origin;
+    orig->is_root = true;
+  }
+  tok->display_file_no = orig->file->display_file->file_no;
+  tok->display_line_no = orig->line_no + orig->file->line_delta;
+  tok->is_root = true;
+}
+
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
 static Token *preprocess2(Token *tok) {
@@ -1285,15 +1297,7 @@ static Token *preprocess2(Token *tok) {
       tok = directives(&cur, tok);
       continue;
     }
-
-    Token *orig = tok;
-    if (tok->origin) {
-      orig = orig->origin;
-      orig->is_root = true;
-    }
-    tok->display_file_no = orig->file->display_file->file_no;
-    tok->display_line_no = orig->line_no + orig->file->line_delta;
-    tok->is_root = true;
+    finalize_tok(tok);
 
     cur = cur->next = tok;
     tok = tok->next;
@@ -1308,6 +1312,16 @@ static Token *preprocess2(Token *tok) {
   if (start_m != locked_macros)
     internal_error();
   return head.next;
+}
+
+static Token *pass_line(Token **cur, Token *tok) {
+  Token *start = tok;
+  tok = get_line(cur, start);
+
+  for (Token *t = start; t != tok; t = t->next)
+    finalize_tok(t);
+
+  return tok;
 }
 
 static Token *directives(Token **cur, Token *start) {
@@ -1463,22 +1477,6 @@ static Token *directives(Token **cur, Token *start) {
     return tok;
   }
 
-  if (equal(tok, "pragma")) {
-    if (equal(tok->next, "once")) {
-      hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
-      tok = skip_line(tok->next->next);
-      return tok;
-    }
-    tok = get_line(cur, start);
-
-    for (Token *t = start; t != tok; t = t->next) {
-      t->is_root = true;
-      if (t->origin)
-        t->origin->is_root = true;
-    }
-    return tok;
-  }
-
   if (equal(tok, "error"))
     error_tok(tok, "error");
 
@@ -1490,8 +1488,17 @@ static Token *directives(Token **cur, Token *start) {
     return tok;
   }
 
+  if (equal(tok, "pragma")) {
+    if (equal(tok->next, "once")) {
+      hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
+      tok = skip_line(tok->next->next);
+      return tok;
+    }
+    return pass_line(cur, start);
+  }
+
   if (opt_cc1_asm_pp)
-    return get_line(cur, start);
+    return pass_line(cur, start);
 
   // `#`-only line is legal. It's called a null directive.
   if (tok->at_bol)
