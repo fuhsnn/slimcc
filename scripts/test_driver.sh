@@ -191,8 +191,13 @@ check '-fno-common'
 echo '_Static_assert( (char)-1 == (signed char)-1, "");' | $testcc -xc - -S -o/dev/null -fsigned-char
 check '-fsigned-char'
 
-# -funsigned-char
 echo '_Static_assert( (char)-1 == (unsigned char)-1, "");' | $testcc -xc - -S -o/dev/null -funsigned-char
+check '-funsigned-char'
+
+echo "_Static_assert('\\x80' == -128,\"\");" | $testcc -xc - -S -o/dev/null -fsigned-char
+check '-fsigned-char'
+
+echo "_Static_assert('\\x80' == 128,\"\");" | $testcc -xc - -S -o/dev/null -funsigned-char
 check '-funsigned-char'
 
 # -ffunction-sections

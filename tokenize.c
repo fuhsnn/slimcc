@@ -543,10 +543,39 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
   return tok;
 }
 
-static Token *read_char_literal(char *start, char *quote, Type *ty) {
+static Token *read_char_literal(char *start) {
+  uint32_t val = 0;
+  bool is_multi = false;
+  char *p = start + 1;
+  for (;;) {
+    if (*p == '\0')
+      error_at(start, "unclosed character literal");
+
+    uint8_t c;
+    if (*p == '\\')
+      c = read_escape_seq(&p, p + 1);
+    else
+      c = decode_utf8(&p, p);
+
+    val <<= 8;
+    val |= c;
+    if (*p == '\'')
+      break;
+    is_multi = true;
+  }
+  if (!is_multi && !ty_pchar->is_unsigned)
+    val = (int8_t)val;
+
+  Token *tok = new_token(TK_INT_NUM, start, p + 1);
+  tok->ival = val;
+  tok->ty = ty_int;
+  return tok;
+}
+
+static Token *read_unicode_char_literal(char *start, char *quote, Type *ty) {
   char *p = quote + 1;
   if (*p == '\0')
-    error_at(start, "unclosed char literal");
+    error_at(start, "unclosed character literal");
 
   uint32_t c;
   if (*p == '\\')
@@ -554,11 +583,10 @@ static Token *read_char_literal(char *start, char *quote, Type *ty) {
   else
     c = decode_utf8(&p, p);
 
-  char *end = strchr(p, '\'');
-  if (!end)
-    error_at(p, "unclosed char literal");
+  if (*p != '\'')
+    error_at(p, "invalid unicode character literal");
 
-  Token *tok = new_token(TK_INT_NUM, start, end + 1);
+  Token *tok = new_token(TK_INT_NUM, start, p + 1);
   tok->ival = c;
   tok->ty = ty;
   return tok;
@@ -751,7 +779,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
 // Converts a pp-number token to a regular number token.
 void convert_pp_number(Token *tok, Node *node) {
   if (tok->kind == TK_INT_NUM) {
-    node->val = tok->ival;
+    node->val = eval_sign_extend(tok->ty, tok->ival);
     node->ty = tok->ty;
     return;
   }
@@ -959,38 +987,35 @@ Token *tokenize(File *file, Token **end) {
 
     // Character literal
     if (*p == '\'') {
-      cur = cur->next = read_char_literal(p, p, ty_int);
-      cur->ival = (char)cur->ival;
+      cur = cur->next = read_char_literal(p);
       p += cur->len;
       continue;
     }
 
     // UTF-8 character literal
     if (startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
-      cur = cur->next = read_char_literal(p, p + 2, ty_uchar);
-      cur->ival &= 0xff;
+      cur = cur->next = read_unicode_char_literal(p, p + 2, ty_uchar);
       p += cur->len;
       continue;
     }
 
     // UTF-16 character literal
     if (startswith2(p, 'u', '\'')) {
-      cur = cur->next = read_char_literal(p, p + 1, ty_char16_t);
-      cur->ival &= 0xffff;
+      cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char16_t);
       p += cur->len;
       continue;
     }
 
     // Wide character literal
     if (startswith2(p, 'L', '\'')) {
-      cur = cur->next = read_char_literal(p, p + 1, ty_wchar_t);
+      cur = cur->next = read_unicode_char_literal(p, p + 1, ty_wchar_t);
       p += cur->len;
       continue;
     }
 
     // UTF-32 character literal
     if (startswith2(p, 'U', '\'')) {
-      cur = cur->next = read_char_literal(p, p + 1, ty_char32_t);
+      cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char32_t);
       p += cur->len;
       continue;
     }

@@ -3026,16 +3026,13 @@ static char *eval_constexpr_data(Node *node) {
   return var->init_data + ofs;
 }
 
-static int64_t eval_sign_extend(Type *ty, int64_t val) {
-  if (ty->size == 8 || !is_integer(ty))
-    return val;
-
+int64_t eval_sign_extend(Type *ty, int64_t val) {
   switch (ty->size) {
   case 1: return ty->is_unsigned ? (uint8_t)val : (int64_t)(int8_t)val;
   case 2: return ty->is_unsigned ? (uint16_t)val : (int64_t)(int16_t)val;
   case 4: return ty->is_unsigned ? (uint32_t)val : (int64_t)(int32_t)val;
   }
-  internal_error();
+  return val;
 }
 
 static void eval_void(Node *node) {

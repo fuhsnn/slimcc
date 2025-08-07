@@ -18,6 +18,11 @@ int main(void) {
   ASSERT(181, u'\u00b5');
   ASSERT(129437, U'\U0001F99D');
 
+  ASSERT(0x7777, 'w\u0077');
+  ASSERT(0x777777, '\u0077\U00000077w');
+  ASSERT(0x77777777, '\x77\u0077w\U00000077');
+  { long v = '\x80\x80\x80\x80'; ASSERT(1, v < 0); }
+
   static const char str1[] = STR('\U0001F99D');
   static const char ref1[] = {0x27, 0x5c, 0x55, 0x30, 0x30, 0x30, 0x31, 0x46, 0x39, 0x39, 0x44, 0x27, 0};
 
