@@ -93,6 +93,10 @@ static Reg argreg[] = {REG_X64_DI, REG_X64_SI, REG_X64_DX, REG_X64_CX, REG_X64_R
 static char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
 static char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
 
+static char *rip = "%rip";
+static char *rbp = "%rbp";
+static char *rbx = "%rbx";
+
 static Obj *current_fn;
 static char *lvar_ptr;
 static int va_gp_start;
@@ -356,7 +360,7 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_array, bool l
         snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, asm_name(var));
       else
         snprintf(ofs, STRBUF_SZ, "\"%s\"", asm_name(var));
-      *ptr = "%rip";
+      *ptr = rip;
       return true;
     }
   }
@@ -2923,7 +2927,7 @@ static void gen_void_assign(Node *node) {
     }
   }
 
-  if (is_memop_ptr(rhs, sofs, &sptr) && !(opt_fpic || opt_fpie) && !strcmp(sptr, "%rip")) {
+  if (is_memop_ptr(rhs, sofs, &sptr) && sptr == rip && !(opt_fpic || opt_fpie)) {
     char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       Printftn("movq $%s, %s(%s)", sofs, dofs, dptr);
@@ -3358,7 +3362,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
 
   if (is_memop_ptr(node, ofs, &ptr)) {
     if (gen) {
-      if (!(opt_fpic || opt_fpie) && !strcmp(ptr, "%rip"))
+      if (ptr == rip && !(opt_fpic || opt_fpie))
         Printftn("movl $%s, %s", ofs, regs[r][2]);
       else
         Printftn("lea %s(%s), %s", ofs, ptr, regs[r][3]);
@@ -4081,9 +4085,9 @@ static void asm_gen_operands(void) {
 }
 
 static char *alt_ptr(char *reg) {
-  if (asm_alt_ptr.rbp && !strcmp("%rbp", reg))
+  if (asm_alt_ptr.rbp && reg == rbp)
     return asm_alt_ptr.rbp;
-  if (asm_alt_ptr.rbx && !strcmp("%rbx", reg))
+  if (asm_alt_ptr.rbx && reg == rbx)
     return asm_alt_ptr.rbx;
   return reg;
 }
@@ -4309,7 +4313,7 @@ static bool is_asm_symbolic_arg(Node *node, char *punct) {
   }
   char ofs[STRBUF_SZ], *ptr;
   if (node->kind == ND_ADDR &&
-    is_memop(node->lhs, ofs, &ptr, true) && !strcmp(ptr, "%rip")) {
+    is_memop(node->lhs, ofs, &ptr, true) && ptr == rip) {
     if (punct)
       Printf("%s%s", punct, ofs);
     return true;
@@ -4429,29 +4433,29 @@ static char *asm_push_frame_ptr(Node *node) {
 
   if (node->asm_ctx->frame_ptr1) {
     asm_alt_ptr.rbp = regs[node->asm_ctx->frame_ptr1][3];
-    if (!strcmp(lvar_ptr, "%rbp"))
+    if (lvar_ptr == rbp)
       lvar_ptr = asm_alt_ptr.rbp;
     Printftn("movq %%rbp, %s", asm_alt_ptr.rbp);
   }
   if (node->asm_ctx->frame_ptr2) {
     asm_alt_ptr.rbx = regs[node->asm_ctx->frame_ptr2][3];
-    if (!strcmp(lvar_ptr, "%rbx"))
+    if (lvar_ptr == rbx)
       lvar_ptr = asm_alt_ptr.rbx;
     Printftn("movq %%rbx, %s", asm_alt_ptr.rbx);
   }
 
   if (node->asm_ctx->frame_ptr1)
-    push_from("%rbp");
+    push_from(rbp);
   if (node->asm_ctx->frame_ptr2)
-    push_from("%rbx");
+    push_from(rbx);
   return prev;
 }
 
 static void asm_pop_frame_ptr(Node *node, char *prev) {
   if (node->asm_ctx->frame_ptr2)
-    pop("%rbx");
+    pop(rbx);
   if (node->asm_ctx->frame_ptr1)
-    pop("%rbp");
+    pop(rbp);
   lvar_ptr = prev;
 }
 
@@ -4520,7 +4524,7 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   for (Obj *var = sc->locals; var; var = var->next) {
     if (var->pass_by_stack) {
       var->ofs = var->stack_offset + 16;
-      var->ptr = "%rbp";
+      var->ptr = rbp;
       continue;
     }
     bottom += var->ty->size;
@@ -4746,7 +4750,7 @@ void emit_text(Obj *fn) {
   int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
 
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
-  lvar_ptr = (lvar_align > 16) ? "%rbx" : "%rbp";
+  lvar_ptr = (lvar_align > 16) ? rbx : rbp;
   current_fn = fn;
   ext_refs = &(ExtRefs){0};
   rtn_label = count();
