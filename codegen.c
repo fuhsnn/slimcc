@@ -83,8 +83,7 @@ static char *regs[REG_X64_XMM0][4] = {
 
 static FILE *output_file;
 static FILE *extref_file;
-static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
-static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
+
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 
@@ -172,7 +171,7 @@ static ExtRefs *ext_refs;
 
 static void load2(Type *ty, int sofs, char *sptr);
 static void store2(Type *ty, int dofs, char *dptr);
-static void store_gp2(char **reg, int sz, int ofs, char *ptr);
+static void store_gp2(char **r, int sz, int dofs, char *dptr);
 
 static void gen_asm(Node *node);
 static void gen_expr(Node *node);
@@ -1602,12 +1601,7 @@ static void copy_ret_buffer(Obj *var) {
       fp++;
       continue;
     }
-    if (gp == 0)
-      store_gp2((char *[]){reg_ax(1), reg_ax(2), reg_ax(4), reg_ax(8)},
-                chunk_sz, ofs + var->ofs, var->ptr);
-    else
-      store_gp2((char *[]){reg_dx(1), reg_dx(2), reg_dx(4), reg_dx(8)},
-                chunk_sz, ofs + var->ofs, var->ptr);
+    store_gp2(regs[gp == 0 ? REG_X64_AX : REG_X64_DX], chunk_sz, ofs + var->ofs, var->ptr);
     gp++;
   }
 }
@@ -4675,25 +4669,25 @@ static void store_fp(int r, int sz, int ofs, char *ptr) {
   internal_error();
 }
 
-static void store_gp2(char **reg, int sz, int dofs, char *dptr) {
+static void store_gp2(char **r, int sz, int dofs, char *dptr) {
   for (int ofs = 0;;) {
     int rem = sz - ofs;
     int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
     switch (p2) {
-    case 1: Printftn("mov %s, %d(%s)", reg[0], ofs + dofs, dptr); break;
-    case 2: Printftn("mov %s, %d(%s)", reg[1], ofs + dofs, dptr); break;
-    case 4: Printftn("mov %s, %d(%s)", reg[2], ofs + dofs, dptr); break;
-    case 8: Printftn("mov %s, %d(%s)", reg[3], ofs + dofs, dptr); break;
+    case 1: Printftn("mov %s, %d(%s)", r[REGSZ_8], ofs + dofs, dptr); break;
+    case 2: Printftn("mov %s, %d(%s)", r[REGSZ_16], ofs + dofs, dptr); break;
+    case 4: Printftn("mov %s, %d(%s)", r[REGSZ_32], ofs + dofs, dptr); break;
+    case 8: Printftn("mov %s, %d(%s)", r[REGSZ_64], ofs + dofs, dptr); break;
     }
     ofs += p2;
     if (ofs >= sz)
       return;
-    Printftn("shr $%d, %s", p2 * 8, reg[3]);
+    Printftn("shr $%d, %s", p2 * 8, r[REGSZ_64]);
   }
 }
 
-static void store_gp(int r, int sz, int ofs, char *ptr) {
-  store_gp2((char *[]){argreg8[r], argreg16[r], argreg32[r], argreg64[r]}, sz, ofs, ptr);
+static void store_gp(int idx, int sz, int ofs, char *ptr) {
+  store_gp2(regs[argreg[idx]], sz, ofs, ptr);
 }
 
 static void emit_cdtor(char *sec, uint16_t priority, Obj *fn) {
