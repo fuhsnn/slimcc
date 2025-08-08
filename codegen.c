@@ -176,9 +176,12 @@ static void store_gp2(char **r, int sz, int dofs, char *dptr);
 static void gen_asm(Node *node);
 static void gen_expr(Node *node);
 static void gen_stmt(Node *node);
+static bool gen_block_stmt(Node *node, bool is_reach);
+static bool gen_if_stmt(Node *node, bool is_reach);
 static void gen_void_expr(Node *node);
 static void gen_void_assign(Node *node);
-static bool gen_stmt_opt(Node *node);
+static bool gen_reachable_stmt(Node *node);
+static bool gen_unreachable_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
@@ -2646,29 +2649,13 @@ static void gen_stmt_naked(Node *node) {
 static void gen_stmt(Node *node) {
   if (opt_g)
     print_loc(node->tok);
-  if (opt_optimize && gen_stmt_opt(node))
-    return;
 
   switch (node->kind) {
   case ND_NULL_STMT:
     return;
-  case ND_IF: {
-    int64_t c = count();
-    char else_label[STRBUF_SZ];
-    snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, c);
-
-    gen_cond(node->cond, false, else_label);
-    gen_stmt(node->then);
-    if (!node->els) {
-      Printfsn("%s:", else_label);
-      return;
-    }
-    Printftn("jmp .L.end.%"PRIi64, c);
-    Printfsn("%s:", else_label);
-    gen_stmt(node->els);
-    Printfsn(".L.end.%"PRIi64":", c);
+  case ND_IF:
+    gen_if_stmt(node, true);
     return;
-  }
   case ND_FOR: {
     char bg[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
     name_brk_cont(node, bg, brk, cont, count());
@@ -2748,10 +2735,7 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_BLOCK:
-    name_labels(node);
-    for (Node *n = node->body; n; n = n->next)
-      gen_stmt(n);
-    gen_defr(node);
+    gen_block_stmt(node, true);
     return;
   case ND_BREAK:
   case ND_CONT:
@@ -3490,27 +3474,106 @@ static bool gen_bool_opt(Node *node) {
   return true;
 }
 
-static bool gen_stmt_opt(Node *node) {
+static bool gen_block_stmt(Node *node, bool is_reach) {
+  name_labels(node);
+  for (Node *n = node->body; n; n = n->next) {
+    if (is_reach)
+      is_reach = gen_reachable_stmt(n);
+    else
+      is_reach = gen_unreachable_stmt(n);
+  }
+  if (is_reach)
+    gen_defr(node);
+  return is_reach;
+}
+
+static bool gen_skip_unreachable_stmt(Node *node, bool is_reach, char *lbl) {
+  if (!node)
+    return is_reach;
+  if (!is_reach)
+    return gen_unreachable_stmt(node);
+
+  Printftn("jmp %s", lbl);
+  gen_unreachable_stmt(node);
+  Printfsn("%s:", lbl);
+  return true;
+}
+
+static bool gen_if_stmt(Node *node, bool is_reach) {
+  int64_t c = count();
+  char else_label[STRBUF_SZ];
+  snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, c);
+
+  if (!is_reach) {
+    is_reach = gen_unreachable_stmt(node->then);
+    return gen_skip_unreachable_stmt(node->els, is_reach, else_label);
+  }
   int64_t val;
-  if (node->kind == ND_IF && is_const_expr(node->cond, &val)) {
-    if (!val && node->then->no_label) {
-      if (node->els)
-        gen_stmt(node->els);
-      return true;
-    }
+  if (is_const_expr(node->cond, &val)) {
     if (val) {
-      gen_stmt(node->then);
-
-      if (node->els && !node->els->no_label) {
-        char else_label[STRBUF_SZ];
-        snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, count());
-
-        Printftn("jmp %s", else_label);
-        gen_stmt(node->els);
-        Printftn("%s:", else_label);
-      }
-      return true;
+      is_reach = gen_reachable_stmt(node->then);
+      return gen_skip_unreachable_stmt(node->els, is_reach, else_label);
     }
+    is_reach = node->els ? gen_reachable_stmt(node->els) : true;
+    return gen_skip_unreachable_stmt(node->then, is_reach, else_label);
+  }
+
+  gen_cond(node->cond, false, else_label);
+  is_reach = gen_reachable_stmt(node->then);
+  if (!node->els) {
+    Printfsn("%s:", else_label);
+    return true;
+  }
+
+  if (is_reach)
+    Printftn("jmp .L.end.%"PRIi64, c);
+  Printfsn("%s:", else_label);
+  bool is_reach2 = gen_reachable_stmt(node->els);
+  if (is_reach)
+    Printfsn(".L.end.%"PRIi64":", c);
+  return is_reach | is_reach2;
+}
+
+static bool gen_reachable_stmt(Node *node) {
+  if (opt_g)
+    print_loc(node->tok);
+
+  switch (node->kind) {
+  case ND_IF:
+    return gen_if_stmt(node, true);
+  case ND_BLOCK:
+    return gen_block_stmt(node, true);
+  case ND_GOTO:
+  case ND_GOTO_EXPR:
+  case ND_BREAK:
+  case ND_CONT:
+  case ND_RETURN:
+    gen_stmt(node);
+    return false;
+  }
+  gen_stmt(node);
+  return true;
+}
+
+static bool gen_unreachable_stmt(Node *node) {
+  if (opt_g)
+    print_loc(node->tok);
+
+  switch (node->kind) {
+  case ND_IF:
+    return gen_if_stmt(node, false);
+  case ND_BLOCK:
+    return gen_block_stmt(node, false);
+  case ND_LABEL:
+    gen_stmt(node);
+    return true;
+  case ND_FOR:
+  case ND_DO:
+  case ND_SWITCH:
+    if (node->then->no_label)
+      return false;
+    gen_stmt(node);
+    return true;
   }
   return false;
 }
