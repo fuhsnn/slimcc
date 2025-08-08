@@ -51,6 +51,7 @@ typedef struct {
   bool is_nocommon;
   bool is_gnu_inline;
   bool is_naked;
+  bool is_noreturn;
   bool is_returns_twice;
   bool is_ctor;
   bool is_dtor;
@@ -796,6 +797,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   bool_attr(tok, kind, "nocommon", &attr->is_nocommon);
   bool_attr(tok, kind, "gnu_inline", &attr->is_gnu_inline);
   bool_attr(tok, kind, "naked", &attr->is_naked);
+  bool_attr(tok, kind, "noreturn", &attr->is_noreturn);
   bool_attr(tok, kind, "returns_twice", &attr->is_returns_twice);
   cdtor_attr(tok, kind, "constructor", &attr->is_ctor, &attr->ctor_prior);
   cdtor_attr(tok, kind, "destructor", &attr->is_dtor, &attr->dtor_prior);
@@ -846,6 +848,9 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
 
   fn->is_naked |= attr->is_naked;
   DeclAttr(bool_attr, "naked", &fn->is_naked);
+
+  fn->is_noreturn |= attr->is_noreturn;
+  DeclAttr(bool_attr, "noreturn", &fn->is_noreturn);
 
   fn->returns_twice |= attr->is_returns_twice;
   DeclAttr(bool_attr, "returns_twice", &fn->returns_twice);

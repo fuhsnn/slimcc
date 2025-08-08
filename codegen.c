@@ -409,6 +409,10 @@ static bool is_plain_asm(Node *node) {
     !node->asm_clobbers && !node->asm_labels;
 }
 
+static bool is_direct_fncall(Node *lhs) {
+  return lhs->kind == ND_VAR && lhs->var->ty->kind == TY_FUNC;
+}
+
 static RegSz bitwidth_to_regsz(int bits) {
   switch(bits) {
   case 64: return REGSZ_64;
@@ -1858,7 +1862,7 @@ static void gen_funcall(Node *node) {
     if (arg_stk_align > 16)
       push_from("%rsp");
 
-  bool use_fn_ptr = !(node->lhs->kind == ND_VAR && node->lhs->var->ty->kind == TY_FUNC);
+  bool use_fn_ptr = !is_direct_fncall(node->lhs);
   if (use_fn_ptr) {
     gen_expr(node->lhs);
     push();
@@ -3554,6 +3558,11 @@ static bool gen_reachable_stmt(Node *node) {
   case ND_EXPR_STMT:
     if (node->lhs->kind == ND_UNREACHABLE)
       return false;
+    if (node->lhs->kind == ND_FUNCALL && is_direct_fncall(node->lhs->lhs) &&
+      node->lhs->lhs->var->is_noreturn) {
+      gen_stmt(node);
+      return false;
+    }
   }
   gen_stmt(node);
   return true;

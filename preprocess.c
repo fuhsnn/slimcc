@@ -1964,6 +1964,9 @@ static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
   if (gnu_if_battr && is_gnu_attr(tok))
     return true;
 
+  if (equal_ext(tok, "noreturn"))
+    return true;
+
   return false;
 }
 
