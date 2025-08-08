@@ -2301,6 +2301,7 @@ static void gen_expr2(Node *node, bool is_void) {
 
   switch (node->kind) {
   case ND_NULL_EXPR:
+  case ND_UNREACHABLE:
     return;
   case ND_NUM: {
     if (node->ty->kind == TY_BITINT)
@@ -3550,6 +3551,9 @@ static bool gen_reachable_stmt(Node *node) {
   case ND_RETURN:
     gen_stmt(node);
     return false;
+  case ND_EXPR_STMT:
+    if (node->lhs->kind == ND_UNREACHABLE)
+      return false;
   }
   gen_stmt(node);
   return true;

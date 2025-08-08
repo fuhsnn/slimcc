@@ -4762,7 +4762,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "__builtin_unreachable")) {
-    Node *node = new_node(ND_NULL_EXPR, tok);
+    Node *node = new_node(ND_UNREACHABLE, tok);
     *rest = skip(skip(tok->next, "("), ")");
     return node;
   }

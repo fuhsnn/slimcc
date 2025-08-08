@@ -796,6 +796,7 @@ void add_type(Node *node) {
   case ND_THREAD_FENCE:
   case ND_VA_START:
   case ND_VA_COPY:
+  case ND_UNREACHABLE:
     node->ty = ty_void;
     return;
   case ND_CKD_ARITH:
