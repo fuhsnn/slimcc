@@ -4917,18 +4917,10 @@ void emit_text(Obj *fn) {
   }
 
   // Emit code
-  gen_stmt(fn->body);
-  assert(tmp_stack.depth == 0);
+  bool is_reach = gen_reachable_stmt(fn->body);
 
-  peak_stk_usage += tmpbuf_sz;
-  if (peak_stk_usage) {
-    peak_stk_usage = align_to(peak_stk_usage, 16);
-    insrtln(".set __BUF, -%d; sub $%d, %%rsp", stack_alloc_loc, peak_stk_usage, peak_stk_usage);
-  }
-  if (!strcmp(fn->name, "main"))
+  if (is_reach && !strcmp(fn->name, "main"))
     Printstn("xor %%eax, %%eax");
-
-  long pre_epilog_pos = ftell(output_file);
 
   // Epilogue
   Printfsn(".L.rtn.%"PRIi64":", rtn_label);
@@ -4936,6 +4928,13 @@ void emit_text(Obj *fn) {
     Printstn("mov -8(%%rbp), %%rbx");
   Printstn("leave");
   Printstn("ret");
+
+  assert(tmp_stack.depth == 0);
+  peak_stk_usage += tmpbuf_sz;
+  if (peak_stk_usage) {
+    peak_stk_usage = align_to(peak_stk_usage, 16);
+    insrtln(".set __BUF, -%d; sub $%d, %%rsp", stack_alloc_loc, peak_stk_usage, peak_stk_usage);
+  }
 
   if (extref_file) {
     fclose(extref_file);
@@ -4947,21 +4946,6 @@ void emit_text(Obj *fn) {
   ext_refs = NULL;
   current_fn = NULL;
   emit_text_end(fn);
-
-  {
-    char fmtbuf[STRBUF_SZ];
-    int len;
-    if (!strcmp(fn->name, "main"))
-      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n\txor %%eax, %%eax\n", rtn_label);
-    else
-      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n", rtn_label);
-
-    if (len < MIN(pre_epilog_pos, STRBUF_SZ)) {
-      char *p = &fnobj->buf[pre_epilog_pos - len];
-      if (!strncmp(p, fmtbuf, len))
-        memset(p, ' ', len - 1);
-    }
-  }
 }
 
 // Logic should be in sync with gen_funcall_args()
@@ -4997,6 +4981,28 @@ void prepare_funcall(Node *node, Scope *scope) {
   }
 }
 
+static void peep_redunt_jmp(char *p) {
+  while ((p = strstr(p, "\n\tjmp "))) {
+    char *write_p = p;
+    char *name_p = p + 6;
+    p = strchr(name_p, '\n');
+    size_t write_len = p - write_p;
+    size_t name_len = p - name_p;
+
+    while (*p == '\n') {
+      char *name_p2 = p + 1;
+      size_t ins_len = strcspn(name_p2, ":;#\n");
+      if (name_p2[ins_len] != ':')
+        break;
+      p = name_p2 + ins_len + 1;
+      if (ins_len == name_len && !memcmp(name_p2, name_p, name_len)) {
+        memset(write_p, ' ', write_len);
+        break;
+      }
+    }
+  }
+}
+
 int codegen(Obj *prog, FILE *out) {
   output_file = out;
 
@@ -5020,6 +5026,7 @@ int codegen(Obj *prog, FILE *out) {
       if (!var->is_live)
         continue;
       FuncObj *fn = var->output;
+      peep_redunt_jmp(fn->buf);
       fwrite(fn->buf, 1, fn->buflen, out);
       if (fn->extref_buf)
         fwrite(fn->extref_buf, 1, fn->extref_buflen, out);
