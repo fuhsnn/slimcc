@@ -2756,6 +2756,9 @@ static void gen_stmt(Node *node) {
     Printfsn("%s:", node->unique_label);
     return;
   case ND_RETURN: {
+    if (current_fn->is_noreturn)
+      error_tok(node->tok, "function is noreturn");
+
     if (!node->lhs) {
       if (has_defr(node))
         gen_defr(node);
@@ -4923,11 +4926,13 @@ void emit_text(Obj *fn) {
     Printstn("xor %%eax, %%eax");
 
   // Epilogue
-  Printfsn(".L.rtn.%"PRIi64":", rtn_label);
-  if (lvar_align > 16)
-    Printstn("mov -8(%%rbp), %%rbx");
-  Printstn("leave");
-  Printstn("ret");
+  if (!(!is_reach && fn->is_noreturn)) {
+    Printfsn(".L.rtn.%"PRIi64":", rtn_label);
+    if (lvar_align > 16)
+      Printstn("mov -8(%%rbp), %%rbx");
+    Printstn("leave");
+    Printstn("ret");
+  }
 
   assert(tmp_stack.depth == 0);
   peak_stk_usage += tmpbuf_sz;
