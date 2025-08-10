@@ -4107,7 +4107,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         error_tok(tok, "member has incomplete type");
       if (basety->tag && !opt_ms_anon_struct)
         error_tok(tok, "enable MSVC anonymous struct extension with `-fms-anon-struct`");
-      Member *mem = ast_arena_calloc(sizeof(Member));
+      Member *mem = calloc(1, sizeof(Member));
       mem->ty = basety;
 
       tok = tok->next;
@@ -4118,11 +4118,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Regular struct members
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
-      Member *mem = ast_arena_calloc(sizeof(Member));
+      Member *mem = calloc(1, sizeof(Member));
       mem->alt_align = attr.align;
       mem->is_packed = attr.is_packed;
       mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
-      if (mem->name && !current_fn)
+      if (mem->name)
         mem->name->is_live = true;
 
       for (Type *t = mem->ty; t; t = t->base)
@@ -4210,6 +4210,9 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   if (!tag)
     return ty;
 
+  ty->tag = tag;
+  ty->tag->is_live = true;
+
   Type *ty2 = find_tag_in_scope(tag);
   if (ty2) {
     if (ty2->size < 0) {
@@ -4222,7 +4225,6 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
       }
       return ty2;
     }
-    ty->tag = tag;
     if (!(opt_std >= STD_C23 && is_compatible(ty, ty2)))
       error_tok(tag, "tag redeclaration");
     return ty2;

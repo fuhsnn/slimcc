@@ -68,7 +68,7 @@ void init_ty_lp64(void) {
 }
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {
-  Type *ty = ast_arena_calloc(sizeof(Type));
+  Type *ty = calloc(1, sizeof(Type));
   ty->kind = kind;
   ty->size = size;
   ty->align = align;
@@ -98,7 +98,7 @@ Type *new_bitint(int64_t width, Token *tok) {
 }
 
 Type *copy_type(Type *ty) {
-  Type *ret = ast_arena_malloc(sizeof(Type));
+  Type *ret = malloc(sizeof(Type));
   *ret = *ty;
   return ret;
 }
@@ -121,13 +121,7 @@ Type *new_qualified_type(Type *ty) {
   if (ty->origin)
     ty = ty->origin;
 
-  Type *ret;
-  if (ty->size < 0)
-    ret = malloc(sizeof(Type));
-  else
-    ret = ast_arena_malloc(sizeof(Type));
-
-  *ret = *ty;
+  Type *ret = copy_type(ty);
   ret->origin = ty;
 
   if (ty->size < 0) {

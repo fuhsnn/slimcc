@@ -88,12 +88,50 @@ int flexible(void) {
   return 1;
 }
 
-struct list { struct list *next; };
-TAG_COMPAT_CHK(1, struct lists { struct list lst; }, struct lists { struct list lst; } );
+int incomplete_ptr(void) {
+  struct list { struct list *next; };
+  TAG_COMPAT_CHK(1, struct lists { struct list lst; }, struct lists { struct list lst; } );
+
+  struct S *p;
+  struct S { int i; };
+  { ASSERT(1, _Generic(struct S { int i;}, typeof(*p): 1)); }
+  { ASSERT(1, _Generic(struct S { int j;}, typeof(*p): 0, default: 1)); }
+  return 1;
+}
+
+void param1(struct S *) {
+  typedef const int I;
+  struct S { I i; };
+}
+
+void param2(struct S *) {
+  struct S { int i; };
+}
+
+void param3(struct S { int i; } *) {
+}
+
+void param4(struct S *) {
+  struct S { const int i; };
+}
+
+int incomplete_param(void) {
+  SASSERT(0 == _Generic(param1, typeof(&param2): 1, default: 0));
+  SASSERT(0 == _Generic(param1, typeof(&param3): 1, default: 0));
+  SASSERT(1 == _Generic(param1, typeof(&param4): 1, default: 0));
+  SASSERT(1 == _Generic(param2, typeof(&param3): 1, default: 0));
+  SASSERT(0 == _Generic(param2, typeof(&param4): 1, default: 0));
+  SASSERT(0 == _Generic(param3, typeof(&param4): 1, default: 0));
+
+  return 1;
+}
 
 int main(void) {
   ASSERT(1, assign((t8){},(t8){},(t8){}));
   ASSERT(1, flexible());
+  ASSERT(1, incomplete_ptr());
+  ASSERT(1, incomplete_param());
+
 
   printf("OK\n");
 }
