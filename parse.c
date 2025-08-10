@@ -139,6 +139,8 @@ static Obj *globals;
 
 static Scope *scope = &(Scope){0};
 
+static HashMap symbols;
+
 // Points to the function object the parser is currently parsing.
 static Obj *current_fn;
 
@@ -263,6 +265,13 @@ static VarScope *find_var(Token *tok) {
     if (sc2)
       return sc2;
   }
+  return NULL;
+}
+
+static Obj *find_var_in_scope(Token *tok) {
+  VarScope *sc = hashmap_get2(&scope->vars, tok->loc, tok->len);
+  if (sc)
+    return sc->var;
   return NULL;
 }
 
@@ -5195,24 +5204,37 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       error_tok(tok, "variable name omitted");
 
     bool is_definition = !(attr->strg & SC_EXTERN);
-    if (!is_definition && equal(tok, "="))
+    if (!is_definition && equal(tok, "=")) {
+      if (scope->parent)
+        error_tok(tok, "extern variable cannot be initialized");
       is_definition = true;
+    }
 
-    VarScope *sc = find_var(name);
-    Obj *var;
-    if (sc && sc->var) {
-      symbol_attr(&tok, tok, sc->var, attr, name);
+    Obj *var = hashmap_get2(&symbols, name->loc, name->len);
+
+    Obj *sc_var = find_var_in_scope(name);
+    if (sc_var && sc_var != var)
+      error_tok(tok, "invalid redeclaration");
+
+    if (var) {
+      if (!sc_var)
+        push_scope(var->name)->var = var;
+      if (!is_compatible2(var->ty, ty))
+        error_tok(tok, "incompatible type");
+
+      symbol_attr(&tok, tok, var, attr, name);
 
       if (!is_definition)
         continue;
-      if (sc->var->is_definition && !sc->var->is_tentative)
+      if (var->is_definition && !var->is_tentative)
         continue;
-      var = sc->var;
       var->is_tentative = false;
       var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
       symbol_attr(&tok, tok, var, attr, name);
+
+      hashmap_put2(&symbols, name->loc, name->len, var);
     }
     var->is_definition = is_definition;
     var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
