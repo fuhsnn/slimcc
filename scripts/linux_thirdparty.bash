@@ -15,8 +15,7 @@ test_bearssl() {
 }
 
 test_bfs() {
- github_tar tavianator bfs 4.0.8
- sed -i 's|-std=c17|-std=c23|g' build/flags.mk
+ github_tar tavianator bfs 4.1
  ./configure
  make check
 }
@@ -44,6 +43,9 @@ test_binutils() {
  replace_line "test_objdump_S" "" binutils/testsuite/binutils-all/objdump.exp
  replace_line "readelf_wi_test" "" binutils/testsuite/binutils-all/readelf.exp
  sed -i 's|beginwarn.c:7:|beginwarn.o:|g' ld/testsuite/ld-elf/shared.exp
+
+ # this one passes '-Bsymbolic' to cc, not sure if intended
+ sed -i 's|symbolic \"-Bsymbolic\"|symbolic \"-Wl,-Bsymbolic\"|g' ld/testsuite/ld-shared/shared.exp
 
  fix_and_configure --disable-gprofng
  make && make check
@@ -97,7 +99,7 @@ test_c3() {
 }
 
 test_calc() {
- git_fetch https://github.com/lcn2/calc 41951e2c09a57389e604aedafbb12eb2b4020ba4 calc
+ github_tar lcn2 calc v2.16.0.0
  make CC=$CC LCC=$CC MAN=true check
 }
 
@@ -243,7 +245,7 @@ test_gzip() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-0
+ github_tar ImageMagick ImageMagick 7.1.2-1
  fix_and_configure
  make check V=1
 }
@@ -486,6 +488,7 @@ test_metalang99() {
 test_micropython() {
  github_clone micropython micropython v1.25.0
  use_stdbit "#include <stdbool.h>" py/misc.h
+ sed -i 's|inline MP_ALWAYSINLINE const|static inline const|g' py/misc.h
  replace_line "#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 8)" "#if 1" py/nlrx64.c
  sed -i 's|defined(LFS2_NO_INTRINSICS)|1|g' lib/littlefs/lfs2_util.h
  make -C ports/unix/ CC=$CC VARIANT=standard V=1 test_full
@@ -533,11 +536,11 @@ test_muon() {
 }
 
 test_nginx() {
- github_tar nginx nginx release-1.29.0
+ github_tar nginx nginx release-1.29.1
  auto/configure
  make
  cd ../
- git_fetch https://github.com/nginx/nginx-tests 7f1e88e10dca8e4c135ab9e688df0c2484091125 nginx-tests
+ git_fetch https://github.com/nginx/nginx-tests 06a36245e134eac985cdfc5fac982cb149f61412 nginx-tests
  prove .
 }
 
@@ -612,12 +615,14 @@ test_perl() {
 
 test_pixman() {
  url_tar https://cairographics.org/releases/pixman-0.42.2.tar.gz pixman
+ # enable constructor for coverage
+ replace_line "#if defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7))" "#if 1" configure
  fix_and_configure
  make check
 }
 
 test_php() {
- github_tar php php-src php-8.5.0alpha4
+ github_tar php php-src php-8.5.0beta1
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -637,7 +642,7 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_18_BETA2
+ github_tar postgres postgres REL_18_BETA3
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
@@ -646,7 +651,7 @@ test_postgres() {
 }
 
 test_python() {
- github_tar python cpython v3.13.6
+ github_tar python cpython v3.13.7
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Python/pylifecycle.c
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
@@ -703,7 +708,7 @@ test_valkey() {
 }
 
 test_ruby() {
- git_fetch https://github.com/ruby/ruby 86320a53002a3adaf35ad7434c70e86747a8b345 ruby
+ git_fetch https://github.com/ruby/ruby d025bc230cd1f31d0b03c9f6490d8db066fc01b1 ruby
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  make check -j4
@@ -722,7 +727,7 @@ test_samba() {
 }
 
 test_scrapscript() {
- git_fetch https://github.com/tekknolagi/scrapscript 467a577f1fa389f91b0ecda180b23daaa2b43fa2 scrapscript
+ git_fetch https://github.com/tekknolagi/scrapscript 986e0fbbcb497bea22875006d4c60dd3809a0cff scrapscript
  curl -LsSf https://astral.sh/uv/install.sh | sh
  ~/.local/bin/uv python install 3.10
  ~/.local/bin/uv python pin 3.010
@@ -730,7 +735,7 @@ test_scrapscript() {
 }
 
 test_sokol() {
- git_fetch https://github.com/fuhsnn/sokol da4efba3e39ea65e51954109faac3daa757f0839 sokol
+ git_fetch https://github.com/floooh/sokol 4012bd599827c9721502a90eaa661249b156d09e sokol
  sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.0|g' tests/ext/CMakeLists.txt
 
  mkdir cmakebuild && cd cmakebuild
@@ -753,7 +758,7 @@ test_tcl() {
 }
 
 test_tinycc() {
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 666e88ee2a66366a81497b4e927b02c69f18a165 tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 19fdef46f960dd72fb5883514df25501db5b2d4e tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
@@ -891,7 +896,7 @@ build_gcc() {
 }
 
 build_glfw() {
- git_fetch https://github.com/glfw/glfw 506c11ba43b901dbcc4d90449f46de67cf000af4 glfw
+ git_fetch https://github.com/glfw/glfw 768e81a0eb3ae411d108168fdff7cd3335f2a34a glfw
  cmake ./ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
  make
 }
@@ -922,7 +927,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250726
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250809
  ./configure
  make V=1
 }
@@ -1026,12 +1031,14 @@ replace_line() {
 }
 
 wget_timeout_noretry() {
- wget -c -4 -T10 -t1 $@
+ wget -c -T30 -t2 $@
 }
 
 wget_loop() {
- while ! wget_timeout_noretry "$1" -O "$2"; do
-  sleep 10
+ local URL="$1"
+
+ while ! wget_timeout_noretry $URL -O "$2"; do
+  URL=`echo $URL | sed -e 's|ftpmirror.gnu|ftp.gnu|g'`
  done
 }
 
