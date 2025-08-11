@@ -79,6 +79,7 @@ typedef struct Relocation Relocation;
 typedef struct LocalLabel LocalLabel;
 typedef struct EnumVal EnumVal;
 typedef struct AsmContext AsmContext;
+typedef struct FuncObj FuncObj;
 
 //
 // alloc.c
@@ -316,6 +317,7 @@ struct Obj {
   char *name;    // Variable name
   Type *ty;      // Type
   bool is_local; // local or global/function
+  bool is_live;
   bool is_compound_lit;
   bool is_string_lit;
   int alt_align;
@@ -333,6 +335,7 @@ struct Obj {
   bool is_definition;
   bool is_static;
   bool is_weak;
+  bool is_static_lvar;
   Obj *static_lvars;
   char *alias_name;
   char *visibility;
@@ -364,12 +367,7 @@ struct Obj {
   uint16_t ctor_prior;
   uint16_t dtor_prior;
   Node *body;
-  void *output; // backend defined output object
-
-  // Static inline function
-  bool is_live;
-  bool is_referenced;
-  StringArray refs;
+  FuncObj *output; // backend defined output object
 };
 
 // Global variable can be initialized either by a constant expression
@@ -379,6 +377,7 @@ struct Relocation {
   Relocation *next;
   int offset;
   char **label;
+  Obj *var;
   long addend;
 };
 
@@ -601,6 +600,7 @@ Obj *new_lvar(char *name, Type *ty);
 bool is_const_var(Obj *var);
 bool equal_tok(Token *a, Token *b);
 char *new_unique_name(void);
+Obj *get_builtin_var(char *);
 
 //
 // bitint.c

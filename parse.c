@@ -288,6 +288,13 @@ static Type *find_tag_in_scope(Token *tok) {
   return hashmap_get2(&scope->tags, tok->loc, tok->len);
 }
 
+Obj *get_builtin_var(char *name) {
+  Obj *var = hashmap_get(&symbols, name);
+  if (!var)
+    internal_error();
+  return var;
+}
+
 static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
   if (ty->is_unsigned && ty->size == 8)
     return (uint64_t)lhs <= rhs;
@@ -567,7 +574,7 @@ static Obj *new_static_lvar(Type *ty) {
   var->name = new_unique_name();
   var->is_definition = true;
   var->is_static = true;
-
+  var->is_static_lvar = true;
   var->next = current_fn->static_lvars;
   current_fn->static_lvars = var;
   return var;
@@ -738,7 +745,6 @@ static void attr_cleanup(Token *loc, TokenKind kind, Obj **fn) {
       VarScope *sc = find_var(skip(tok->next, "("));
       if (!(sc && sc->var && sc->var->ty->kind == TY_FUNC))
         error_tok(tok, "cleanup function not found");
-      strarray_push(&current_fn->refs, sc->var->name);
       *fn = sc->var;
       return;
     }
@@ -2243,6 +2249,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
             cur = cur->next = ast_arena_calloc(sizeof(Relocation));
             cur->offset = (pos + offset);
             cur->label = srel->label;
+            cur->var = srel->var;
             cur->addend = srel->addend;
             srel = srel->next;
             pos += 8;
@@ -2258,10 +2265,11 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
       EvalContext ctx = {.kind = (ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
       int64_t val = eval2(node, &ctx);
-      if (ctx.label) {
+      if (ctx.label || ctx.var) {
         Relocation *rel = ast_arena_calloc(sizeof(Relocation));
         rel->offset = offset;
         rel->label = ctx.label;
+        rel->var = ctx.var;
         rel->addend = val;
         return cur->next = rel;
       }
@@ -3294,7 +3302,6 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 
       if (var) {
         ctx->var = var;
-        ctx->label = var->asm_name ? &var->asm_name : &var->name;
         return ofs;
       }
     }
@@ -4952,14 +4959,6 @@ static Node *primary(Token **rest, Token *tok) {
     VarScope *sc = find_var(tok);
     *rest = tok->next;
 
-    // For "static inline" function
-    if (sc && sc->var && sc->var->ty->kind == TY_FUNC) {
-      if (current_fn)
-        strarray_push(&current_fn->refs, sc->var->name);
-      else
-        sc->var->is_referenced = true;
-    }
-
     if (sc) {
       if (sc->var)
         return new_var_node(sc->var, tok);
@@ -5088,15 +5087,6 @@ static void resolve_local_gotos(Node *node) {
   for (LocalLabel *ll = scope->labels; ll; ll = ll->next)
     if (ll->label)
       node = node->goto_next = ll->label;
-}
-
-static void mark_fn_live(Obj *var) {
-  if (var->is_live)
-    return;
-  var->is_live = true;
-
-  for (int i = 0; i < var->refs.len; i++)
-    mark_fn_live(hashmap_get(&symbols, var->refs.data[i]));
 }
 
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
@@ -5332,19 +5322,6 @@ Obj *parse(Token *tok) {
     global_declaration(&tok, tok, basety, &attr);
     arena_off(&node_arena);
   }
-
-  for (Obj *var = glb_head.next; var; var = var->next) {
-    if (var->is_definition && var->ty->kind == TY_FUNC &&
-      var->is_inline && !var->is_static && (var->is_extern_fn ?
-      (var->is_gnu_inline || opt_std == STD_C89) : opt_std >= STD_C99)) {
-      var->is_definition = false;
-      var->refs.len = 0;
-    }
-  }
-  for (Obj *var = glb_head.next; var; var = var->next)
-    if (var->is_definition && var->ty->kind == TY_FUNC &&
-      (var->is_referenced || !(var->is_static && var->is_inline)))
-      mark_fn_live(var);
 
   return glb_head.next;
 }

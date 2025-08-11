@@ -82,7 +82,6 @@ static char *regs[REG_X64_XMM0][4] = {
 };
 
 static FILE *output_file;
-static FILE *extref_file;
 
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
@@ -154,20 +153,13 @@ struct AsmContext {
   uint32_t clobber_mask;
 };
 
-typedef struct {
+struct FuncObj {
   char *buf;
   size_t buflen;
-  char *extref_buf;
-  size_t extref_buflen;
-} FuncObj;
-
-typedef struct {
-  HashMap map;
-  char *buf;
-  size_t buflen;
-} ExtRefs;
-
-static ExtRefs *ext_refs;
+  Obj **refs;
+  int32_t ref_cnt;
+  int32_t ref_capacity;
+};
 
 static void load2(Type *ty, int sofs, char *sptr);
 static void store2(Type *ty, int dofs, char *dptr);
@@ -233,29 +225,23 @@ static bool is_valid_vis(char *vis) {
     (!strcmp(vis, "hidden") || !strcmp(vis, "internal") || !strcmp(vis, "protected"));
 }
 
-static bool check_extref(char *name) {
-  if (hashmap_get(&ext_refs->map, name))
-    return false;
-
-  hashmap_put(&ext_refs->map, name, (void *)1);
-  return true;
+static void push_ref(Obj *var) {
+  FuncObj *fn = current_fn->output;
+  if (fn->ref_cnt == fn->ref_capacity) {
+    fn->ref_capacity += 4;
+    fn->refs = realloc(fn->refs, sizeof(Obj *) * fn->ref_capacity);
+  }
+  fn->refs[fn->ref_cnt++] = var;
 }
 
 static char *asm_name(Obj *var) {
-  char *asm_name = var->asm_name ? var->asm_name : var->name;
-
-  if (!var->is_static && !var->is_definition &&
-    (var->is_weak || is_valid_vis(var->visibility)) &&
-    ext_refs && check_extref(var->name)) {
-    if (!extref_file)
-      extref_file = open_memstream(&ext_refs->buf, &ext_refs->buflen);
-
-    if (var->is_weak)
-      fprintf(extref_file, "\t.weak \"%s\"\n", asm_name);
-    if (is_valid_vis(var->visibility))
-      fprintf(extref_file, "\t.%s \"%s\"\n", var->visibility, asm_name);
+  if (current_fn && current_fn != var) {
+    if (var->is_static_lvar)
+      var->is_live = true;
+    else if (!var->is_definition || (var->is_inline && var->is_static))
+      push_ref(var);
   }
-  return asm_name;
+  return var->asm_name ? var->asm_name : var->name;
 }
 
 static int get_align(Obj *var) {
@@ -811,7 +797,13 @@ static void gen_cmp_setcc(NodeKind kind, bool is_unsigned) {
 }
 
 static void gen_bitint_builtin_call2(char *fn) {
-  strarray_push(&current_fn->refs, fn);
+  static HashMap map;
+  Obj *var = hashmap_get(&map, fn);
+  if (!var) {
+    var = get_builtin_var(fn);
+    hashmap_put(&map, fn, var);
+  }
+  push_ref(var);
   Printftn("call %s", fn);
   clobber_all_regs();
 }
@@ -4735,7 +4727,9 @@ static void emit_data(Obj *var) {
     if (!rel)
       break;
 
-    Printftn(".quad \"%s\"%+ld", *rel->label, rel->addend), pos += 8;
+    char *str = rel->label ? *rel->label : asm_name(rel->var);
+    Printftn(".quad \"%s\"%+ld", str, rel->addend);
+    pos += 8;
     rel = rel->next;
   }
 }
@@ -4782,22 +4776,10 @@ static void emit_cdtor(char *sec, uint16_t priority, Obj *fn) {
   Printftn(".quad \"%s\"", asm_name(fn));
 }
 
-static void emit_text_end(Obj *fn) {
-  Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
-
-  fclose(output_file);
-  output_file = NULL;
-}
-
 void emit_text(Obj *fn) {
-  FuncObj *fnobj = fn->output = calloc(1, sizeof(FuncObj));
-  output_file = open_memstream(&fnobj->buf, &fnobj->buflen);
+  fn->output = calloc(1, sizeof(FuncObj));
+  output_file = open_memstream(&fn->output->buf, &fn->output->buflen);
 
-  for (Obj *var = fn->static_lvars; var; var = var->next)
-    emit_data(var);
-
-  if (fn->is_ctor || fn->is_dtor)
-    fn->is_referenced = true;
   if (fn->is_ctor)
     emit_cdtor("init_array", fn->ctor_prior, fn);
   if (fn->is_dtor)
@@ -4817,7 +4799,10 @@ void emit_text(Obj *fn) {
   if (fn->is_naked) {
     gen_stmt_naked(fn->body);
 
-    emit_text_end(fn);
+    Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
+
+    fclose(output_file);
+    output_file = NULL;
     return;
   }
 
@@ -4829,7 +4814,6 @@ void emit_text(Obj *fn) {
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
   lvar_ptr = (lvar_align > 16) ? rbx : rbp;
   current_fn = fn;
-  ext_refs = &(ExtRefs){0};
   rtn_label = count();
 
   // Prologue
@@ -4945,16 +4929,14 @@ void emit_text(Obj *fn) {
     insrtln(".set __BUF, -%d; sub $%d, %%rsp", stack_alloc_loc, peak_stk_usage, peak_stk_usage);
   }
 
-  if (extref_file) {
-    fclose(extref_file);
-    extref_file = NULL;
-    fnobj->extref_buf = ext_refs->buf;
-    fnobj->extref_buflen = ext_refs->buflen;
-    free(ext_refs->map.buckets);
-  }
-  ext_refs = NULL;
+  Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
+
+  for (Obj *var = fn->static_lvars; var; var = var->next)
+    emit_data(var);
+
+  fclose(output_file);
+  output_file = NULL;
   current_fn = NULL;
-  emit_text_end(fn);
 }
 
 // Logic should be in sync with gen_funcall_args()
@@ -5012,6 +4994,16 @@ static void peep_redunt_jmp(char *p) {
   }
 }
 
+static void mark_fn_live(Obj *var) {
+  if (var->is_live)
+    return;
+  var->is_live = true;
+
+  if (var->output)
+    for (int i = 0; i < var->output->ref_cnt; i++)
+      mark_fn_live(var->output->refs[i]);
+}
+
 int codegen(Obj *prog, FILE *out) {
   output_file = out;
 
@@ -5022,9 +5014,49 @@ int codegen(Obj *prog, FILE *out) {
   }
 
   for (Obj *var = prog; var; var = var->next) {
+    if (var->is_definition && var->ty->kind == TY_FUNC &&
+      var->is_inline && !var->is_static && (var->is_extern_fn ?
+      (var->is_gnu_inline || opt_std == STD_C89) : opt_std >= STD_C99)) {
+      var->is_definition = false;
+      var->output = NULL;
+    }
+  }
+
+  for (Obj *var = prog; var; var = var->next) {
+    if (!var->is_definition)
+      continue;
+    if (var->ty->kind == TY_FUNC) {
+      if (!(var->is_static && var->is_inline) || var->is_ctor || var->is_dtor)
+        mark_fn_live(var);
+      continue;
+    }
+    for (Relocation *rel = var->rel; rel; rel = rel->next) {
+      Obj *ref = rel->var;
+      if (!ref)
+        continue;
+      if (!ref->is_definition) {
+        ref->is_live = true;
+        continue;
+      }
+      if (ref->ty->kind == TY_FUNC && ref->is_static && ref->is_inline)
+        mark_fn_live(ref);
+    }
+  }
+
+  for (Obj *var = prog; var; var = var->next) {
     if (!var->is_definition) {
-      if (var->is_weak || var->alias_name)
-        emit_symbol(var);
+      if (var->alias_name ||
+        (var->is_live && (var->is_weak || is_valid_vis(var->visibility)))) {
+        if (var->is_weak)
+          Printftn(".weak \"%s\"", asm_name(var));
+        else
+          Printftn(".globl \"%s\"", asm_name(var));
+
+        if (is_valid_vis(var->visibility))
+          Printftn(".%s \"%s\"", var->visibility, asm_name(var));
+        if (var->alias_name)
+          Printftn(".set \"%s\", \"%s\"", var->name, var->alias_name);
+      }
       continue;
     }
     if (var->ty->kind == TY_ASM) {
@@ -5037,8 +5069,6 @@ int codegen(Obj *prog, FILE *out) {
       FuncObj *fn = var->output;
       peep_redunt_jmp(fn->buf);
       fwrite(fn->buf, 1, fn->buflen, out);
-      if (fn->extref_buf)
-        fwrite(fn->extref_buf, 1, fn->extref_buflen, out);
       continue;
     }
     emit_data(var);
