@@ -1184,7 +1184,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
     }
 
     char *var_name = name ? get_ident(name) : NULL;
-    cur = cur->param_next = new_lvar(var_name, param_ty);
+    cur = cur->param_next = new_var(var_name, param_ty, calloc(1, sizeof(Obj)));
   }
   leave_scope();
   add_type(expr);
@@ -5092,35 +5092,34 @@ static void resolve_local_gotos(Node *node) {
       node = node->goto_next = ll->label;
 }
 
-static Obj *find_func(char *name) {
-  Scope *sc = scope;
-  while (sc->parent)
-    sc = sc->parent;
-
-  VarScope *sc2 = hashmap_get(&sc->vars, name);
-  if (sc2 && sc2->var && sc2->var->ty->kind == TY_FUNC)
-    return sc2->var;
-  return NULL;
-}
-
 static void mark_fn_live(Obj *var) {
   if (var->is_live)
     return;
   var->is_live = true;
 
-  for (int i = 0; i < var->refs.len; i++) {
-    Obj *fn = find_func(var->refs.data[i]);
-    if (fn)
-      mark_fn_live(fn);
-  }
+  for (int i = 0; i < var->refs.len; i++)
+    mark_fn_live(hashmap_get(&symbols, var->refs.data[i]));
 }
 
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
-  char *name_str = get_ident(name);
+  Obj *fn = hashmap_get2(&symbols, name->loc, name->len);
 
-  Obj *fn = find_func(name_str);
-  if (!fn) {
+  Obj *sc_var = find_var_in_scope(name);
+  if (sc_var && sc_var != fn)
+    error_tok(name, "invalid redeclaration");
+
+  if (fn) {
+    if (!sc_var)
+      push_scope(fn->name)->var = fn;
+    if (!is_compatible(fn->ty, ty))
+      error_tok(name, "incompatible redeclaration");
+    if (!fn->is_static && (attr->strg & SC_STATIC))
+      error_tok(name, "static declaration follows a non-static declaration");
+  } else {
+    char *name_str = get_ident(name);
     fn = new_gvar(name_str, ty);
+
+    hashmap_put2(&symbols, name->loc, name->len, fn);
 
     if ((attr->strg & SC_STATIC) || (attr->is_inline && !(attr->strg & SC_EXTERN)))
       fn->is_static = true;
@@ -5128,11 +5127,6 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
     if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
       strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
       fn->returns_twice = true;
-  } else {
-    if (!fn->is_static && (attr->strg & SC_STATIC))
-      error_tok(name, "static declaration follows a non-static declaration");
-    if (!is_compatible(fn->ty, ty))
-      error_tok(name, "function prototype mismatch");
   }
   fn->is_inline |= attr->is_inline;
   return fn;
@@ -5152,6 +5146,17 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   if (ty->scopes) {
     scope = ty->scopes;
+
+    if (!ty->is_oldstyle) {
+      Obj head = {0};
+      Obj *cur = &head;
+      for (Obj *var = ty->param_list; var; var = var->param_next) {
+        var->is_local = true;
+        cur = cur->next = var;
+      }
+      cur->next = scope->locals;
+      scope->locals = head.next;
+    }
   } else {
     enter_scope();
     ty->scopes = scope;
