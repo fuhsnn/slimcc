@@ -5026,7 +5026,7 @@ int codegen(Obj *prog, FILE *out) {
     if (!var->is_definition)
       continue;
     if (var->ty->kind == TY_FUNC) {
-      if (!(var->is_static && var->is_inline) || var->is_ctor || var->is_dtor)
+      if (!(var->is_static && var->is_inline) || var->is_used)
         mark_fn_live(var);
       continue;
     }

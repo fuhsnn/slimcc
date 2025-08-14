@@ -318,6 +318,7 @@ struct Obj {
   Type *ty;      // Type
   bool is_local; // local or global/function
   bool is_live;
+  bool is_used;
   bool is_compound_lit;
   bool is_string_lit;
   int alt_align;

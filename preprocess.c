@@ -1947,6 +1947,7 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("packed");
     PutAttr("returns_twice");
     PutAttr("section");
+    PutAttr("used");
     PutAttr("weak");
 
     if (!opt_disable_visibility)

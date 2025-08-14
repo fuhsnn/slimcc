@@ -53,6 +53,7 @@ typedef struct {
   bool is_naked;
   bool is_noreturn;
   bool is_returns_twice;
+  bool is_used;
   bool is_ctor;
   bool is_dtor;
   uint16_t ctor_prior;
@@ -814,6 +815,7 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   bool_attr(tok, kind, "naked", &attr->is_naked);
   bool_attr(tok, kind, "noreturn", &attr->is_noreturn);
   bool_attr(tok, kind, "returns_twice", &attr->is_returns_twice);
+  bool_attr(tok, kind, "used", &attr->is_used);
   cdtor_attr(tok, kind, "constructor", &attr->is_ctor, &attr->ctor_prior);
   cdtor_attr(tok, kind, "destructor", &attr->is_dtor, &attr->dtor_prior);
   str_attr(tok, kind, "alias", &attr->alias);
@@ -834,12 +836,21 @@ static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token
 
   apply_str_attr("alias", name, &var->alias_name, attr->alias);
   DeclAttr(str_attr, "alias", &var->alias_name);
+  if (var->alias_name) {
+    Obj *alias_var = hashmap_get(&symbols, var->alias_name);
+    if (!alias_var)
+      error_tok(tok, "\'%s\' not found", var->alias_name);
+    alias_var->is_used = true;
+  }
 
   apply_str_attr("section", name, &var->section_name, attr->section);
   DeclAttr(str_attr, "section", &var->section_name);
 
   apply_str_attr("visibility", name, &var->visibility, attr->visibility);
   DeclAttr(str_attr, "visibility", &var->visibility);
+
+  var->is_used |= attr->is_used;
+  DeclAttr(bool_attr, "used", &var->is_used);
 
   var->is_weak |= attr->is_weak;
   DeclAttr(bool_attr, "weak", &var->is_weak);
@@ -860,6 +871,9 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
 
   apply_cdtor_attr("destructor", name, &fn->is_dtor, &fn->dtor_prior, attr->dtor_prior, attr->is_dtor);
   DeclAttr(cdtor_attr, "destructor", &fn->is_dtor, &fn->dtor_prior);
+
+  if (fn->is_ctor || fn->is_dtor)
+    fn->is_used = true;
 
   fn->is_naked |= attr->is_naked;
   DeclAttr(bool_attr, "naked", &fn->is_naked);
