@@ -352,7 +352,8 @@ struct Obj {
 
   // Function
   bool is_inline;
-  bool only_inline;
+  bool is_gnu_inline;
+  bool is_extern_fn;
   bool is_naked;
   bool is_noreturn;
   bool returns_twice;

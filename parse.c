@@ -865,9 +865,10 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
   DeclAttr(bool_attr, "returns_twice", &fn->returns_twice);
 
   if (equal(tok, "{")) {
-    bool is_gnu_inline = attr->is_gnu_inline;
-    DeclAttr(bool_attr, "gnu_inline", &is_gnu_inline);
-    fn->only_inline = is_gnu_inline && attr->is_inline && (attr->strg & SC_EXTERN);
+    fn->is_gnu_inline = attr->is_gnu_inline;
+    DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
+    if (fn->is_gnu_inline)
+      fn->is_inline |= attr->is_inline;
   }
 }
 
@@ -5118,14 +5119,14 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
 
     hashmap_put2(&symbols, name->loc, name->len, fn);
 
-    if ((attr->strg & SC_STATIC) || (attr->is_inline && !(attr->strg & SC_EXTERN)))
-      fn->is_static = true;
+    fn->is_static = attr->strg & SC_STATIC;
+    fn->is_inline = attr->is_inline;
 
     if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
       strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
       fn->returns_twice = true;
   }
-  fn->is_inline |= attr->is_inline;
+  fn->is_extern_fn |= attr->strg & SC_EXTERN;
   return fn;
 }
 
@@ -5175,9 +5176,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   emit_text(fn);
   arena_off(&ast_arena);
-
-  if (fn->only_inline)
-    fn->is_definition = false;
 }
 
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
@@ -5335,6 +5333,14 @@ Obj *parse(Token *tok) {
     arena_off(&node_arena);
   }
 
+  for (Obj *var = glb_head.next; var; var = var->next) {
+    if (var->is_definition && var->ty->kind == TY_FUNC &&
+      var->is_inline && !var->is_static && (var->is_extern_fn ?
+      (var->is_gnu_inline || opt_std == STD_C89) : opt_std >= STD_C99)) {
+      var->is_definition = false;
+      var->refs.len = 0;
+    }
+  }
   for (Obj *var = glb_head.next; var; var = var->next)
     if (var->is_definition && var->ty->kind == TY_FUNC &&
       (var->is_referenced || !(var->is_static && var->is_inline)))

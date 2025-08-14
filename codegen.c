@@ -330,13 +330,17 @@ static bool use_rip(Obj *var) {
   if (var->is_static || !(opt_fpie || opt_fpic))
     return true;
 
-  if (opt_fpie)
-    return var->is_definition || (var->ty->kind != TY_FUNC && !var->is_weak);
-
+  if (opt_fpie) {
+    if (var->ty->kind == TY_FUNC)
+      return var->is_definition && !var->is_inline;
+    return var->is_definition || !var->is_weak;
+  }
   char *vis = var->visibility ? var->visibility : opt_visibility;
-  if (vis && (!strcmp(vis, "hidden")))
-    return var->is_definition || (var->ty->kind != TY_FUNC && !var->is_weak && var->visibility);
-
+  if (vis && (!strcmp(vis, "hidden"))) {
+    if (var->ty->kind == TY_FUNC)
+      return var->is_definition && !var->is_inline;
+    return var->is_definition || (!var->is_weak && var->visibility);
+  }
   return false;
 }
 
