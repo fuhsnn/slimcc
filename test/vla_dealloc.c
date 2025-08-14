@@ -3,6 +3,20 @@
 #define STRINGIFY(x) STRINGIFY2(x)
 #define ASSERTL(x, y) test_assert(x, y, #y " line:" STRINGIFY(__LINE__))
 
+int disable_dealloc(int i) {
+  void *lv1, *p;
+  {
+    int vla[i];
+    lv1 = vla;
+    p = alloca(100);
+  }
+  {
+    int vla[i];
+    ASSERT(0, vla == lv1);
+  }
+  return 1;
+}
+
 int main(int argc, char** argv) {
 
   void *lv1, *lv2;
@@ -168,6 +182,8 @@ goto4:;
   ASSERTL(1, lv1 == vla1);
   ASSERTL(1, lv2 == vla2);
 
+
+  ASSERT(1, disable_dealloc(argc));
   printf("OK\n");
   return 0;
 }

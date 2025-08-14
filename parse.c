@@ -4662,6 +4662,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node->lhs = assign(&tok, tok);
     *rest = skip(tok, ")");
     node->ty = pointer_to(ty_void);
+    dont_dealloc_vla = true;
     return node;
   }
 
@@ -4956,10 +4957,6 @@ static Node *primary(Token **rest, Token *tok) {
         strarray_push(&current_fn->refs, sc->var->name);
       else
         sc->var->is_referenced = true;
-
-      char *name = sc->var->name;
-      if (!strcmp(name, "alloca"))
-        dont_dealloc_vla = true;
     }
 
     if (sc) {
