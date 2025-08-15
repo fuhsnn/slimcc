@@ -5225,32 +5225,27 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
         push_scope(var->name)->var = var;
       if (!is_compatible2(var->ty, ty))
         error_tok(tok, "incompatible type");
-
-      symbol_attr(&tok, tok, var, attr, name);
-
-      if (!is_definition)
-        continue;
-      if (var->is_definition && !var->is_tentative)
-        continue;
-      var->is_tentative = false;
-      var->ty = ty;
+      if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
+        var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
-      symbol_attr(&tok, tok, var, attr, name);
 
       hashmap_put2(&symbols, name->loc, name->len, var);
+
+      var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
+      var->is_tls = attr->strg & SC_THREAD;
     }
-    var->is_definition = is_definition;
-    var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
-    var->is_tls = attr->strg & SC_THREAD;
-    var->alt_align = alt_align;
+    var->alt_align = MAX(var->alt_align, alt_align);
+    symbol_attr(&tok, tok, var, attr, name);
+
+    if (!is_definition || var->init_data)
+      continue;
+    var->is_definition = true;
 
     if (attr->strg & SC_CONSTEXPR)
       constexpr_initializer(&tok, skip(tok, "="), var, var);
     else if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
-    else if (is_definition)
-      var->is_tentative = true;
   }
   *rest = tok;
 }
