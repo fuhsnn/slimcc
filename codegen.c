@@ -106,6 +106,7 @@ static int lvar_stk_sz;
 static int peak_stk_usage;
 static int tmpbuf_sz;
 static int64_t rtn_label;
+static HashMap *ext_refs;
 
 static struct {
   bool in[REG_X64_END];
@@ -226,6 +227,10 @@ static bool is_valid_vis(char *vis) {
 }
 
 static void push_ref(Obj *var) {
+  if (hashmap_get(ext_refs, var->name))
+    return;
+  hashmap_put(ext_refs, var->name, (void *)1);
+
   FuncObj *fn = current_fn->output;
   if (fn->ref_cnt == fn->ref_capacity) {
     fn->ref_capacity += 4;
@@ -4814,6 +4819,7 @@ void emit_text(Obj *fn) {
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
   lvar_ptr = (lvar_align > 16) ? rbx : rbp;
   current_fn = fn;
+  ext_refs = &(HashMap){0};
   rtn_label = count();
 
   // Prologue
@@ -4949,9 +4955,13 @@ void emit_text(Obj *fn) {
     } while (has_change);
   }
 
+  if (ext_refs->buckets)
+    free(ext_refs->buckets);
+  ext_refs = NULL;
+  current_fn = NULL;
+
   fclose(output_file);
   output_file = NULL;
-  current_fn = NULL;
 }
 
 // Logic should be in sync with gen_funcall_args()
