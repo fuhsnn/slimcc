@@ -4681,7 +4681,8 @@ static void emit_data(Obj *var) {
     return;
   }
 
-  bool use_rodata = is_const_var(var) && !((opt_fpic || opt_fpie) && (var->rel || var->section_name));
+  bool use_rodata = var->is_string_lit ||
+    (is_const_var(var) && !((opt_fpic || opt_fpie) && (var->rel || var->section_name)));
   bool use_bss = !var->init_data && !var->rel;
 
   if (var->section_name)
