@@ -93,9 +93,14 @@ int incomplete_ptr(void) {
   TAG_COMPAT_CHK(1, struct lists { struct list lst; }, struct lists { struct list lst; } );
 
   struct S *p;
+  {
+    typedef struct S {} T;
+    static_assert(_Generic(*p, T:0, default:1));
+  }
   struct S { int i; };
-  { ASSERT(1, _Generic(struct S { int i;}, typeof(*p): 1)); }
-  { ASSERT(1, _Generic(struct S { int j;}, typeof(*p): 0, default: 1)); }
+  { static_assert(_Generic(struct S { int i;}, typeof(*p): 1)); }
+  { static_assert(_Generic(struct S { int j;}, typeof(*p): 0, default: 1)); }
+
   return 1;
 }
 
