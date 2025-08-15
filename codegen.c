@@ -239,13 +239,17 @@ static void push_ref(Obj *var) {
   fn->refs[fn->ref_cnt++] = var;
 }
 
-static char *asm_name(Obj *var) {
+static char *get_symbol(Obj *var) {
   if (current_fn && current_fn != var) {
     if (var->is_static_lvar)
       var->is_live = true;
     else if (!var->is_definition || var->is_static)
       push_ref(var);
   }
+  return var->asm_name ? var->asm_name : var->name;
+}
+
+static char *asm_name(Obj *var) {
   return var->asm_name ? var->asm_name : var->name;
 }
 
@@ -354,9 +358,9 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_array, bool l
     }
     if (!var->is_tls && use_rip(var)) {
       if (offset)
-        snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, asm_name(var));
+        snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, get_symbol(var));
       else
-        snprintf(ofs, STRBUF_SZ, "\"%s\"", asm_name(var));
+        snprintf(ofs, STRBUF_SZ, "\"%s\"", get_symbol(var));
       *ptr = rip;
       return true;
     }
@@ -1003,7 +1007,7 @@ static void gen_addr(Node *node) {
     if (node->var->is_tls) {
       if (opt_femulated_tls) {
         clobber_all_regs();
-        Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", asm_name(node->var));
+        Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", get_symbol(node->var));
         if (opt_use_plt)
           Printstn("call __emutls_get_address@PLT");
         else
@@ -1012,7 +1016,7 @@ static void gen_addr(Node *node) {
       }
       if (opt_fpic) {
         clobber_all_regs();
-        Printftn(".byte 0x66; lea \"%s\"@tlsgd(%%rip), %%rdi", asm_name(node->var));
+        Printftn(".byte 0x66; lea \"%s\"@tlsgd(%%rip), %%rdi", get_symbol(node->var));
         if (opt_use_plt)
           Printstn(".value 0x6666; rex64 call __tls_get_addr@PLT");
         else
@@ -1022,19 +1026,19 @@ static void gen_addr(Node *node) {
 
       Printstn("mov %%fs:0, %%rax");
       if (node->var->is_definition)
-        Printftn("add $\"%s\"@tpoff, %%rax", asm_name(node->var));
+        Printftn("add $\"%s\"@tpoff, %%rax", get_symbol(node->var));
       else
-        Printftn("add \"%s\"@gottpoff(%%rip), %%rax", asm_name(node->var));
+        Printftn("add \"%s\"@gottpoff(%%rip), %%rax", get_symbol(node->var));
       return;
     }
 
     // Function or global variable
     if (!(opt_fpic || opt_fpie))
-      Printftn("movl $\"%s\", %%eax", asm_name(node->var));
+      Printftn("movl $\"%s\", %%eax", get_symbol(node->var));
     else if (use_rip(node->var))
-      Printftn("leaq \"%s\"(%%rip), %%rax", asm_name(node->var));
+      Printftn("leaq \"%s\"(%%rip), %%rax", get_symbol(node->var));
     else
-      Printftn("movq \"%s\"@GOTPCREL(%%rip), %%rax", asm_name(node->var));
+      Printftn("movq \"%s\"@GOTPCREL(%%rip), %%rax", get_symbol(node->var));
     return;
   case ND_DEREF:
     gen_expr(node->lhs);
@@ -1896,11 +1900,11 @@ static void gen_funcall(Node *node) {
     Printftn("call *%s", pop_inreg("%r10"));
   } else {
     if (use_rip(node->lhs->var))
-      Printftn("call \"%s\"", asm_name(node->lhs->var));
+      Printftn("call \"%s\"", get_symbol(node->lhs->var));
     else if (opt_use_plt)
-      Printftn("call \"%s\"@PLT", asm_name(node->lhs->var));
+      Printftn("call \"%s\"@PLT", get_symbol(node->lhs->var));
     else
-      Printftn("call *\"%s\"@GOTPCREL(%%rip)", asm_name(node->lhs->var));
+      Printftn("call *\"%s\"@GOTPCREL(%%rip)", get_symbol(node->lhs->var));
   }
 
   clobber_all_regs();
@@ -4382,7 +4386,7 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
 static bool is_asm_symbolic_arg(Node *node, char *punct) {
   if (node->kind == ND_VAR && node->var->ty->kind == TY_FUNC && use_rip(node->var)) {
     if (punct)
-      fprintf(output_file, "%s\"%s\"", punct, asm_name(node->var));
+      fprintf(output_file, "%s\"%s\"", punct, get_symbol(node->var));
     return true;
   }
   char ofs[STRBUF_SZ], *ptr;
@@ -4618,43 +4622,43 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   return max_depth;
 }
 
-static void emit_symbol(Obj *var) {
+static void emit_symbol(Obj *var, char *name) {
   if (var->is_static)
-    Printftn(".local \"%s\"", asm_name(var));
+    Printftn(".local \"%s\"", name);
   else if (var->is_weak)
-    Printftn(".weak \"%s\"", asm_name(var));
+    Printftn(".weak \"%s\"", name);
   else
-    Printftn(".globl \"%s\"", asm_name(var));
+    Printftn(".globl \"%s\"", name);
 
   if (var->alias_name)
     Printftn(".set \"%s\", \"%s\"", var->name, var->alias_name);
 
   char *vis = var->visibility ? var->visibility : opt_visibility;
   if (is_valid_vis(vis))
-    Printftn(".%s \"%s\"", vis, asm_name(var));
+    Printftn(".%s \"%s\"", vis, name);
 }
 
 static void emit_data(Obj *var) {
   int64_t sz = var->ty->size;
+  char *var_name = get_symbol(var);
 
   if (var->ty->kind == TY_ARRAY)
     if (sz < 0 && var->is_tentative)
       sz = var->ty->base->size;
 
   if (sz < 0)
-    error("object \'%s\' has incomplete type", asm_name(var));
+    error("object \'%s\' has incomplete type", var_name);
 
   if (opt_femulated_tls && var->is_tls) {
     char name_t[STRBUF_SZ], name_v[STRBUF_SZ];
-    snprintf(name_t, STRBUF_SZ, "__emutls_t.%s", asm_name(var));
-    snprintf(name_v, STRBUF_SZ, "__emutls_v.%s", asm_name(var));
+    snprintf(name_t, STRBUF_SZ, "__emutls_t.%s", var_name);
+    snprintf(name_v, STRBUF_SZ, "__emutls_v.%s", var_name);
 
     Obj tmp_var = *var;
     tmp_var.is_tls = false;
     tmp_var.asm_name = tmp_var.alias_name = NULL;
 
-    tmp_var.name = name_v;
-    emit_symbol(&tmp_var);
+    emit_symbol(&tmp_var, name_v);
     Printstn(".data");
     Printftn(".size \"%s\", 32", name_v);
     Printstn(".align 8");
@@ -4669,11 +4673,11 @@ static void emit_data(Obj *var) {
     return;
   }
 
-  emit_symbol(var);
+  emit_symbol(var, var_name);
 
   if (var->is_tentative && !(var->is_tls || var->is_weak || var->section_name) &&
     (var->is_common || (!var->is_nocommon && opt_fcommon))) {
-    Printftn(".comm \"%s\", %"PRIi64", %d", asm_name(var), sz, get_align(var));
+    Printftn(".comm \"%s\", %"PRIi64", %d", var_name, sz, get_align(var));
     return;
   }
 
@@ -4692,7 +4696,7 @@ static void emit_data(Obj *var) {
     Printfts(".section .%s", use_bss ? "bss" : "data");
 
   if (opt_data_sections && !var->section_name)
-    Printf(".\"%s\"", asm_name(var));
+    Printf(".\"%s\"", var_name);
 
   if (var->is_tls)
     Printssn(",\"awT\"");
@@ -4701,10 +4705,10 @@ static void emit_data(Obj *var) {
   else
     Printssn(",\"aw\"");
 
-  Printftn(".type \"%s\", @object", asm_name(var));
-  Printftn(".size \"%s\", %"PRIi64, asm_name(var), sz);
+  Printftn(".type \"%s\", @object", var_name);
+  Printftn(".size \"%s\", %"PRIi64, var_name, sz);
   Printftn(".align %d", get_align(var));
-  Printfsn("\"%s\":", asm_name(var));
+  Printfsn("\"%s\":", var_name);
 
   if (sz == 0)
     return;
@@ -4732,7 +4736,7 @@ static void emit_data(Obj *var) {
     if (!rel)
       break;
 
-    char *str = rel->label ? *rel->label : asm_name(rel->var);
+    char *str = rel->label ? *rel->label : get_symbol(rel->var);
     Printftn(".quad \"%s\"%+ld", str, rel->addend);
     pos += 8;
     rel = rel->next;
@@ -4772,39 +4776,41 @@ static void store_gp(int idx, int sz, int ofs, char *ptr) {
   store_gp2(regs[argreg[idx]], sz, ofs, ptr);
 }
 
-static void emit_cdtor(char *sec, uint16_t priority, Obj *fn) {
+static void emit_cdtor(char *sec, uint16_t priority, char *fn_name) {
   Printfts(".section .%s", sec);
   if (priority)
     Printf(".%"PRIu16, (uint16_t)(priority - 1));
   Printssn(",\"aw\"");
   Printstn(".align 8");
-  Printftn(".quad \"%s\"", asm_name(fn));
+  Printftn(".quad \"%s\"", fn_name);
 }
 
 void emit_text(Obj *fn) {
   fn->output = calloc(1, sizeof(FuncObj));
   output_file = open_memstream(&fn->output->buf, &fn->output->buflen);
 
-  if (fn->is_ctor)
-    emit_cdtor("init_array", fn->ctor_prior, fn);
-  if (fn->is_dtor)
-    emit_cdtor("fini_array", fn->dtor_prior, fn);
+  char *fn_name = asm_name(fn);
 
-  emit_symbol(fn);
+  if (fn->is_ctor)
+    emit_cdtor("init_array", fn->ctor_prior, fn_name);
+  if (fn->is_dtor)
+    emit_cdtor("fini_array", fn->dtor_prior, fn_name);
+
+  emit_symbol(fn, fn_name);
 
   if (fn->section_name)
     Printftn(".section \"%s\",\"ax\",@progbits", fn->section_name);
   else if (opt_func_sections)
-    Printftn(".section .text.\"%s\",\"ax\",@progbits", asm_name(fn));
+    Printftn(".section .text.\"%s\",\"ax\",@progbits", fn_name);
   else
     Printstn(".text");
-  Printftn(".type \"%s\", @function", asm_name(fn));
-  Printfsn("\"%s\":", asm_name(fn));
+  Printftn(".type \"%s\", @function", fn_name);
+  Printfsn("\"%s\":", fn_name);
 
   if (fn->is_naked) {
     gen_stmt_naked(fn->body);
 
-    Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
+    Printftn(".size \"%s\", .-\"%s\"", fn_name, fn_name);
 
     fclose(output_file);
     output_file = NULL;
@@ -4935,7 +4941,7 @@ void emit_text(Obj *fn) {
     insrtln(".set __BUF, -%d; sub $%d, %%rsp", stack_alloc_loc, peak_stk_usage, peak_stk_usage);
   }
 
-  Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
+  Printftn(".size \"%s\", .-\"%s\"", fn_name, fn_name);
 
   {
     Obj head = {.next = fn->static_lvars};
