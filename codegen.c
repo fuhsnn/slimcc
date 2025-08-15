@@ -4642,9 +4642,8 @@ static void emit_data(Obj *var) {
   int64_t sz = var->ty->size;
   char *var_name = get_symbol(var);
 
-  if (var->ty->kind == TY_ARRAY)
-    if (sz < 0 && var->is_tentative)
-      sz = var->ty->base->size;
+  if (var->ty->kind == TY_ARRAY && sz < 0)
+    sz = var->ty->base->size;
 
   if (sz < 0)
     error("object \'%s\' has incomplete type", var_name);
@@ -4675,7 +4674,8 @@ static void emit_data(Obj *var) {
 
   emit_symbol(var, var_name);
 
-  if (var->is_tentative && !(var->is_tls || var->is_weak || var->section_name) &&
+  if (!var->is_static_lvar && !var->init_data && !var->is_tls &&
+    !(var->is_weak || var->section_name) &&
     (var->is_common || (!var->is_nocommon && opt_fcommon))) {
     Printftn(".comm \"%s\", %"PRIi64", %d", var_name, sz, get_align(var));
     return;

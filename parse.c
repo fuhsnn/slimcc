@@ -5230,9 +5230,8 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 
       if (!is_definition)
         continue;
-      if (var->is_definition && !var->is_tentative)
+      if (var->is_static_lvar || var->init_data)
         continue;
-      var->is_tentative = false;
       var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
@@ -5249,8 +5248,6 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       constexpr_initializer(&tok, skip(tok, "="), var, var);
     else if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
-    else if (is_definition)
-      var->is_tentative = true;
   }
   *rest = tok;
 }

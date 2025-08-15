@@ -343,7 +343,6 @@ struct Obj {
   char *asm_name;
 
   // Global variable
-  bool is_tentative;
   bool is_tls;
   bool is_common;
   bool is_nocommon;
