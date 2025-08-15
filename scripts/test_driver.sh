@@ -209,7 +209,7 @@ echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep '\.data\.' | g
 check '-fdata-sections'
 echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections -fno-emulated-tls | grep '\.tdata\.' | grep -q 'var'
 check '-fdata-sections'
-echo 'void fn(void){static int var;}' | $testcc -xc - -S -o- -fdata-sections | grep -q '\.bss\.'
+echo 'void fn(void){static int var [[gnu::used]];}' | $testcc -xc - -S -o- -fdata-sections | grep -q '\.bss\.'
 check '-fdata-sections'
 echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections -fno-emulated-tls | grep '\.tbss\.' | grep -q 'var'
 check '-fdata-sections'

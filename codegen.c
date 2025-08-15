@@ -238,7 +238,7 @@ static char *asm_name(Obj *var) {
   if (current_fn && current_fn != var) {
     if (var->is_static_lvar)
       var->is_live = true;
-    else if (!var->is_definition || (var->is_inline && var->is_static))
+    else if (!var->is_definition || var->is_static)
       push_ref(var);
   }
   return var->asm_name ? var->asm_name : var->name;
@@ -4931,8 +4931,23 @@ void emit_text(Obj *fn) {
 
   Printftn(".size \"%s\", .-\"%s\"", asm_name(fn), asm_name(fn));
 
-  for (Obj *var = fn->static_lvars; var; var = var->next)
-    emit_data(var);
+  {
+    Obj head = {.next = fn->static_lvars};
+    bool has_change;
+    do {
+      has_change = false;
+      Obj *cur = &head;
+      for (Obj *var = head.next; var; var = var->next) {
+        if (var->is_live || var->is_used) {
+          emit_data(var);
+          has_change = true;
+          continue;
+        }
+        cur = cur->next = var;
+      }
+      cur->next = NULL;
+    } while (has_change);
+  }
 
   fclose(output_file);
   output_file = NULL;
@@ -4994,14 +5009,20 @@ static void peep_redunt_jmp(char *p) {
   }
 }
 
-static void mark_fn_live(Obj *var) {
+static void mark_live(Obj *var) {
   if (var->is_live)
     return;
   var->is_live = true;
 
-  if (var->output)
-    for (int i = 0; i < var->output->ref_cnt; i++)
-      mark_fn_live(var->output->refs[i]);
+  if (var->ty->kind == TY_FUNC) {
+    if (var->output)
+      for (int i = 0; i < var->output->ref_cnt; i++)
+        mark_live(var->output->refs[i]);
+  } else {
+    for (Relocation *rel = var->rel; rel; rel = rel->next)
+      if (rel->var)
+        mark_live(rel->var);
+  }
 }
 
 int codegen(Obj *prog, FILE *out) {
@@ -5022,26 +5043,9 @@ int codegen(Obj *prog, FILE *out) {
     }
   }
 
-  for (Obj *var = prog; var; var = var->next) {
-    if (!var->is_definition)
-      continue;
-    if (var->ty->kind == TY_FUNC) {
-      if (!(var->is_static && var->is_inline) || var->is_used)
-        mark_fn_live(var);
-      continue;
-    }
-    for (Relocation *rel = var->rel; rel; rel = rel->next) {
-      Obj *ref = rel->var;
-      if (!ref)
-        continue;
-      if (!ref->is_definition) {
-        ref->is_live = true;
-        continue;
-      }
-      if (ref->ty->kind == TY_FUNC && ref->is_static && ref->is_inline)
-        mark_fn_live(ref);
-    }
-  }
+  for (Obj *var = prog; var; var = var->next)
+    if (var->is_definition && (!var->is_static || var->is_used))
+      mark_live(var);
 
   for (Obj *var = prog; var; var = var->next) {
     if (!var->is_definition) {
@@ -5063,9 +5067,9 @@ int codegen(Obj *prog, FILE *out) {
       Printfsn("%s", var->asm_name);
       continue;
     }
+    if (!var->is_live)
+      continue;
     if (var->ty->kind == TY_FUNC) {
-      if (!var->is_live)
-        continue;
       FuncObj *fn = var->output;
       peep_redunt_jmp(fn->buf);
       fwrite(fn->buf, 1, fn->buflen, out);
