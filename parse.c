@@ -5237,8 +5237,11 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     }
     symbol_attr(&tok, tok, var, attr, name);
 
-    if (!var->alt_align)
+    if (alt_align) {
+      if (var->alt_align && var->alt_align != alt_align)
+        error_tok(tok, "alignment conflict");
       var->alt_align = alt_align;
+    }
     if (!is_definition || var->init_data)
       continue;
     var->is_definition = true;
