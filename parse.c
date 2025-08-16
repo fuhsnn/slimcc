@@ -5230,20 +5230,23 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 
       symbol_attr(&tok, tok, var, attr, name);
 
-      if (!is_definition)
-        continue;
-      if (var->is_static_lvar || var->init_data)
+      if (var->init_data)
         continue;
     } else {
       var = new_gvar(get_ident(name), ty);
-      symbol_attr(&tok, tok, var, attr, name);
 
       hashmap_put2(&symbols, name->loc, name->len, var);
+
+      var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
+      var->is_tls = attr->strg & SC_THREAD;
+
+      symbol_attr(&tok, tok, var, attr, name);
     }
-    var->is_definition = is_definition;
-    var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
-    var->is_tls = attr->strg & SC_THREAD;
-    var->alt_align = alt_align;
+    if (!var->alt_align)
+      var->alt_align = alt_align;
+    if (!is_definition)
+      continue;
+    var->is_definition = true;
 
     if (attr->strg & SC_CONSTEXPR)
       constexpr_initializer(&tok, skip(tok, "="), var, var);
