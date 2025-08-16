@@ -48,6 +48,12 @@ void init_ty_lp64(void) {
   define_macro("__SIZEOF_SIZE_T__", "8");
   define_macro("__SIZE_TYPE__", "long unsigned int");
 
+  define_macro("__LONG_LONG_MAX__", "0x7fffffffffffffffLL");
+  define_macro("__LONG_MAX__", "0x7fffffffffffffffL");
+  define_macro("__INT_MAX__", "0x7fffffff");
+  define_macro("__SHRT_MAX__", "0x7fff");
+  define_macro("__SCHAR_MAX__", "0xf");
+
   ty_size_t = ty_ulong;
   ty_intptr_t = ty_ptrdiff_t = ty_long;
 
