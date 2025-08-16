@@ -5225,6 +5225,8 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
         push_scope(var->name)->var = var;
       if (!is_compatible2(var->ty, ty))
         error_tok(tok, "incompatible type");
+      if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
+        var->ty = ty;
 
       symbol_attr(&tok, tok, var, attr, name);
 
@@ -5232,7 +5234,6 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
         continue;
       if (var->is_static_lvar || var->init_data)
         continue;
-      var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
       symbol_attr(&tok, tok, var, attr, name);
