@@ -192,7 +192,7 @@ bool is_array(Type *ty) {
 }
 
 bool is_bitfield(Node *node) {
-  return node->kind == ND_MEMBER && node->member->is_bitfield;
+  return node->kind == ND_MEMBER && node->m.member->is_bitfield;
 }
 
 bool is_ptr(Type *ty) {
@@ -204,21 +204,21 @@ static bool is_bitfield2(Node *node, int *width) {
   case ND_ASSIGN:
   case ND_ARITH_ASSIGN:
   case ND_POST_INCDEC:
-    return is_bitfield2(node->lhs, width);
+    return is_bitfield2(node->m.lhs, width);
   case ND_CHAIN:
   case ND_COMMA:
-    return is_bitfield2(node->rhs, width);
+    return is_bitfield2(node->m.rhs, width);
   case ND_STMT_EXPR: {
-    Node *stmt = node->body;
+    Node *stmt = node->blk.body;
     while (stmt->next)
       stmt = stmt->next;
     if (stmt->kind == ND_EXPR_STMT)
-      return is_bitfield2(stmt->lhs, width);
+      return is_bitfield2(stmt->m.lhs, width);
   }
   case ND_MEMBER:
-    if (!node->member->is_bitfield)
+    if (!node->m.member->is_bitfield)
       return false;
-    *width = node->member->bit_width;
+    *width = node->m.member->bit_width;
     return true;
   }
   return false;
@@ -229,7 +229,7 @@ bool is_redundant_cast(Node *expr, Type *ty) {
     return false;
 
   Type *ty2 = expr->ty;
-  Type *ty3 = expr->lhs->ty;
+  Type *ty3 = expr->m.lhs->ty;
   int sz = ty->size;
   int sz2 = ty2->size;
   int sz3 = ty3->size;
@@ -515,7 +515,7 @@ bool is_nullptr(Node *node) {
 
   if (node->kind == ND_CAST &&
     node->ty->kind == TY_PTR && node->ty->base->kind == TY_VOID)
-    node = node->lhs;
+    node = node->m.lhs;
 
   int64_t val;
   if (is_integer(node->ty) && is_const_expr(node, &val) && val == 0)
@@ -653,14 +653,14 @@ void add_type(Node *node) {
     return;
   case ND_ADD:
   case ND_SUB: {
-    add_type(node->lhs);
-    add_type(node->rhs);
-    Node *ptr = node->lhs->ty->base ? node->lhs : node->rhs->ty->base ? node->rhs : NULL;
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    Node *ptr = node->m.lhs->ty->base ? node->m.lhs : node->m.rhs->ty->base ? node->m.rhs : NULL;
     if (ptr) {
       node->ty = ptr->ty;
       return;
     }
-    node->ty = usual_arith_conv(&node->lhs, &node->rhs);
+    node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   }
   case ND_MUL:
@@ -669,24 +669,24 @@ void add_type(Node *node) {
   case ND_BITAND:
   case ND_BITOR:
   case ND_BITXOR:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    node->ty = usual_arith_conv(&node->lhs, &node->rhs);
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   case ND_POS:
   case ND_NEG:
-    add_type(node->lhs);
-    if (!is_numeric(node->lhs->ty))
-      error_tok(node->lhs->tok, "invalid operand");
-    if (is_integer(node->lhs->ty))
-      int_promotion(&node->lhs);
-    node->ty = node->lhs->ty;
+    add_type(node->m.lhs);
+    if (!is_numeric(node->m.lhs->ty))
+      error_tok(node->m.lhs->tok, "invalid operand");
+    if (is_integer(node->m.lhs->ty))
+      int_promotion(&node->m.lhs);
+    node->ty = node->m.lhs->ty;
     return;
   case ND_ASSIGN:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    node->rhs = assign_cast(node->lhs->ty, node->rhs);
-    node->ty = node->lhs->ty;
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    node->m.rhs = assign_cast(node->m.lhs->ty, node->m.rhs);
+    node->ty = node->m.lhs->ty;
     return;
   case ND_EQ:
   case ND_NE:
@@ -694,122 +694,122 @@ void add_type(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-    add_type(node->lhs);
-    add_type(node->rhs);
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
     node->ty = ty_int;
-    if (common_ptr_conv(&node->lhs, &node->rhs))
+    if (common_ptr_conv(&node->m.lhs, &node->m.rhs))
       return;
-    usual_arith_conv(&node->lhs, &node->rhs);
+    usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   case ND_FUNCALL:
     assert(!!node->ty);
     return;
   case ND_NOT:
-    add_type(node->lhs);
+    add_type(node->m.lhs);
     node->ty = ty_int;
     return;
   case ND_LOGOR:
   case ND_LOGAND:
-    add_type(node->lhs);
-    add_type(node->rhs);
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
     node->ty = ty_int;
     return;
   case ND_BITNOT:
-    add_type(node->lhs);
-    if (!(is_integer(node->lhs->ty) || node->lhs->ty->kind == TY_BITINT))
-      error_tok(node->lhs->tok, "invalid operand");
-    int_promotion(&node->lhs);
-    node->ty = node->lhs->ty;
+    add_type(node->m.lhs);
+    if (!(is_integer(node->m.lhs->ty) || node->m.lhs->ty->kind == TY_BITINT))
+      error_tok(node->m.lhs->tok, "invalid operand");
+    int_promotion(&node->m.lhs);
+    node->ty = node->m.lhs->ty;
     return;
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    if (!(is_integer(node->lhs->ty) || node->lhs->ty->kind == TY_BITINT))
-      error_tok(node->lhs->tok, "invalid operand");
-    if (!(is_integer(node->rhs->ty) || node->rhs->ty->kind == TY_BITINT))
-      error_tok(node->rhs->tok, "invalid operand");
-    if (node->rhs->ty->kind == TY_BITINT)
-      node->rhs = new_cast(node->rhs, ty_ullong);
-    int_promotion(&node->lhs);
-    node->ty = node->lhs->ty;
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    if (!(is_integer(node->m.lhs->ty) || node->m.lhs->ty->kind == TY_BITINT))
+      error_tok(node->m.lhs->tok, "invalid operand");
+    if (!(is_integer(node->m.rhs->ty) || node->m.rhs->ty->kind == TY_BITINT))
+      error_tok(node->m.rhs->tok, "invalid operand");
+    if (node->m.rhs->ty->kind == TY_BITINT)
+      node->m.rhs = new_cast(node->m.rhs, ty_ullong);
+    int_promotion(&node->m.lhs);
+    node->ty = node->m.lhs->ty;
     return;
   case ND_VAR:
-    node->ty = node->var->ty;
+    node->ty = node->m.var->ty;
     return;
   case ND_COND:
-    add_type(node->cond);
-    add_type(node->then);
-    add_type(node->els);
-    if (node->then->ty->kind == TY_VOID || node->els->ty->kind == TY_VOID)
+    add_type(node->ctrl.cond);
+    add_type(node->ctrl.then);
+    add_type(node->ctrl.els);
+    if (node->ctrl.then->ty->kind == TY_VOID || node->ctrl.els->ty->kind == TY_VOID)
       node->ty = ty_void;
-    else if (common_ptr_conv(&node->then, &node->els))
-      node->ty = node->then->ty;
-    else if (!is_numeric(node->then->ty) && is_compatible(node->then->ty, node->els->ty))
-      node->ty = node->then->ty;
+    else if (common_ptr_conv(&node->ctrl.then, &node->ctrl.els))
+      node->ty = node->ctrl.then->ty;
+    else if (!is_numeric(node->ctrl.then->ty) && is_compatible(node->ctrl.then->ty, node->ctrl.els->ty))
+      node->ty = node->ctrl.then->ty;
     else
-      node->ty = usual_arith_conv(&node->then, &node->els);
+      node->ty = usual_arith_conv(&node->ctrl.then, &node->ctrl.els);
     return;
   case ND_CHAIN:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    node->ty = node->rhs->ty;
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    node->ty = node->m.rhs->ty;
     return;
   case ND_COMMA:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    node->ty = ptr_decay(node->rhs->ty);
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    node->ty = ptr_decay(node->m.rhs->ty);
     return;
   case ND_MEMBER:
-    add_type(node->lhs);
-    node->ty = node->member->ty;
+    add_type(node->m.lhs);
+    node->ty = node->m.member->ty;
     return;
   case ND_ADDR:
-    add_type(node->lhs);
-    node->ty = pointer_to(node->lhs->ty);
+    add_type(node->m.lhs);
+    node->ty = pointer_to(node->m.lhs->ty);
     return;
   case ND_DEREF:
-    add_type(node->lhs);
-    if (!node->lhs->ty->base)
+    add_type(node->m.lhs);
+    if (!node->m.lhs->ty->base)
       error_tok(node->tok, "invalid pointer dereference");
-    if (node->lhs->ty->base->kind == TY_VOID)
+    if (node->m.lhs->ty->base->kind == TY_VOID)
       error_tok(node->tok, "dereferencing a void pointer");
 
-    node->ty = node->lhs->ty->base;
+    node->ty = node->m.lhs->ty->base;
     return;
   case ND_FOR:
-    add_type(node->cond);
-    add_type(node->then);
-    add_type(node->init);
-    add_type(node->inc);
+    add_type(node->ctrl.cond);
+    add_type(node->ctrl.then);
+    add_type(node->ctrl.for_init);
+    add_type(node->ctrl.for_inc);
     return;
   case ND_IF:
-    add_type(node->cond);
-    add_type(node->then);
-    add_type(node->els);
+    add_type(node->ctrl.cond);
+    add_type(node->ctrl.then);
+    add_type(node->ctrl.els);
     return;
   case ND_DO:
   case ND_SWITCH:
-    add_type(node->cond);
-    add_type(node->then);
+    add_type(node->ctrl.cond);
+    add_type(node->ctrl.then);
     return;
   case ND_EXPR_STMT:
-    add_type(node->lhs);
+    add_type(node->m.lhs);
     return;
   case ND_BLOCK:
-    for (Node *n = node->body; n; n = n->next)
+    for (Node *n = node->blk.body; n; n = n->next)
       add_type(n);
     break;
   case ND_STMT_EXPR:
-    if (node->body) {
-      for (Node *n = node->body; n; n = n->next)
+    if (node->blk.body) {
+      for (Node *n = node->blk.body; n; n = n->next)
         add_type(n);
-      Node *stmt = node->body;
+      Node *stmt = node->blk.body;
       while (stmt->next)
         stmt = stmt->next;
       if (stmt->kind == ND_EXPR_STMT) {
-        node->ty = ptr_decay(stmt->lhs->ty);
+        node->ty = ptr_decay(stmt->m.lhs->ty);
         return;
       }
     }
@@ -819,36 +819,36 @@ void add_type(Node *node) {
     node->ty = pointer_to(ty_void);
     return;
   case ND_CAS:
-    add_type(node->cas_addr);
-    add_type(node->cas_old);
-    add_type(node->cas_new);
+    add_type(node->cas.addr);
+    add_type(node->cas.old_val);
+    add_type(node->cas.new_val);
     node->ty = ty_bool;
 
-    if (node->cas_addr->ty->kind != TY_PTR)
-      error_tok(node->cas_addr->tok, "pointer expected");
-    if (node->cas_old->ty->kind != TY_PTR)
-      error_tok(node->cas_old->tok, "pointer expected");
+    if (node->cas.addr->ty->kind != TY_PTR)
+      error_tok(node->cas.addr->tok, "pointer expected");
+    if (node->cas.old_val->ty->kind != TY_PTR)
+      error_tok(node->cas.old_val->tok, "pointer expected");
     return;
   case ND_EXCH:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    if (node->lhs->ty->kind != TY_PTR)
-      error_tok(node->cas_addr->tok, "pointer expected");
-    node->ty = node->lhs->ty->base;
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    if (node->m.lhs->ty->kind != TY_PTR)
+      error_tok(node->m.lhs->tok, "pointer expected");
+    node->ty = node->m.lhs->ty->base;
     return;
   case ND_VA_START:
-    add_type(node->lhs);
+    add_type(node->m.lhs);
     node->ty = ty_void;
     return;
   case ND_VA_COPY:
-    add_type(node->lhs);
-    add_type(node->rhs);
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
     node->ty = ty_void;
     return;
   case ND_CKD_ARITH:
-    add_type(node->lhs);
-    add_type(node->rhs);
-    add_type(node->inc);
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    add_type(node->m.target);
     node->ty = ty_bool;
     return;
   case ND_NULL_EXPR:

@@ -682,7 +682,7 @@ static bool convert_pp_bitint(char *begin, char *end, Node *node, int base, bool
     data = realloc(data, limb64 * sizeof(uint64_t));
     data[limb32] = 0;
   }
-  node->bitint_data = (uint64_t *)data;
+  node->num.bitint_data = (uint64_t *)data;
   node->ty = new_bitint(bit_width, node->tok);
   node->ty->is_unsigned = is_unsigned;
   return true;
@@ -771,7 +771,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
       ty = ty_int;
   }
 
-  node->val = val;
+  node->num.val = val;
   node->ty = ty;
   return true;
 }
@@ -779,7 +779,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
 // Converts a pp-number token to a regular number token.
 void convert_pp_number(Token *tok, Node *node) {
   if (tok->kind == TK_INT_NUM) {
-    node->val = eval_sign_extend(tok->ty, tok->ival);
+    node->num.val = eval_sign_extend(tok->ty, tok->ival);
     node->ty = tok->ty;
     return;
   }
@@ -832,7 +832,7 @@ void convert_pp_number(Token *tok, Node *node) {
   if (&p[len] != end)
     error_tok(tok, "invalid numeric constant");
 
-  node->fval = val;
+  node->num.fval = val;
   node->ty = ty;
 }
 

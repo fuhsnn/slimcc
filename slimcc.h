@@ -510,66 +510,86 @@ struct CaseRange {
 
 // AST node type
 struct Node {
-  NodeKind kind; // Node kind
   Node *next;    // Next node
+  NodeKind kind; // Node kind
+  NodeKind arith_kind : 31; // Arithmetic Assignment
+  bool no_label : 1;
   Type *ty;      // Type, e.g. int or pointer to int
   Token *tok;    // Representative token
 
-  Node *lhs;     // Left-hand side
-  Node *rhs;     // Right-hand side
+  DeferStmt *dfr_from;
+  DeferStmt *dfr_dest;
 
-  // "if" or "for" statement
-  Node *cond;
-  Node *then;
-  Node *els;
-  Node *init;
-  Node *inc;
-
-  // Block or statement expression
-  Node *body;
-
-  // Struct member access
-  Member *member;
-
-  // Function call
-  Obj *ret_buffer;
-  Obj *args;
-
-  char *unique_label;
-  Node *goto_next;
-
-  // Switch
-  CaseRange *cases;
-  Node *default_label;
-
-  DeferStmt *defr_start;
-  DeferStmt *defr_end;
-
-  // "asm" blocks
-  Token *asm_str;
-  AsmParam *asm_outputs;
-  AsmParam *asm_inputs;
-  Token *asm_clobbers;
-  AsmParam *asm_labels;
-  AsmContext *asm_ctx; // backend defined
-
-  // Atomic compare-and-swap
-  Node *cas_addr;
-  Node *cas_old;
-  Node *cas_new;
-
-  // Variable
-  Obj *var;
+ANON_UNION_START
+  // Misc
+  struct {
+    Node *lhs;
+    Node *rhs;
+    Node *target;
+    Obj *var;
+    Member *member;
+  } m;
 
   // Numeric literal
-  int64_t val;
-  long double fval;
-  uint64_t *bitint_data;
+  struct {
+    int64_t val;
+    uint64_t *bitint_data;
+    long double fval;
+  } num;
 
-  // Arithmetic Assignment
-  NodeKind arith_kind;
+  // Block or statement expression
+  struct {
+    Node *body;
+    Node *local_labels;
+  } blk;
 
-  bool no_label;
+  // if, ?:, for, do, while, switch
+  struct {
+    Node *cond;
+    Node *then;
+  ANON_UNION_START
+    Node *els;
+    Node *for_init;
+    Node *sw_default;
+  ANON_UNION_END
+  ANON_UNION_START
+    Node *for_inc;
+    CaseRange *sw_cases;
+  ANON_UNION_END
+    Node *breaks;
+  } ctrl;
+
+  // goto, break, continue, case, labels
+  struct {
+    Node *next;
+    Node *node;
+    char *unique_label;
+  } lbl;
+
+  // Function call
+  struct {
+    Node *expr;
+    Obj *rtn_buf;
+    Obj *args;
+  } call;
+
+  // Atomic compare-and-swap
+  struct {
+    Node *addr;
+    Node *old_val;
+    Node *new_val;
+  } cas;
+
+  // GNU inline assembly
+  struct {
+    Token *str_tok;
+    AsmParam *outputs;
+    AsmParam *inputs;
+    Token *clobbers;
+    AsmParam *labels;
+    AsmContext *ctx; // backend defined
+  } gasm;
+ANON_UNION_END
 };
 
 // Represents a block scope.

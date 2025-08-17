@@ -1264,7 +1264,7 @@ static void read_line_marker(Token **rest, Token *tok) {
   if (node.ty->kind != TY_INT)
     error_tok(tok, "invalid line marker");
 
-  start->file->line_delta = node.val - start->line_no - 1;
+  start->file->line_delta = node.num.val - start->line_no - 1;
 
   tok = tok->next;
   if (tok->kind == TK_EOF)

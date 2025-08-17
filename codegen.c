@@ -269,16 +269,16 @@ static int64_t count(void) {
 }
 
 static char *goto_label(Node *node) {
-  if (node->unique_label)
-    return node->unique_label;
-  if (node->default_label)
-    return node->default_label->unique_label;
+  if (node->lbl.unique_label)
+    return node->lbl.unique_label;
+  if (node->lbl.node)
+    return node->lbl.node->lbl.unique_label;
   internal_error();
 }
 
-static void name_labels(Node *node) {
-  for (Node *n = node->goto_next; n; n = n->goto_next)
-    n->unique_label = new_unique_name();
+static void name_labels(Node *n) {
+  for (; n; n = n->lbl.next)
+    n->lbl.unique_label = new_unique_name();
 }
 
 static void name_brk_cont(Node *node, char *bg, char *brk, char *cont, int64_t c) {
@@ -288,11 +288,11 @@ static void name_brk_cont(Node *node, char *bg, char *brk, char *cont, int64_t c
   if (cont)
     snprintf(cont, STRBUF_SZ, ".L.cont.%"PRIi64, c);
 
-  for (Node *n = node->goto_next; n; n = n->goto_next) {
+  for (Node *n = node->ctrl.breaks; n; n = n->lbl.next) {
     if (n->kind == ND_BREAK)
-      n->unique_label = brk;
+      n->lbl.unique_label = brk;
     else
-      n->unique_label = cont;
+      n->lbl.unique_label = cont;
   }
 }
 
@@ -340,9 +340,9 @@ static bool use_rip(Obj *var) {
 }
 
 static Node *skip_gp_cast(Node *node) {
-  while (node->kind == ND_CAST && node->ty->size == node->lhs->ty->size &&
-    node->ty->kind != TY_BOOL && is_gp_ty(node->ty) && is_gp_ty(node->lhs->ty))
-    node = node->lhs;
+  while (node->kind == ND_CAST && node->ty->size == node->m.lhs->ty->size &&
+    node->ty->kind != TY_BOOL && is_gp_ty(node->ty) && is_gp_ty(node->m.lhs->ty))
+    node = node->m.lhs;
 
   return node;
 }
@@ -372,10 +372,10 @@ static bool is_memop_ptr(Node *node, char *ofs, char **ptr) {
   node = skip_gp_cast(node);
 
   if (node->kind == ND_ADDR)
-    return eval_memop(node->lhs, ofs, ptr, true, true);
+    return eval_memop(node->m.lhs, ofs, ptr, true, true);
 
   if (node->kind == ND_CAST && node->ty->kind == TY_PTR)
-    node = node->lhs;
+    node = node->m.lhs;
   if (node->ty->kind == TY_ARRAY || node->ty->kind == TY_FUNC)
     return eval_memop(node, ofs, ptr, true, true);
 
@@ -396,20 +396,20 @@ static bool has_memop(Node *node) {
 }
 
 static bool is_int_to_int_cast(Node *node) {
-  return node->kind == ND_CAST && is_integer(node->ty) && is_integer(node->lhs->ty);
+  return node->kind == ND_CAST && is_integer(node->ty) && is_integer(node->m.lhs->ty);
 }
 
 static bool has_defr(Node *node) {
-  return node->defr_start != node->defr_end;
+  return node->dfr_from != node->dfr_dest;
 }
 
 static bool is_plain_asm(Node *node) {
-  return !node->asm_outputs && !node->asm_inputs &&
-    !node->asm_clobbers && !node->asm_labels;
+  return !node->gasm.outputs && !node->gasm.inputs &&
+    !node->gasm.clobbers && !node->gasm.labels;
 }
 
-static bool is_direct_fncall(Node *lhs) {
-  return lhs->kind == ND_VAR && lhs->var->ty->kind == TY_FUNC;
+static bool is_direct_fncall(Node *fn_expr) {
+  return fn_expr->kind == ND_VAR && fn_expr->m.var->ty->kind == TY_FUNC;
 }
 
 static RegSz bitwidth_to_regsz(int bits) {
@@ -837,7 +837,7 @@ static void gen_bitint_builtin_call(NodeKind kind) {
 }
 
 static void gen_bitfield_load(Node *node, int ofs) {
-  Member *mem = node->member;
+  Member *mem = node->m.member;
 
   if (mem->ty->kind == TY_BITINT) {
     Printftn("mov %%rax, %s", argreg64[1]);
@@ -954,7 +954,7 @@ static void gen_bitfield_store2(char *ptr, Reg r_val, Reg r_tmp, Member *mem) {
 }
 
 static void gen_bitfield_store(Node *node, bool is_void) {
-  Member *mem = node->member;
+  Member *mem = node->m.member;
 
   if (mem->ty->kind == TY_BITINT) {
     pop(argreg64[2]);
@@ -992,22 +992,22 @@ static void gen_addr(Node *node) {
   switch (node->kind) {
   case ND_VAR:
     // Variable-length array, which is always local.
-    if (node->var->ty->kind == TY_VLA) {
-      Printftn("mov %d(%s), %%rax", node->var->ofs, node->var->ptr);
+    if (node->m.var->ty->kind == TY_VLA) {
+      Printftn("mov %d(%s), %%rax", node->m.var->ofs, node->m.var->ptr);
       return;
     }
 
     // Local variable
-    if (node->var->is_local) {
-      Printftn("lea %d(%s), %%rax", node->var->ofs, node->var->ptr);
+    if (node->m.var->is_local) {
+      Printftn("lea %d(%s), %%rax", node->m.var->ofs, node->m.var->ptr);
       return;
     }
 
     // Thread-local variable
-    if (node->var->is_tls) {
+    if (node->m.var->is_tls) {
       if (opt_femulated_tls) {
         clobber_all_regs();
-        Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", get_symbol(node->var));
+        Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", get_symbol(node->m.var));
         if (opt_use_plt)
           Printstn("call __emutls_get_address@PLT");
         else
@@ -1016,7 +1016,7 @@ static void gen_addr(Node *node) {
       }
       if (opt_fpic) {
         clobber_all_regs();
-        Printftn(".byte 0x66; lea \"%s\"@tlsgd(%%rip), %%rdi", get_symbol(node->var));
+        Printftn(".byte 0x66; lea \"%s\"@tlsgd(%%rip), %%rdi", get_symbol(node->m.var));
         if (opt_use_plt)
           Printstn(".value 0x6666; rex64 call __tls_get_addr@PLT");
         else
@@ -1025,32 +1025,32 @@ static void gen_addr(Node *node) {
       }
 
       Printstn("mov %%fs:0, %%rax");
-      if (node->var->is_definition)
-        Printftn("add $\"%s\"@tpoff, %%rax", get_symbol(node->var));
+      if (node->m.var->is_definition)
+        Printftn("add $\"%s\"@tpoff, %%rax", get_symbol(node->m.var));
       else
-        Printftn("add \"%s\"@gottpoff(%%rip), %%rax", get_symbol(node->var));
+        Printftn("add \"%s\"@gottpoff(%%rip), %%rax", get_symbol(node->m.var));
       return;
     }
 
     // Function or global variable
     if (!(opt_fpic || opt_fpie))
-      Printftn("movl $\"%s\", %%eax", get_symbol(node->var));
-    else if (use_rip(node->var))
-      Printftn("leaq \"%s\"(%%rip), %%rax", get_symbol(node->var));
+      Printftn("movl $\"%s\", %%eax", get_symbol(node->m.var));
+    else if (use_rip(node->m.var))
+      Printftn("leaq \"%s\"(%%rip), %%rax", get_symbol(node->m.var));
     else
-      Printftn("movq \"%s\"@GOTPCREL(%%rip), %%rax", get_symbol(node->var));
+      Printftn("movq \"%s\"@GOTPCREL(%%rip), %%rax", get_symbol(node->m.var));
     return;
   case ND_DEREF:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     return;
   case ND_CHAIN:
   case ND_COMMA:
-    gen_void_expr(node->lhs);
-    gen_addr(node->rhs);
+    gen_void_expr(node->m.lhs);
+    gen_addr(node->m.rhs);
     return;
   case ND_MEMBER:
-    gen_addr(node->lhs);
-    imm_add("%rax", "%rdx", node->member->offset);
+    gen_addr(node->m.lhs);
+    imm_add("%rax", "%rdx", node->m.member->offset);
     return;
   case ND_ASSIGN:
   case ND_COND:
@@ -1241,21 +1241,21 @@ static void gen_cmp_zero(Node *node, NodeKind kind) {
     return;
   }
   Node zero = {.kind = ND_NUM, .ty = node->ty, .tok = node->tok};
-  Node expr = {.kind = kind, .lhs = node, .rhs = &zero, .tok = node->tok};
+  Node expr = {.kind = kind, .m.lhs = node, .m.rhs = &zero, .tok = node->tok};
   add_type(&expr);
   gen_expr(&expr);
 }
 
 static void gen_var_assign(Obj *var, Node *expr) {
-  Node var_node = {.kind = ND_VAR, .var = var, .tok = expr->tok};
-  Node node = {.kind = ND_ASSIGN, .lhs = &var_node, .rhs = expr, .tok = expr->tok};
+  Node var_node = {.kind = ND_VAR, .m.var = var, .tok = expr->tok};
+  Node node = {.kind = ND_ASSIGN, .m.lhs = &var_node, .m.rhs = expr, .tok = expr->tok};
   add_type(&node);
   gen_void_assign(&node);
 }
 
 static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
   Node null = {.kind = ND_NULL_EXPR, .ty = ty, .tok = rhs->tok};
-  Node expr = {.kind = kind, .lhs = &null, .rhs = rhs,.tok = rhs->tok};
+  Node expr = {.kind = kind, .m.lhs = &null, .m.rhs = rhs, .tok = rhs->tok};
   add_type(&expr);
   gen_expr(new_cast(&expr, ty));
 }
@@ -1390,44 +1390,44 @@ static char *cast_table[][11] = {
 
 static void gen_cast(Node *node) {
   if (node->ty->kind == TY_BOOL) {
-    gen_cmp_zero(node->lhs, ND_NE);
+    gen_cmp_zero(node->m.lhs, ND_NE);
     return;
   }
-  gen_expr(node->lhs);
+  gen_expr(node->m.lhs);
 
   if (node->ty->kind == TY_VOID)
     return;
 
   if (node->ty->kind == TY_BITINT) {
     int64_t from_sz;
-    if (node->lhs->ty->kind == TY_BITINT) {
-      if (node->lhs->ty->bit_cnt >= node->ty->bit_cnt)
+    if (node->m.lhs->ty->kind == TY_BITINT) {
+      if (node->m.lhs->ty->bit_cnt >= node->ty->bit_cnt)
         return;
-      from_sz = node->lhs->ty->bit_cnt;
-    } else if (is_gp_ty(node->lhs->ty)) {
+      from_sz = node->m.lhs->ty->bit_cnt;
+    } else if (is_gp_ty(node->m.lhs->ty)) {
       Printftn("mov %%rax, %s(%s)", tmpbuf(node->ty->size), lvar_ptr);
-      if (node->lhs->ty->size * 8 >= node->ty->bit_cnt)
+      if (node->m.lhs->ty->size * 8 >= node->ty->bit_cnt)
         return;
-      from_sz = node->lhs->ty->size * 8;
+      from_sz = node->m.lhs->ty->size * 8;
     } else {
       error_tok(node->tok, "Unimplemented cast to _BitInt");
     }
     Printftn("lea %s(%s), %s", tmpbuf(node->ty->size), lvar_ptr, argreg64[1]);
     Printftn("movl $%"PRIi32", %s", (int32_t)from_sz, argreg32[0]);
     Printftn("movl $%"PRIi32", %s", (int32_t)node->ty->bit_cnt, argreg32[2]);
-    load_val2(ty_int, node->lhs->ty->is_unsigned, argreg32[3], NULL);
+    load_val2(ty_int, node->m.lhs->ty->is_unsigned, argreg32[3], NULL);
     gen_bitint_builtin_call2("__slimcc_bitint_sign_ext");
     return;
   }
 
-  if (node->lhs->ty->kind == TY_BITINT) {
+  if (node->m.lhs->ty->kind == TY_BITINT) {
     if (!is_gp_ty(node->ty))
       error_tok(node->tok, "Unimplemented cast from _BitInt");
     Printftn("mov %s(%s), %%rax", tmpbuf(node->ty->size), lvar_ptr);
-    int64_t shft = 64 - node->lhs->ty->bit_cnt;
+    int64_t shft = 64 - node->m.lhs->ty->bit_cnt;
     if (shft > 0) {
       Printftn("shl $%d, %%rax", (int)shft);
-      if (node->lhs->ty->is_unsigned)
+      if (node->m.lhs->ty->is_unsigned)
         Printftn("shr $%d, %%rax", (int)shft);
       else
         Printftn("sar $%d, %%rax", (int)shft);
@@ -1435,7 +1435,7 @@ static void gen_cast(Node *node) {
     return;
   }
 
-  int t1 = getTypeId(node->lhs->ty);
+  int t1 = getTypeId(node->m.lhs->ty);
   int t2 = getTypeId(node->ty);
   if (cast_table[t1][t2]) {
     if (t1 == F80)
@@ -1691,7 +1691,7 @@ static void builtin_alloca(Node *node) {
   Printstn("mov %%rsp, %%rcx");
   Printstn("sub %%rax, %%rsp");
 
-  int align = node->var ? MAX(node->var->alt_align, 16) : 16;
+  int align = node->m.var ? MAX(node->m.var->alt_align, 16) : 16;
   Printftn("and $-%d, %%rsp", align);
   Printstn("sub %%rsp, %%rcx");
 
@@ -1710,15 +1710,15 @@ static void builtin_alloca(Node *node) {
   Printstn("jmp 2b");
   Printstn("1:");
 
-  if (node->var)
-    Printftn("mov %%rsp, %d(%s)", node->var->ofs, node->var->ptr);
+  if (node->m.var)
+    Printftn("mov %%rsp, %d(%s)", node->m.var->ofs, node->m.var->ptr);
   else
     Printstn("mov %%rsp, %%rax");
 }
 
 static void gen_defr(Node *node) {
-  DeferStmt *defr = node->defr_start;
-  DeferStmt *end = node->defr_end;
+  DeferStmt *defr = node->dfr_from;
+  DeferStmt *end = node->dfr_dest;
 
   while (defr != end) {
     if (defr->kind == DF_VLA_DEALLOC) {
@@ -1799,7 +1799,7 @@ static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
 // Logic should be in sync with prepare_funcall()
 static void gen_funcall_args(Node *node) {
   // Pass-by-stack or non-trival args that need spilling
-  for (Obj *var = node->args; var; var = var->param_next)
+  for (Obj *var = node->call.args; var; var = var->param_next)
     if (var->ptr)
       gen_var_assign(var, var->arg_expr);
 
@@ -1807,7 +1807,7 @@ static void gen_funcall_args(Node *node) {
   int gp = rtn_by_stk, fp = 0;
 
   int reg_arg_cnt = 0;
-  for (Obj *var = node->args; var; var = var->param_next) {
+  for (Obj *var = node->call.args; var; var = var->param_next) {
     if (var->pass_by_stack)
       continue;
 
@@ -1854,7 +1854,7 @@ static void gen_funcall_args(Node *node) {
   }
 
   if (rtn_by_stk)
-    Printftn("lea %d(%s), %%rdi", node->ret_buffer->ofs, node->ret_buffer->ptr);
+    Printftn("lea %d(%s), %%rdi", node->call.rtn_buf->ofs, node->call.rtn_buf->ptr);
 }
 
 static void gen_funcall(Node *node) {
@@ -1862,14 +1862,14 @@ static void gen_funcall(Node *node) {
   int gp_count = rtn_by_stk;
   int fp_count = 0;
   int arg_stk_align;
-  int arg_stk_size = calling_convention(node->args, &gp_count, &fp_count, &arg_stk_align);
+  int arg_stk_size = calling_convention(node->call.args, &gp_count, &fp_count, &arg_stk_align);
   if (arg_stk_size)
     if (arg_stk_align > 16)
       push_from("%rsp");
 
-  bool use_fn_ptr = !is_direct_fncall(node->lhs);
+  bool use_fn_ptr = !is_direct_fncall(node->call.expr);
   if (use_fn_ptr) {
-    gen_expr(node->lhs);
+    gen_expr(node->call.expr);
     push();
   }
 
@@ -1884,7 +1884,7 @@ static void gen_funcall(Node *node) {
 
   gen_funcall_args(node);
 
-  if (get_func_ty(node->lhs->ty)->is_variadic) {
+  if (get_func_ty(node->call.expr->ty)->is_variadic) {
     if (fp_count)
       Printftn("movb $%d, %%al", fp_count);
     else
@@ -1899,12 +1899,12 @@ static void gen_funcall(Node *node) {
     }
     Printftn("call *%s", pop_inreg("%r10"));
   } else {
-    if (use_rip(node->lhs->var))
-      Printftn("call \"%s\"", get_symbol(node->lhs->var));
+    if (use_rip(node->call.expr->m.var))
+      Printftn("call \"%s\"", get_symbol(node->call.expr->m.var));
     else if (opt_use_plt)
-      Printftn("call \"%s\"@PLT", get_symbol(node->lhs->var));
+      Printftn("call \"%s\"@PLT", get_symbol(node->call.expr->m.var));
     else
-      Printftn("call *\"%s\"@GOTPCREL(%%rip)", get_symbol(node->lhs->var));
+      Printftn("call *\"%s\"@GOTPCREL(%%rip)", get_symbol(node->call.expr->m.var));
   }
 
   clobber_all_regs();
@@ -1933,19 +1933,19 @@ static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
       return;
     }
 
-    if (is_cmp(node) && is_gp_ty(node->lhs->ty)) {
+    if (is_cmp(node) && is_gp_ty(node->m.lhs->ty)) {
       NodeKind kind = node->kind;
       if (!gen_cmp_opt_gp(node, &kind)) {
-        gen_expr(node->lhs);
+        gen_expr(node->m.lhs);
         push();
-        gen_expr(node->rhs);
+        gen_expr(node->m.rhs);
 
-        bool is_r64 = node->lhs->ty->size == 8;
+        bool is_r64 = node->m.lhs->ty->size == 8;
         char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
-        Printftn("cmp %s, %s", regop_ax(node->lhs->ty), op);
+        Printftn("cmp %s, %s", regop_ax(node->m.lhs->ty), op);
       }
       flip_cmp(&kind, !jump_cond);
-      char *ins = cmp_cc(kind, node->lhs->ty->is_unsigned);
+      char *ins = cmp_cc(kind, node->m.lhs->ty->is_unsigned);
       Printftn("j%s %s", ins, jump_label);
       return;
     }
@@ -1953,24 +1953,24 @@ static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
     if (node->kind == ND_LOGAND || node->kind == ND_LOGOR) {
       bool short_cond = (node->kind == ND_LOGOR);
       if (short_cond == jump_cond) {
-        gen_cond(node->lhs, jump_cond, jump_label);
-        gen_cond(node->rhs, jump_cond, jump_label);
+        gen_cond(node->m.lhs, jump_cond, jump_label);
+        gen_cond(node->m.rhs, jump_cond, jump_label);
         return;
       }
       char short_label[STRBUF_SZ];
       snprintf(short_label, STRBUF_SZ, ".L.short.%"PRIi64, count());
 
-      gen_cond(node->lhs, short_cond, short_label);
-      gen_cond(node->rhs, short_cond, short_label);
+      gen_cond(node->m.lhs, short_cond, short_label);
+      gen_cond(node->m.rhs, short_cond, short_label);
       Printftn("jmp %s", jump_label);
       Printfsn("%s:", short_label);
       return;
     }
 
     if (node->kind == ND_CAST && node->ty->kind == TY_BOOL &&
-      node->lhs->ty->kind != TY_BITINT) {
-      Node zero = {.kind = ND_NUM, .ty = node->lhs->ty, .tok = node->tok};
-      Node expr = {.kind = ND_NE, .lhs = node->lhs, .rhs = &zero, .tok = node->tok};
+      node->m.lhs->ty->kind != TY_BITINT) {
+      Node zero = {.kind = ND_NUM, .ty = node->m.lhs->ty, .tok = node->tok};
+      Node expr = {.kind = ND_NE, .m.lhs = node->m.lhs, .m.rhs = &zero, .tok = node->tok};
       add_type(&expr);
       gen_cond(&expr, jump_cond, jump_label);
       return;
@@ -1991,8 +1991,8 @@ static void gen_logical(Node *node, bool flip) {
   snprintf(short_label, STRBUF_SZ, ".L.short.%"PRIi64, c);
   bool short_cond = (node->kind == ND_LOGOR);
 
-  gen_cond(node->lhs, short_cond, short_label);
-  gen_cond(node->rhs, short_cond, short_label);
+  gen_cond(node->m.lhs, short_cond, short_label);
+  gen_cond(node->m.rhs, short_cond, short_label);
 
   static char *set_zero = "xor %eax, %eax";
   static char *set_one = "movl $1, %eax";
@@ -2007,7 +2007,7 @@ static void gen_logical(Node *node, bool flip) {
 
 static void gen_xmm_arith(Node *node) {
   if (node->kind == ND_NEG) {
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
 
     if (node->ty->kind == TY_FLOAT) {
       Printstn("mov $0x80000000, %%eax");
@@ -2020,11 +2020,11 @@ static void gen_xmm_arith(Node *node) {
     }
     return;
   }
-  gen_expr(node->lhs);
+  gen_expr(node->m.lhs);
   pushf();
-  gen_expr(node->rhs);
+  gen_expr(node->m.rhs);
 
-  bool is_xmm64 = node->lhs->ty->kind == TY_DOUBLE;
+  bool is_xmm64 = node->m.lhs->ty->kind == TY_DOUBLE;
   int reg = popf_inreg(is_xmm64, 1);
   char *sz = is_xmm64 ? "sd" : "ss";
 
@@ -2077,15 +2077,15 @@ static void gen_xmm_arith(Node *node) {
 
 static void gen_x87_arith(Node *node) {
   if (node->kind == ND_NEG) {
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
     Printstn("fchs");
     Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
     return;
   }
-  gen_expr(node->lhs);
+  gen_expr(node->m.lhs);
   push_x87();
-  gen_expr(node->rhs);
+  gen_expr(node->m.rhs);
   Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
   pop_x87();
   Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
@@ -2141,12 +2141,12 @@ static void gen_x87_arith(Node *node) {
 }
 
 static void gen_bitint_arith(Node *node) {
-  Type *ty = node->lhs->ty;
+  Type *ty = node->m.lhs->ty;
 
   switch (node->kind) {
   case ND_NEG:
   case ND_BITNOT:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
 
     Printftn("movl $%"PRIi32", %s", (int32_t)ty->bit_cnt, argreg32[0]);
     Printftn("lea %s(%s), %s", tmpbuf(ty->size), lvar_ptr, argreg64[1]);
@@ -2154,9 +2154,9 @@ static void gen_bitint_arith(Node *node) {
     return;
   }
 
-  gen_expr(node->lhs);
+  gen_expr(node->m.lhs);
   push_bitint(ty->size);
-  gen_expr(node->rhs);
+  gen_expr(node->m.rhs);
 
   Printftn("movl $%"PRIi32", %s", (int32_t)ty->bit_cnt, argreg32[0]);
   Printftn("lea %d(%s), %s", pop_bitint(ty->size), lvar_ptr, argreg64[1]);
@@ -2215,19 +2215,19 @@ static void gen_bitint_arith(Node *node) {
 static void gen_gp_arith(Node *node) {
   switch (node->kind) {
   case ND_NEG:
-    gen_expr(node->lhs);
-    Printftn("neg %s", regop_ax(node->lhs->ty));
+    gen_expr(node->m.lhs);
+    Printftn("neg %s", regop_ax(node->m.lhs->ty));
     return;
   case ND_BITNOT:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     Printstn("not %%rax");
     return;
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     push();
-    gen_expr(node->rhs);
+    gen_expr(node->m.rhs);
     Printstn("mov %%al, %%cl");
 
     char *ax = regop_ax(node->ty);
@@ -2241,11 +2241,11 @@ static void gen_gp_arith(Node *node) {
     return;
   }
 
-  gen_expr(node->lhs);
+  gen_expr(node->m.lhs);
   push();
-  gen_expr(node->rhs);
+  gen_expr(node->m.rhs);
 
-  bool is_r64 = node->lhs->ty->size == 8 || node->lhs->ty->base;
+  bool is_r64 = node->m.lhs->ty->size == 8 || node->m.lhs->ty->base;
   char *ax = is_r64 ? "%rax" : "%eax";
   char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
 
@@ -2267,7 +2267,7 @@ static void gen_gp_arith(Node *node) {
       Printstn("xor %%edx, %%edx");
       Printftn("div %s", op);
     } else {
-      if (node->lhs->ty->size == 8)
+      if (node->m.lhs->ty->size == 8)
         Printstn("cqo");
       else
         Printstn("cdq");
@@ -2293,7 +2293,7 @@ static void gen_gp_arith(Node *node) {
   case ND_GT:
   case ND_GE:
     Printftn("cmp %s, %s", ax, op);
-    gen_cmp_setcc(node->kind, node->lhs->ty->is_unsigned);
+    gen_cmp_setcc(node->kind, node->m.lhs->ty->is_unsigned);
     return;
   }
 
@@ -2314,14 +2314,14 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   case ND_NUM: {
     if (node->ty->kind == TY_BITINT)
-      load_bitint_val(node->ty, node->bitint_data);
+      load_bitint_val(node->ty, node->num.bitint_data);
     else if (is_flonum(node->ty))
-      load_fval(node->ty, node->fval);
-    load_val(node->ty, node->val);
+      load_fval(node->ty, node->num.fval);
+    load_val(node->ty, node->num.val);
     return;
   }
   case ND_POS:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     return;
   case ND_VAR:
     gen_addr(node);
@@ -2333,51 +2333,51 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   }
   case ND_DEREF:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     load(node, 0);
     return;
   case ND_ADDR:
-    gen_addr(node->lhs);
+    gen_addr(node->m.lhs);
     return;
   case ND_ASSIGN:
-    gen_addr(node->lhs);
+    gen_addr(node->m.lhs);
     push();
-    gen_expr(node->rhs);
-    store(node->lhs, is_void);
+    gen_expr(node->m.rhs);
+    store(node->m.lhs, is_void);
     return;
   case ND_ARITH_ASSIGN:
-    gen_addr(node->lhs);
+    gen_addr(node->m.lhs);
     push();
-    load(node->lhs, 0);
-    gen_expr_null_lhs(node->arith_kind, node->lhs->ty, node->rhs);
-    store(node->lhs, is_void);
+    load(node->m.lhs, 0);
+    gen_expr_null_lhs(node->arith_kind, node->m.lhs->ty, node->m.rhs);
+    store(node->m.lhs, is_void);
     return;
   case ND_POST_INCDEC:
-    gen_addr(node->lhs);
+    gen_addr(node->m.lhs);
     Printstn("movq %%rax, %%rcx");
-    load(node->lhs, 0);
-    push_by_ty(node->lhs->ty);
+    load(node->m.lhs, 0);
+    push_by_ty(node->m.lhs->ty);
     push_from("%rcx");
-    gen_expr_null_lhs(ND_ADD, node->lhs->ty, node->rhs);
-    store(node->lhs, true);
-    pop_by_ty(node->lhs->ty);
+    gen_expr_null_lhs(ND_ADD, node->m.lhs->ty, node->m.rhs);
+    store(node->m.lhs, true);
+    pop_by_ty(node->m.lhs->ty);
     return;
   case ND_CKD_ARITH: {
-    Type *res_ty = node->inc->ty->base;
+    Type *res_ty = node->m.target->ty->base;
     int32_t chk_bits = res_ty->is_unsigned +
       (res_ty->kind == TY_BITINT ? res_ty->bit_cnt : res_ty->size * 8);
 
     int32_t bits = MAX(chk_bits, res_ty->size * 8);
-    bits = MAX(bits, ovf_headroom(node->lhs->ty, node->arith_kind));
-    bits = MAX(bits, ovf_headroom(node->rhs->ty, node->arith_kind));
+    bits = MAX(bits, ovf_headroom(node->m.lhs->ty, node->arith_kind));
+    bits = MAX(bits, ovf_headroom(node->m.rhs->ty, node->arith_kind));
     bits = align_to(bits, 64);
     int32_t sz = bits / 8;
 
-    gen_expr(node->inc);
+    gen_expr(node->m.target);
     push();
-    gen_cast_to_bitint(bits, node->lhs);
+    gen_cast_to_bitint(bits, node->m.lhs);
     push_bitint(sz);
-    gen_cast_to_bitint(bits, node->rhs);
+    gen_cast_to_bitint(bits, node->m.rhs);
 
     load_val2(ty_int, bits, argreg32[0], NULL);
     Printftn("lea %d(%s), %s", pop_bitint(sz), lvar_ptr, argreg64[1]);
@@ -2395,10 +2395,10 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   }
   case ND_STMT_EXPR:
-    name_labels(node);
-    for (Node *n = node->body; n; n = n->next) {
+    name_labels(node->blk.local_labels);
+    for (Node *n = node->blk.body; n; n = n->next) {
       if (!n->next && n->kind == ND_EXPR_STMT)
-        gen_expr(n->lhs);
+        gen_expr(n->m.lhs);
       else
         gen_stmt(n);
     }
@@ -2410,15 +2410,15 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   case ND_CHAIN:
   case ND_COMMA:
-    gen_void_expr(node->lhs);
-    gen_expr(node->rhs);
+    gen_void_expr(node->m.lhs);
+    gen_expr(node->m.rhs);
     return;
   case ND_CAST:
     gen_cast(node);
     return;
   case ND_INIT_SEQ:
-    gen_mem_zero(node->var->ofs, node->var->ptr, node->var->ty->size);
-    for (Node *n = node->lhs; n; n = n->next)
+    gen_mem_zero(node->m.var->ofs, node->m.var->ptr, node->m.var->ty->size);
+    for (Node *n = node->m.lhs; n; n = n->next)
       gen_void_assign(n);
     return;
   case ND_COND: {
@@ -2426,16 +2426,16 @@ static void gen_expr2(Node *node, bool is_void) {
     char else_label[STRBUF_SZ];
     snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, c);
 
-    gen_cond(node->cond, false, else_label);
-    gen_expr(node->then);
+    gen_cond(node->ctrl.cond, false, else_label);
+    gen_expr(node->ctrl.then);
     Printftn("jmp .L.end.%"PRIi64, c);
     Printfsn("%s:", else_label);
-    gen_expr(node->els);
+    gen_expr(node->ctrl.els);
     Printfsn(".L.end.%"PRIi64":", c);
     return;
   }
   case ND_NOT:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     Printstn("xor $1, %%al");
     return;
   case ND_LOGAND:
@@ -2448,8 +2448,8 @@ static void gen_expr2(Node *node, bool is_void) {
     if (is_x87_class(node->ty)) {
       if (is_void) {
         Printstn("fstp %%st(0)");
-      } else if (node->ret_buffer) {
-        Printftn("lea %d(%s), %%rax", node->ret_buffer->ofs, node->ret_buffer->ptr);
+      } else if (node->call.rtn_buf) {
+        Printftn("lea %d(%s), %%rax", node->call.rtn_buf->ofs, node->call.rtn_buf->ptr);
         Printstn("fstpt (%%rax)");
       } else {
         Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
@@ -2459,8 +2459,8 @@ static void gen_expr2(Node *node, bool is_void) {
     if (node->ty->kind == TY_BITINT) {
       if (bitint_rtn_need_copy(node->ty->bit_cnt)) {
         char sofs[STRBUF_SZ];
-        snprintf(sofs, STRBUF_SZ, "%d", node->ret_buffer->ofs);
-        gen_mem_copy2(sofs, node->ret_buffer->ptr,
+        snprintf(sofs, STRBUF_SZ, "%d", node->call.rtn_buf->ofs);
+        gen_mem_copy2(sofs, node->call.rtn_buf->ptr,
           tmpbuf(node->ty->size), lvar_ptr, node->ty->size);
       } else {
         Printftn("mov %%rax, %s(%s)", tmpbuf(node->ty->size), lvar_ptr);
@@ -2474,9 +2474,9 @@ static void gen_expr2(Node *node, bool is_void) {
         cast_extend_int32(node->ty, reg_ax(node->ty->size), "%eax");
         return;
       }
-      if (node->ret_buffer && !is_mem_class(node->ty)) {
-        copy_ret_buffer(node->ret_buffer);
-        Printftn("lea %d(%s), %%rax", node->ret_buffer->ofs, node->ret_buffer->ptr);
+      if (node->call.rtn_buf && !is_mem_class(node->ty)) {
+        copy_ret_buffer(node->call.rtn_buf);
+        Printftn("lea %d(%s), %%rax", node->call.rtn_buf->ofs, node->call.rtn_buf->ptr);
       }
     }
     return;
@@ -2484,16 +2484,16 @@ static void gen_expr2(Node *node, bool is_void) {
     Printftn("lea %s(%%rip), %%rax", goto_label(node));
     return;
   case ND_CAS: {
-    gen_expr(node->cas_addr);
+    gen_expr(node->cas.addr);
     push();
-    gen_expr(node->cas_old);
+    gen_expr(node->cas.old_val);
     push();
-    gen_expr(node->cas_new);
+    gen_expr(node->cas.new_val);
 
     char *old = pop_inreg(tmpreg64[0]);
     char *addr = pop_inreg(tmpreg64[1]);
 
-    Type *ty = node->cas_addr->ty->base;
+    Type *ty = node->cas.addr->ty->base;
     char *ax = reg_ax(ty->size);
     char *dx = reg_dx(ty->size);
 
@@ -2516,12 +2516,12 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   }
   case ND_EXCH: {
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     push();
-    gen_expr(node->rhs);
+    gen_expr(node->m.rhs);
     char *reg = pop_inreg(tmpreg64[0]);
 
-    int sz = node->lhs->ty->base->size;
+    int sz = node->m.lhs->ty->base->size;
     Printftn("xchg %s, (%s)", reg_ax(sz), reg);
     return;
   }
@@ -2530,30 +2530,30 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   case ND_ALLOCA:
   case ND_ALLOCA_ZINIT:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     builtin_alloca(node);
     return;
   case ND_FRAME_ADDR:
-    if (!node->val) {
+    if (!node->num.val) {
       Printstn("movq %%rbp, %%rax");
       return;
     }
     Printstn("movq (%%rbp), %%rax");
-    for (int64_t i = 1; i < node->val; i++)
+    for (int64_t i = 1; i < node->num.val; i++)
       Printstn("movq (%%rax), %%rax");
     return;
   case ND_RTN_ADDR:
-    if (!node->val) {
+    if (!node->num.val) {
       Printstn("movq 8(%%rbp), %%rax");
       return;
     }
     Printstn("movq (%%rbp), %%rax");
-    for (int64_t i = 1; i < node->val; i++)
+    for (int64_t i = 1; i < node->num.val; i++)
       Printstn("movq (%%rax), %%rax");
     Printstn("movq 8(%%rax), %%rax");
     return;
   case ND_VA_START: {
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     Printftn("movl $%d, (%%rax)", va_gp_start);
     Printftn("movl $%d, 4(%%rax)", va_fp_start);
     Printftn("lea %d(%%rbp), %%rdx", va_st_start);
@@ -2563,15 +2563,15 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   }
   case ND_VA_COPY: {
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     push();
-    gen_expr(node->rhs);
+    gen_expr(node->m.rhs);
     char *reg = pop_inreg(tmpreg64[0]);
     gen_mem_copy(0, "%rax", 0, reg, 24);
     return;
   }
   case ND_VA_ARG: {
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
 
     Type *ty = node->ty->base;
     bool use_reg_save = is_by_reg_agg(ty);
@@ -2579,7 +2579,7 @@ static void gen_expr2(Node *node, bool is_void) {
       if (va_arg_need_copy(ty)) {
         // Structs with FP member are split into 8-byte chunks in the
         // reg save area, we reconstruct the layout with a local copy.
-        gen_vaarg_reg_copy(ty, node->var);
+        gen_vaarg_reg_copy(ty, node->m.var);
       } else if (is_fp_class_lo(ty)) {
         Printftn("cmpl $%d, 4(%%rax)", 160);
         Printstn("ja 1f");
@@ -2613,7 +2613,7 @@ static void gen_expr2(Node *node, bool is_void) {
   }
   }
 
-  switch (node->lhs->ty->kind) {
+  switch (node->m.lhs->ty->kind) {
   case TY_FLOAT:
   case TY_DOUBLE:
     gen_xmm_arith(node);
@@ -2644,7 +2644,7 @@ static void gen_stmt_naked(Node *node) {
   case ND_BLOCK:
     if (has_defr(node))
       break;
-    for (Node *n = node->body; n; n = n->next)
+    for (Node *n = node->blk.body; n; n = n->next)
       gen_stmt_naked(n);
     return;
   case ND_ASM:
@@ -2670,15 +2670,15 @@ static void gen_stmt(Node *node) {
     char bg[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
     name_brk_cont(node, bg, brk, cont, count());
 
-    if (node->init)
-      gen_stmt(node->init);
+    if (node->ctrl.for_init)
+      gen_stmt(node->ctrl.for_init);
     Printfsn("%s:", bg);
-    if (node->cond)
-      gen_cond(node->cond, false, brk);
-    gen_stmt(node->then);
+    if (node->ctrl.cond)
+      gen_cond(node->ctrl.cond, false, brk);
+    gen_stmt(node->ctrl.then);
     Printfsn("%s:", cont);
-    if (node->inc)
-      gen_void_expr(node->inc);
+    if (node->ctrl.for_inc)
+      gen_void_expr(node->ctrl.for_inc);
     gen_defr(node);
     Printftn("jmp %s", bg);
     Printfsn("%s:", brk);
@@ -2689,58 +2689,58 @@ static void gen_stmt(Node *node) {
     name_brk_cont(node, bg, brk, cont, count());
 
     Printfsn("%s:", bg);
-    gen_stmt(node->then);
+    gen_stmt(node->ctrl.then);
     Printfsn("%s:", cont);
-    gen_cond(node->cond, true, bg);
+    gen_cond(node->ctrl.cond, true, bg);
     Printfsn("%s:", brk);
     return;
   }
   case ND_SWITCH: {
-    gen_expr(node->cond);
+    gen_expr(node->ctrl.cond);
 
     int64_t c = count(), cnt = 0;
     char *ax, *cx, *dx;
-    if (node->cond->ty->size == 8)
+    if (node->ctrl.cond->ty->size == 8)
       ax = "%rax", cx = "%rcx", dx = "%rdx";
     else
       ax = "%eax", cx = "%ecx", dx = "%edx";
 
     Node *label = NULL;
-    for (CaseRange *cr = node->cases; cr; cr = cr->next) {
-      if (cr->label == node->default_label)
+    for (CaseRange *cr = node->ctrl.sw_cases; cr; cr = cr->next) {
+      if (cr->label == node->ctrl.sw_default)
         continue;
 
       if (label != cr->label) {
         label = cr->label;
-        label->unique_label = format(".L.case%"PRIi64".%"PRIi64, cnt++, c);
+        label->lbl.unique_label = format(".L.case%"PRIi64".%"PRIi64, cnt++, c);
       }
 
       if (cr->hi == cr->lo) {
         imm_cmp(ax, dx, cr->lo);
-        Printftn("je %s", label->unique_label);
+        Printftn("je %s", label->lbl.unique_label);
         continue;
       }
       if (cr->lo == 0) {
         imm_cmp(ax, dx, cr->hi);
-        Printftn("jbe %s", label->unique_label);
+        Printftn("jbe %s", label->lbl.unique_label);
         continue;
       }
       Printftn("mov %s, %s", ax, cx);
       imm_sub(cx, dx, cr->lo);
       imm_cmp(cx, dx, cr->hi - cr->lo);
-      Printftn("jbe %s", label->unique_label);
+      Printftn("jbe %s", label->lbl.unique_label);
     }
 
     char brk[STRBUF_SZ];
     name_brk_cont(node, NULL, brk, NULL, c);
 
-    if (node->default_label) {
-      node->default_label->unique_label = format(".L.default.%"PRIi64, c);
-      Printftn("jmp %s", node->default_label->unique_label);
+    if (node->ctrl.sw_default) {
+      node->ctrl.sw_default->lbl.unique_label = format(".L.default.%"PRIi64, c);
+      Printftn("jmp %s", node->ctrl.sw_default->lbl.unique_label);
     } else {
       Printftn("jmp %s", brk);
     }
-    gen_stmt(node->then);
+    gen_stmt(node->ctrl.then);
     Printfsn("%s:", brk);
     return;
   }
@@ -2754,24 +2754,24 @@ static void gen_stmt(Node *node) {
     Printftn("jmp %s", goto_label(node));
     return;
   case ND_GOTO_EXPR:
-    gen_expr(node->lhs);
+    gen_expr(node->m.lhs);
     Printstn("jmp *%%rax");
     return;
   case ND_LABEL:
-    Printfsn("%s:", node->unique_label);
+    Printfsn("%s:", node->lbl.unique_label);
     return;
   case ND_RETURN: {
     if (current_fn->is_noreturn)
       error_tok(node->tok, "function is noreturn");
 
-    if (!node->lhs) {
+    if (!node->m.lhs) {
       if (has_defr(node))
         gen_defr(node);
       Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
       return;
     }
-    gen_expr(node->lhs);
-    Type *ty = node->lhs->ty;
+    gen_expr(node->m.lhs);
+    Type *ty = node->m.lhs->ty;
 
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION || ty->kind == TY_BITINT) {
       if (ty->kind == TY_BITINT)
@@ -2809,7 +2809,7 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_EXPR_STMT:
-    gen_void_expr(node->lhs);
+    gen_void_expr(node->m.lhs);
     return;
   case ND_ASM:
     gen_asm(node);
@@ -2869,14 +2869,14 @@ static void gen_void_arith_assign(Node *node) {
     node->arith_kind = ND_ADD;
   }
 
-  Node *lhs = node->lhs;
-  Node *rhs = node->rhs;
+  Node *lhs = node->m.lhs;
+  Node *rhs = node->m.rhs;
   add_type(rhs);
 
   if (opt_optimize && is_gp_ty(lhs->ty) && !is_bitfield(lhs) &&
     lhs->ty->kind != TY_BOOL && is_integer(rhs->ty)) {
     Node null = {.kind = ND_NULL_EXPR, .ty = lhs->ty, .tok = rhs->tok};
-    Node expr = {.kind = node->arith_kind, .lhs = &null, .rhs = rhs, .tok = rhs->tok};
+    Node expr = {.kind = node->arith_kind, .m.lhs = &null, .m.rhs = rhs, .tok = rhs->tok};
     add_type(&expr);
 
     switch (node->arith_kind) {
@@ -2885,7 +2885,7 @@ static void gen_void_arith_assign(Node *node) {
     case ND_BITAND:
     case ND_BITOR:
     case ND_BITXOR:
-      memop_arith(lhs, expr.rhs, arith_ins(node->arith_kind));
+      memop_arith(lhs, expr.m.rhs, arith_ins(node->arith_kind));
       return;
     }
   }
@@ -2893,8 +2893,8 @@ static void gen_void_arith_assign(Node *node) {
 }
 
 static void gen_void_assign(Node *node) {
-  Node *lhs = node->lhs;
-  Node *rhs = node->rhs;
+  Node *lhs = node->m.lhs;
+  Node *rhs = node->m.rhs;
 
   if (is_gp_ty(lhs->ty) && !is_bitfield(lhs) && !lhs->ty->is_atomic &&
     is_const_expr(rhs, NULL)) {
@@ -2904,8 +2904,8 @@ static void gen_void_assign(Node *node) {
 
   char sofs[STRBUF_SZ], *sptr;
   if (is_memop(rhs, sofs, &sptr, true) ||
-    (is_int_to_int_cast(rhs) && lhs->ty->size <= rhs->lhs->ty->size &&
-    lhs->ty->kind != TY_BOOL && is_memop(rhs->lhs, sofs, &sptr, true))) {
+    (is_int_to_int_cast(rhs) && lhs->ty->size <= rhs->m.lhs->ty->size &&
+    lhs->ty->kind != TY_BOOL && is_memop(rhs->m.lhs, sofs, &sptr, true))) {
     char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       gen_mem_copy2(sofs, sptr, dofs, dptr, write_size(lhs));
@@ -2954,7 +2954,7 @@ static void gen_void_expr(Node *node) {
   case ND_NOT:
   case ND_BITNOT:
   case ND_CAST:
-    gen_void_expr(node->lhs);
+    gen_void_expr(node->m.lhs);
     return;
   case ND_ADD:
   case ND_SUB:
@@ -2975,8 +2975,8 @@ static void gen_void_expr(Node *node) {
   case ND_GE:
   case ND_CHAIN:
   case ND_COMMA:
-    gen_void_expr(node->lhs);
-    gen_void_expr(node->rhs);
+    gen_void_expr(node->m.lhs);
+    gen_void_expr(node->m.rhs);
     return;
   case ND_ASSIGN:
     gen_void_assign(node);
@@ -3216,9 +3216,9 @@ static bool gen_cmp_opt_gp2(Node *lhs, Node *rhs) {
 }
 
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind) {
-  if (gen_cmp_opt_gp2(node->lhs, node->rhs))
+  if (gen_cmp_opt_gp2(node->m.lhs, node->m.rhs))
     return true;
-  if (gen_cmp_opt_gp2(node->rhs, node->lhs)) {
+  if (gen_cmp_opt_gp2(node->m.rhs, node->m.lhs)) {
     switch (*kind) {
     case ND_LT: *kind = ND_GT; break;
     case ND_LE: *kind = ND_GE; break;
@@ -3251,22 +3251,22 @@ static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int p
     }
     break;
   case 2:
-    if (is_int_to_int_cast(rhs) && is_memop(rhs->lhs, ofs, &ptr, true) &&
-      sz <= rhs->lhs->ty->size) {
+    if (is_int_to_int_cast(rhs) && is_memop(rhs->m.lhs, ofs, &ptr, true) &&
+      sz <= rhs->m.lhs->ty->size) {
       gen_expr(lhs);
       Printftn("%s %s(%s), %s", arith_ins(kind), ofs, ptr, ax);
       return true;
     }
     break;
   case 3:
-    if (is_int_to_int_cast(rhs) && is_memop(rhs->lhs, ofs, &ptr, true) &&
-      sz > rhs->lhs->ty->size) {
+    if (is_int_to_int_cast(rhs) && is_memop(rhs->m.lhs, ofs, &ptr, true) &&
+      sz > rhs->m.lhs->ty->size) {
       gen_expr(lhs);
 
-      if (!rhs->lhs->ty->is_unsigned && sz == 8)
-        load_extend_int64(rhs->lhs->ty, ofs, ptr, "%rdx");
+      if (!rhs->m.lhs->ty->is_unsigned && sz == 8)
+        load_extend_int64(rhs->m.lhs->ty, ofs, ptr, "%rdx");
       else
-        load_extend_int(rhs->lhs->ty, ofs, ptr, "%edx");
+        load_extend_int(rhs->m.lhs->ty, ofs, ptr, "%edx");
 
       Printftn("%s %s, %s", arith_ins(kind), reg_dx(sz), ax);
       return true;
@@ -3284,13 +3284,13 @@ static bool gen_arith_opt_gp(Node *node, int sz) {
   case ND_BITOR:
   case ND_BITXOR:
     for (int pass = 0; pass <= 3; pass++)
-      if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, pass) ||
-        gen_arith_opt_gp2(node->kind, sz, node->rhs, node->lhs, pass))
+      if (gen_arith_opt_gp2(node->kind, sz, node->m.lhs, node->m.rhs, pass) ||
+        gen_arith_opt_gp2(node->kind, sz, node->m.rhs, node->m.lhs, pass))
         return true;
     break;
   case ND_SUB:
     for (int pass = 0; pass <= 3; pass++)
-      if (gen_arith_opt_gp2(node->kind, sz, node->lhs, node->rhs, pass))
+      if (gen_arith_opt_gp2(node->kind, sz, node->m.lhs, node->m.rhs, pass))
         return true;
   }
   return false;
@@ -3301,13 +3301,13 @@ static bool gen_shift_opt_gp(Node *node) {
   int64_t val;
   char ofs[STRBUF_SZ], *ptr;
 
-  if (is_const_expr(node->rhs, &val)) {
-    gen_expr(node->lhs);
+  if (is_const_expr(node->m.rhs, &val)) {
+    gen_expr(node->m.lhs);
     imm_arith(node->kind, node->ty->size, val);
     return true;
   }
-  if (is_memop(node->rhs, ofs, &ptr, true)) {
-    gen_expr(node->lhs);
+  if (is_memop(node->m.rhs, ofs, &ptr, true)) {
+    gen_expr(node->m.lhs);
 
     Printftn("movb %s(%s), %%cl", ofs, ptr);
     Printftn("%s %%cl, %s", arith_ins(node->kind), ax);
@@ -3318,8 +3318,8 @@ static bool gen_shift_opt_gp(Node *node) {
 
 static bool gen_gp_opt(Node *node) {
   NodeKind kind = node->kind;
-  Node *lhs = node->lhs;
-  Node *rhs = node->rhs;
+  Node *lhs = node->m.lhs;
+  Node *rhs = node->m.rhs;
   Type *ty = node->ty;
 
   switch (kind) {
@@ -3338,7 +3338,7 @@ static bool gen_gp_opt(Node *node) {
   if (gen_arith_opt_gp(node, node->ty->size))
     return true;
 
-  if (is_cmp(node) && is_gp_ty(node->lhs->ty) && gen_cmp_opt_gp(node, &kind)) {
+  if (is_cmp(node) && is_gp_ty(node->m.lhs->ty) && gen_cmp_opt_gp(node, &kind)) {
     gen_cmp_setcc(kind, lhs->ty->is_unsigned);
     return true;
   }
@@ -3347,7 +3347,7 @@ static bool gen_gp_opt(Node *node) {
 
 static bool gen_load_opt_gp(Node *node, Reg r) {
   char ofs[STRBUF_SZ], *ptr;
-  Node *lhs = node->lhs;
+  Node *lhs = node->m.lhs;
   Type *ty = node->ty;
   bool gen = (r != REG_X64_NULL);
 
@@ -3383,7 +3383,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
 }
 
 static void gen_deref_opt(Node *node, int64_t *ofs) {
-  for (;; node = node->lhs) {
+  for (;; node = node->m.lhs) {
     if (node->kind == ND_CAST && node->ty->base)
       continue;
 
@@ -3391,11 +3391,11 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
       continue;
 
     int64_t val;
-    if (node->kind == ND_ADD && is_const_expr(node->rhs, &val)) {
+    if (node->kind == ND_ADD && is_const_expr(node->m.rhs, &val)) {
       *ofs += val;
       continue;
     }
-    if (node->kind == ND_SUB && is_const_expr(node->rhs, &val)) {
+    if (node->kind == ND_SUB && is_const_expr(node->m.rhs, &val)) {
       *ofs -= val;
       continue;
     }
@@ -3407,8 +3407,8 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
 
 static void gen_member_opt(Node *node, int64_t *ofs) {
   while (node->kind == ND_MEMBER) {
-    *ofs += node->member->offset;
-    node = node->lhs;
+    *ofs += node->m.member->offset;
+    node = node->m.lhs;
   }
 
   switch (node->kind) {
@@ -3432,7 +3432,7 @@ static Node *bool_expr_opt(Node *node, bool *flip) {
     switch (node->kind) {
     case ND_NOT:
       has_not = !has_not;
-      node = node->lhs;
+      node = node->m.lhs;
       continue;
     case ND_EQ:
     case ND_NE:
@@ -3451,7 +3451,7 @@ static Node *bool_expr_opt(Node *node, bool *flip) {
     }
     if (!(node->kind == ND_CAST && is_gp_ty(node->ty)))
       break;
-    node = node->lhs;
+    node = node->m.lhs;
   }
   if (boolexpr) {
     *flip = boolexpr_has_not;
@@ -3478,7 +3478,7 @@ static bool gen_bool_opt(Node *node) {
     return true;
   }
   if (node->kind == ND_CAST && node->ty->kind == TY_BOOL) {
-    gen_cmp_zero(node->lhs, flip ? ND_EQ : ND_NE);
+    gen_cmp_zero(node->m.lhs, flip ? ND_EQ : ND_NE);
     return true;
   }
   gen_expr(node);
@@ -3488,8 +3488,8 @@ static bool gen_bool_opt(Node *node) {
 }
 
 static bool gen_block_stmt(Node *node, bool is_reach) {
-  name_labels(node);
-  for (Node *n = node->body; n; n = n->next) {
+  name_labels(node->blk.local_labels);
+  for (Node *n = node->blk.body; n; n = n->next) {
     if (is_reach)
       is_reach = gen_reachable_stmt(n);
     else
@@ -3518,22 +3518,22 @@ static bool gen_if_stmt(Node *node, bool is_reach) {
   snprintf(else_label, STRBUF_SZ, ".L.else.%"PRIi64, c);
 
   if (!is_reach) {
-    is_reach = gen_unreachable_stmt(node->then);
-    return gen_skip_unreachable_stmt(node->els, is_reach, else_label);
+    is_reach = gen_unreachable_stmt(node->ctrl.then);
+    return gen_skip_unreachable_stmt(node->ctrl.els, is_reach, else_label);
   }
   int64_t val;
-  if (is_const_expr(node->cond, &val)) {
+  if (is_const_expr(node->ctrl.cond, &val)) {
     if (val) {
-      is_reach = gen_reachable_stmt(node->then);
-      return gen_skip_unreachable_stmt(node->els, is_reach, else_label);
+      is_reach = gen_reachable_stmt(node->ctrl.then);
+      return gen_skip_unreachable_stmt(node->ctrl.els, is_reach, else_label);
     }
-    is_reach = node->els ? gen_reachable_stmt(node->els) : true;
-    return gen_skip_unreachable_stmt(node->then, is_reach, else_label);
+    is_reach = node->ctrl.els ? gen_reachable_stmt(node->ctrl.els) : true;
+    return gen_skip_unreachable_stmt(node->ctrl.then, is_reach, else_label);
   }
 
-  gen_cond(node->cond, false, else_label);
-  is_reach = gen_reachable_stmt(node->then);
-  if (!node->els) {
+  gen_cond(node->ctrl.cond, false, else_label);
+  is_reach = gen_reachable_stmt(node->ctrl.then);
+  if (!node->ctrl.els) {
     Printfsn("%s:", else_label);
     return true;
   }
@@ -3541,7 +3541,7 @@ static bool gen_if_stmt(Node *node, bool is_reach) {
   if (is_reach)
     Printftn("jmp .L.end.%"PRIi64, c);
   Printfsn("%s:", else_label);
-  bool is_reach2 = gen_reachable_stmt(node->els);
+  bool is_reach2 = gen_reachable_stmt(node->ctrl.els);
   if (is_reach)
     Printfsn(".L.end.%"PRIi64":", c);
   return is_reach | is_reach2;
@@ -3564,10 +3564,10 @@ static bool gen_reachable_stmt(Node *node) {
     gen_stmt(node);
     return false;
   case ND_EXPR_STMT:
-    if (node->lhs->kind == ND_UNREACHABLE)
+    if (node->m.lhs->kind == ND_UNREACHABLE)
       return false;
-    if (node->lhs->kind == ND_FUNCALL && is_direct_fncall(node->lhs->lhs) &&
-      node->lhs->lhs->var->is_noreturn) {
+    if (node->m.lhs->kind == ND_FUNCALL && is_direct_fncall(node->m.lhs->call.expr) &&
+      node->m.lhs->call.expr->m.var->is_noreturn) {
       gen_stmt(node);
       return false;
     }
@@ -3591,7 +3591,7 @@ static bool gen_unreachable_stmt(Node *node) {
   case ND_FOR:
   case ND_DO:
   case ND_SWITCH:
-    if (node->then->no_label)
+    if (node->ctrl.then->no_label)
       return false;
     gen_stmt(node);
     return true;
@@ -3602,8 +3602,8 @@ static bool gen_unreachable_stmt(Node *node) {
 static bool gen_expr_opt(Node *node) {
   NodeKind kind = node->kind;
   Type *ty = node->ty;
-  Node *lhs = node->lhs;
-  Node *rhs = node->rhs;
+  Node *lhs = node->m.lhs;
+  Node *rhs = node->m.rhs;
 
   char *var_ptr;
   char var_ofs[STRBUF_SZ];
@@ -3647,11 +3647,11 @@ static bool gen_expr_opt(Node *node) {
 
   {
     int64_t cond_val;
-    if (kind == ND_COND && is_const_expr(node->cond, &cond_val)) {
+    if (kind == ND_COND && is_const_expr(node->ctrl.cond, &cond_val)) {
       if (cond_val)
-        gen_expr(node->then);
+        gen_expr(node->ctrl.then);
       else
-        gen_expr(node->els);
+        gen_expr(node->ctrl.els);
       return true;
     }
   }
@@ -3659,7 +3659,7 @@ static bool gen_expr_opt(Node *node) {
   if (ty->kind == TY_ARRAY || ty->kind == TY_STRUCT || ty->kind == TY_UNION ||
     is_bitfield(node)) {
     char var_ofs[STRBUF_SZ], *var_ptr;
-    Node addr_node = {.kind = ND_ADDR, .lhs = node, .tok = node->tok};
+    Node addr_node = {.kind = ND_ADDR, .m.lhs = node, .tok = node->tok};
     if (is_memop_ptr(&addr_node, var_ofs, &var_ptr)) {
       Printftn("lea %s(%s), %%rax", var_ofs, var_ptr);
       if (is_bitfield(node))
@@ -3670,7 +3670,7 @@ static bool gen_expr_opt(Node *node) {
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
-    gen_deref_opt(node->lhs, &ofs);
+    gen_deref_opt(node->m.lhs, &ofs);
 
     if (is_scalar(ty)) {
       load2(ty, ofs, "%rax");
@@ -3700,7 +3700,7 @@ static bool gen_addr_opt(Node *node) {
 
   {
     char ofs[STRBUF_SZ], *ptr;
-    Node addr_node = {.kind = ND_ADDR, .lhs = node, .tok = node->tok};
+    Node addr_node = {.kind = ND_ADDR, .m.lhs = node, .tok = node->tok};
     if (is_memop_ptr(&addr_node, ofs, &ptr)) {
       Printftn("lea %s(%s), %%rax", ofs, ptr);
       return true;
@@ -3709,7 +3709,7 @@ static bool gen_addr_opt(Node *node) {
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
-    gen_deref_opt(node->lhs, &ofs);
+    gen_deref_opt(node->m.lhs, &ofs);
     imm_add("%rax", "%rdx", ofs);
     return true;
   }
@@ -3739,19 +3739,19 @@ static void asm_fill_ops(Node *node) {
   asm_ops.cnt = 0;
   memset(asm_ops.data, 0, sizeof(*asm_ops.data) * asm_ops.capacity);
 
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next)
+  for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next)
     asm_ops_push(ap);
 
-  for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next)
+  for (AsmParam *ap = node->gasm.inputs; ap; ap = ap->next)
     asm_ops_push(ap);
 }
 
 static void asm_fill_ops2(Node *node) {
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next)
+  for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next)
     if (*ap->constraint->str == '+')
       asm_ops_push(ap);
 
-  for (AsmParam *ap = node->asm_labels; ap; ap = ap->next)
+  for (AsmParam *ap = node->gasm.labels; ap; ap = ap->next)
     ap->label_id = asm_ops_push(ap);
 }
 
@@ -3954,8 +3954,8 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       ap->kind = ASMOP_MEM;
       continue;
     }
-    if (ap->arg->kind == ND_VAR && ap->arg->var->asm_name) {
-      Reg r = ident_reg(ap->arg->var->asm_name, ap->arg->tok);
+    if (ap->arg->kind == ND_VAR && ap->arg->m.var->asm_name) {
+      Reg r = ident_reg(ap->arg->m.var->asm_name, ap->arg->tok);
       if ((is_gp_reg(r) && !ap->is_gp) || (is_xmm_reg(r) && !ap->is_fp) ||
         (is_x87_reg(r) && !ap->is_x87))
         error_tok(ap->arg->tok, "constraint mismatch with variable register");
@@ -4041,7 +4041,7 @@ static void asm_assign_oprands(void) {
 static void asm_prepare_args(Node *node, int *out_tmp) {
   bool has_ptr_out = false;
   bool has_bitfield_out = false;
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+  for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG)
       ptr_convert(&ap->arg);
     if (has_memop(ap->arg))
@@ -4053,7 +4053,7 @@ static void asm_prepare_args(Node *node, int *out_tmp) {
   }
   *out_tmp = has_ptr_out + has_bitfield_out;
 
-  for (AsmParam *ap = node->asm_inputs; ap; ap = ap->next) {
+  for (AsmParam *ap = node->gasm.inputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG)
       ptr_convert(&ap->arg);
     if (has_memop(ap->arg))
@@ -4078,32 +4078,32 @@ static Reg acquire_gp(bool *use1, bool *use2, Token *tok) {
 }
 
 static Reg acquire_out_tmp(Node *node) {
-  if (node->asm_ctx->frame_ptr1 && !asm_use.out[REG_X64_BP])
+  if (node->gasm.ctx->frame_ptr1 && !asm_use.out[REG_X64_BP])
     return asm_use.out[REG_X64_BP] = true, REG_X64_BP;
 
-  if (node->asm_ctx->frame_ptr2 && !asm_use.out[REG_X64_BX])
+  if (node->gasm.ctx->frame_ptr2 && !asm_use.out[REG_X64_BX])
     return asm_use.out[REG_X64_BX] = true, REG_X64_BX;
 
   return acquire_gp(asm_use.out, NULL, node->tok);
 }
 
 static void asm_prepare_regs(Node *node, int tmp_cnt) {
-  node->asm_ctx = ast_arena_calloc(sizeof(AsmContext));
+  node->gasm.ctx = ast_arena_calloc(sizeof(AsmContext));
 
   if (asm_use.in[REG_X64_BP] || asm_use.out[REG_X64_BP])
-    node->asm_ctx->frame_ptr1 = acquire_gp(asm_use.in, asm_use.out, node->tok);
+    node->gasm.ctx->frame_ptr1 = acquire_gp(asm_use.in, asm_use.out, node->tok);
 
   if (asm_use.in[REG_X64_BX] || asm_use.out[REG_X64_BX])
-    node->asm_ctx->frame_ptr2 = acquire_gp(asm_use.in, asm_use.out, node->tok);
+    node->gasm.ctx->frame_ptr2 = acquire_gp(asm_use.in, asm_use.out, node->tok);
 
   switch (tmp_cnt) {
-  case 2: node->asm_ctx->output_tmp2 = acquire_out_tmp(node);
-  case 1: node->asm_ctx->output_tmp1 = acquire_out_tmp(node);
+  case 2: node->gasm.ctx->output_tmp2 = acquire_out_tmp(node);
+  case 1: node->gasm.ctx->output_tmp1 = acquire_out_tmp(node);
   }
 
   for (Reg r = REG_X64_R12; r <= REG_X64_BP; r++)
     if (asm_use.in[r] || asm_use.out[r])
-      node->asm_ctx->clobber_mask |= 1U << r;
+      node->gasm.ctx->clobber_mask |= 1U << r;
 }
 
 void prepare_inline_asm(Node *node) {
@@ -4112,10 +4112,10 @@ void prepare_inline_asm(Node *node) {
   asm_fill_ops(node);
 
   int x87_clobber = 0;
-  asm_clobbers(node->asm_clobbers, &x87_clobber);
+  asm_clobbers(node->gasm.clobbers, &x87_clobber);
 
-  asm_constraint(node->asm_inputs, x87_clobber);
-  asm_constraint(node->asm_outputs, 0);
+  asm_constraint(node->gasm.inputs, x87_clobber);
+  asm_constraint(node->gasm.outputs, 0);
 
   asm_assign_oprands();
 
@@ -4151,7 +4151,7 @@ static void asm_gen_operands(void) {
   for (int i = 0; i < asm_ops.cnt; i++) {
     AsmParam *ap = asm_ops.data[i];
     if (ap->ptr) {
-      Node addr_node = {.kind = ND_ADDR, .lhs = ap->arg, .tok = ap->arg->tok};
+      Node addr_node = {.kind = ND_ADDR, .m.lhs = ap->arg, .tok = ap->arg->tok};
       gen_var_assign(ap->ptr, &addr_node);
       continue;
     }
@@ -4292,9 +4292,9 @@ static int asm_x87_inputs(void) {
 }
 
 static void asm_save_out_flags(Node *node) {
-  Reg freereg = node->asm_ctx->output_tmp1;
+  Reg freereg = node->gasm.ctx->output_tmp1;
 
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+  for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_FLAG) {
       char ofs[STRBUF_SZ], *ptr;
       asm_gen_ptr(ap, ofs, &ptr, freereg);
@@ -4309,7 +4309,7 @@ static void asm_save_out_flags(Node *node) {
 static void asm_save_out_x87(Node *node, int in_cnt) {
   AsmParam *sort_buf[8] = {0};
   int out_cnt = 0;
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+  for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG) {
       if (is_x87_reg(ap->reg)) {
         sort_buf[ap->reg - REG_X64_X87_ST0] = ap;
@@ -4321,14 +4321,14 @@ static void asm_save_out_x87(Node *node, int in_cnt) {
   for (int i = 0; i < out_cnt; i++) {
     AsmParam *ap = sort_buf[i];
     if (ap)
-      asm_reg_output(ap, node->asm_ctx->output_tmp1);
+      asm_reg_output(ap, node->gasm.ctx->output_tmp1);
     else
       Printstn("fstp %%st(0)");
   }
 }
 
 static void asm_save_out_bitfield(AsmParam *ap, Reg r1, Reg r2) {
-  Member *mem = ap->arg->member;
+  Member *mem = ap->arg->m.member;
   char *ptr = regs[r2][3];
 
   Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), ptr);
@@ -4338,10 +4338,10 @@ static void asm_save_out_bitfield(AsmParam *ap, Reg r1, Reg r2) {
 }
 
 static void asm_save_out(Node *node) {
-  Reg r1 = node->asm_ctx->output_tmp1;
-  Reg r2 = node->asm_ctx->output_tmp2;
+  Reg r1 = node->gasm.ctx->output_tmp1;
+  Reg r2 = node->gasm.ctx->output_tmp2;
 
-  for (AsmParam *ap = node->asm_outputs; ap; ap = ap->next) {
+  for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG) {
       if (is_x87_reg(ap->reg))
         continue;
@@ -4384,14 +4384,14 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
 }
 
 static bool is_asm_symbolic_arg(Node *node, char *punct) {
-  if (node->kind == ND_VAR && node->var->ty->kind == TY_FUNC && use_rip(node->var)) {
+  if (node->kind == ND_VAR && node->m.var->ty->kind == TY_FUNC && use_rip(node->m.var)) {
     if (punct)
-      fprintf(output_file, "%s\"%s\"", punct, get_symbol(node->var));
+      fprintf(output_file, "%s\"%s\"", punct, get_symbol(node->m.var));
     return true;
   }
   char ofs[STRBUF_SZ], *ptr;
   if (node->kind == ND_ADDR &&
-    is_memop(node->lhs, ofs, &ptr, true) && ptr == rip) {
+    is_memop(node->m.lhs, ofs, &ptr, true) && ptr == rip) {
     if (punct)
       Printf("%s%s", punct, ofs);
     return true;
@@ -4400,7 +4400,7 @@ static bool is_asm_symbolic_arg(Node *node, char *punct) {
 }
 
 static void asm_body(Node *node) {
-  char *p = node->asm_str->str;
+  char *p = node->gasm.str_tok->str;
   for (;;) {
     size_t spn = strcspn(p, "%");
     if (spn) {
@@ -4418,11 +4418,11 @@ static void asm_body(Node *node) {
     p++;
 
     if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
-      AsmParam *ap = find_op(p + 1, &p, node->asm_str, true);
+      AsmParam *ap = find_op(p + 1, &p, node->gasm.str_tok, true);
       if (ap->arg->kind != ND_GOTO)
         error_tok(ap->arg->tok, "not a label");
 
-      if (node->asm_outputs)
+      if (node->gasm.outputs)
         Printf("%df", ap->label_id);
       else
         Printf("%s", goto_label(ap->arg));
@@ -4441,7 +4441,7 @@ static void asm_body(Node *node) {
       p++;
     }
     if (*p == '[' || Isdigit(*p)) {
-      AsmParam *ap = find_op(p, &p, node->asm_str, false);
+      AsmParam *ap = find_op(p, &p, node->gasm.str_tok, false);
       char *punct = (mod == 'c') ? "" : "$";
 
       switch (ap->kind) {
@@ -4489,57 +4489,57 @@ static void asm_body(Node *node) {
       }
       error_tok(ap->arg->tok, "invalid operand");
     }
-    error_tok(node->asm_str, "unknown modifier \"%c\"", *p);
+    error_tok(node->gasm.str_tok, "unknown modifier \"%c\"", *p);
   }
   fputc('\n', output_file);
 }
 
 static void asm_push_clobbers(Node *node) {
   for (Reg r = REG_X64_R12; r <= REG_X64_R15; r++)
-    if (node->asm_ctx->clobber_mask & (1U << r))
+    if (node->gasm.ctx->clobber_mask & (1U << r))
       push_from(regs[r][3]);
 }
 
 static void asm_pop_clobbers(Node *node) {
   for (Reg r = REG_X64_R15; r >= REG_X64_R12; r--)
-    if (node->asm_ctx->clobber_mask & (1U << r))
+    if (node->gasm.ctx->clobber_mask & (1U << r))
       pop(regs[r][3]);
 }
 
 static char *asm_push_frame_ptr(Node *node) {
   char *prev = lvar_ptr;
 
-  if (node->asm_ctx->frame_ptr1) {
-    asm_alt_ptr.rbp = regs[node->asm_ctx->frame_ptr1][3];
+  if (node->gasm.ctx->frame_ptr1) {
+    asm_alt_ptr.rbp = regs[node->gasm.ctx->frame_ptr1][3];
     if (lvar_ptr == rbp)
       lvar_ptr = asm_alt_ptr.rbp;
     Printftn("movq %%rbp, %s", asm_alt_ptr.rbp);
   }
-  if (node->asm_ctx->frame_ptr2) {
-    asm_alt_ptr.rbx = regs[node->asm_ctx->frame_ptr2][3];
+  if (node->gasm.ctx->frame_ptr2) {
+    asm_alt_ptr.rbx = regs[node->gasm.ctx->frame_ptr2][3];
     if (lvar_ptr == rbx)
       lvar_ptr = asm_alt_ptr.rbx;
     Printftn("movq %%rbx, %s", asm_alt_ptr.rbx);
   }
 
-  if (node->asm_ctx->frame_ptr1)
+  if (node->gasm.ctx->frame_ptr1)
     push_from(rbp);
-  if (node->asm_ctx->frame_ptr2)
+  if (node->gasm.ctx->frame_ptr2)
     push_from(rbx);
   return prev;
 }
 
 static void asm_pop_frame_ptr(Node *node, char *prev) {
-  if (node->asm_ctx->frame_ptr2)
+  if (node->gasm.ctx->frame_ptr2)
     pop(rbx);
-  if (node->asm_ctx->frame_ptr1)
+  if (node->gasm.ctx->frame_ptr1)
     pop(rbp);
   lvar_ptr = prev;
 }
 
 static void gen_asm(Node *node) {
   if (is_plain_asm(node)) {
-    Printftn("%s", node->asm_str->str);
+    Printftn("%s", node->gasm.str_tok->str);
     return;
   }
   asm_alt_ptr.rbp = asm_alt_ptr.rbx = NULL;
@@ -4559,11 +4559,11 @@ static void gen_asm(Node *node) {
 
   int fallthrough_label = asm_ops.cnt;
   int meet_label = asm_ops.cnt + 1;
-  bool is_goto_with_output = node->asm_outputs && node->asm_labels;
+  bool is_goto_with_output = node->gasm.outputs && node->gasm.labels;
   if (is_goto_with_output) {
-    char *tmp_gp = regs[node->asm_ctx->output_tmp1][3];
+    char *tmp_gp = regs[node->gasm.ctx->output_tmp1][3];
     Printftn("lea %df(%%rip), %s; jmp %df", fallthrough_label, tmp_gp, meet_label);
-    for (AsmParam *ap = node->asm_labels; ap; ap = ap->next) {
+    for (AsmParam *ap = node->gasm.labels; ap; ap = ap->next) {
       Printftn("%d:", ap->label_id);
       Printftn("lea %s(%%rip), %s", goto_label(ap->arg), tmp_gp);
       Printftn("jmp %df", meet_label);
@@ -4974,10 +4974,10 @@ void emit_text(Obj *fn) {
 // Logic should be in sync with gen_funcall_args()
 void prepare_funcall(Node *node, Scope *scope) {
   bool rtn_by_stk = is_mem_class(node->ty);
-  calling_convention(node->args, &(int){rtn_by_stk}, &(int){0}, NULL);
+  calling_convention(node->call.args, &(int){rtn_by_stk}, &(int){0}, NULL);
 
   int reg_arg_cnt = 0;
-  for (Obj *var = node->args; var; var = var->param_next) {
+  for (Obj *var = node->call.args; var; var = var->param_next) {
     var->is_local = true;
     if (var->pass_by_stack) {
       var->ofs = var->stack_offset;
