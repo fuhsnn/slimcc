@@ -27,6 +27,19 @@ typedef struct {
   int64_t enum_val;
 } VarScope;
 
+typedef enum {
+  PCD_MUL,
+  PCD_ADD,
+  PCD_SHFT,
+  PCD_CMP,
+  PCD_EQ,
+  PCD_BITAND,
+  PCD_XOR,
+  PCD_BITOR,
+  PCD_LOGAND,
+  PCD_LOGOR,
+} Preced;
+
 enum {
   SC_AUTO      = 1,
   SC_CONSTEXPR = 1 << 1,
@@ -176,22 +189,12 @@ static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
-static Node *log_or(Token **rest, Token *tok);
 static long double eval_double(Node *node);
 static uint64_t *eval_bitint(Node *node);
 static Node *conditional(Token **rest, Token *tok);
-static Node *log_and(Token **rest, Token *tok);
-static Node *bit_or(Token **rest, Token *tok);
-static Node *bit_xor(Token **rest, Token *tok);
-static Node *bit_and(Token **rest, Token *tok);
-static Node *equality(Token **rest, Token *tok);
-static Node *relational(Token **rest, Token *tok);
-static Node *shift(Token **rest, Token *tok);
-static Node *add(Token **rest, Token *tok);
 static Node *new_add(Node *lhs, Node *rhs, Token *tok);
 static Node *new_sub(Node *lhs, Node *rhs, Token *tok);
-static Node *mul(Token **rest, Token *tok);
-static Node *cast(Token **rest, Token *tok);
+static Node *binary(Token **rest, Token *tok, Preced stop);
 static Member *get_struct_member(Type *ty, Token *tok);
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind);
 static Type *struct_decl(Type *ty, int alt_align, int pack_align);
@@ -3751,7 +3754,7 @@ static Node *assign(Token **rest, Token *tok) {
 
 // conditional = logor ("?" expr? ":" conditional)?
 static Node *conditional(Token **rest, Token *tok) {
-  Node *cond = log_or(&tok, tok);
+  Node *cond = binary(&tok, tok, PCD_LOGOR);
 
   if (!equal(tok, "?")) {
     *rest = tok;
@@ -3790,139 +3793,156 @@ static Node *conditional(Token **rest, Token *tok) {
   return node;
 }
 
-// logor = logand ("||" logand)*
-static Node *log_or(Token **rest, Token *tok) {
-  Node *node = log_and(&tok, tok);
-  while (equal(tok, "||")) {
-    Token *start = tok;
-    node = new_binary(ND_LOGOR, cond_cast(node), cond_cast(log_and(&tok, tok->next)), start);
-  }
-  *rest = tok;
-  return node;
-}
-
-// logand = bitor ("&&" bitor)*
-static Node *log_and(Token **rest, Token *tok) {
-  Node *node = bit_or(&tok, tok);
-  while (equal(tok, "&&")) {
-    Token *start = tok;
-    node = new_binary(ND_LOGAND, cond_cast(node), cond_cast(bit_or(&tok, tok->next)), start);
-  }
-  *rest = tok;
-  return node;
-}
-
-// bitor = bitxor ("|" bitxor)*
-static Node *bit_or(Token **rest, Token *tok) {
-  Node *node = bit_xor(&tok, tok);
-  while (equal(tok, "|")) {
-    Token *start = tok;
-    node = new_binary(ND_BITOR, node, bit_xor(&tok, tok->next), start);
-  }
-  *rest = tok;
-  return node;
-}
-
-// bitxor = bitand ("^" bitand)*
-static Node *bit_xor(Token **rest, Token *tok) {
-  Node *node = bit_and(&tok, tok);
-  while (equal(tok, "^")) {
-    Token *start = tok;
-    node = new_binary(ND_BITXOR, node, bit_and(&tok, tok->next), start);
-  }
-  *rest = tok;
-  return node;
-}
-
-// bitand = equality ("&" equality)*
-static Node *bit_and(Token **rest, Token *tok) {
-  Node *node = equality(&tok, tok);
-  while (equal(tok, "&")) {
-    Token *start = tok;
-    node = new_binary(ND_BITAND, node, equality(&tok, tok->next), start);
-  }
-  *rest = tok;
-  return node;
-}
-
-// equality = relational ("==" relational | "!=" relational)*
-static Node *equality(Token **rest, Token *tok) {
-  Node *node = relational(&tok, tok);
+static Node *binary(Token **rest, Token *tok, Preced stop) {
+  Node *node = unary(&tok, tok);
 
   for (;;) {
     Token *start = tok;
-
-    if (equal(tok, "==")) {
-      node = new_binary(ND_EQ, node, relational(&tok, tok->next), start);
+    if (equal(tok, "*")) {
+      node = new_binary(ND_MUL, node, unary(&tok, tok->next), start);
       continue;
     }
-
-    if (equal(tok, "!=")) {
-      node = new_binary(ND_NE, node, relational(&tok, tok->next), start);
+    if (equal(tok, "/")) {
+      node = new_binary(ND_DIV, node, unary(&tok, tok->next), start);
       continue;
     }
-
-    *rest = tok;
-    return node;
+    if (equal(tok, "%")) {
+      node = new_binary(ND_MOD, node, unary(&tok, tok->next), start);
+      continue;
+    }
+    if (stop == PCD_MUL)
+      return *rest = tok, node;
+    break;
   }
-}
-
-// relational = shift ("<" shift | "<=" shift | ">" shift | ">=" shift)*
-static Node *relational(Token **rest, Token *tok) {
-  Node *node = shift(&tok, tok);
 
   for (;;) {
     Token *start = tok;
-
-    if (equal(tok, "<")) {
-      node = new_binary(ND_LT, node, shift(&tok, tok->next), start);
+    if (equal(tok, "+")) {
+      node = new_add(node, binary(&tok, tok->next, PCD_MUL), start);
       continue;
     }
-
-    if (equal(tok, "<=")) {
-      node = new_binary(ND_LE, node, shift(&tok, tok->next), start);
+    if (equal(tok, "-")) {
+      node = new_sub(node, binary(&tok, tok->next, PCD_MUL), start);
       continue;
     }
-
-    if (equal(tok, ">")) {
-      node = new_binary(ND_GT, node, shift(&tok, tok->next), start);
-      continue;
-    }
-
-    if (equal(tok, ">=")) {
-      node = new_binary(ND_GE, node, shift(&tok, tok->next), start);
-      continue;
-    }
-
-    *rest = tok;
-    return node;
+    if (stop == PCD_ADD)
+      return *rest = tok, node;
+    break;
   }
-}
-
-// shift = add ("<<" add | ">>" add)*
-static Node *shift(Token **rest, Token *tok) {
-  Node *node = add(&tok, tok);
 
   for (;;) {
     Token *start = tok;
-
     if (equal(tok, "<<")) {
-      node = new_binary(ND_SHL, node, add(&tok, tok->next), start);
+      node = new_binary(ND_SHL, node, binary(&tok, tok->next, PCD_ADD), start);
       continue;
     }
-
     if (equal(tok, ">>")) {
       add_type(node);
       if (node->ty->is_unsigned)
-        node = new_binary(ND_SHR, node, add(&tok, tok->next), start);
+        node = new_binary(ND_SHR, node, binary(&tok, tok->next, PCD_ADD), start);
       else
-        node = new_binary(ND_SAR, node, add(&tok, tok->next), start);
+        node = new_binary(ND_SAR, node, binary(&tok, tok->next, PCD_ADD), start);
       continue;
     }
-
-    *rest = tok;
-    return node;
+    if (stop == PCD_SHFT)
+      return *rest = tok, node;
+    break;
   }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "<")) {
+      node = new_binary(ND_LT, node, binary(&tok, tok->next, PCD_SHFT), start);
+      continue;
+    }
+    if (equal(tok, "<=")) {
+      node = new_binary(ND_LE, node, binary(&tok, tok->next, PCD_SHFT), start);
+      continue;
+    }
+    if (equal(tok, ">")) {
+      node = new_binary(ND_GT, node, binary(&tok, tok->next, PCD_SHFT), start);
+      continue;
+    }
+    if (equal(tok, ">=")) {
+      node = new_binary(ND_GE, node, binary(&tok, tok->next, PCD_SHFT), start);
+      continue;
+    }
+    if (stop == PCD_CMP)
+      return *rest = tok, node;
+    break;
+  }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "==")) {
+      node = new_binary(ND_EQ, node, binary(&tok, tok->next, PCD_CMP), start);
+      continue;
+    }
+    if (equal(tok, "!=")) {
+      node = new_binary(ND_NE, node, binary(&tok, tok->next, PCD_CMP), start);
+      continue;
+    }
+    if (stop == PCD_EQ)
+      return *rest = tok, node;
+    break;
+  }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "&")) {
+      node = new_binary(ND_BITAND, node, binary(&tok, tok->next, PCD_EQ), start);
+      continue;
+    }
+    if (stop == PCD_BITAND)
+      return *rest = tok, node;
+    break;
+  }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "^")) {
+      node = new_binary(ND_BITXOR, node, binary(&tok, tok->next, PCD_BITAND), start);
+      continue;
+    }
+    if (stop == PCD_XOR)
+      return *rest = tok, node;
+    break;
+  }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "|")) {
+      node = new_binary(ND_BITOR, node, binary(&tok, tok->next, PCD_XOR), start);
+      continue;
+    }
+    if (stop == PCD_BITOR)
+      return *rest = tok, node;
+    break;
+  }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "&&")) {
+      node = new_binary(ND_LOGAND,
+        cond_cast(node), cond_cast(binary(&tok, tok->next, PCD_BITOR)), start);
+      continue;
+    }
+    if (stop == PCD_LOGAND)
+      return *rest = tok, node;
+    break;
+  }
+
+  for (;;) {
+    Token *start = tok;
+    if (equal(tok, "||")) {
+      node = new_binary(ND_LOGOR,
+        cond_cast(node), cond_cast(binary(&tok, tok->next, PCD_LOGAND)), start);
+      continue;
+    }
+    break;
+  }
+  *rest = tok;
+  return node;
 }
 
 // In C, `+` operator is overloaded to perform the pointer arithmetic.
@@ -3988,83 +4008,27 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   error_tok(tok, "invalid operands");
 }
 
-// add = mul ("+" mul | "-" mul)*
-static Node *add(Token **rest, Token *tok) {
-  Node *node = mul(&tok, tok);
-
-  for (;;) {
-    Token *start = tok;
-
-    if (equal(tok, "+")) {
-      node = new_add(node, mul(&tok, tok->next), start);
-      continue;
-    }
-
-    if (equal(tok, "-")) {
-      node = new_sub(node, mul(&tok, tok->next), start);
-      continue;
-    }
-
-    *rest = tok;
-    return node;
-  }
-}
-
-// mul = cast ("*" cast | "/" cast | "%" cast)*
-static Node *mul(Token **rest, Token *tok) {
-  Node *node = cast(&tok, tok);
-
-  for (;;) {
-    Token *start = tok;
-
-    if (equal(tok, "*")) {
-      node = new_binary(ND_MUL, node, cast(&tok, tok->next), start);
-      continue;
-    }
-
-    if (equal(tok, "/")) {
-      node = new_binary(ND_DIV, node, cast(&tok, tok->next), start);
-      continue;
-    }
-
-    if (equal(tok, "%")) {
-      node = new_binary(ND_MOD, node, cast(&tok, tok->next), start);
-      continue;
-    }
-
-    *rest = tok;
-    return node;
-  }
-}
-
-// cast = "(" type-name ")" cast | unary
-static Node *cast(Token **rest, Token *tok) {
-  Token *start = tok;
-  Type *ty;
-  if (is_typename_paren(&tok, tok, &ty)) {
-    Node *calc = calc_vla(ty, start);
-    Node *node = new_cast(cast(rest, tok), ty);
-    node->tok = start;
-    if (calc)
-      return new_binary(ND_COMMA, calc, node, start);
-    return node;
-  }
-  return unary(rest, tok);
-}
-
-// unary = ("+" | "-" | "*" | "&" | "!" | "~") cast
-//       | ("++" | "--") unary
-//       | "&&" ident
-//       | postfix
 static Node *unary(Token **rest, Token *tok) {
+  // Casts
+  {
+    Type *ty;
+    if (is_typename_paren(&tok, tok, &ty)) {
+      Node *calc = calc_vla(ty, tok);
+      Node *node = new_cast(unary(rest, tok), ty);
+      if (calc)
+        return new_binary(ND_COMMA, calc, node, tok);
+      return node;
+    }
+  }
+
   if (equal(tok, "+"))
-    return new_unary(ND_POS, cast(rest, tok->next), tok);
+    return new_unary(ND_POS, unary(rest, tok->next), tok);
 
   if (equal(tok, "-"))
-    return new_unary(ND_NEG, cast(rest, tok->next), tok);
+    return new_unary(ND_NEG, unary(rest, tok->next), tok);
 
   if (equal(tok, "&")) {
-    Node *lhs = cast(rest, tok->next);
+    Node *lhs = unary(rest, tok->next);
     add_type(lhs);
     if (is_bitfield(lhs))
       error_tok(tok, "cannot take address of bitfield");
@@ -4076,7 +4040,7 @@ static Node *unary(Token **rest, Token *tok) {
     // in the C spec, but dereferencing a function shouldn't do
     // anything. If foo is a function, `*foo`, `**foo` or `*****foo`
     // are all equivalent to just `foo`.
-    Node *node = cast(rest, tok->next);
+    Node *node = unary(rest, tok->next);
     add_type(node);
     if (node->ty->kind == TY_FUNC)
       return node;
@@ -4090,10 +4054,10 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "!"))
-    return new_unary(ND_NOT, cond_cast(cast(rest, tok->next)), tok);
+    return new_unary(ND_NOT, cond_cast(unary(rest, tok->next)), tok);
 
   if (equal(tok, "~"))
-    return new_unary(ND_BITNOT, cast(rest, tok->next), tok);
+    return new_unary(ND_BITNOT, unary(rest, tok->next), tok);
 
   // Read ++i as i+=1
   if (equal(tok, "++"))
