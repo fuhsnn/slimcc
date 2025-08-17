@@ -13,6 +13,7 @@
 
 // Represents a deleted hash entry
 #define TOMBSTONE ((void *)-1)
+#define TOMBSTONE_CASE ((uintptr_t)-1)
 
 static uint64_t fnv_hash(char *s, int len) {
   uint64_t hash = 0xcbf29ce484222325;
@@ -53,25 +54,27 @@ static void rehash(HashMap *map) {
   *map = map2;
 }
 
-static bool match(HashEntry *ent, char *key, int keylen) {
-  return ent->key && ent->key != TOMBSTONE &&
-         ent->keylen == keylen && memcmp(ent->key, key, keylen) == 0;
-}
-
 static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
   if (!map->buckets)
     return NULL;
 
   uint64_t hash = fnv_hash(key, keylen);
+  uint64_t msk = map->capacity - 1;
+  HashEntry *buckets = map->buckets;
 
-  for (int i = 0; i < map->capacity; i++) {
-    HashEntry *ent = &map->buckets[(hash + i) & (map->capacity - 1)];
-    if (match(ent, key, keylen))
-      return ent;
-    if (ent->key == NULL)
+  for (;;) {
+    HashEntry *ent = &buckets[hash++ & msk];
+
+    switch ((uintptr_t)ent->key) {
+    case 0:
       return NULL;
+    default:
+      if (ent->keylen == keylen && !memcmp(ent->key, key, keylen))
+        return ent;
+    case TOMBSTONE_CASE:
+      break;
+    }
   }
-  internal_error();
 }
 
 static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
@@ -83,21 +86,25 @@ static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
   }
 
   uint64_t hash = fnv_hash(key, keylen);
+  uint64_t msk = map->capacity - 1;
+  HashEntry *buckets = map->buckets;
 
-  for (int i = 0; i < map->capacity; i++) {
-    HashEntry *ent = &map->buckets[(hash + i) & (map->capacity - 1)];
+  for (;;) {
+    HashEntry *ent = &buckets[hash++ & msk];
 
-    if (match(ent, key, keylen))
-      return ent;
-
-    if (ent->key == NULL) {
+    switch ((uintptr_t)ent->key) {
+    case 0:
       ent->key = key;
       ent->keylen = keylen;
       map->used++;
       return ent;
+    default:
+      if (ent->keylen == keylen && !memcmp(ent->key, key, keylen))
+        return ent;
+    case TOMBSTONE_CASE:
+      break;
     }
   }
-  internal_error();
 }
 
 void *hashmap_get(HashMap *map, char *key) {
