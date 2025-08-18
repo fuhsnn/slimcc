@@ -180,7 +180,7 @@ static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
 static bool gen_load_opt_gp(Node *node, Reg r);
 static Node *bool_expr_opt(Node *node, bool *flip);
-static void gen_mem_copy2(char *sofs, char *sptr, char *dofs, char *dptr, int sz);
+static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz);
 static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64);
 
 static void imm_add(char *op, char *tmp, int64_t val);
@@ -643,7 +643,7 @@ static void pop_by_ty(Type *ty) {
     int pos = pop_bitint(ty->size);
     char sofs_buf[STRBUF_SZ];
     snprintf(sofs_buf, STRBUF_SZ, "%d", pos);
-    gen_mem_copy2(sofs_buf, lvar_ptr, tmpbuf(ty->size), lvar_ptr, ty->size);
+    gen_mem_copy(sofs_buf, lvar_ptr, tmpbuf(ty->size), lvar_ptr, ty->size);
     return;
   }
   default: pop("%rax"); return;
@@ -716,7 +716,7 @@ static char *regop_ax(Type *ty) {
   internal_error();
 }
 
-static void gen_mem_copy2(char *sofs, char *sptr, char *dofs, char *dptr, int sz) {
+static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz) {
   for (int i = 0; i < sz;) {
     int rem = sz - i;
     if (rem >= 16) {
@@ -730,14 +730,6 @@ static void gen_mem_copy2(char *sofs, char *sptr, char *dofs, char *dptr, int sz
     Printftn("mov %s, %d+%s(%s)", reg_dx(p2), i, dofs, dptr);
     i += p2;
   }
-}
-
-static void gen_mem_copy(int sofs, char *sptr, int dofs, char *dptr, int sz) {
-  char sofs_buf[STRBUF_SZ];
-  snprintf(sofs_buf, STRBUF_SZ, "%d", sofs);
-  char dofs_buf[STRBUF_SZ];
-  snprintf(dofs_buf, STRBUF_SZ, "%d", dofs);
-  gen_mem_copy2(sofs_buf, sptr, dofs_buf, dptr, sz);
 }
 
 static void gen_mem_zero(int dofs, char *dptr, int sz) {
@@ -1075,10 +1067,10 @@ static void load3(Type *ty, char *sofs, char *sptr) {
     Printftn("movsd %s(%s), %%xmm0", sofs, sptr);
     return;
   case TY_LDOUBLE:
-    gen_mem_copy2(sofs, sptr, tmpbuf(10), lvar_ptr, 10);
+    gen_mem_copy(sofs, sptr, tmpbuf(10), lvar_ptr, 10);
     return;
   case TY_BITINT:
-    gen_mem_copy2(sofs, sptr, tmpbuf(ty->size), lvar_ptr, ty->size);
+    gen_mem_copy(sofs, sptr, tmpbuf(ty->size), lvar_ptr, ty->size);
     return;
   }
 
@@ -1122,7 +1114,7 @@ static void store3(Type *ty, char *dofs, char *dptr) {
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
-    gen_mem_copy2("0", "%rax", dofs, dptr, ty->size);
+    gen_mem_copy("0", "%rax", dofs, dptr, ty->size);
     return;
   case TY_FLOAT:
     Printftn("movss %%xmm0, %s(%s)", dofs, dptr);
@@ -1131,10 +1123,10 @@ static void store3(Type *ty, char *dofs, char *dptr) {
     Printftn("movsd %%xmm0, %s(%s)", dofs, dptr);
     return;
   case TY_LDOUBLE:
-    gen_mem_copy2(tmpbuf(10), lvar_ptr, dofs, dptr, 10);
+    gen_mem_copy(tmpbuf(10), lvar_ptr, dofs, dptr, 10);
     return;
   case TY_BITINT:
-    gen_mem_copy2(tmpbuf(ty->size), lvar_ptr, dofs, dptr, ty->size);
+    gen_mem_copy(tmpbuf(ty->size), lvar_ptr, dofs, dptr, ty->size);
     return;
   }
 
@@ -1655,7 +1647,7 @@ static void copy_struct_mem(void) {
   Type *ty = current_fn->ty->return_ty;
 
   Printftn("mov -%d(%s), %%rcx", rtn_ptr_ofs, lvar_ptr);
-  gen_mem_copy(0, "%rax", 0, "%rcx", ty->size);
+  gen_mem_copy("0", "%rax", "0", "%rcx", ty->size);
   Printstn("mov %%rcx, %%rax");
 }
 
@@ -1679,9 +1671,9 @@ static void gen_vaarg_reg_copy(Type *ty, Obj *var) {
       Printstn("addq 16(%%rax), %%rcx"); // reg_save_area
       Printstn("addq $8, (%%rax)");
     }
-    gen_mem_copy(0, "%rcx",
-                 ofs + var->ofs, var->ptr,
-                 MIN(8, ty->size - ofs));
+    char dofs[STRBUF_SZ];
+    snprintf(dofs, STRBUF_SZ, "%d", ofs + var->ofs);
+    gen_mem_copy("0", "%rcx", dofs, var->ptr, MIN(8, ty->size - ofs));
   }
   Printftn("lea %d(%s), %%rdx", var->ofs, var->ptr);
   return;
@@ -2385,7 +2377,7 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_bitint_builtin_call(node->arith_kind);
 
     pop("%rax");
-    gen_mem_copy2(tmpbuf(sz), lvar_ptr, "0", "%rax", res_ty->size);
+    gen_mem_copy(tmpbuf(sz), lvar_ptr, "0", "%rax", res_ty->size);
 
     load_val2(ty_int, bits, argreg32[0], NULL);
     Printftn("lea %s(%s), %s", tmpbuf(sz), lvar_ptr, argreg64[1]);
@@ -2460,7 +2452,7 @@ static void gen_expr2(Node *node, bool is_void) {
       if (bitint_rtn_need_copy(node->ty->bit_cnt)) {
         char sofs[STRBUF_SZ];
         snprintf(sofs, STRBUF_SZ, "%d", node->call.rtn_buf->ofs);
-        gen_mem_copy2(sofs, node->call.rtn_buf->ptr,
+        gen_mem_copy(sofs, node->call.rtn_buf->ptr,
           tmpbuf(node->ty->size), lvar_ptr, node->ty->size);
       } else {
         Printftn("mov %%rax, %s(%s)", tmpbuf(node->ty->size), lvar_ptr);
@@ -2567,7 +2559,7 @@ static void gen_expr2(Node *node, bool is_void) {
     push();
     gen_expr(node->m.rhs);
     char *reg = pop_inreg(tmpreg64[0]);
-    gen_mem_copy(0, "%rax", 0, reg, 24);
+    gen_mem_copy("0", "%rax", "0", reg, 24);
     return;
   }
   case ND_VA_ARG: {
@@ -2780,7 +2772,7 @@ static void gen_stmt(Node *node) {
       if (!is_mem_class(ty)) {
         if (has_defr(node)) {
           if (ty->kind != TY_BITINT)
-            gen_mem_copy2("0", "%rax", tmpbuf(ty->size), lvar_ptr, ty->size);
+            gen_mem_copy("0", "%rax", tmpbuf(ty->size), lvar_ptr, ty->size);
           push_bitint(ty->size);
           gen_defr(node);
           Printftn("lea %d(%s), %%rax", pop_bitint(ty->size), lvar_ptr);
@@ -2908,12 +2900,12 @@ static void gen_void_assign(Node *node) {
     lhs->ty->kind != TY_BOOL && is_memop(rhs->m.lhs, sofs, &sptr, true))) {
     char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
-      gen_mem_copy2(sofs, sptr, dofs, dptr, write_size(lhs));
+      gen_mem_copy(sofs, sptr, dofs, dptr, write_size(lhs));
       return;
     }
     if (!is_bitfield(lhs) && !lhs->ty->is_atomic) {
       gen_addr(lhs);
-      gen_mem_copy2(sofs, sptr, "0", "%rax", write_size(lhs));
+      gen_mem_copy(sofs, sptr, "0", "%rax", write_size(lhs));
       return;
     }
   }
