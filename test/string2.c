@@ -19,6 +19,12 @@ int main(void){
   ASSERT(7 * sizeof(char32_t), sizeof(str32));
   ASSERT(7 * sizeof(wchar_t), sizeof(strw));
 
+  ASSERT('f', str[0]);
+  ASSERT('o', str[1]);
+  ASSERT('o', str16[2]);
+  ASSERT('b', str32[3]);
+  ASSERT('a', strw[4]);
+
   char *arr[] = { "fo", {"oba"}, ("rfoob"), {(("ar"))} };
   ASSERT(1, !strcmp("fo", arr[0]) );
   ASSERT(1, !strcmp("oba", arr[1]) );
@@ -38,6 +44,26 @@ int main(void){
   ASSERT(1, !strcmp("baz", sarr[0].a) );
   ASSERT(1, !strcmp("foobaz", sarr[1].p) );
   ASSERT(1, !strcmp("bar", sarr[1].a) );
+
+  {
+    struct Flex { int i;  char arr[]; };
+    static struct Flex gflex = {12, "345"};
+
+    ASSERT(12, gflex.i);
+    ASSERT('3', gflex.arr[0]);
+    ASSERT('4', gflex.arr[1]);
+    ASSERT('5', gflex.arr[2]);
+    ASSERT('\0', gflex.arr[3]);
+
+#if defined(__slimcc__) || defined(__widcc__)
+    struct Flex lflex = {6, "789"};
+    ASSERT(6, lflex.i);
+    ASSERT('7', lflex.arr[0]);
+    ASSERT('8', lflex.arr[1]);
+    ASSERT('9', lflex.arr[2]);
+    ASSERT('\0', lflex.arr[3]);
+#endif
+  }
 
   printf("OK\n");
 }

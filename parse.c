@@ -90,6 +90,7 @@ struct Initializer {
     INIT_FLEX,
     INIT_FLEX_NESTED,
     INIT_LIST,
+    INIT_STR_ARRAY,
     INIT_EXPR,
     INIT_TOK
   } kind;
@@ -1782,44 +1783,19 @@ static Token *skip_excess_element(Token *tok) {
   return tok;
 }
 
-// string-initializer = string-literal
 static void string_initializer(Token *tok, Initializer *init) {
   if (tok->ty->base->size != init->ty->base->size)
-    error_tok(tok, "array initialization with string of different character size");
+    error_tok(tok, "array initialization with string of incompatible size");
 
-  if (init->kind == INIT_FLEX)
-    new_initializer(init, array_of(init->ty->base, tok->ty->array_len), false);
-
-  int len = MIN(init->ty->array_len, tok->ty->array_len);
-
-  switch (init->ty->base->size) {
-  case 1: {
-    char *str = tok->str;
-    for (int i = 0; i < len; i++) {
-      init->mem_arr[i].kind = INIT_EXPR;
-      init->mem_arr[i].expr = new_num(str[i], tok);
-    }
-    break;
+  if (init->kind == INIT_LIST) {
+    free_initializers(init);
+    init->mem_cnt = 0;
+  } else if (init->kind == INIT_FLEX) {
+    init->ty = array_of(init->ty->base, tok->ty->array_len);
   }
-  case 2: {
-    uint16_t *str = (uint16_t *)tok->str;
-    for (int i = 0; i < len; i++) {
-      init->mem_arr[i].kind = INIT_EXPR;
-      init->mem_arr[i].expr = new_num(str[i], tok);
-    }
-    break;
-  }
-  case 4: {
-    uint32_t *str = (uint32_t *)tok->str;
-    for (int i = 0; i < len; i++) {
-      init->mem_arr[i].kind = INIT_EXPR;
-      init->mem_arr[i].expr = new_num(str[i], tok);
-    }
-    break;
-  }
-  default:
-    internal_error();
-  }
+  init->kind = INIT_STR_ARRAY;
+  init->tok = tok;
+  return;
 }
 
 static bool is_str_tok(Token **rest, Token *tok, Token **str_tok) {
@@ -1987,7 +1963,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
       error_tok(tok, "nested initialization of flexible array member");
     }
 
-    if (is_integer(init->ty->base)) {
+    if (init->ty->base->kind != TY_BOOL && is_integer(init->ty->base)) {
       Token *str_tok;
       Token *tok2;
       if (equal(tok, "{") && is_str_tok(&tok2, tok->next, &str_tok)) {
@@ -2111,7 +2087,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     ty->origin = orig;
 
     Initializer *i = &init->mem_arr[init->mem_cnt - 1];
-    if (i->kind == INIT_LIST)
+    if (i->ty->size > 0)
       ty->size += i->ty->size;
     var->ty = ty;
   }
@@ -2156,6 +2132,28 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
 
     Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), node, tok);
     add_type(n);
+    return expr->next = n;
+  }
+  case INIT_STR_ARRAY: {
+    Token *str = init->tok;
+    size_t base_sz = init->ty->base->size;
+    Obj *var = new_anon_gvar(init->ty);
+    var->is_string_lit = true;
+    if (str->ty->array_len < init->ty->array_len) {
+      var->init_data = calloc(1, base_sz * init->ty->array_len);
+      memcpy(var->init_data, str->str, base_sz * str->ty->array_len);
+    } else {
+      var->init_data = malloc(base_sz * init->ty->array_len);
+      memcpy(var->init_data, str->str, base_sz * init->ty->array_len);
+    }
+    Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), new_var_node(var, tok), tok);
+    add_type(n->m.lhs);
+    add_type(n->m.rhs);
+    n->ty = ty_void;
+
+    // non-static struct with flexible array member, supported as extension
+    if (n->m.lhs->ty->size < 0)
+      n->m.lhs->ty = init->ty;
     return expr->next = n;
   }
   case INIT_LIST: {
@@ -2311,6 +2309,11 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
     }
     }
     error_tok(node->tok, "unknown initializer");
+  }
+  case INIT_STR_ARRAY: {
+    size_t len = MIN(init->ty->array_len, init->tok->ty->array_len);
+    memcpy(buf + offset, init->tok->str, init->ty->base->size * len);
+    return cur;
   }
   case INIT_LIST: {
     if (init->ty->kind == TY_ARRAY) {
