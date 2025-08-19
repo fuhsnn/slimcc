@@ -106,7 +106,7 @@ ANON_UNION_END
 // For local variable initializer.
 typedef struct InitDesg InitDesg;
 struct InitDesg {
-  InitDesg *next;
+  InitDesg *parent;
   int idx;
   Member *member;
   Obj *var;
@@ -2081,11 +2081,11 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     bool is_volatile = ty->is_volatile;
     bool is_restrict = ty->is_restrict;
 
-    init->ty = ty;
     init->kind = INIT_EXPR;
     init->expr = assign(rest, tok);
     ptr_convert(&init->expr);
     *ty = *init->expr->ty;
+    init->ty = ty;
 
     ty->origin = init->expr->ty->origin ? init->expr->ty->origin : init->expr->ty;
     ty->is_atomic = is_atomic;
@@ -2122,12 +2122,12 @@ static Node *init_desg_expr(InitDesg *desg, Token *tok) {
     return new_var_node(desg->var, tok);
 
   if (desg->member) {
-    Node *node = new_unary(ND_MEMBER, init_desg_expr(desg->next, tok), tok);
+    Node *node = new_unary(ND_MEMBER, init_desg_expr(desg->parent, tok), tok);
     node->m.member = desg->member;
     return node;
   }
 
-  Node *lhs = init_desg_expr(desg->next, tok);
+  Node *lhs = init_desg_expr(desg->parent, tok);
   Node *rhs = new_num(desg->idx, tok);
   return new_unary(ND_DEREF, new_add(lhs, rhs, tok), tok);
 }
@@ -2141,7 +2141,7 @@ static Node *init_num_tok(Initializer *init, Node *node) {
   return init->expr;
 }
 
-static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg *desg, Token *tok) {
+static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Token *tok) {
   switch (init->kind) {
   case INIT_NONE:
   case INIT_FLEX:
@@ -2151,7 +2151,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
   case INIT_EXPR: {
     Node *node = init_num_tok(init, new_node(ND_NUM, init->tok));
 
-    if (ty->kind == TY_ARRAY)
+    if (init->ty->kind == TY_ARRAY)
       error_tok(node->tok, "array initializer must be an initializer list");
 
     Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), node, tok);
@@ -2159,20 +2159,20 @@ static Node *create_lvar_init(Node *expr, Initializer *init, Type *ty, InitDesg 
     return expr->next = n;
   }
   case INIT_LIST: {
-    if (ty->kind == TY_ARRAY) {
+    if (init->ty->kind == TY_ARRAY) {
       for (int i = 0; i < init->mem_cnt; i++) {
-        InitDesg desg2 = {.next = desg, .idx = i};
-        expr = create_lvar_init(expr, &init->mem_arr[i], ty->base, &desg2, tok);
+        InitDesg desg2 = {.parent = desg, .idx = i};
+        expr = create_lvar_init(expr, &init->mem_arr[i], &desg2, tok);
       }
       return expr;
     }
-    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
-        if (ty->kind == TY_UNION && init->initmem != mem)
+    if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
+      for (Member *mem = init->ty->members; mem_iter(&mem); mem = mem->next) {
+        if (init->ty->kind == TY_UNION && init->initmem != mem)
           continue;
 
-        InitDesg desg2 = {.next = desg, .member = mem};
-        expr = create_lvar_init(expr, &init->mem_arr[mem->idx], mem->ty, &desg2, tok);
+        InitDesg desg2 = {.parent = desg, .member = mem};
+        expr = create_lvar_init(expr, &init->mem_arr[mem->idx], &desg2, tok);
       }
       return expr;
     }
@@ -2197,7 +2197,7 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
 
   InitDesg desg = {.var = var};
   Node head = {0};
-  create_lvar_init(&head, &init, var->ty, &desg, tok);
+  create_lvar_init(&head, &init, &desg, tok);
   free_initializers(&init);
 
   if (opt_optimize && init.kind == INIT_EXPR)
@@ -2237,7 +2237,7 @@ static long double read_double_buf(char *buf, Type *ty) {
 }
 
 static Relocation *
-write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int offset, EvalKind ev_kind) {
+write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalKind ev_kind) {
   switch (init->kind) {
   case INIT_NONE:
   case INIT_FLEX:
@@ -2246,16 +2246,16 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
   case INIT_TOK:
   case INIT_EXPR: {
     Node *node = init_num_tok(init, &(Node){.kind = ND_NUM, .tok = init->tok});
-    node = assign_cast(ty, node);
+    node = assign_cast(init->ty, node);
 
-    if (ty->kind == TY_ARRAY)
+    if (init->ty->kind == TY_ARRAY)
       error_tok(node->tok, "array initializer must be an initializer list");
 
     // Direct initialization with a const variable
     if (init->kind == INIT_EXPR) {
       int sofs;
       Obj *var = NULL;
-      if (is_compatible(ty, init->expr->ty))
+      if (is_compatible(init->ty, init->expr->ty))
         var = eval_var(init->expr, &sofs, false);
 
       if (var && var->init_data && !var->is_weak &&
@@ -2264,7 +2264,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         while (srel && srel->offset < sofs)
           srel = srel->next;
 
-        for (int pos = 0; pos < ty->size && (pos + sofs) < var->ty->size;) {
+        for (int pos = 0; pos < init->ty->size && (pos + sofs) < var->ty->size;) {
           if (srel && srel->offset == (pos + sofs)) {
             cur = cur->next = ast_arena_calloc(sizeof(Relocation));
             cur->offset = (pos + offset);
@@ -2282,8 +2282,8 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
       }
     }
 
-    if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
-      EvalContext ctx = {.kind = (ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
+    if (is_integer(init->ty) || init->ty->kind == TY_PTR || init->ty->kind == TY_NULLPTR) {
+      EvalContext ctx = {.kind = (init->ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
       int64_t val = eval2(node, &ctx);
       if (ctx.label || ctx.var) {
         Relocation *rel = ast_arena_calloc(sizeof(Relocation));
@@ -2293,19 +2293,19 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
         rel->addend = val;
         return cur->next = rel;
       }
-      memcpy(buf + offset, &val, ty->size);
+      memcpy(buf + offset, &val, init->ty->size);
       return cur;
     }
 
-    switch (ty->kind) {
+    switch (init->ty->kind) {
     case TY_FLOAT: BUFF_CAST(float, (buf + offset)) = eval_double(node); return cur;
     case TY_DOUBLE: BUFF_CAST(double, (buf + offset)) = eval_double(node); return cur;
     case TY_LDOUBLE: BUFF_CAST(long double, (buf + offset)) = eval_double(node); return cur;
     case TY_BITINT: {
       uint64_t *data = eval_bitint(node);
-      if (ty->bit_cnt < ty->size * 8)
-        eval_bitint_sign_ext(ty->bit_cnt, data, ty->size * 8, ty->is_unsigned);
-      memcpy(buf + offset, data, ty->size);
+      if (init->ty->bit_cnt < init->ty->size * 8)
+        eval_bitint_sign_ext(init->ty->bit_cnt, data, init->ty->size * 8, init->ty->is_unsigned);
+      memcpy(buf + offset, data, init->ty->size);
       free(data);
       return cur;
     }
@@ -2313,16 +2313,16 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     error_tok(node->tok, "unknown initializer");
   }
   case INIT_LIST: {
-    if (ty->kind == TY_ARRAY) {
-      int sz = ty->base->size;
+    if (init->ty->kind == TY_ARRAY) {
+      int sz = init->ty->base->size;
       for (int i = 0; i < init->mem_cnt; i++)
-        cur = write_gvar_data(cur, &init->mem_arr[i], ty->base, buf, offset + sz * i, ev_kind);
+        cur = write_gvar_data(cur, &init->mem_arr[i], buf, offset + sz * i, ev_kind);
       return cur;
     }
 
-    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
-        if (ty->kind == TY_UNION && init->initmem != mem)
+    if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
+      for (Member *mem = init->ty->members; mem_iter(&mem); mem = mem->next) {
+        if (init->ty->kind == TY_UNION && init->initmem != mem)
           continue;
 
         Initializer *init2 = &init->mem_arr[mem->idx];
@@ -2368,7 +2368,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
           }
           continue;
         }
-        cur = write_gvar_data(cur, init2, mem->ty, buf, offset + mem->offset, ev_kind);
+        cur = write_gvar_data(cur, init2, buf, offset + mem->offset, ev_kind);
       }
       return cur;
     }
@@ -2390,7 +2390,7 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
 
   Relocation head = {0};
   char *buf = calloc(1, var->ty->size);
-  write_gvar_data(&head, &init, var->ty, buf, 0, EV_LABEL);
+  write_gvar_data(&head, &init, buf, 0, EV_LABEL);
   free_initializers(&init);
 
   var->init_data = buf;
@@ -2403,7 +2403,7 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
 
   Relocation head = {0};
   char *buf = calloc(1, init_var->ty->size);
-  write_gvar_data(&head, &init, init_var->ty, buf, 0, EV_CONST);
+  write_gvar_data(&head, &init, buf, 0, EV_CONST);
   free_initializers(&init);
 
   init_var->init_data = var->constexpr_data = buf;
