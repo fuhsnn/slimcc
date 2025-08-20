@@ -100,7 +100,7 @@ struct Initializer {
 ANON_UNION_START
     Token *tok;
     Node *expr;
-    Member *initmem;
+    int32_t init_idx;
 ANON_UNION_END
 };
 
@@ -1783,7 +1783,13 @@ static Token *skip_excess_element(Token *tok) {
   return tok;
 }
 
-static void string_initializer(Token *tok, Initializer *init) {
+static bool string_initializer(Token **rest, Token *tok, Initializer *init) {
+  int paren = 0;
+  while (consume(&tok, tok, "("))
+    paren++;
+
+  if (tok->kind != TK_STR)
+    return false;
   if (tok->ty->base->size != init->ty->base->size)
     error_tok(tok, "array initialization with string of incompatible size");
 
@@ -1795,20 +1801,12 @@ static void string_initializer(Token *tok, Initializer *init) {
   }
   init->kind = INIT_STR_ARRAY;
   init->tok = tok;
-  return;
-}
 
-static bool is_str_tok(Token **rest, Token *tok, Token **str_tok) {
-  if (equal(tok, "(") && is_str_tok(&tok, tok->next, str_tok) &&
-    consume(rest, tok, ")"))
-    return true;
-
-  if (tok->kind == TK_STR) {
-    *str_tok = tok;
-    *rest = tok->next;
-    return true;
-  }
-  return false;
+  tok = tok->next;
+  while (paren--)
+    tok = skip(tok, ")");
+  *rest = tok;
+  return true;
 }
 
 // array-designator = "[" const-expr "]"
@@ -1889,7 +1887,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
     init->kind = INIT_LIST;
 
     if (init->ty->kind == TY_UNION) {
-      init->initmem = mem;
+      init->init_idx = mem->idx;
       designation(rest, tok, &init->mem_arr[mem->idx]);
     } else {
       designation(&tok, tok, &init->mem_arr[mem->idx]);
@@ -1927,17 +1925,20 @@ static int count_array_init_elements(Token *tok, Type *ty) {
   return max;
 }
 
-static void braced_initializer(Token **rest, Token *tok, Initializer *init) {
+static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, bool has_brace) {
   Token *start = tok;
   list_initializer(&tok, tok, init, 0);
 
-  for (; comma_list(rest, &tok, "}", tok != start);) {
-    if (equal(tok, ".") || equal(tok, "[")) {
-      designation(&tok, tok, init);
-      continue;
+  if (has_brace) {
+    for (; comma_list(&tok, &tok, "}", tok != start);) {
+      if (equal(tok, ".") || equal(tok, "[")) {
+        designation(&tok, tok, init);
+        continue;
+      }
+      tok = skip_excess_element(tok);
     }
-    tok = skip_excess_element(tok);
   }
+  *rest = tok;
 }
 
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int idx) {
@@ -1948,104 +1949,67 @@ static void list_initializer(Token **rest, Token *tok, Initializer *init, int id
       break;
 
     initializer2(&tok, tok2, &init->mem_arr[idx]);
+
+    if (init->ty->kind == TY_UNION) {
+      init->init_idx = idx;
+      break;
+    }
   }
   *rest = tok;
 }
 
-// initializer = string-initializer | array-initializer
-//             | struct-initializer | union-initializer
-//             | assign
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
+  bool has_brace = consume(&tok, tok, "{");
+  if (has_brace && consume(rest, tok, "}")) {
+    if (init->kind == INIT_FLEX)
+      new_initializer(init, array_of(init->ty->base, 0), false);
+    init->kind = INIT_NONE;
+    return;
+  }
+
   if (init->ty->kind == TY_ARRAY) {
-    if (init->kind == INIT_FLEX_NESTED) {
-      if (consume(&tok, tok, "{") && consume(rest, tok, "}"))
-        return;
+    if (init->kind == INIT_FLEX_NESTED)
       error_tok(tok, "nested initialization of flexible array member");
-    }
 
     if (init->ty->base->kind != TY_BOOL && is_integer(init->ty->base)) {
-      Token *str_tok;
-      Token *tok2;
-      if (equal(tok, "{") && is_str_tok(&tok2, tok->next, &str_tok)) {
-        if (consume(rest, tok2, "}")) {
-          string_initializer(str_tok, init);
-          return;
-        }
-      } else if (is_str_tok(rest, tok, &str_tok)) {
-        string_initializer(str_tok, init);
+      if (string_initializer(&tok, tok, init)) {
+        *rest = has_brace ? (consume(&tok, tok, ","), skip(tok, "}")) : tok;
         return;
       }
     }
 
-    bool has_brace = consume(&tok, tok, "{");
     if (init->kind == INIT_FLEX) {
       int len = count_array_init_elements(tok, init->ty);
       new_initializer(init, array_of(init->ty->base, len), false);
     }
-    if (has_brace)
-      braced_initializer(rest, tok, init);
-    else
-      list_initializer(rest, tok, init, 0);
+    aggregate_initializer(rest, tok, init, has_brace);
     return;
   }
 
-  if (init->ty->kind == TY_STRUCT) {
-    if (consume(&tok, tok, "{")) {
-      braced_initializer(rest, tok, init);
-      return;
+  if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
+    if (!has_brace) {
+      Node *expr = assign(rest, tok);
+      add_type(expr);
+      if (is_compatible(expr->ty, init->ty)) {
+        init->kind = INIT_EXPR;
+        init->expr = expr;
+        return;
+      }
     }
-
-    Node *expr = assign(rest, tok);
-    add_type(expr);
-    if (is_compatible(expr->ty, init->ty)) {
-      init->kind = INIT_EXPR;
-      init->expr = expr;
-      return;
-    }
-
-    list_initializer(rest, tok, init, 0);
+    aggregate_initializer(rest, tok, init, has_brace);
     return;
   }
 
-  if (init->ty->kind == TY_UNION) {
-    if (consume(&tok, tok, "{")) {
-      init->initmem = init->ty->members;
-      mem_iter(&init->initmem);
-      braced_initializer(rest, tok, init);
-      return;
-    }
-
-    Node *expr = assign(rest, tok);
-    add_type(expr);
-    if (is_compatible(expr->ty, init->ty)) {
-      init->kind = INIT_EXPR;
-      init->expr = expr;
-      return;
-    }
-
-    init->initmem = init->ty->members;
-    mem_iter(&init->initmem);
-    initializer2(rest, tok, &init->mem_arr[0]);
-    return;
-  }
-
-  if (equal(tok, "{")) {
-    if (consume(rest, tok->next, "}"))
-      return;
-    initializer2(&tok, tok->next, init);
-    *rest = skip(tok, "}");
-    return;
-  }
-
-  if ((tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) && equal(tok->next, ",")) {
+  if ((tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) &&
+    (equal(tok->next, ",") || equal(tok->next, "}"))) {
     init->kind = INIT_TOK;
     init->tok = tok;
-    *rest = tok->next;
-    return;
+    tok = tok->next;
+  } else {
+    init->kind = INIT_EXPR;
+    init->expr = assign(&tok, tok);
   }
-
-  init->kind = INIT_EXPR;
-  init->expr = assign(rest, tok);
+  *rest = has_brace ? (consume(&tok, tok, ","), skip(tok, "}")) : tok;
 }
 
 static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
@@ -2081,7 +2045,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   initializer2(rest, tok, init);
   var->ty = init->ty;
 
-  if (ty->is_flexible) {
+  if (ty->is_flexible && init->kind == INIT_LIST) {
     Type *orig = ty->origin ? ty->origin : ty;
     ty = copy_type(ty);
     ty->origin = orig;
@@ -2166,7 +2130,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
     }
     if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
       for (Member *mem = init->ty->members; mem_iter(&mem); mem = mem->next) {
-        if (init->ty->kind == TY_UNION && init->initmem != mem)
+        if (init->ty->kind == TY_UNION && init->init_idx != mem->idx)
           continue;
 
         InitDesg desg2 = {.parent = desg, .member = mem};
@@ -2325,7 +2289,7 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
 
     if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
       for (Member *mem = init->ty->members; mem_iter(&mem); mem = mem->next) {
-        if (init->ty->kind == TY_UNION && init->initmem != mem)
+        if (init->ty->kind == TY_UNION && init->init_idx != mem->idx)
           continue;
 
         Initializer *init2 = &init->mem_arr[mem->idx];
