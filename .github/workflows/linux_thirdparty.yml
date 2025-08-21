@@ -46,6 +46,7 @@ jobs:
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
+          - { vm: interop, proj: test_lwan }
           - { vm: interop, proj: test_micropython }
           - { vm: interop, proj: test_msgpack }
           - { vm: interop, proj: test_muon }
@@ -94,11 +95,13 @@ jobs:
           - { vm: main, proj: test_gzip }
           - { vm: main, proj: test_janet }
           - { vm: main, proj: test_jemalloc }
+          - { vm: main, proj: test_jerryscript }
           - { vm: main, proj: test_jq }
           - { vm: main, proj: test_lame }
           - { vm: main, proj: test_libarchive }
           - { vm: main, proj: test_libevent }
           - { vm: main, proj: test_libgc }
+          - { vm: main, proj: test_libgit2 }
           - { vm: main, proj: test_libgmp }
           - { vm: main, proj: test_libjansson }
           - { vm: main, proj: test_libjpeg }
@@ -147,6 +150,7 @@ jobs:
           - { vm: main, proj: test_toybox }
           - { vm: main, proj: test_vim }
           - { vm: main, proj: test_wget }
+          - { vm: main, proj: test_wolfssl }
           - { vm: main, proj: test_xxhash }
           - { vm: main, proj: test_xz }
           - { vm: main, proj: test_yash }

@@ -1,6 +1,17 @@
 set -eu
 set -o pipefail
 
+test_jerryscript() {
+ github_tar jerryscript-project jerryscript v3.0.0
+ sed -i 's|if(NOT (${CMAKE_C_COMPILER_ID} STREQUAL MSVC))|if(FALSE)|g' tests/unit-doc/CMakeLists.txt
+ replace_line "#ifdef __GNUC__" "#if 1" jerry-ext/include/jerryscript-ext/autorelease.impl.h
+ replace_line "#elif defined(__GNUC__)" "#elif 1" jerry-ext/include/jerryscript-ext/module.h
+ python3 tools/run-tests.py --unittest
+ python3 tools/run-tests.py --jerry-tests
+ python3 tools/run-tests.py --test262
+ python3 tools/build.py
+}
+
 test_bash() {
  url_tar https://ftpmirror.gnu.org/gnu/bash/bash-5.3.tar.gz bash
  fix_and_configure
@@ -195,7 +206,7 @@ test_gawk() {
 }
 
 test_git() {
- github_tar git git v2.50.1
+ github_tar git git v2.51.0
  make CC="$CC" test -j2
 }
 
@@ -318,6 +329,18 @@ test_libgc() {
  sh autogen.sh
  fix_and_configure --disable-dynamic-loading --enable-threads=posix --with-libatomic-ops=none
  make check
+}
+
+test_libgit2(){
+ github_tar libgit2 libgit2 v1.9.1
+ use_stdatomic '#ifdef GIT_THREADS' src/util/thread.h
+ sed -i 's|defined(GIT_BUILTIN_ATOMIC)|1|g' src/util/thread.h
+ sed -i 's|__atomic_exchange(ptr, &newval, &foundval,|return atomic_exchange_explicit(ptr, newval,|g' src/util/thread.h
+ sed -i 's|__atomic_compare_exchange(ptr, &foundval, &newval, false,|atomic_compare_exchange_strong_explicit(ptr, \&foundval, newval,|g' src/util/thread.h
+ replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" deps/ntlmclient/utf8.h
+ sed -i 's|__has_builtin(__builtin_add_overflow)|0|g' src/util/integer.h
+ cmake . -DCMAKE_C_COMPILER=$CC
+ make && ctest --verbose
 }
 
 test_libgmp() {
@@ -455,6 +478,23 @@ test_lua() {
  ../lua -e"_port=true" all.lua # assertion at files.lua:84 fail in CI
 }
 
+test_lwan(){
+ github_tar lpereira lwan v0.7
+ use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
+ use_stdbit '#include <assert.h>' src/lib/timeout.c
+ use_stdbit '#include <assert.h>' src/samples/techempower/json.c
+ use_stdbit '#include <stdlib.h>' src/lib/lwan-private.h
+ sed -i 's|defined(LWAN_HAVE_BUILTIN_CLZLL)|(1)|g' src/lib/lwan-private.h
+ sed -i 's|__sync_##O##_and_fetch|__builtin_atomic_arith_##O|g' src/lib/lwan.h
+ sed -i 's|__uint128_t|unsigned _BitInt(128)|g' src/lib/lwan-thread.c
+ sed -i 's|__builtin_inf()|HUGE_VAL|g' src/samples/forthsalon/forth.c
+ replace_line "#if defined(__x86_64__)" "#if 0" src/lib/lwan-websocket.c
+ replace_line "#if __x86_64__" "#if 0" src/lib/lwan-template.c
+ mkdir build && cd build
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu -DCMAKE_C_FLAGS=-fPIC
+ make testsuite
+}
+
 test_mawk() {
  github_tar ThomasDickey mawk-snapshots t20250131
  ./configure
@@ -524,7 +564,7 @@ test_msgpack() {
 }
 
 test_muon() {
- git_fetch https://github.com/muon-build/muon e6038ff33267ebf035d4aa839d7815fb34c427b0 muon
+ git_fetch https://github.com/muon-build/muon 91e7009351bbfa032ddcc25764c92fced0f47faa muon
  sh ./bootstrap.sh build
  build/muon-bootstrap setup build
  sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
@@ -678,7 +718,7 @@ test_quickjs() {
 }
 
 test_redis() {
- github_tar redis redis 8.2.0
+ github_tar redis redis 8.2.1
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -805,6 +845,13 @@ test_wget() {
  make check
 }
 
+test_wolfssl() {
+ github_tar wolfSSL wolfssl v5.8.2-stable
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
+ make && ctest
+}
+
 test_wuffs() {
  git_fetch https://github.com/google/wuffs 67e9078eabcbda867ccc9fa912d81cba4fb0aa89 wuffs
  sed -i 's|Building (C)|Build CC:$CC|g' ./build-example.sh
@@ -922,12 +969,12 @@ build_lynx() {
 }
 
 build_nano() {
- url_tar https://www.nano-editor.org/dist/v8/nano-8.5.tar.gz nano
+ url_xz https://www.nano-editor.org/dist/v8/nano-8.6.tar.xz nano
  ./configure && make
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250809
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250816
  ./configure
  make V=1
 }

@@ -18,7 +18,9 @@ RUN apt-get install -y --no-install-recommends \
  # liballegro5
  xvfb xauth \
  # msgpack
- libgtest-dev
+ libgtest-dev \
+ # lwan
+ python3-requests libsqlite3-dev liblua5.1-0-dev libmariadb-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
