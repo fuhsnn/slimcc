@@ -1010,9 +1010,9 @@ static void gen_addr(Node *node) {
         clobber_all_regs();
         Printftn(".byte 0x66; lea \"%s\"@tlsgd(%%rip), %%rdi", get_symbol(node->m.var));
         if (opt_use_plt)
-          Printstn(".value 0x6666; rex64 call __tls_get_addr@PLT");
+          Printstn(".value 0x6666; rex64; call __tls_get_addr@PLT");
         else
-          Printstn(".byte 0x66; rex64 call *__tls_get_addr@GOTPCREL(%%rip)");
+          Printstn(".byte 0x66; rex64; call *__tls_get_addr@GOTPCREL(%%rip)");
         return;
       }
 
