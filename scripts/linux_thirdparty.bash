@@ -1,15 +1,10 @@
 set -eu
 set -o pipefail
 
-test_jerryscript() {
- github_tar jerryscript-project jerryscript v3.0.0
- sed -i 's|if(NOT (${CMAKE_C_COMPILER_ID} STREQUAL MSVC))|if(FALSE)|g' tests/unit-doc/CMakeLists.txt
- replace_line "#ifdef __GNUC__" "#if 1" jerry-ext/include/jerryscript-ext/autorelease.impl.h
- replace_line "#elif defined(__GNUC__)" "#elif 1" jerry-ext/include/jerryscript-ext/module.h
- python3 tools/run-tests.py --unittest
- python3 tools/run-tests.py --jerry-tests
- python3 tools/run-tests.py --test262
- python3 tools/build.py
+test_ag() {
+ git_fetch https://github.com/aswild/the_silver_searcher 7b571a8a94d0e22a06e3313cb0d9672b416fb2c1 ag
+ sh autogen.sh
+ ./configure && make test
 }
 
 test_bash() {
@@ -101,12 +96,11 @@ test_c23doku() {
 test_c3() {
  github_tar c3lang c3c v0.7.4
  replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
- mkdir build && cd build
- cmake ../ -DCMAKE_C_COMPILER=$CC
+ cmake_init
  make VERBOSE=1
  cd ../test
- ../build/c3c compile-test unit
- ../build/c3c compile-run -O1 src/test_suite_runner.c3 -- ../build/c3c test_suite/
+ ../cmakebuild/c3c compile-test unit
+ ../cmakebuild/c3c compile-run -O1 src/test_suite_runner.c3 -- ../cmakebuild/c3c test_suite/
 }
 
 test_calc() {
@@ -123,8 +117,7 @@ test_cjson() {
  git_fetch https://github.com/DaveGamble/cJSON 8f2beb57ddad1f94bed899790b00f46df893ccac cjson
  replace_line "#if (defined(__GNUC__) || defined(__SUNPRO_CC) || defined (__SUNPRO_C)) && defined(CJSON_API_VISIBILITY)" "#if 1" cJSON.h
  sed -i 's/if defined(__GNUC__) || defined(__ghs__)/if 1/g' tests/unity/src/unity_internals.h
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC
+ cmake_init
  make check
 }
 
@@ -176,6 +169,17 @@ test_espruino() {
  sed -i 's|-lstdc++|-lc|g' make/family/LINUX.make
  BOARD=LINUX PYTHON=python3 USE_TENSORFLOW=0 make CC=$CC LD=$CC V=1 -j1
  ./bin/espruino --test-all
+}
+
+test_jerryscript() {
+ github_tar jerryscript-project jerryscript v3.0.0
+ sed -i 's|if(NOT (${CMAKE_C_COMPILER_ID} STREQUAL MSVC))|if(FALSE)|g' tests/unit-doc/CMakeLists.txt
+ replace_line "#ifdef __GNUC__" "#if 1" jerry-ext/include/jerryscript-ext/autorelease.impl.h
+ replace_line "#elif defined(__GNUC__)" "#elif 1" jerry-ext/include/jerryscript-ext/module.h
+ python3 tools/run-tests.py --unittest
+ python3 tools/run-tests.py --jerry-tests
+ python3 tools/run-tests.py --test262
+ python3 tools/build.py
 }
 
 test_file() {
@@ -256,7 +260,7 @@ test_gzip() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-1
+ github_tar ImageMagick ImageMagick 7.1.2-2
  fix_and_configure
  make check V=1
 }
@@ -287,8 +291,7 @@ test_lame() {
 
 test_liballegro5() {
  git_fetch https://github.com/liballeg/allegro5 c870f466638b345639b46628e4d421443aacff71 liballegro5
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
+ cmake_init
  make VERBOSE=1
  make run_standalone_tests
  . ../tests/grab_bitmap_suites.sh
@@ -339,7 +342,7 @@ test_libgit2(){
  sed -i 's|__atomic_compare_exchange(ptr, &foundval, &newval, false,|atomic_compare_exchange_strong_explicit(ptr, \&foundval, newval,|g' src/util/thread.h
  replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" deps/ntlmclient/utf8.h
  sed -i 's|__has_builtin(__builtin_add_overflow)|0|g' src/util/integer.h
- cmake . -DCMAKE_C_COMPILER=$CC
+ cmake_init
  make && ctest --verbose
 }
 
@@ -354,7 +357,7 @@ test_libjansson() {
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/jansson.h
  convert_atomic_x_fetch src/jansson.h
  use_stdatomic "#include <stdio.h>" src/hashtable_seed.c
- cmake . -DCMAKE_C_COMPILER=$CC -DJANSSON_BUILD_DOCS=OFF -DCMAKE_C_FLAGS=-lm -DHAVE_ATOMIC_BUILTINS=1
+ cmake_init -DCMAKE_C_FLAGS=-lm -DJANSSON_BUILD_DOCS=OFF -DHAVE_ATOMIC_BUILTINS=1
  make && make test
 }
 
@@ -367,8 +370,7 @@ test_libjpeg() {
 test_libjsonc() {
  git_fetch https://github.com/json-c/json-c 7cee5237dc6c0831e3f9dc490394eaea44636861 json-c
  sed -i 's|json_object_new_double(NAN)|json_object_new_double(nan(\"\"))|g' json_tokener.c
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC -DHAVE_VASPRINTF=no
+ cmake_init -DHAVE_VASPRINTF=no
  make && make test
 }
 
@@ -465,8 +467,7 @@ test_libxml() {
 
 test_libyaml() {
  git_fetch https://github.com/yaml/libyaml 840b65c40675e2d06bf40405ad3f12dec7f35923 libyaml
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC
+ cmake_init
  make && make test
 }
 
@@ -479,19 +480,17 @@ test_lua() {
 }
 
 test_lwan(){
- github_tar lpereira lwan v0.7
+ git_fetch https://github.com/lpereira/lwan 3557d0345d5e2f6ebef8a38b56b121ae61e23318 lwan
  use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
  use_stdbit '#include <assert.h>' src/lib/timeout.c
  use_stdbit '#include <assert.h>' src/samples/techempower/json.c
  use_stdbit '#include <stdlib.h>' src/lib/lwan-private.h
- sed -i 's|defined(LWAN_HAVE_BUILTIN_CLZLL)|(1)|g' src/lib/lwan-private.h
  sed -i 's|__sync_##O##_and_fetch|__builtin_atomic_arith_##O|g' src/lib/lwan.h
  sed -i 's|__uint128_t|unsigned _BitInt(128)|g' src/lib/lwan-thread.c
  sed -i 's|__builtin_inf()|HUGE_VAL|g' src/samples/forthsalon/forth.c
  replace_line "#if defined(__x86_64__)" "#if 0" src/lib/lwan-websocket.c
  replace_line "#if __x86_64__" "#if 0" src/lib/lwan-template.c
- mkdir build && cd build
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu -DCMAKE_C_FLAGS=-fPIC
+ cmake_init
  make testsuite
 }
 
@@ -504,7 +503,7 @@ test_mawk() {
 test_mbedtls() {
  url_bz https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.0.0-beta/mbedtls-4.0.0-beta.tar.bz2 mbedtls
  replace_line "    (defined(__GNUC__) || defined(__clang__)) && defined(MBEDTLS_ARCH_IS_X64)" "1" tf-psa-crypto/drivers/builtin/src/aesni.h
- cmake . -DCMAKE_C_COMPILER=$CC
+ cmake_init
  make && ctest -j2
 }
 
@@ -542,8 +541,7 @@ test_mimalloc() {
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/prim/prim.c
- mkdir build && cd build
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
+ cmake_init
  make && make test
 }
 
@@ -556,8 +554,7 @@ test_mruby() {
 test_msgpack() {
  github_tar msgpack msgpack-c c-6.1.0
  convert_atomic_x_fetch cmake/sysdep.h.in
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC -DMSGPACK_32BIT=OFF -DBUILD_SHARED_LIBS=ON \
+ cmake_init -DMSGPACK_32BIT=OFF -DBUILD_SHARED_LIBS=ON \
   -DMSGPACK_CHAR_SIGN=signed -DMSGPACK_BUILD_EXAMPLES=ON -DMSGPACK_BUILD_TESTS=ON
  make
  make test
@@ -749,8 +746,13 @@ test_ruby() {
  make check -j4
 }
 
+test_rvvm() {
+ git_fetch https://github.com/LekKit/RVVM 87ca4d60d6e633abd4d306c6abfd01eb1a8f991c rvvm
+ make test
+}
+
 test_samba() {
- github_tar samba-team samba samba-4.22.3
+ github_tar samba-team samba samba-4.22.4
  sed -i 's|conf.fatal|print|g' buildtools/wafsamba/generic_cc.py
  sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
  sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
@@ -772,9 +774,8 @@ test_scrapscript() {
 test_sokol() {
  git_fetch https://github.com/floooh/sokol 4012bd599827c9721502a90eaa661249b156d09e sokol
  sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.0|g' tests/ext/CMakeLists.txt
-
- mkdir cmakebuild && cd cmakebuild
- cmake ../tests/ -DCMAKE_C_COMPILER=$CC -DSOKOL_BACKEND=SOKOL_GLCORE
+ cd tests
+ cmake_init -DSOKOL_BACKEND=SOKOL_GLCORE
  make VERBOSE=1 && ./sokol-test
 }
 
@@ -842,8 +843,7 @@ test_wget() {
 
 test_wolfssl() {
  github_tar wolfSSL wolfssl v5.8.2-stable
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS=-fPIC
+ cmake_init
  make && ctest
 }
 
@@ -869,8 +869,7 @@ test_xxhash() {
 
 test_xz() {
  url_tar https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.gz xz
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC
+ cmake_init
  make && make test
 }
 
@@ -922,8 +921,7 @@ build_erlang() {
 
 build_freetype() {
  url_tar https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-13-3/freetype-VER-2-13-3.tar.gz freetype
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=$(dirname $(find /usr/ 2>/dev/null | grep libbz2.so$))
+ cmake_init
  make
 }
 
@@ -932,14 +930,13 @@ build_gcc() {
  fix_configure
  sed -i 's/^\s*struct ucontext/ucontext_t/g' ./libgcc/config/i386/linux-unwind.h
  mkdir buildonly && cd "$_"
- export MAKEINFO=missing
- ../configure --enable-languages=c,c++ --disable-multilib --disable-bootstrap
+ MAKEINFO=true ../configure --enable-languages=c,c++ --disable-multilib --disable-bootstrap
  make
 }
 
 build_glfw() {
  git_fetch https://github.com/glfw/glfw 768e81a0eb3ae411d108168fdff7cd3335f2a34a glfw
- cmake ./ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
+ cmake_init -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
  make
 }
 
@@ -969,7 +966,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250816
+ github_tar ThomasDickey ncurses-snapshots v6_5_20250823
  ./configure
  make V=1
 }
@@ -991,9 +988,8 @@ build_q2rtx() {
  replace_line "#if (defined __GNUC__)" "#if 1" inc/common/intreadwrite.h
  replace_line "#define inline __inline" "" inc/shared/config.h
  sed -i 's|-msse2 -mfpmath=sse||g' CMakeLists.txt
- mkdir build && cd build
- cmake ../ -DUSE_SYSTEM_CURL=on -DUSE_SYSTEM_OPENAL=on -DUSE_SYSTEM_SDL2=on -DUSE_SYSTEM_ZLIB=on -DCONFIG_BUILD_GLSLANG=no \
-  -DCMAKE_C_COMPILER=$CC -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD -DSTBIR_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H -fms-anon-struct'
+ cmake_init -DUSE_SYSTEM_CURL=on -DUSE_SYSTEM_OPENAL=on -DUSE_SYSTEM_SDL2=on -DUSE_SYSTEM_ZLIB=on -DCONFIG_BUILD_GLSLANG=no \
+  -DCMAKE_C_FLAGS='-DSTBI_NO_SIMD -DSTBIR_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H -fms-anon-struct'
  make VERBOSE=1
 }
 
@@ -1021,8 +1017,7 @@ build_raylib_raygui() {
 build_sdl3() {
  github_tar libsdl-org SDL release-3.2.20
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_FLAGS='-fPIC -DSTBI_NO_SIMD' -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu
+ cmake_init -DCMAKE_C_FLAGS=-DSTBI_NO_SIMD
  make VERBOSE=1
 }
 
@@ -1065,7 +1060,13 @@ fix_configure() {
 
 fix_and_configure() {
  fix_configure
- ./configure $@
+ ./configure "$@"
+}
+
+cmake_init() {
+ mkdir cmakebuild && cd cmakebuild
+ cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu \
+  -DCMAKE_C_COMPILE_OPTIONS_PIC=-fPIC -DCMAKE_C_COMPILE_OPTIONS_PIE=-fPIE "$@"
 }
 
 replace_line() {

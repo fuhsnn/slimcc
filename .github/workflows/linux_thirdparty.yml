@@ -53,6 +53,7 @@ jobs:
           - { vm: interop, proj: test_nob }
           - { vm: interop, proj: test_quickjs }
           - { vm: interop, proj: test_redis }
+          - { vm: interop, proj: test_rvvm }
           - { vm: interop, proj: test_sokol }
           - { vm: interop, proj: test_valkey }
           - { vm: interop, proj: test_wasm3 }
@@ -66,6 +67,7 @@ jobs:
           - { vm: interop, proj: build_raylib_raygui }
           - { vm: interop, proj: build_sdl3 }
           - { vm: interop, proj: build_yquake2 }
+          - { vm: main, proj: test_ag }
           - { vm: main, proj: test_bash }
           - { vm: main, proj: test_bearssl }
           - { vm: main, proj: test_binutils }
