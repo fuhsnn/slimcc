@@ -323,6 +323,13 @@ bool equal_tok(Token *a, Token *b) {
   return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
 }
 
+static void chk_vla_expr_side_effect(Node *expr) {
+  while (expr->kind == ND_DEREF || expr->kind == ND_ADDR)
+    expr = expr->m.lhs;
+  if (expr->kind != ND_VAR)
+    error_tok(expr->tok, "execution of VLA expression not supported");
+}
+
 static Node *new_node(NodeKind kind, Token *tok) {
   Node *node = arena_calloc(&node_arena, sizeof(Node));
   node->kind = kind;
@@ -1575,6 +1582,12 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
     Node *node = expr(&tok, tok);
     add_type(node);
     ty = node->ty;
+
+    Type *t = ty;
+    while (t->kind == TY_PTR)
+      t = t->base;
+    if (t->kind == TY_VLA)
+      chk_vla_expr_side_effect(node);
   }
   *rest = skip(tok, ")");
   return ty;
@@ -4862,7 +4875,7 @@ static Node *primary(Token **rest, Token *tok) {
       ty = node->ty;
 
       if (ty->kind == TY_VLA)
-        return new_binary(ND_COMMA, node, vla_size(ty, start), tok);
+        chk_vla_expr_side_effect(node);
     }
     if (ty->kind == TY_VLA)
       return vla_size(ty, tok);
@@ -4900,7 +4913,7 @@ static Node *primary(Token **rest, Token *tok) {
       ty = node->ty;
 
       if (ty->kind == TY_VLA && ty->vla_len)
-        return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
+        chk_vla_expr_side_effect(node);
     }
     if (ty->kind == TY_VLA)
       return vla_count(ty, start, false);

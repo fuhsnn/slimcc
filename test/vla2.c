@@ -44,10 +44,6 @@ int fn3(int i) {
   return sizeof *t;
 }
 
-int fn4(int i){
-  return sizeof(*(char(*)[i+7]){0});
-}
-
 int vm_in_cast(int i) {
   (int(*)[i++])(void *)0;
 
@@ -103,8 +99,6 @@ int main(void){
 
   ASSERT(44, fn3(11));
   ASSERT(52, fn3(13));
-
-  ASSERT(14, fn4(7));
 
   ASSERT(12, vm_in_cast(9));
 
