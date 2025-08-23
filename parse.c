@@ -139,7 +139,8 @@ typedef struct {
 typedef struct JumpContext JumpContext;
 struct JumpContext {
   JumpContext *next;
-  DeferStmt *defr_end;
+  DeferStmt *dfr_lvl;
+  Token *dfr_ctx;
   Token *labels;
   Node *node;
 } *jump_ctx;
@@ -169,8 +170,8 @@ static DeferStmt *current_defr;
 static bool fn_use_vla;
 static bool dont_dealloc_vla;
 static bool is_global_init_context;
-static bool is_defer_context;
 static bool *eval_recover;
+static Token *defer_context;
 
 static bool is_typename(Token *tok);
 static Type *typename(Token **rest, Token *tok);
@@ -2562,7 +2563,7 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
         continue;
       }
 
-      if (!is_defer_context) {
+      if (!defer_context) {
         Node *node = new_label(start);
         node->lbl.unique_label = new_unique_name();
         node->lbl.next = labels;
@@ -2581,7 +2582,7 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
             break;
         if (!ctx)
           error_tok(tok, "stray case");
-        if (jump_ctx->defr_end != current_defr)
+        if (jump_ctx->dfr_lvl != current_defr || jump_ctx->dfr_ctx != defer_context)
           error_tok(tok, "illegal jump");
         active_sw = ctx->node;
       }
@@ -2681,7 +2682,8 @@ static void loop_body(Token **rest, Token *tok, Node *node, Token *label_list) {
 
   ctx.labels = label_list;
   ctx.node = node;
-  ctx.defr_end = current_defr;
+  ctx.dfr_lvl = current_defr;
+  ctx.dfr_ctx = defer_context;
 
   node->ctrl.then = secondary_block(rest, tok);
 
@@ -2708,6 +2710,9 @@ static JumpContext *resolve_labeled_jump(Token **rest, Token *tok, bool is_cont)
 
 static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   if (tok->kind == TK_return) {
+    if (defer_context)
+      error_tok(tok, "return in defer block");
+
     Node *node = new_node(ND_RETURN, tok);
     node->dfr_from = current_defr;
     if (consume(rest, tok->next, ";"))
@@ -2744,7 +2749,8 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     jump_ctx = &ctx;
 
     ctx.labels = label_list;
-    ctx.defr_end = current_defr;
+    ctx.dfr_lvl = current_defr;
+    ctx.dfr_ctx = defer_context;
 
     node->ctrl.then = secondary_block(rest, tok);
 
@@ -2840,8 +2846,9 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     bool is_cont = tok->kind == TK_continue;
     Node *node = new_node(is_cont ? ND_CONT : ND_BREAK, tok);
     JumpContext *ctx = resolve_labeled_jump(rest, tok, is_cont);
-
-    node->dfr_dest = ctx->defr_end;
+    if (ctx->dfr_ctx != defer_context)
+      error_tok(tok, "illegal jump");
+    node->dfr_dest = ctx->dfr_lvl;
     node->dfr_from = current_defr;
 
     node->lbl.next = ctx->node->ctrl.breaks;
@@ -2850,11 +2857,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_defer) {
-    bool ctx = is_defer_context;
-    is_defer_context = true;
+    Token *prev = defer_context;
+    defer_context = tok;
     Node *node = secondary_block(rest, tok->next);
     add_type(node);
-    is_defer_context = ctx;
+    defer_context = prev;
     new_defr(DF_DEFER_STMT)->stmt = node;
     return new_node(ND_NULL_STMT, tok);
   }
