@@ -479,12 +479,11 @@ test_lua() {
 }
 
 test_lwan(){
- github_tar lpereira lwan v0.7
+ git_fetch https://github.com/lpereira/lwan 3557d0345d5e2f6ebef8a38b56b121ae61e23318 lwan
  use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
  use_stdbit '#include <assert.h>' src/lib/timeout.c
  use_stdbit '#include <assert.h>' src/samples/techempower/json.c
  use_stdbit '#include <stdlib.h>' src/lib/lwan-private.h
- sed -i 's|defined(LWAN_HAVE_BUILTIN_CLZLL)|(1)|g' src/lib/lwan-private.h
  sed -i 's|__sync_##O##_and_fetch|__builtin_atomic_arith_##O|g' src/lib/lwan.h
  sed -i 's|__uint128_t|unsigned _BitInt(128)|g' src/lib/lwan-thread.c
  sed -i 's|__builtin_inf()|HUGE_VAL|g' src/samples/forthsalon/forth.c
