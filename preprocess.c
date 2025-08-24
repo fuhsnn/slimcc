@@ -81,7 +81,7 @@ struct tm *cur_time;
 
 static Token *preprocess2(Token *tok);
 static Token *preprocess3(Token *tok);
-static Macro *find_macro(Token *tok);
+static bool has_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
@@ -375,10 +375,7 @@ static Token *read_const_expr(Token *tok) {
         tok = tok->next;
         bool has_paren = consume(&tok, tok, "(");
 
-        if (tok->kind != TK_IDENT)
-          error_tok(start, "macro name must be an identifier");
-
-        to_int_token(start, !!find_macro(tok));
+        to_int_token(start, has_macro(tok));
         cur = cur->next = start;
         tok = tok->next;
         if (has_paren)
@@ -446,9 +443,9 @@ static bool get_cond_incl(CondIncl **cond) {
   return true;
 }
 
-static Macro *find_macro(Token *tok) {
+static bool has_macro(Token *tok) {
   if (tok->kind != TK_IDENT)
-    return NULL;
+    error_tok(tok, "expected an identifier");
   return hashmap_get2(&macros, tok->loc, tok->len);
 }
 
@@ -812,14 +809,14 @@ static Token *subst(Token *tok, MacroContext *ctx) {
     }
 
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
-      Macro *tail_m;
-      Token *rparen;
+      Macro *tail_m = NULL;
+      Token *rparen = NULL;
       if (equal(tok, ")")) {
         tail_m = ctx->m;
         rparen = tok;
         tok = tok->next;
-      } else {
-        tail_m = find_macro(tok);
+      } else if (tok->kind == TK_IDENT) {
+        tail_m = hashmap_get2(&macros, tok->loc, tok->len);
         rparen = tok->next;
         tok = skip(tok->next, ")");
       }
@@ -903,16 +900,20 @@ static Token *prepare_funclike_args(Token *start) {
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
 
-    if (!locked_macros && is_hash(tok)) {
-      tok = directives(&cur, tok);
-      continue;
-    }
-    if (locked_macros) {
+    if (!locked_macros) {
+      if (is_hash(tok)) {
+        tok = directives(&cur, tok);
+        continue;
+      }
+    } else {
       pop_macro_lock(tok);
-      Macro *m = find_macro(tok);
-      if (m && m->is_locked)
-        tok->dont_expand = true;
+      if (tok->kind == TK_IDENT) {
+        Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
+        if (m && m->is_locked)
+          tok->dont_expand = true;
+      }
     }
+
     cur = cur->next = tok;
     newline_to_space(cur);
 
@@ -949,10 +950,10 @@ static void free_funclike_args(Token *tok, Token *stop_tok) {
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
 static bool expand_macro(Token **rest, Token *tok, bool is_root) {
-  if (tok->dont_expand)
+  if (tok->kind != TK_IDENT || tok->dont_expand)
     return false;
 
-  Macro *m = find_macro(tok);
+  Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
   if (!m)
     return false;
 
@@ -1387,7 +1388,7 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "ifdef")) {
-    bool active = find_macro(tok->next);
+    bool active = has_macro(tok->next);
     push_cond_incl(tok, active);
     tok = skip_line(tok->next->next);
     if (!active)
@@ -1396,7 +1397,7 @@ static Token *directives(Token **cur, Token *start) {
   }
 
   if (equal(tok, "ifndef")) {
-    bool active = !find_macro(tok->next);
+    bool active = !has_macro(tok->next);
     push_cond_incl(tok, active);
     tok = skip_line(tok->next->next);
     if (!active)
@@ -1423,7 +1424,7 @@ static Token *directives(Token **cur, Token *start) {
       error_tok(start, "stray #elifdef");
     cond->tok->is_incl_guard = false;
 
-    if (!cond->been_active && find_macro(tok->next)) {
+    if (!cond->been_active && has_macro(tok->next)) {
       cond->been_active = true;
       return skip_line(tok->next->next);
     }
@@ -1436,7 +1437,7 @@ static Token *directives(Token **cur, Token *start) {
       error_tok(start, "stray #elifndef");
     cond->tok->is_incl_guard = false;
 
-    if (!cond->been_active && !find_macro(tok->next)) {
+    if (!cond->been_active && !has_macro(tok->next)) {
       cond->been_active = true;
       return skip_line(tok->next->next);
     }
