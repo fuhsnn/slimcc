@@ -2667,7 +2667,7 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
 
 static Node *secondary_block(Token **rest, Token *tok) {
   if (equal(tok, "{"))
-    return compound_stmt(rest, tok->next, ND_BLOCK);
+    return compound_stmt(rest, tok, ND_BLOCK);
 
   DeferStmt *dfr = new_block_scope();
   Node head = {0};
@@ -2868,7 +2868,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (equal(tok, "{"))
-    return compound_stmt(rest, tok->next, ND_BLOCK);
+    return compound_stmt(rest, tok, ND_BLOCK);
 
   return expr_stmt(rest, tok);
 }
@@ -2891,7 +2891,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   Node *node = new_node(kind, tok);
   node->dfr_dest = current_defr;
 
-  local_labels(&tok, tok);
+  local_labels(&tok, tok->next);
 
   Node head = {0};
   Node *cur = &head;
@@ -4865,7 +4865,7 @@ static Node *primary(Token **rest, Token *tok) {
       if (is_constant_context())
         error_tok(tok, "statement expresssion in constant context");
 
-      Node *node = compound_stmt(&tok, tok->next->next, ND_STMT_EXPR);
+      Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
       *rest = skip(tok, ")");
       return node;
     }
@@ -5135,7 +5135,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     enter_scope();
     ty->scopes = scope;
   }
-  fn->body = compound_stmt2(rest, tok->next, ND_BLOCK);
+  fn->body = compound_stmt2(rest, tok, ND_BLOCK);
 
   if (ty->pre_calc) {
     Node *calc = new_unary(ND_EXPR_STMT, ty->pre_calc, tok);

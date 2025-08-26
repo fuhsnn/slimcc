@@ -4800,6 +4800,9 @@ void emit_text(Obj *fn) {
   Printftn(".type \"%s\", @function", fn_name);
   Printfsn("\"%s\":", fn_name);
 
+  if (opt_g)
+    print_loc(fn->body->tok);
+
   if (fn->is_naked) {
     gen_stmt_naked(fn->body);
 
