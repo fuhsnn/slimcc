@@ -1629,11 +1629,12 @@ static Node *calc_vla(Type *ty, Token *tok) {
   return n;
 }
 
-static Node *new_vla(Node *sz, Obj *var) {
-  Node *node = new_unary(ND_ALLOCA, sz, sz->tok);
+static Node *new_vla(Token *name, Type *ty) {
+  Node *node = vla_size(ty, name);
+  add_type(node);
+  node = new_unary(ND_ALLOCA, node, name);
   node->ty = pointer_to(ty_void);
-  node->m.var = var;
-  add_type(sz);
+  node->m.var = new_lvar(get_ident(name), ty);
   return node;
 }
 
@@ -1704,7 +1705,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (ty->kind == TY_VLA) {
     fn_use_vla = true;
 
-    Node *node = new_vla(vla_size(ty, name), new_lvar(get_ident(name), ty));
+    Node *node = new_vla(name, ty);
 
     DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
     defr->vla = node->m.var;

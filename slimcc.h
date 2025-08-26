@@ -1,3 +1,6 @@
+#ifndef SLIMCC_H
+#define SLIMCC_H
+
 #define _XOPEN_SOURCE 700
 #include <assert.h>
 #include <errno.h>
@@ -922,3 +925,5 @@ extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
 extern char *default_ld;
 extern char *default_as;
+
+#endif

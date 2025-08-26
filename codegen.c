@@ -95,7 +95,7 @@ static char *rip = "%rip";
 static char *rbp = "%rbp";
 static char *rbx = "%rbx";
 
-static Obj *current_fn;
+static Obj *codegen_fn;
 static char *lvar_ptr;
 static int va_gp_start;
 static int va_fp_start;
@@ -231,7 +231,7 @@ static void push_ref(Obj *var) {
     return;
   hashmap_put(ext_refs, var->name, (void *)1);
 
-  FuncObj *fn = current_fn->output;
+  FuncObj *fn = codegen_fn->output;
   if (fn->ref_cnt == fn->ref_capacity) {
     fn->ref_capacity += 4;
     fn->refs = realloc(fn->refs, sizeof(Obj *) * fn->ref_capacity);
@@ -240,7 +240,7 @@ static void push_ref(Obj *var) {
 }
 
 static char *get_symbol(Obj *var) {
-  if (current_fn && current_fn != var) {
+  if (codegen_fn && codegen_fn != var) {
     if (var->is_static_lvar)
       var->is_live = true;
     else if (!var->is_definition || var->is_static)
@@ -510,7 +510,7 @@ static Slot *pop_tmpstack(int sz) {
   }
 
   if (sl->kind == SL_ST) {
-    if (!opt_reuse_stack || current_fn->dont_reuse_stk) {
+    if (!opt_reuse_stack || codegen_fn->dont_reuse_stk) {
       peak_stk_usage += sz * 8;
       sl->st_ofs = -peak_stk_usage;
     } else {
@@ -1611,7 +1611,7 @@ static void copy_ret_buffer(Obj *var) {
 }
 
 static void copy_struct_reg(void) {
-  Type *ty = current_fn->ty->return_ty;
+  Type *ty = codegen_fn->ty->return_ty;
   int gp = 0, fp = 0;
   char *sptr = "%rax";
 
@@ -1644,7 +1644,7 @@ static void copy_struct_reg(void) {
 }
 
 static void copy_struct_mem(void) {
-  Type *ty = current_fn->ty->return_ty;
+  Type *ty = codegen_fn->ty->return_ty;
 
   Printftn("mov -%d(%s), %%rcx", rtn_ptr_ofs, lvar_ptr);
   gen_mem_copy("0", "%rax", "0", "%rcx", ty->size);
@@ -1717,7 +1717,7 @@ static void gen_defr(Node *node) {
       while (defr->next != end && defr->next->kind == DF_VLA_DEALLOC)
         defr = defr->next;
 
-      if (!current_fn->dealloc_vla) {
+      if (!codegen_fn->dealloc_vla) {
         defr = defr->next;
         continue;
       }
@@ -2753,7 +2753,7 @@ static void gen_stmt(Node *node) {
     Printfsn("%s:", node->lbl.unique_label);
     return;
   case ND_RETURN: {
-    if (current_fn->is_noreturn)
+    if (codegen_fn->is_noreturn)
       error_tok(node->tok, "function is noreturn");
 
     if (!node->m.lhs) {
@@ -3810,7 +3810,7 @@ static Reg ident_reg(char *str, Token *tok) {
   error_tok(tok, "unknown register");
 }
 
-static void asm_clobbers(Token *tok, int *x87_clobber) {
+static void asm_prepare_clobbers(Token *tok, int *x87_clobber) {
   if (!tok)
     return;
 
@@ -4104,7 +4104,7 @@ void prepare_inline_asm(Node *node) {
   asm_fill_ops(node);
 
   int x87_clobber = 0;
-  asm_clobbers(node->gasm.clobbers, &x87_clobber);
+  asm_prepare_clobbers(node->gasm.clobbers, &x87_clobber);
 
   asm_constraint(node->gasm.inputs, x87_clobber);
   asm_constraint(node->gasm.outputs, 0);
@@ -4606,7 +4606,7 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   int max_depth = bottom;
   for (Scope *sub = sc->children; sub; sub = sub->sibling_next) {
     int sub_depth= assign_lvar_offsets(sub, bottom);
-    if (!opt_reuse_stack || current_fn->dont_reuse_stk)
+    if (!opt_reuse_stack || codegen_fn->dont_reuse_stk)
       bottom = max_depth = sub_depth;
     else
       max_depth = MAX(max_depth, sub_depth);
@@ -4817,7 +4817,7 @@ void emit_text(Obj *fn) {
 
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
   lvar_ptr = (lvar_align > 16) ? rbx : rbp;
-  current_fn = fn;
+  codegen_fn = fn;
   ext_refs = &(HashMap){0};
   rtn_label = count();
 
@@ -4957,7 +4957,7 @@ void emit_text(Obj *fn) {
   if (ext_refs->buckets)
     free(ext_refs->buckets);
   ext_refs = NULL;
-  current_fn = NULL;
+  codegen_fn = NULL;
 
   fclose(output_file);
   output_file = NULL;
