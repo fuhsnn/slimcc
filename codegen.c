@@ -1387,39 +1387,42 @@ static void gen_cast(Node *node) {
   }
   gen_expr(node->m.lhs);
 
-  if (node->ty->kind == TY_VOID)
+  Type *from_ty = node->m.lhs->ty;
+  Type *to_ty = node->ty;
+
+  if (to_ty->kind == TY_VOID)
     return;
 
-  if (node->ty->kind == TY_BITINT) {
+  if (to_ty->kind == TY_BITINT) {
     int64_t from_sz;
-    if (node->m.lhs->ty->kind == TY_BITINT) {
-      if (node->m.lhs->ty->bit_cnt >= node->ty->bit_cnt)
+    if (from_ty->kind == TY_BITINT) {
+      if (from_ty->bit_cnt >= to_ty->bit_cnt)
         return;
-      from_sz = node->m.lhs->ty->bit_cnt;
-    } else if (is_gp_ty(node->m.lhs->ty)) {
-      Printftn("mov %%rax, %s(%s)", tmpbuf(node->ty->size), lvar_ptr);
-      if (node->m.lhs->ty->size * 8 >= node->ty->bit_cnt)
+      from_sz = from_ty->bit_cnt;
+    } else if (is_gp_ty(from_ty)) {
+      Printftn("mov %%rax, %s(%s)", tmpbuf(to_ty->size), lvar_ptr);
+      if (from_ty->size * 8 >= to_ty->bit_cnt)
         return;
-      from_sz = node->m.lhs->ty->size * 8;
+      from_sz = from_ty->size * 8;
     } else {
       error_tok(node->tok, "Unimplemented cast to _BitInt");
     }
-    Printftn("lea %s(%s), %s", tmpbuf(node->ty->size), lvar_ptr, argreg64[1]);
+    Printftn("lea %s(%s), %s", tmpbuf(to_ty->size), lvar_ptr, argreg64[1]);
     Printftn("movl $%"PRIi32", %s", (int32_t)from_sz, argreg32[0]);
-    Printftn("movl $%"PRIi32", %s", (int32_t)node->ty->bit_cnt, argreg32[2]);
-    load_val2(ty_int, node->m.lhs->ty->is_unsigned, argreg32[3], NULL);
+    Printftn("movl $%"PRIi32", %s", (int32_t)to_ty->bit_cnt, argreg32[2]);
+    load_val2(ty_int, from_ty->is_unsigned, argreg32[3], NULL);
     gen_bitint_builtin_call2("__slimcc_bitint_sign_ext");
     return;
   }
 
-  if (node->m.lhs->ty->kind == TY_BITINT) {
-    if (!is_gp_ty(node->ty))
+  if (from_ty->kind == TY_BITINT) {
+    if (!is_gp_ty(to_ty))
       error_tok(node->tok, "Unimplemented cast from _BitInt");
-    Printftn("mov %s(%s), %%rax", tmpbuf(node->ty->size), lvar_ptr);
-    int64_t shft = 64 - node->m.lhs->ty->bit_cnt;
+    Printftn("mov %s(%s), %%rax", tmpbuf(to_ty->size), lvar_ptr);
+    int64_t shft = 64 - from_ty->bit_cnt;
     if (shft > 0) {
       Printftn("shl $%d, %%rax", (int)shft);
-      if (node->m.lhs->ty->is_unsigned)
+      if (from_ty->is_unsigned)
         Printftn("shr $%d, %%rax", (int)shft);
       else
         Printftn("sar $%d, %%rax", (int)shft);
@@ -1427,8 +1430,8 @@ static void gen_cast(Node *node) {
     return;
   }
 
-  int t1 = getTypeId(node->m.lhs->ty);
-  int t2 = getTypeId(node->ty);
+  int t1 = getTypeId(from_ty);
+  int t2 = getTypeId(to_ty);
   if (cast_table[t1][t2]) {
     if (t1 == F80)
       Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
