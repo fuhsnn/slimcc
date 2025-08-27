@@ -1289,28 +1289,22 @@ static char i32u16[] = "movzwl %ax, %eax";
 static char i32f32[] = "cvtsi2ssl %eax, %xmm0";
 static char i32i64[] = "movslq %eax, %rax";
 static char i32f64[] = "cvtsi2sdl %eax, %xmm0";
-static char i32f80[] = "push %rax; fildl (%rsp); pop %rax";
 
 static char u32f32[] = "mov %eax, %eax; cvtsi2ssq %rax, %xmm0";
 static char u32i64[] = "mov %eax, %eax";
 static char u32f64[] = "mov %eax, %eax; cvtsi2sdq %rax, %xmm0";
-static char u32f80[] = "mov %eax, %eax; push %rax; fildll (%rsp); pop %rax";
 
 static char i64f32[] = "cvtsi2ssq %rax, %xmm0";
 static char i64f64[] = "cvtsi2sdq %rax, %xmm0";
-static char i64f80[] = "push %rax; fildll (%rsp); pop %rax";
 
 static char u64f32[] =
-  "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2ss %rax,%xmm0; jmp 2f; "
-  "1: mov %rax,%rdx; and $1,%eax; pxor %xmm0,%xmm0; shr %rdx; "
+  "test %rax,%rax; js 1f; cvtsi2ss %rax,%xmm0; jmp 2f; "
+  "1: mov %rax,%rdx; and $1,%eax; shr $1, %rdx; "
   "or %rax,%rdx; cvtsi2ss %rdx,%xmm0; addss %xmm0,%xmm0; 2:";
 static char u64f64[] =
-  "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2sd %rax,%xmm0; jmp 2f; "
-  "1: mov %rax,%rdx; and $1,%eax; pxor %xmm0,%xmm0; shr %rdx; "
+  "test %rax,%rax; js 1f; cvtsi2sd %rax,%xmm0; jmp 2f; "
+  "1: mov %rax,%rdx; and $1,%eax; shr $1, %rdx; "
   "or %rax,%rdx; cvtsi2sd %rdx,%xmm0; addsd %xmm0,%xmm0; 2:";
-static char u64f80[] =
-  "push %rax; fildq (%rsp); test %rax, %rax; jns 1f;"
-  "mov $1602224128, %eax; mov %eax, 4(%rsp); fadds 4(%rsp); 1:; pop %rax";
 
 static char f32i8[] = "cvttss2sil %xmm0, %eax; movsbl %al, %eax";
 static char f32u8[] = "cvttss2sil %xmm0, %eax; movzbl %al, %eax";
@@ -1320,11 +1314,9 @@ static char f32i32[] = "cvttss2sil %xmm0, %eax";
 static char f32u32[] = "cvttss2siq %xmm0, %rax";
 static char f32i64[] = "cvttss2siq %xmm0, %rax";
 static char f32u64[] =
-  "cvttss2siq %xmm0, %rcx; movq %rcx, %rdx; movl $0x5F000000, %eax; "
-  "movd %eax, %xmm1; subss %xmm1, %xmm0; cvttss2siq %xmm0, %rax; "
-  "sarq $63, %rdx; andq %rdx, %rax; orq %rcx, %rax;";
+  "movl $0x5F000000, %eax; movd %eax, %xmm1; comiss %xmm0, %xmm1; setbe %al; ja 1f; "
+  "subss %xmm1, %xmm0; 1: cvttss2siq %xmm0, %rdx; shlq $63, %rax; orq %rdx, %rax";
 static char f32f64[] = "cvtss2sd %xmm0, %xmm0";
-static char f32f80[] = "sub $8, %rsp; movss %xmm0, (%rsp); flds (%rsp); add $8, %rsp";
 
 static char f64i8[] = "cvttsd2sil %xmm0, %eax; movsbl %al, %eax";
 static char f64u8[] = "cvttsd2sil %xmm0, %eax; movzbl %al, %eax";
@@ -1334,51 +1326,102 @@ static char f64i32[] = "cvttsd2sil %xmm0, %eax";
 static char f64u32[] = "cvttsd2siq %xmm0, %rax";
 static char f64i64[] = "cvttsd2siq %xmm0, %rax";
 static char f64u64[] =
-  "cvttsd2siq %xmm0, %rcx; movq %rcx, %rdx; mov $0x43e0000000000000, %rax; "
-  "movq %rax, %xmm1; subsd %xmm1, %xmm0; cvttsd2siq %xmm0, %rax; "
-  "sarq $63, %rdx; andq %rdx, %rax; orq %rcx, %rax";
+  "mov $0x43e0000000000000, %rax; movq %rax, %xmm1; comisd %xmm0, %xmm1; setbe %al; ja 1f; "
+  "subsd %xmm1, %xmm0; 1: cvttsd2siq %xmm0, %rdx; shlq $63, %rax; orq %rdx, %rax";
 static char f64f32[] = "cvtsd2ss %xmm0, %xmm0";
-static char f64f80[] = "sub $8, %rsp; movsd %xmm0, (%rsp); fldl (%rsp); add $8, %rsp";
 
-#define FROM_F80_1                                                        \
-  "sub $24, %rsp; fnstcw 14(%rsp); movzwl 14(%rsp), %eax; or $12, %ah; " \
-  "mov %ax, 12(%rsp); fldcw 12(%rsp); "
+static char *cast_table[][10] = {
+  // i8   i16     i32     i64     u8     u16     u32     u64     f32     f64
+  {NULL,  NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i8
+  {i32i8, NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i16
+  {i32i8, i32i16, NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i32
+  {i32i8, i32i16, NULL,   NULL,   i32u8, i32u16, NULL,   NULL,   i64f32, i64f64}, // i64
 
-#define FROM_F80_2 " (%rsp); fldcw 14(%rsp); "
-#define FROM_F80_3 "; add $24, %rsp"
+  {i32i8, NULL,   NULL,   i32i64, NULL,  NULL,   NULL,   i32i64, i32f32, i32f64}, // u8
+  {i32i8, i32i16, NULL,   i32i64, i32u8, NULL,   NULL,   i32i64, i32f32, i32f64}, // u16
+  {i32i8, i32i16, NULL,   u32i64, i32u8, i32u16, NULL,   u32i64, u32f32, u32f64}, // u32
+  {i32i8, i32i16, NULL,   NULL,   i32u8, i32u16, NULL,   NULL,   u64f32, u64f64}, // u64
 
-static char f80i8[] = FROM_F80_1 "fistps" FROM_F80_2 "movsbl (%rsp), %eax" FROM_F80_3;
-static char f80u8[] = FROM_F80_1 "fistps" FROM_F80_2 "movzbl (%rsp), %eax" FROM_F80_3;
-static char f80i16[] = FROM_F80_1 "fistps" FROM_F80_2 "movzbl (%rsp), %eax" FROM_F80_3;
-static char f80u16[] = FROM_F80_1 "fistpl" FROM_F80_2 "movswl (%rsp), %eax" FROM_F80_3;
-static char f80i32[] = FROM_F80_1 "fistpl" FROM_F80_2 "mov (%rsp), %eax" FROM_F80_3;
-static char f80u32[] = FROM_F80_1 "fistpq" FROM_F80_2 "mov (%rsp), %eax" FROM_F80_3;
-static char f80i64[] = FROM_F80_1 "fistpq" FROM_F80_2 "mov (%rsp), %rax" FROM_F80_3;
-static char f80u64[] =
-  "sub $16, %rsp; movl $0x5f000000, 12(%rsp); flds 12(%rsp); fucomi %st(1), %st; setbe %al;"
-  "fldz; fcmovbe %st(1), %st; fstp %st(1); fsubrp %st, %st(1); fnstcw 4(%rsp);"
-  "movzwl 4(%rsp), %ecx; orl $3072, %ecx; movw %cx, 6(%rsp); fldcw 6(%rsp);"
-  "fistpll 8(%rsp); fldcw 4(%rsp); shlq $63, %rax; xorq 8(%rsp), %rax; add $16, %rsp";
-
-static char f80f32[] = "sub $8, %rsp; fstps (%rsp); movss (%rsp), %xmm0; add $8, %rsp";
-static char f80f64[] = "sub $8, %rsp; fstpl (%rsp); movsd (%rsp), %xmm0; add $8, %rsp";
-
-static char *cast_table[][11] = {
-  // i8   i16     i32     i64     u8     u16     u32     u64     f32     f64     f80
-  {NULL,  NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64, i32f80}, // i8
-  {i32i8, NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64, i32f80}, // i16
-  {i32i8, i32i16, NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64, i32f80}, // i32
-  {i32i8, i32i16, NULL,   NULL,   i32u8, i32u16, NULL,   NULL,   i64f32, i64f64, i64f80}, // i64
-
-  {i32i8, NULL,   NULL,   i32i64, NULL,  NULL,   NULL,   i32i64, i32f32, i32f64, i32f80}, // u8
-  {i32i8, i32i16, NULL,   i32i64, i32u8, NULL,   NULL,   i32i64, i32f32, i32f64, i32f80}, // u16
-  {i32i8, i32i16, NULL,   u32i64, i32u8, i32u16, NULL,   u32i64, u32f32, u32f64, u32f80}, // u32
-  {i32i8, i32i16, NULL,   NULL,   i32u8, i32u16, NULL,   NULL,   u64f32, u64f64, u64f80}, // u64
-
-  {f32i8, f32i16, f32i32, f32i64, f32u8, f32u16, f32u32, f32u64, NULL,   f32f64, f32f80}, // f32
-  {f64i8, f64i16, f64i32, f64i64, f64u8, f64u16, f64u32, f64u64, f64f32, NULL,   f64f80}, // f64
-  {f80i8, f80i16, f80i32, f80i64, f80u8, f80u16, f80u32, f80u64, f80f32, f80f64, NULL},   // f80
+  {f32i8, f32i16, f32i32, f32i64, f32u8, f32u16, f32u32, f32u64, NULL,   f32f64}, // f32
+  {f64i8, f64i16, f64i32, f64i64, f64u8, f64u16, f64u32, f64u64, f64f32, NULL, }, // f64
 };
+
+static void gen_cast_f80_to_int(char *buf, char *ins, char *mv, char *dst) {
+  Printftn("fnstcw 8+%s", buf);
+  Printftn("fnstcw 10+%s", buf);
+  Printftn("orb $12, 11+%s", buf);
+  Printftn("fldcw 10+%s", buf);
+
+  Printftn("%s %s", ins, buf);
+  Printftn("%s %s, %s", mv, buf, dst);
+
+  Printftn("fldcw 8+%s", buf);
+}
+
+static void gen_cast_from_f80(int to_ty) {
+  char buf[STRBUF_SZ];
+  snprintf(buf, STRBUF_SZ, "%s(%s)", tmpbuf(16), lvar_ptr);
+
+  Printftn("fldt %s", buf);
+
+  switch (to_ty) {
+  case I8: gen_cast_f80_to_int(buf, "fistps", "movsbl", "%eax"); return;
+  case U8: gen_cast_f80_to_int(buf, "fistps", "movzbl", "%eax"); return;
+  case I16: gen_cast_f80_to_int(buf, "fistps", "movzbl", "%eax"); return;
+  case U16: gen_cast_f80_to_int(buf, "fistpl", "movswl", "%eax"); return;
+  case I32: gen_cast_f80_to_int(buf, "fistpl", "movl", "%eax"); return;
+  case U32: gen_cast_f80_to_int(buf, "fistpll", "movl", "%eax"); return;
+  case I64: gen_cast_f80_to_int(buf, "fistpll", "movq", "%rax"); return;
+  case U64:
+    Printftn("fnstcw 8+%s", buf);
+    Printftn("fnstcw 10+%s", buf);
+    Printftn("orb $12, 11+%s", buf);
+    Printftn("fldcw 10+%s", buf);
+
+    Printftn("movl $0x5f000000, 12+%s", buf);
+    Printftn("flds 12+%s", buf);
+    Printstn("fcomi; setbe %%al; ja 1f");
+    Printstn("fsubrp; jmp 2f; 1: fstp %%st; 2:");
+    Printftn("fistpll %s; shlq $63, %%rax; orq %s, %%rax", buf, buf);
+
+    Printftn("fldcw 8+%s", buf);
+    return;
+  case F32: Printftn("fstps %s; movss %s, %%xmm0", buf, buf); return;
+  case F64: Printftn("fstpl %s; movsd %s, %%xmm0", buf, buf); return;
+  default:
+    internal_error();
+  }
+}
+
+static void gen_cast_to_f80(int from_ty) {
+  char buf[STRBUF_SZ];
+  snprintf(buf, STRBUF_SZ, "%s(%s)", tmpbuf(16), lvar_ptr);
+
+  switch (from_ty) {
+  case I8:
+  case U8:
+  case I16:
+  case U16:
+  case I32: Printftn("movl %%eax, %s; fildl %s", buf, buf); break;
+  case U32: Printstn("movl %%eax, %%eax");
+  case I64: Printftn("movq %%rax, %s; fildll %s", buf, buf); break;
+  case U64:
+    Printftn("movq %%rax, %s", buf);
+    Printftn("fildll %s", buf);
+    Printstn("test %%rax, %%rax");
+    Printstn("jns 1f");
+    Printftn("movl $0x5F800000, %s", buf);
+    Printftn("fadds %s", buf);
+    Printstn("1:");
+    break;
+  case F32: Printftn("movss %%xmm0, %s; flds %s", buf, buf); break;
+  case F64: Printftn("movsd %%xmm0, %s; fldl %s", buf, buf); break;
+  default:
+    internal_error();
+  }
+
+  Printftn("fstpt %s", buf);
+}
 
 static void gen_cast(Node *node) {
   if (node->ty->kind == TY_BOOL) {
@@ -1432,15 +1475,21 @@ static void gen_cast(Node *node) {
 
   int t1 = getTypeId(from_ty);
   int t2 = getTypeId(to_ty);
-  if (cast_table[t1][t2]) {
+
+  if (t2 == F80) {
     if (t1 == F80)
-      Printftn("fldt %s(%s)", tmpbuf(10), lvar_ptr);
-
-    Printftn("%s", cast_table[t1][t2]);
-
-    if (t2 == F80)
-      Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
+      return;
+    gen_cast_to_f80(t1);
+    return;
   }
+
+  if (t1 == F80) {
+    gen_cast_from_f80(t2);
+    return;
+  }
+
+  if (cast_table[t1][t2])
+    Printftn("%s", cast_table[t1][t2]);
 }
 
 typedef enum {
