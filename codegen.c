@@ -2040,28 +2040,32 @@ static void gen_xmm_arith(Node *node) {
     return;
   case ND_EQ:
   case ND_NE:
-  case ND_LT:
-  case ND_LE:
-  case ND_GT:
-  case ND_GE:
-    if (node->kind == ND_GT || node->kind == ND_GE)
-      Printftn("ucomi%s %%xmm0, %%xmm%d", sz, reg);
-    else
-      Printftn("ucomi%s %%xmm%d, %%xmm0", sz, reg);
+    Printftn("ucomi%s %%xmm%d, %%xmm0", sz, reg);
 
     if (node->kind == ND_EQ) {
       Printstn("sete %%al");
       Printstn("setnp %%dl");
       Printstn("and %%dl, %%al");
-    } else if (node->kind == ND_NE) {
+    } else {
       Printstn("setne %%al");
       Printstn("setp %%dl");
       Printstn("or %%dl, %%al");
-    } else if (node->kind == ND_LT || node->kind == ND_GT) {
-      Printstn("seta %%al");
-    } else if (node->kind == ND_LE || node->kind == ND_GE) {
-      Printstn("setae %%al");
     }
+    Printstn("movzbl %%al, %%eax");
+    return;
+  case ND_LT:
+  case ND_LE:
+  case ND_GT:
+  case ND_GE:
+    if (node->kind == ND_GT || node->kind == ND_GE)
+      Printftn("comi%s %%xmm0, %%xmm%d", sz, reg);
+    else
+      Printftn("comi%s %%xmm%d, %%xmm0", sz, reg);
+
+    if (node->kind == ND_LT || node->kind == ND_GT)
+      Printstn("seta %%al");
+    else
+      Printstn("setae %%al");
 
     Printstn("movzbl %%al, %%eax");
     return;
@@ -2104,6 +2108,20 @@ static void gen_x87_arith(Node *node) {
     return;
   case ND_EQ:
   case ND_NE:
+    Printstn("fucomip");
+    Printstn("fstp %%st");
+
+    if (node->kind == ND_EQ) {
+      Printstn("sete %%al");
+      Printstn("setnp %%dl");
+      Printstn("and %%dl, %%al");
+    } else {
+      Printstn("setne %%al");
+      Printstn("setp %%dl");
+      Printstn("or %%dl, %%al");
+    }
+    Printstn("movzbl %%al, %%eax");
+    return;
   case ND_LT:
   case ND_LE:
   case ND_GT:
@@ -2111,22 +2129,13 @@ static void gen_x87_arith(Node *node) {
     if (node->kind == ND_LT || node->kind == ND_LE)
       Printstn("fxch %%st(1)");
 
-    Printstn("fucomip");
-    Printstn("fstp %%st(0)");
+    Printstn("fcomip");
+    Printstn("fstp %%st");
 
-    if (node->kind == ND_EQ) {
-      Printstn("sete %%al");
-      Printstn("setnp %%dl");
-      Printstn("and %%dl, %%al");
-    } else if (node->kind == ND_NE) {
-      Printstn("setne %%al");
-      Printstn("setp %%dl");
-      Printstn("or %%dl, %%al");
-    } else if (node->kind == ND_LT || node->kind == ND_GT) {
+    if (node->kind == ND_LT || node->kind == ND_GT)
       Printstn("seta %%al");
-    } else if (node->kind == ND_LE || node->kind == ND_GE) {
+    else
       Printstn("setae %%al");
-    }
 
     Printstn("movzbl %%al, %%eax");
     return;
