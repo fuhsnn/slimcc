@@ -70,7 +70,7 @@ test_blake2() {
 }
 
 test_busybox() {
- git_fetch https://github.com/sailfishos-mirror/busybox 142ac2d796dddea50d8926d1747523182c12d097 busybox
+ git_fetch https://github.com/sailfishos-mirror/busybox a98b95b715359a8b002d1cb8e1f998a4afa2c73e busybox
  sed -i 's|-Wp,-MD,|-MD -MF |g' scripts/Makefile.lib
  sed -i 's|-Wp,-MD,|-MD -MF |g' scripts/Makefile.host
  sed -i 's|LDLIBS += rt|LDLIBS += rt resolv|g' Makefile.flags
@@ -94,7 +94,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.7.4
+ github_tar c3lang c3c v0.7.5
  replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
  cmake_init
  make VERBOSE=1
@@ -114,7 +114,7 @@ test_cello() {
 }
 
 test_cjson() {
- git_fetch https://github.com/DaveGamble/cJSON 8f2beb57ddad1f94bed899790b00f46df893ccac cjson
+ github_tar DaveGamble cJSON v1.7.19
  replace_line "#if (defined(__GNUC__) || defined(__SUNPRO_CC) || defined (__SUNPRO_C)) && defined(CJSON_API_VISIBILITY)" "#if 1" cJSON.h
  sed -i 's/if defined(__GNUC__) || defined(__ghs__)/if 1/g' tests/unity/src/unity_internals.h
  cmake_init
@@ -260,13 +260,13 @@ test_gzip() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-2
+ github_tar ImageMagick ImageMagick 7.1.2-3
  fix_and_configure
  make check V=1
 }
 
 test_janet() {
- github_tar janet-lang janet v1.39.0
+ github_tar janet-lang janet v1.39.1
  # Use C11 concurrency features
  sed -i "s|/\* #define JANET_THREAD_LOCAL _Thread_local \*/|#define JANET_THREAD_LOCAL _Thread_local|g" src/conf/janetconf.h
  sed -i "s|/\* #define JANET_USE_STDATOMIC \*/|#define JANET_USE_STDATOMIC|g" src/conf/janetconf.h
@@ -457,7 +457,7 @@ test_libuv() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.14.5
+ github_tar GNOME libxml2 v2.14.6
  libtoolize
  sh autogen.sh
  fix_configure
@@ -525,12 +525,13 @@ test_metalang99() {
 }
 
 test_micropython() {
- github_clone micropython micropython v1.25.0
+ github_clone micropython micropython v1.26.0
  use_stdbit "#include <stdbool.h>" py/misc.h
  sed -i 's|inline MP_ALWAYSINLINE const|static inline const|g' py/misc.h
  replace_line "#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 8)" "#if 1" py/nlrx64.c
  sed -i 's|defined(LFS2_NO_INTRINSICS)|1|g' lib/littlefs/lfs2_util.h
- make -C ports/unix/ CC=$CC VARIANT=standard V=1 test_full
+ sed -i 's|(mp_float_t)NAN}|(union {long long i;double f;}){.i=0x7ff8000000000000LL}.f}|g' py/objfloat.c
+ make -C ports/unix/ CC=$CC V=1 VARIANT=standard MICROPY_PY_THREAD_GIL=1 test_full
  cd tests
  MICROPY_CPYTHON3=python3 MICROPY_MICROPYTHON=../ports/unix/build-standard/micropython ./run-multitests.py multi_net/*.py
 }
@@ -561,12 +562,11 @@ test_msgpack() {
 }
 
 test_muon() {
- git_fetch https://github.com/muon-build/muon 91e7009351bbfa032ddcc25764c92fced0f47faa muon
+ git_fetch https://github.com/muon-build/muon 613c25dcc2c7ad512c936d030e8895bc1802ed28 muon
  sh ./bootstrap.sh build
  build/muon-bootstrap setup build
  sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
  sed -i "s|\['common/13|#|g" subprojects/meson-tests/meson.build # we don't do pch
- sed -i "s|\['common/251|#|g" subprojects/meson-tests/meson.build # https://github.com/muon-build/muon/issues/149
  sed -i "s|\['frameworks/7 gnome|#|g" subprojects/meson-tests/meson.build
  build/muon-bootstrap -C build samu
  build/muon-bootstrap -C build test
@@ -654,7 +654,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0beta2
+ github_tar php php-src php-8.5.0beta3
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -669,12 +669,12 @@ test_php() {
  ./buildconf --force
  fix_configure
  coverage=(--enable-pcntl --enable-zend-test --with-bz2 --with-curl --with-ffi --with-gettext --with-gmp --with-openssl --with-readline --with-sodium --with-zlib)
- CFLAGS=-fdisable-visibility ./configure "${coverage[@]}"
+ CFLAGS=-fdisable-visibility ./configure "${coverage[@]}" --enable-huge-code-pages=no
  make test NO_INTERACTION=1
 }
 
 test_postgres() {
- github_tar postgres postgres REL_18_BETA3
+ github_tar postgres postgres REL_18_RC1
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
@@ -740,30 +740,20 @@ test_valkey() {
 }
 
 test_ruby() {
- git_fetch https://github.com/ruby/ruby 6023195fbd7f422e94b9d5cdee39273f71f9078f ruby
+ git_fetch https://github.com/ruby/ruby 8d79187523cdc0b5b961f4e856df8824c241f16e ruby
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  make check -j4
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 374fdbe1c65156279d72cf85cb1828847a923055 rvvm
- make test -B USE_SDL=2 CC=$CC CFLAGS='-DSDL_DISABLE_IMMINTRIN_H'
-
- replace_line "#undef GNU_EXTS" "#define GNU_EXTS 1" src/compiler.h
+ git_fetch https://github.com/LekKit/RVVM e4c7e3247923de02f3bf0f803a09190c4308556c rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
- make test -B USE_SDL=2 CC=$CC CFLAGS='-DSDL_DISABLE_IMMINTRIN_H'
-
- sed -i 's|std=c99|std=c11|g' Makefile
- make test -B USE_SDL=2 CC=$CC CFLAGS='-DSDL_DISABLE_IMMINTRIN_H'
-
- replace_line "#undef FPU_LIB_KNOWN_SANE_COMPILER" "#define FPU_LIB_KNOWN_SANE_COMPILER 1" src/fpu_lib.h
- make test -B USE_SDL=2 CC=$CC CFLAGS='-DSDL_DISABLE_IMMINTRIN_H'
+ make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
 
 test_samba() {
  github_tar samba-team samba samba-4.22.4
- sed -i 's|conf.fatal|print|g' buildtools/wafsamba/generic_cc.py
  sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
  sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
@@ -873,8 +863,8 @@ test_wuffs() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash bab7e27f4c6ae4efbb83dd99ae8a554423571635 xxhash
- make CC=$CC check
+ git_fetch https://github.com/Cyan4973/xxHash 1a08a8e2817e5ef3f04840407715bc1f0cc22269 xxhash
+ make CC=$CC DISPATCH=0 check
 }
 
 test_xz() {
@@ -930,7 +920,7 @@ build_erlang() {
 }
 
 build_freetype() {
- url_tar https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-13-3/freetype-VER-2-13-3.tar.gz freetype
+ url_tar https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-14-0/freetype-VER-2-14-0.tar.gz freetype
  cmake_init
  make
 }
@@ -1025,7 +1015,7 @@ build_raylib_raygui() {
 }
 
 build_sdl3() {
- github_tar libsdl-org SDL release-3.2.20
+ github_tar libsdl-org SDL release-3.2.22
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  cmake_init -DCMAKE_C_FLAGS=-DSTBI_NO_SIMD
  make VERBOSE=1
