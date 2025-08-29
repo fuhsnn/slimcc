@@ -1519,9 +1519,10 @@ static Type *enum_specifier(Token **rest, Token *tok) {
         decl_enum_cnt++;
         continue;
       }
-      cur = cur->next = ast_arena_malloc(sizeof(EnumVal));
+      cur = cur->next = malloc(sizeof(EnumVal));
       cur->val = v;
       cur->name = name;
+      name->is_live = true;
     }
     VarScope *sc = push_scope(get_ident(name));
     sc->enum_ty = ty;

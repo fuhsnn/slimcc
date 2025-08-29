@@ -131,6 +131,10 @@ int incomplete_param(void) {
   return 1;
 }
 
+void ext_enum1(void) { { enum A { J, K, L=0 }; extern enum A ext_enum; } };
+
+void ext_enum2(void) { enum A { K=1, L=0, J=0 }; extern enum A ext_enum; };
+
 int main(void) {
   ASSERT(1, assign((t8){},(t8){},(t8){}));
   ASSERT(1, flexible());
