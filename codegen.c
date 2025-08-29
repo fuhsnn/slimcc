@@ -574,16 +574,16 @@ static void pushf(void) {
 
 static int pop_fp(bool is_xmm64, int dest_reg, bool must_be_dest) {
   Slot *sl = pop_tmpstack(1);
-  char *mv = is_xmm64 ? "movsd" : "movss";
 
   if (sl->kind == SL_FP) {
     int pop_reg = sl->fp_depth + 2;
-    insrtln("%s %%xmm0, %%xmm%d", sl->loc, mv, pop_reg);
+    insrtln("movaps %%xmm0, %%xmm%d", sl->loc, pop_reg);
     if (!must_be_dest)
       return pop_reg;
-    Printftn("%s %%xmm%d, %%xmm%d", mv, pop_reg, dest_reg);
+    Printftn("movaps %%xmm%d, %%xmm%d", pop_reg, dest_reg);
     return dest_reg;
   }
+  char *mv = is_xmm64 ? "movsd" : "movss";
   insrtln("%s %%xmm0, %d(%s)", sl->loc, mv, sl->st_ofs, lvar_ptr);
   Printftn("%s %d(%s), %%xmm%d", mv, sl->st_ofs, lvar_ptr, dest_reg);
   return dest_reg;
@@ -2089,6 +2089,7 @@ static void gen_xmm_arith(Node *node) {
     return;
   case ND_EQ:
   case ND_NE:
+    Printstn("xor %%eax, %%eax");
     Printftn("ucomi%s %%xmm%d, %%xmm0", sz, reg);
 
     if (node->kind == ND_EQ) {
@@ -2100,12 +2101,13 @@ static void gen_xmm_arith(Node *node) {
       Printstn("setp %%dl");
       Printstn("or %%dl, %%al");
     }
-    Printstn("movzbl %%al, %%eax");
     return;
   case ND_LT:
   case ND_LE:
   case ND_GT:
   case ND_GE:
+    Printstn("xor %%eax, %%eax");
+
     if (node->kind == ND_GT || node->kind == ND_GE)
       Printftn("comi%s %%xmm0, %%xmm%d", sz, reg);
     else
@@ -2115,8 +2117,6 @@ static void gen_xmm_arith(Node *node) {
       Printstn("seta %%al");
     else
       Printstn("setae %%al");
-
-    Printstn("movzbl %%al, %%eax");
     return;
   }
 
@@ -2157,6 +2157,7 @@ static void gen_x87_arith(Node *node) {
     return;
   case ND_EQ:
   case ND_NE:
+    Printstn("xor %%eax, %%eax");
     Printstn("fucomip");
     Printstn("fstp %%st");
 
@@ -2169,12 +2170,13 @@ static void gen_x87_arith(Node *node) {
       Printstn("setp %%dl");
       Printstn("or %%dl, %%al");
     }
-    Printstn("movzbl %%al, %%eax");
     return;
   case ND_LT:
   case ND_LE:
   case ND_GT:
   case ND_GE:
+    Printstn("xor %%eax, %%eax");
+
     if (node->kind == ND_LT || node->kind == ND_LE)
       Printstn("fxch %%st(1)");
 
@@ -2185,8 +2187,6 @@ static void gen_x87_arith(Node *node) {
       Printstn("seta %%al");
     else
       Printstn("setae %%al");
-
-    Printstn("movzbl %%al, %%eax");
     return;
   }
 
@@ -3059,6 +3059,16 @@ static char *arith_ins(NodeKind kind) {
   return ins;
 }
 
+static char *farith_ins(NodeKind kind) {
+  switch (kind) {
+  case ND_ADD: return "add";
+  case ND_SUB: return "sub";
+  case ND_MUL: return "mul";
+  case ND_DIV: return "div";
+  }
+  internal_error();
+}
+
 static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
   if (in_imm_range(val)) {
     Printftn("%s $%"PRIi64", %s", arith_ins(kind), val, op);
@@ -3398,6 +3408,49 @@ static bool gen_gp_opt(Node *node) {
   return false;
 }
 
+static bool gen_arith_opt_fp2(NodeKind kind, Node *lhs, Node *rhs, int pass) {
+  long double fval;
+  char ofs[STRBUF_SZ], *ptr;
+  char *sz = rhs->ty->kind == TY_FLOAT ? "ss" : "sd";
+
+  switch (pass) {
+  case 0:
+    if (is_const_double(rhs, &fval)) {
+      gen_expr(lhs);
+      load_f32_f64(rhs->ty, fval, 1);
+      Printftn("%s%s %%xmm1, %%xmm0", farith_ins(kind), sz);
+      return true;
+    }
+    break;
+  case 1:
+    if (is_memop(rhs, ofs, &ptr, true)) {
+      gen_expr(lhs);
+      Printftn("%s%s %s(%s), %%xmm0", farith_ins(kind), sz, ofs, ptr);
+      return true;
+    }
+    break;
+  }
+  return false;
+}
+
+static bool gen_arith_opt_fp(Node *node) {
+  switch (node->kind) {
+  case ND_ADD:
+  case ND_MUL:
+    for (int pass = 0; pass <= 1; pass++)
+      if (gen_arith_opt_fp2(node->kind, node->m.lhs, node->m.rhs, pass) ||
+        gen_arith_opt_fp2(node->kind, node->m.rhs, node->m.lhs, pass))
+        return true;
+    break;
+  case ND_SUB:
+  case ND_DIV:
+    for (int pass = 0; pass <= 1; pass++)
+      if (gen_arith_opt_fp2(node->kind, node->m.lhs, node->m.rhs, pass))
+        return true;
+  }
+  return false;
+}
+
 static bool gen_load_opt_gp(Node *node, Reg r) {
   char ofs[STRBUF_SZ], *ptr;
   Node *lhs = node->m.lhs;
@@ -3696,6 +3749,10 @@ static bool gen_expr_opt(Node *node) {
 
   if (is_int_to_int_cast(node) && ty->size == 4 && lhs->ty->size == 8)
     if (gen_arith_opt_gp(lhs, ty->size))
+      return true;
+
+  if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE)
+    if (gen_arith_opt_fp(node))
       return true;
 
   {
