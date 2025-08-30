@@ -2029,7 +2029,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
   }
 
   if ((tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) &&
-    (equal(tok->next, ",") || equal(tok->next, "}"))) {
+    (equal(tok->next, ",") || equal(tok->next, "}") || equal(tok->next, ";"))) {
     init->kind = INIT_TOK;
     init->tok = tok;
     tok = tok->next;
@@ -2188,7 +2188,7 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   create_lvar_init(&head, &init, &desg, tok);
   free_initializers(&init);
 
-  if (opt_optimize && init.kind == INIT_EXPR)
+  if (opt_optimize && (init.kind == INIT_EXPR || init.kind == INIT_TOK))
     return head.next;
 
   // If a partial initializer list is given, the standard requires
