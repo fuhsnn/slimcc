@@ -26,7 +26,7 @@ COPY . /work/slimcc
 WORKDIR /work/slimcc
 
 RUN ln -s platform/linux-ci-debian13.c platform.c
-RUN clang -O2 -flto=auto -march=native *.c -fsanitize=address -o slimcc
+RUN clang scripts/amalgamation.c -O2 -flto=auto -march=native -fsanitize=address -o slimcc
 
 ENV CC=/work/slimcc/slimcc
 

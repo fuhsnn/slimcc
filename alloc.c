@@ -22,7 +22,7 @@ Arena pp_arena;
 bool free_alloc;
 
 bool check_mem_usage(void) {
-#if USE_ASAN
+#if USE_ASAN || defined(__FILC__)
   return true;
 #else
   struct rusage stat;

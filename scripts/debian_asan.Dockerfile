@@ -48,7 +48,7 @@ COPY . /work/slimcc
 WORKDIR /work/slimcc
 
 RUN ln -s platform/linux-ci.c platform.c
-RUN gcc-12 -O2 -flto=auto -march=native *.c -fsanitize=address -o slimcc
+RUN gcc-12 scripts/amalgamation.c -O2 -flto=auto -march=native -fsanitize=address -o slimcc
 RUN apt-get -y autoremove gcc-12 && apt-get clean
 
 RUN ! command -v cc
