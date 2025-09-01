@@ -116,7 +116,7 @@ static Token *get_line(Token **cur, Token *tok) {
   return tok;
 }
 
-#if USE_ASAN
+#if USE_ASAN || defined(__FILC__)
 #define to_freelist(first, last) \
   do {                           \
     Token *x = first;            \

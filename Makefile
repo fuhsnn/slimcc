@@ -4,7 +4,7 @@ TEST_SRCS!=ls test/*.c
 
 TEST_FLAGS=-Itest -std=c23 -fdefer-ts
 
-.SUFFIXES: .exe .stage2.o .stage2.exe .asan.o .asan.exe
+.SUFFIXES: .exe .stage2.o .stage2.exe .asan.o .asan.exe .filc.o .filc.exe
 
 # Stage 1
 
@@ -76,31 +76,53 @@ $(TESTS_ASAN): slimcc-asan test/host/common.o
 test-asan: $(TESTS_ASAN)
 	for i in $(TESTS_ASAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-asan $(CC)
-	$(MAKE) slimcc CC=./slimcc-asan -B
+	./slimcc-asan scripts/amalgamation.c -c -o/dev/null
 	./slimcc-asan -hashmap-test
 
 test-abi: slimcc-asan test/host/common.o
 	bash scripts/test_abi.bash $(PWD)/slimcc-asan $(CC)
 	bash scripts/test_abi.bash $(CC) $(PWD)/slimcc-asan
 
+# Fil-C build
+
+OBJS_FILC=$(SRCS:.c=.filc.o)
+
+$(OBJS_FILC): slimcc.h
+
+.c.filc.o:
+	$(FILC) $(CFLAGS) -g -o $@ -c $<
+
+slimcc-filc: $(OBJS_FILC)
+	$(FILC) $(CFLAGS) -g -o $@ $(OBJS_FILC) $(LDFLAGS)
+
+TESTS_FILC=$(TEST_SRCS:.c=.filc.exe)
+
+$(TESTS_FILC): slimcc-filc test/host/common.o
+
+.c.filc.exe:
+	./slimcc-filc $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+
+test-filc: $(TESTS_FILC)
+	for i in $(TESTS_FILC); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-filc $(CC)
+	./slimcc-filc scripts/amalgamation.c -c -o/dev/null
+	./slimcc-filc -hashmap-test
+
 # Misc.
 
 test-all: test test-stage2
 
-warn: $(SRCS)
-	$(CC) -fsyntax-only -Wall -Wpedantic -Wextra -Wno-switch -Wno-missing-field-initializers $(CFLAGS) $(SRCS)
+slimcc-lto: $(SRCS) slimcc.h
+	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@
 
-lto: clean
-	$(MAKE) CFLAGS="-O2 -flto=auto -fvisibility=hidden"
+slimcc-lto-je: $(SRCS) slimcc.h
+	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@ -ljemalloc
 
-lto-je: clean
-	$(MAKE) CFLAGS="-O2 -flto=auto -fvisibility=hidden" LDFLAGS="-ljemalloc"
-
-lto-mi: clean
-	$(MAKE) CFLAGS="-O2 -flto=auto -fvisibility=hidden" LDFLAGS="-lmimalloc"
+slimcc-lto-mi: $(SRCS) slimcc.h
+	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@ -lmimalloc
 
 clean:
-	rm -f slimcc slimcc-stage2 slimcc-asan
+	rm -f slimcc slimcc-stage2 slimcc-asan slimcc-filc slimcc-lto slimcc-lto-je slimcc-lto-mi
 	rm -f *.o test/*.o test/*.exe test/host/*.o
 
-.PHONY: test clean test-stage2 test-asan
+.PHONY: clean test test-stage2 test-all test-asan test-filc

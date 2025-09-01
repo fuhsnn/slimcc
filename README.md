@@ -34,7 +34,9 @@ Compiling real C projects with slimcc has been a major focus, the [CI workflow](
  cmake -DCMAKE_C_COMPILER=/home/username/slimcc/slimcc
  ```
  - For installing/symlinking/packaging, please edit `platform.c` with absolute paths.
+ - `cc scripts/amalgamation.c` builds the project as a single translation unit.
  - `make slimcc-asan/test-asan` build and run tests with address sanitizer, recommended if you are hacking the source.
+ - `make slimcc-filc/test-filc` build and run tests with [Fil-C](https://github.com/pizlonator/fil-c/releases), env `FILC` is used.
 
 ## Compatibility
  - Autoconf based projects might fail to build due to `-fPIC` or `-Wl` not being passed. If there is a block in `./configure` that looks like below, append `-Wl,`, `-fPIC`, `-static` respectively and re-configure: 
@@ -52,7 +54,7 @@ lt_prog_compiler_static=
 ## How optimized is the compiler?
 The coding style is highly influenced by `chibicc`, which means in the eyes of C veterans there might be all kinds of inefficiencies in the name of readability. While micro-optimizing is fun, I only commit changes that noticeably improve fully-optimized builds.
 
-As such, optimization flags and custom allocators have great impact on its performance, `make lto/lto-mi/lto-je` is provided for optimized builds. It's usually faster than Clang/GCC for common tasks, but only by doing way less internally.
+As such, optimization flags and custom allocators have great impact on its performance, `make slimcc-(lto/lto-mi/lto-je)` is provided for optimized builds. It's usually faster than Clang/GCC for common tasks, but only by doing less internally.
 
 ## How portable is the compiler?
  - It's written in C99 with several POSIX 2008 functions.
