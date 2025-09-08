@@ -46,6 +46,7 @@ static bool opt_MM;
 static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
+static bool opt_verbose;
 static bool opt_hash_hash_hash;
 bool opt_pie;
 bool opt_nopie;
@@ -62,6 +63,7 @@ bool opt_nodefaultlibs;
 bool opt_nolibc;
 char *default_ld = "ld";
 char *default_as = "as";
+char *dumpmachine_str;
 static char *opt_use_ld;
 static char *opt_use_as;
 static char *opt_MF;
@@ -78,9 +80,8 @@ char *argv0;
 
 static void cc1(char *input_file, char *output, bool is_asm_pp);
 
-static void usage(int status) {
-  fprintf(stderr, "slimcc [ -o <path> ] <file>\n");
-  exit(status);
+static void version(void) {
+  puts("slimcc version 0.0");
 }
 
 static bool startswith(char *arg, char **p, char *str) {
@@ -248,8 +249,27 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
-    if (!strcmp(argv[i], "--help"))
-      usage(0);
+    if (!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose")) {
+      opt_verbose = true;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "--help")) {
+      puts("slimcc [ -o <path> ] <file>");
+      exit(0);
+    }
+
+    if (!strcmp(argv[i], "--version")) {
+      version();
+      exit(0);
+    }
+
+    if (!strcmp(argv[i], "-dumpmachine")) {
+      if (!dumpmachine_str)
+        error("'-dumpmachine' not configured");
+      puts(dumpmachine_str);
+      exit(0);
+    }
 
     if (take_arg_s(argv, &i, &arg, "-o")) {
       opt_o = arg;
@@ -632,7 +652,13 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   for (int i = 0; i < sysincl_paths.len; i++)
     strarray_push(&include_paths, sysincl_paths.data[i]);
 
-  if (input_cnt < 1 && !has_wl)
+  bool no_input = !input_cnt && !has_wl;
+  if (opt_hash_hash_hash || opt_verbose) {
+    version();
+    if (no_input)
+      exit(0);
+  }
+  if (no_input)
     error("no input files");
   else if (input_cnt > 1 && opt_o && (opt_c || opt_S || opt_E))
     error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
@@ -690,13 +716,13 @@ static char *create_tmpfile(void) {
 }
 
 void run_subprocess(char **argv) {
-  // If -### is given, dump the subprocess's command line.
-  if (opt_hash_hash_hash) {
+  if (opt_hash_hash_hash || opt_verbose) {
     fprintf(stderr, "\"%s\"", argv[0]);
     for (int i = 1; argv[i]; i++)
       fprintf(stderr, " \"%s\"", argv[i]);
     fprintf(stderr, "\n");
-    return;
+    if (opt_hash_hash_hash)
+      return;
   }
 
   if (fork() == 0) {

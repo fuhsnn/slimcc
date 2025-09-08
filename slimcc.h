@@ -925,5 +925,6 @@ extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
 extern char *default_ld;
 extern char *default_as;
+extern char *dumpmachine_str;
 
 #endif

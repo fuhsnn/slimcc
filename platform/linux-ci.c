@@ -12,6 +12,8 @@ void platform_init(void) {
 
   init_ty_lp64();
 
+  dumpmachine_str = "x86_64-linux-gnu";
+
   set_fpie("2");
   opt_pie = true;
 }
