@@ -10,6 +10,8 @@ void platform_init(void) {
 
   init_ty_lp64();
 
+  dumpmachine_str = "x86_64-linux-gnu";
+
   // Follow build compiler's PIE on/off status
 #ifdef __pie__
   set_fpie("2");

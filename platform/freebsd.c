@@ -7,6 +7,8 @@ void platform_init(void) {
   define_macro("__extension__", "");
 
   init_ty_lp64();
+
+  dumpmachine_str = "x86_64-unknown-freebsd15.0";
 }
 
 void platform_stdinc_paths(StringArray *paths) {

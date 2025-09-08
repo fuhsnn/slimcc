@@ -9,6 +9,8 @@ void platform_init(void) {
 
   init_ty_lp64();
 
+  dumpmachine_str = "x86_64-alpine-linux-musl";
+
   set_fpie("2");
   opt_pie = true;
 }
