@@ -9,10 +9,10 @@ const char *__asan_default_options(void) {
 #endif
 
 #define FREE_THRESHOLD (100 * 1024)
-#define PAGE_SIZE 4064
+#define ARENA_PAGE_SIZE 4064
 
 struct Page {
-  char buf[PAGE_SIZE];
+  char buf[ARENA_PAGE_SIZE];
   Page *next;
 };
 
@@ -35,7 +35,7 @@ static Page *new_page(void) {
   Page *p = malloc(sizeof(Page));
   p->next = NULL;
 #if USE_ASAN
-  __asan_poison_memory_region(&p->buf, PAGE_SIZE);
+  __asan_poison_memory_region(&p->buf, ARENA_PAGE_SIZE);
 #endif
   return p;
 }
@@ -44,7 +44,7 @@ static void *allocate(Arena *arena, size_t sz, bool clear) {
   size_t aligned_sz = (sz + 15) & -16LL;
 
   void *ptr;
-  if ((arena->used + aligned_sz) <= PAGE_SIZE) {
+  if ((arena->used + aligned_sz) <= ARENA_PAGE_SIZE) {
     ptr = &arena->page->buf[arena->used];
     arena->used += aligned_sz;
   } else {

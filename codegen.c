@@ -2256,6 +2256,7 @@ static void gen_bitint_arith(Node *node) {
     case ND_LE: val = 2; kind = ND_NE; break;
     case ND_GT: val = 2; kind = ND_EQ; break;
     case ND_GE: val = 1; kind = ND_NE; break;
+    default: internal_error();
     }
     imm_cmp("%eax", NULL, val);
     gen_cmp_setcc(kind, false);
