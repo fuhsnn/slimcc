@@ -152,7 +152,7 @@ struct {
 } pack_stk;
 
 // Likewise, global variables are accumulated to this list.
-static Obj *globals;
+static Obj *globals = &(Obj){0};
 
 static Scope *scope = &(Scope){0};
 
@@ -5244,8 +5244,7 @@ static Token *free_parsed_tok(Token *tok, Token *end) {
 
 // program = (typedef | function-definition | global-variable)*
 Obj *parse(Token *tok) {
-  Obj glb_head = {0};
-  globals = &glb_head;
+  Obj *glb_head = globals;
 
   Token *free_head = tok;
   while (tok->kind != TK_EOF) {
@@ -5305,5 +5304,5 @@ Obj *parse(Token *tok) {
     arena_off(&node_arena);
   }
 
-  return glb_head.next;
+  return glb_head->next;
 }
