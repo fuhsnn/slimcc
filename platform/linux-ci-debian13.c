@@ -25,14 +25,16 @@ void platform_stdinc_paths(StringArray *paths) {
   add_include_path(paths, "/usr/include");
 }
 
+void platform_search_dirs(StringArray *paths) {
+  strarray_push(paths, "/usr/lib/gcc/x86_64-linux-gnu/14");
+  strarray_push(paths, "/usr/lib/x86_64-linux-gnu");
+}
+
 void run_assembler(StringArray *as_args, char *input, char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  strarray_push(paths, "-L/usr/lib/gcc/x86_64-linux-gnu/14");
-  strarray_push(paths, "-L/usr/lib/x86_64-linux-gnu");
-
   run_linker_gnustyle(paths, inputs, output,
     "/usr/lib64/ld-linux-x86-64.so.2",
     "/usr/lib/x86_64-linux-gnu",

@@ -230,13 +230,52 @@ static char *quote_makefile(char *s) {
   return buf;
 }
 
+static void build_incl_paths(char *opt_B, bool opt_nostdinc, StringArray *isystem, StringArray *idirafter) {
+  if (opt_B)
+    add_include_path(&sysincl_paths, opt_B);
+
+  for (int i = 0; i < isystem->len; i++)
+    add_include_path(&sysincl_paths, isystem->data[i]);
+
+  if (!opt_nostdinc)
+    platform_stdinc_paths(&sysincl_paths);
+
+  for (int i = 0; i < idirafter->len; i++)
+    add_include_path(&sysincl_paths, idirafter->data[i]);
+
+  // Filter system directories passed as -I
+  int incl_cnt = 0;
+  for (int i = 0; i < include_paths.len; i++) {
+    bool match = false;
+    for (int j = 0; j < sysincl_paths.len; j++)
+      if ((match = !strcmp(sysincl_paths.data[j], include_paths.data[i])))
+        break;
+    if (!match)
+      include_paths.data[incl_cnt++] = include_paths.data[i];
+  }
+  include_paths.len = incl_cnt;
+
+  for (int i = 0; i < sysincl_paths.len; i++)
+    strarray_push(&include_paths, sysincl_paths.data[i]);
+}
+
+static void build_ld_paths(char *opt_B, StringArray *paths) {
+  if (opt_B)
+    strarray_push(&ld_paths, opt_B);
+
+  for (int i = 0; i < paths->len; i++)
+    strarray_push(&ld_paths, paths->data[i]);
+
+  platform_search_dirs(&ld_paths);
+}
+
 static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   char *arg;
   int input_cnt = 0;
   char *opt_B = NULL;
   bool has_wl = false;
   bool opt_nostdinc = false;
-  StringArray libpath = {0};
+  StringArray libpaths = {0};
   StringArray isystem = {0};
   StringArray idirafter = {0};
 
@@ -268,6 +307,20 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       if (!dumpmachine_str)
         error("'-dumpmachine' not configured");
       puts(dumpmachine_str);
+      exit(0);
+    }
+
+    if (!strcmp(argv[i], "-print-search-dirs") || !strcmp(argv[i], "--print-search-dirs")) {
+      StringArray dirs = {0};
+      platform_search_dirs(&dirs);
+      printf("libraries: =");
+      for (int i = 0; i < dirs.len; i++)
+        printf("%s%s", dirs.data[i], (i + 1 != dirs.len) ? ":" : "\n");
+      exit(0);
+    }
+
+    if (!strcmp(argv[i], "-hashmap-test")) {
+      hashmap_test();
       exit(0);
     }
 
@@ -351,8 +404,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-L")) {
-      strarray_push(&libpath, "-L");
-      strarray_push(&libpath, arg);
+      strarray_push(&libpaths, arg);
       continue;
     }
 
@@ -432,11 +484,6 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       else
         opt_MT = format("%s %s", opt_MT, quote_makefile(arg));
       continue;
-    }
-
-    if (!strcmp(argv[i], "-hashmap-test")) {
-      hashmap_test();
-      exit(0);
     }
 
     if (startswith(argv[i], &arg, "-g")) {
@@ -614,43 +661,14 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   if (opt_B) {
     char *as_b = format("%s/%s", opt_B, default_as);
     char *ld_b = format("%s/%s", opt_B, default_ld);
-    if (file_exists(as_b)) default_as = as_b;
-    if (file_exists(ld_b)) default_ld = ld_b;
-
-    strarray_push(&ld_paths, "-L");
-    strarray_push(&ld_paths, opt_B);
-
-    add_include_path(&sysincl_paths, opt_B);
+    if (file_exists(as_b))
+      default_as = as_b;
+    if (file_exists(ld_b))
+      default_ld = ld_b;
   }
 
-  for (int i = 0; i < libpath.len; i++) {
-    strarray_push(&ld_paths, "-L");
-    strarray_push(&ld_paths, libpath.data[i]);
-  }
-
-  for (int i = 0; i < isystem.len; i++)
-    add_include_path(&sysincl_paths, isystem.data[i]);
-
-  if (!opt_nostdinc)
-    platform_stdinc_paths(&sysincl_paths);
-
-  for (int i = 0; i < idirafter.len; i++)
-    add_include_path(&sysincl_paths, idirafter.data[i]);
-
-  // Filter system directories passed as -I
-  int incl_cnt = 0;
-  for (int i = 0; i < include_paths.len; i++) {
-    bool match = false;
-    for (int j = 0; j < sysincl_paths.len; j++)
-      if ((match = !strcmp(sysincl_paths.data[j], include_paths.data[i])))
-        break;
-    if (!match)
-      include_paths.data[incl_cnt++] = include_paths.data[i];
-  }
-  include_paths.len = incl_cnt;
-
-  for (int i = 0; i < sysincl_paths.len; i++)
-    strarray_push(&include_paths, sysincl_paths.data[i]);
+  build_incl_paths(opt_B, opt_nostdinc, &isystem, &idirafter);
+  build_ld_paths(opt_B, &libpaths);
 
   bool no_input = !input_cnt && !has_wl;
   if (opt_hash_hash_hash || opt_verbose) {
@@ -1126,8 +1144,10 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
     }
   }
 
-  for (int i = 0; i < paths->len; i++)
+  for (int i = 0; i < paths->len; i++) {
+    strarray_push(&arr, "-L");
     strarray_push(&arr, paths->data[i]);
+  }
 
   for (int i = 0; i < args->len; i++)
     strarray_push(&arr, args->data[i]);
@@ -1307,8 +1327,8 @@ int main(int argc, char **argv) {
     continue;
   }
 
-  if (run_ld) {
+  if (run_ld)
     run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
-  }
+
   return 0;
 }

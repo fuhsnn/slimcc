@@ -1,5 +1,7 @@
 #include "slimcc.h"
 
+static char *gcclibpath;
+
 void platform_init(void) {
   define_macro("__ELF__", "1");
 
@@ -39,6 +41,21 @@ void platform_stdinc_paths(StringArray *paths) {
   add_include_path(paths, "/usr/include");
 }
 
+void platform_search_dirs(StringArray *paths) {
+  gcclibpath = find_dir_w_file("/usr/lib*/gcc/x86_64*-linux*/*/crtbegin.o");
+  if (!gcclibpath)
+    error("gcc library path not found");
+
+  strarray_push(paths, gcclibpath);
+  strarray_push(paths, "/usr/lib/x86_64-linux-gnu");
+  strarray_push(paths, "/usr/lib/x86_64-pc-linux-gnu");
+  strarray_push(paths, "/usr/lib/x86_64-redhat-linux");
+  strarray_push(paths, "/usr/lib64");
+  strarray_push(paths, "/lib64");
+  strarray_push(paths, "/usr/lib");
+  strarray_push(paths, "/lib");
+}
+
 void run_assembler(StringArray *as_args, char *input, char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
@@ -58,19 +75,6 @@ static char *libpath(void) {
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  char *gcclibpath = find_dir_w_file("/usr/lib*/gcc/x86_64*-linux*/*/crtbegin.o");
-  if (!gcclibpath)
-    error("gcc library path not found");
-
-  strarray_push(paths, format("-L%s", gcclibpath));
-  strarray_push(paths, "-L/usr/lib/x86_64-linux-gnu");
-  strarray_push(paths, "-L/usr/lib/x86_64-pc-linux-gnu");
-  strarray_push(paths, "-L/usr/lib/x86_64-redhat-linux");
-  strarray_push(paths, "-L/usr/lib64");
-  strarray_push(paths, "-L/lib64");
-  strarray_push(paths, "-L/usr/lib");
-  strarray_push(paths, "-L/lib");
-
   run_linker_gnustyle(paths, inputs, output,
     "/lib64/ld-linux-x86-64.so.2",
     libpath(),

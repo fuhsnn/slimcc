@@ -859,6 +859,7 @@ int display_width(char *p, int len);
 
 void platform_init(void);
 void platform_stdinc_paths(StringArray *paths);
+void platform_search_dirs(StringArray *paths);
 void run_assembler(StringArray *as_args, char *input, char *output);
 void run_linker(StringArray *paths, StringArray *inputs, char *output);
 

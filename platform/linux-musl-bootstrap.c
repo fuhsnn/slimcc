@@ -18,13 +18,15 @@ void platform_stdinc_paths(StringArray *paths) {
   add_include_path(paths, ROOT_DIR"/usr/include");
 }
 
+void platform_search_dirs(StringArray *paths) {
+  strarray_push(paths, ROOT_DIR"/lib");
+}
+
 void run_assembler(StringArray *as_args, char *input, char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  strarray_push(paths, "-L"ROOT_DIR"/lib");
-
   strarray_push(inputs, "--gc-sections");
 
   run_linker_gnustyle(paths, inputs, output,
