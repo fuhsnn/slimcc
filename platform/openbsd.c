@@ -35,6 +35,10 @@ void platform_stdinc_paths(StringArray *paths) {
   add_include_path(paths, "/usr/include");
 }
 
+void platform_search_dirs(StringArray *paths) {
+  strarray_push(paths, "/usr/lib");
+}
+
 void run_assembler(StringArray *as_args, char *input, char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
@@ -95,10 +99,10 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output) {
     }
   }
 
-  for (int i = 0; i < paths->len; i++)
+  for (int i = 0; i < paths->len; i++) {
+    strarray_push(&arr, "-L");
     strarray_push(&arr, paths->data[i]);
-
-  strarray_push(&arr, "-L/usr/lib");
+  }
 
   for (int i = 0; i < inputs->len; i++)
     strarray_push(&arr, inputs->data[i]);

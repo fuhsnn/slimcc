@@ -30,14 +30,16 @@ void platform_stdinc_paths(StringArray *paths) {
   add_include_path(paths, "/usr/include");
 }
 
+void platform_search_dirs(StringArray *paths) {
+  strarray_push(paths, "/usr/lib");
+  strarray_push(paths, "/lib");
+}
+
 void run_assembler(StringArray *as_args, char *input, char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  strarray_push(paths, "-L/usr/lib");
-  strarray_push(paths, "-L/lib");
-
   run_linker_gnustyle(paths, inputs, output,
     "/libexec/ld-elf.so.1",
     "/usr/lib",
