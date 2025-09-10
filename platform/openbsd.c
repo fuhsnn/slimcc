@@ -9,6 +9,8 @@ void platform_init(void) {
 
   init_ty_lp64();
 
+  dumpmachine_str = "amd64-unknown-openbsd7.7";
+
   default_as = "gas";
 
   opt_femulated_tls = true;
