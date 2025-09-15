@@ -1779,6 +1779,31 @@ static Token *has_builtin_macro(Token *start) {
   return tok2;
 }
 
+static Token *has_extension_macro(Token *start) {
+  Token *tok = skip(start->next, "(");
+
+  // Check clang/include/clang/Basic/Features.def, gcc/c/c-objc-common.cc
+  bool has_it =
+    equal(tok, "c_alignas") ||
+    equal(tok, "c_alignof") ||
+    equal(tok, "c_atomic") ||
+    equal(tok, "c_generic_selections") ||
+    equal(tok, "c_static_assert") ||
+    equal(tok, "c_thread_local") ||
+    equal(tok, "cxx_binary_literals") ||
+    equal(tok, "c_fixed_enum") ||
+    equal(tok, "c_countof") ||
+    equal(tok, "gnu_asm") ||
+    equal(tok, "gnu_asm_goto_with_outputs") ||
+    equal(tok, "gnu_asm_goto_with_outputs_full");
+
+  tok = skip(tok->next, ")");
+  pop_macro_lock_until(start, tok);
+  Token *tok2 = new_num_token(has_it, start);
+  tok2->next = tok;
+  return tok2;
+}
+
 void init_macros(void) {
   arena_on(&pp_arena);
 
@@ -1827,6 +1852,7 @@ void init_macros(void) {
   add_builtin("__has_attribute", has_attribute_macro, true);
   add_builtin("__has_c_attribute", has_c_attribute_macro, true);
   add_builtin("__has_builtin", has_builtin_macro, true);
+  add_builtin("__has_extension", has_extension_macro, true);
   add_builtin("__has_include", has_include_macro, true);
   add_builtin("__has_embed", has_embed_macro, true);
 }
