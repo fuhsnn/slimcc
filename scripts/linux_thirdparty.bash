@@ -1,6 +1,11 @@
 set -eu
 set -o pipefail
 
+if [ "$CC" = /work/slimcc/slimcc ]; then
+ is_CI=
+ SRC_DIR=/work/slimcc/
+fi
+
 test_ag() {
  git_fetch https://github.com/aswild/the_silver_searcher 7b571a8a94d0e22a06e3313cb0d9672b416fb2c1 ag
  sh autogen.sh
@@ -88,14 +93,25 @@ test_bzip2() {
  make CC=$CC test
 }
 
+test_bzip3() {
+ git_fetch https://github.com/iczelia/bzip3 53984efe378df61a4d3eb41637355c453eec338f bzip3
+ libtoolize
+ sh ./bootstrap.sh
+ fix_and_configure --disable-arch-native
+ sed -i 's|#include <intrin.h>||g' include/common.h
+ sed -i 's|_mm_prefetch((const void \*)(address), _MM_HINT_NTA)||g' include/common.h
+ sed -i 's|_m_prefetchw((const void \*)(address))||g' include/common.h
+ make roundtrip test
+}
+
 test_c23doku() {
- git_fetch https://github.com/fuhsnn/c23doku c0bd5daa91f4ffa0e06f418850111691577cd365 c23doku
+ git_fetch https://github.com/fuhsnn/c23doku 9c84d5229e16af9e58deca7322dc79751d7474b0 c23doku
  CC=$CC sh test.sh
+ CC=$CC sh test_c2y.sh
 }
 
 test_c3() {
  github_tar c3lang c3c v0.7.5
- replace_line "#elif defined(__GNUC__)" "#elif 1" src/utils/whereami.c
  cmake_init
  make VERBOSE=1
  cd ../test
@@ -121,12 +137,15 @@ test_cjson() {
  make check
 }
 
+test_cmocka() {
+ url_bz https://gitlab.com/cmocka/cmocka/-/archive/cmocka-1.1.8/cmocka-cmocka-1.1.8.tar.bz2 cmocka
+ cmake_init
+ make && ctest
+}
+
 test_coreutils() {
- url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.7.tar.xz coreutils
- sed -i 's|--std=gnu99||g' init.cfg
- # fail in docker
-  sed -i 's|tests/tail/inotify-dir-recreate.sh||g' tests/local.mk
-  sed -i 's|tests/rm/deep-2.sh||g' tests/local.mk
+ url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.8.tar.xz coreutils
+ ${is_CI+ replace_line "skip_if_root_" "skip_" tests/rm/deep-2.sh }
  ./configure
  make check
 }
@@ -144,7 +163,7 @@ test_cproc() {
 }
 
 test_curl() {
- url_xz https://github.com/curl/curl/releases/download/curl-8_15_0/curl-8.15.0.tar.xz curl
+ url_xz https://github.com/curl/curl/releases/download/curl-8_16_0/curl-8.16.0.tar.xz curl
  fix_and_configure --with-openssl
  make && make test
 }
@@ -171,17 +190,6 @@ test_espruino() {
  ./bin/espruino --test-all
 }
 
-test_jerryscript() {
- github_tar jerryscript-project jerryscript v3.0.0
- sed -i 's|if(NOT (${CMAKE_C_COMPILER_ID} STREQUAL MSVC))|if(FALSE)|g' tests/unit-doc/CMakeLists.txt
- replace_line "#ifdef __GNUC__" "#if 1" jerry-ext/include/jerryscript-ext/autorelease.impl.h
- replace_line "#elif defined(__GNUC__)" "#elif 1" jerry-ext/include/jerryscript-ext/module.h
- python3 tools/run-tests.py --unittest
- python3 tools/run-tests.py --jerry-tests
- python3 tools/run-tests.py --test262
- python3 tools/build.py
-}
-
 test_file() {
  github_tar file file FILE5_46
  libtoolize
@@ -199,13 +207,14 @@ test_flex() {
 
 test_fossil() {
  github_tar drhsqlite fossil-mirror version-2.26
- CC_FOR_BUILD=$CC ./configure --json
+ use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' extsrc/sqlite3.c
+ CC_FOR_BUILD=$CC ./configure
  make test
 }
 
 test_gawk() {
  url_lz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.3.2.tar.lz gawk
- fix_and_configure --disable-pma # pma segfault in docker
+ fix_and_configure ${is_CI+ --disable-pma } # pma segfault in docker
  make check
 }
 
@@ -236,7 +245,7 @@ test_go() {
  sed -i 's|\"-ggdb\",||g' src/cmd/dist/build.c
  sed -i 's|\"-pipe\",||g' src/cmd/dist/build.c
  sed -i 's|vadd(&gccargs, \"-fmessage-length=0\");||g' src/cmd/dist/build.c
- rm src/runtime/pprof/pprof_test.go # flaky (cpu load sensitive)
+ ${is_CI+ rm src/runtime/pprof/pprof_test.go } # flaky (cpu load sensitive)
  cd src/
  GO14TESTS=1 ./all.bash
 }
@@ -281,6 +290,33 @@ test_jemalloc() {
  autoconf
  ./configure --disable-cxx
  make check
+}
+
+test_jerryscript() {
+ github_tar jerryscript-project jerryscript v3.0.0
+ sed -i 's|if(NOT (${CMAKE_C_COMPILER_ID} STREQUAL MSVC))|if(FALSE)|g' tests/unit-doc/CMakeLists.txt
+ replace_line "#ifdef __GNUC__" "#if 1" jerry-ext/include/jerryscript-ext/autorelease.impl.h
+ replace_line "#elif defined(__GNUC__)" "#elif 1" jerry-ext/include/jerryscript-ext/module.h
+ python3 tools/run-tests.py --unittest
+ python3 tools/run-tests.py --jerry-tests
+ python3 tools/run-tests.py --test262
+ python3 tools/build.py
+}
+
+test_jq() {
+ url_tar https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-1.8.1.tar.gz jq
+ fix_and_configure
+ make check
+}
+
+test_ksh93() {
+ git_fetch https://github.com/ksh93/ksh 310b28220776c6bc023678e8ee1058188724b466 ksh93
+ replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
+ # probe depends on -Wincompatible-pointer-types
+ sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
+ ${is_CI+ rm src/cmd/ksh93/tests/basic.sh src/cmd/ksh93/tests/io.sh src/cmd/ksh93/tests/sigchld.sh src/cmd/ksh93/tests/variables.sh }
+ bin/package make
+ bin/package test
 }
 
 test_lame() {
@@ -369,7 +405,6 @@ test_libjpeg() {
 
 test_libjsonc() {
  git_fetch https://github.com/json-c/json-c 7cee5237dc6c0831e3f9dc490394eaea44636861 json-c
- sed -i 's|json_object_new_double(NAN)|json_object_new_double(nan(\"\"))|g' json_tokener.c
  cmake_init -DHAVE_VASPRINTF=no
  make && make test
 }
@@ -457,7 +492,7 @@ test_libuv() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.14.6
+ github_tar GNOME libxml2 v2.15.0
  libtoolize
  sh autogen.sh
  fix_configure
@@ -476,7 +511,7 @@ test_lua() {
  cd src && make CC="$CC" linux-readline
  url_tar https://www.lua.org/tests/lua-5.4.8-tests.tar.gz luatests
  cd libs && make CC="$CC" && cd ../
- ../lua -e"_port=true" all.lua # assertion at files.lua:84 fail in CI
+ ../lua ${is_CI+ -e"_port=true" } all.lua # assertion at files.lua:84 in CI
 }
 
 test_lwan(){
@@ -525,12 +560,11 @@ test_metalang99() {
 }
 
 test_micropython() {
- github_clone micropython micropython v1.26.0
+ github_clone micropython micropython v1.26.1
  use_stdbit "#include <stdbool.h>" py/misc.h
  sed -i 's|inline MP_ALWAYSINLINE const|static inline const|g' py/misc.h
  replace_line "#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 8)" "#if 1" py/nlrx64.c
  sed -i 's|defined(LFS2_NO_INTRINSICS)|1|g' lib/littlefs/lfs2_util.h
- sed -i 's|(mp_float_t)NAN}|(union {long long i;double f;}){.i=0x7ff8000000000000LL}.f}|g' py/objfloat.c
  make -C ports/unix/ CC=$CC V=1 VARIANT=standard MICROPY_PY_THREAD_GIL=1 test_full
  cd tests
  MICROPY_CPYTHON3=python3 MICROPY_MICROPYTHON=../ports/unix/build-standard/micropython ./run-multitests.py multi_net/*.py
@@ -562,7 +596,7 @@ test_msgpack() {
 }
 
 test_muon() {
- git_fetch https://github.com/muon-build/muon 613c25dcc2c7ad512c936d030e8895bc1802ed28 muon
+ git_fetch https://github.com/muon-build/muon 699068975d943dc42e1485b0e68d48f12d4bee4f muon
  sh ./bootstrap.sh build
  build/muon-bootstrap setup build
  sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
@@ -601,25 +635,19 @@ test_oniguruma() {
  make check
 }
 
-test_jq() {
- url_tar https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-1.8.1.tar.gz jq
- fix_and_configure
- make check
-}
-
 test_openssh() {
  github_tar openssh openssh-portable V_9_8_P1
  ./configure
  make
  make file-tests
- # make t-exec ## "regress/agent-subprocess.sh" fail in CI
+ ${is_CI- make t-exec } # "regress/agent-subprocess.sh" fail in CI
  make interop-tests
  make extra-tests
  make unit
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.5.2
+ github_tar openssl openssl openssl-3.5.3
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -654,7 +682,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0beta3
+ github_tar php php-src php-8.5.0RC1
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -664,7 +692,7 @@ test_php() {
  sed -i 's|, __ATOMIC_SEQ_CST||g' Zend/zend_atomic.h
 
  # don't work in CI https://github.com/php/php-src/blob/17187c4646f3293e1de8df3f26d56978d45186d6/.github/actions/test-linux/action.yml#L40
- export SKIP_IO_CAPTURE_TESTS=1
+ ${is_CI+ export SKIP_IO_CAPTURE_TESTS=1 }
 
  ./buildconf --force
  fix_configure
@@ -674,7 +702,7 @@ test_php() {
 }
 
 test_postgres() {
- github_tar postgres postgres REL_18_RC1
+ github_tar postgres postgres REL_18_0
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
@@ -688,7 +716,7 @@ test_python() {
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
  skip_tests=(
-  test_asyncio test_socket # Fail in CI
+  ${is_CI+ test_asyncio test_socket }
   test_os # https://github.com/python/cpython/issues/126112
  )
  ./configure
@@ -753,12 +781,14 @@ test_rvvm() {
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.22.4
+ github_tar samba-team samba samba-4.23.1
  sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
  sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
+ use_stdatomic '#include <stdarg.h>' third_party/quic_ko_wrapper/quic_ko_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
  replace_line "#if defined(__clang__) || defined(__GNUC__) || defined(__SUNPRO_C)" "#if 1" third_party/heimdal/include/heim_threads.h
+ sed -i 's/defined(_MSC_VER) && !defined(__clang__) &&/1||/g' third_party/ngtcp2/lib/ngtcp2_ringbuf.c
  ./configure --without-json --without-ad-dc --enable-selftest --without-ldap --without-ldb-lmdb --without-ads --with-shared-modules='!vfs_snapper,!vfs_nfs4acl_xattr'
  LD_LIBRARY_PATH=$PWD/bin/default/lib/util:$PWD/bin/default/libcli/util:$PWD/bin/default/librpc:$PWD/bin/default/nsswitch/libwbclient:$PWD/bin/default/source3:$PWD/bin/default/source3/libsmb make quicktest -j2
 }
@@ -781,6 +811,7 @@ test_sokol() {
 
 test_sqlite() {
  github_tar sqlite sqlite version-3.50.4
+ use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
 }
@@ -874,16 +905,17 @@ test_xz() {
 }
 
 test_yash() {
- github_tar magicant yash 2.59
+ github_tar magicant yash 2.60
  ./configure
  sed -i 's| docs$||g' Makefile
- sed -i 's| sigquit[1-8]-p.tst||g' tests/Makefile # extremely slow in CI
+ ${is_CI+ sed -i 's| sigquit[1-8]-p.tst||g' tests/Makefile } # extremely slow in CI
  make test
 }
 
 test_zlib() {
  github_tar madler zlib v1.3.1
  CFLAGS=-fPIC ./configure
+ replace_line 'LDSHARED=cc -shared' 'LDSHARED=$(CC) -shared' Makefile
  make test
 }
 
@@ -893,7 +925,7 @@ test_zsh() {
  autoreconf -fi
  ./configure
  sed -i 's/stat.mdd link=no/stat.mdd link=static/g' config.modules # Required to pass D07multibyte.ztst
- rm Test/A08time.ztst # Fail in CI
+ ${is_CI+ rm Test/A08time.ztst }
  make && make check
 }
 
@@ -910,6 +942,14 @@ build_dash() {
  make
 }
 
+build_ellipsis() {
+ git_fetch https://gitlab.inria.fr/gustedt/ellipsis 478dd3606412f3627e2e38bec86c942507a0f585 ellipsis
+ cd sources
+ sed -i 's|gnu2x|gnu23|g' Makefile-options
+ make distclean && make
+ echo 'Rev(1,2,3)' | ./ellipsis -xc - -D'Rev(X,...)=__VA_TAIL__()__VA_OPT__(,)X' | grep '^3,2,1$'
+}
+
 build_erlang() {
  github_tar erlang otp OTP-27.3.4
  replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
@@ -920,7 +960,7 @@ build_erlang() {
 }
 
 build_freetype() {
- url_tar https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-14-0/freetype-VER-2-14-0.tar.gz freetype
+ url_tar https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-14-1/freetype-VER-2-14-1.tar.gz freetype
  cmake_init
  make
 }
@@ -1035,7 +1075,7 @@ build_tin() {
 }
 
 build_yquake2() {
- github_tar yquake2 yquake2 QUAKE2_8_51
+ github_tar yquake2 yquake2 QUAKE2_8_60
  sed -i 's|-pipe -fomit-frame-pointer||g' Makefile
  sed -i 's|__VERSION__|\"\"|g' src/backends/unix/signalhandler.c
  make CC=$CC VERBOSE=1 CFLAGS='-DSTBI_NO_SIMD -DSDL_DISABLE_IMMINTRIN_H'
@@ -1048,6 +1088,91 @@ build_zig() {
  "$CC" bootstrap.c -o _bootstrap
  ./_bootstrap
  ./zig2 test --show-builtin
+}
+
+bootstrap_musl() {
+ local ROOT_DIR=$PWD/musl_build
+
+ git_fetch https://github.com/bminor/musl 0ccaf0572e9cccda2cced0f7ee659af4c1c6679a musl
+ rm -r src/complex/ include/complex.h
+ AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
+ make install
+ cd ../
+
+ git clone $SRC_DIR slimcc-musl && cd slimcc-musl
+ mkdir -p $ROOT_DIR/lib/slimcc
+ cp -r ./slimcc_headers/include $ROOT_DIR/lib/slimcc/
+ sed 's|ROOT_DIR|'\"$ROOT_DIR\"'|g' ./platform/linux-musl-bootstrap.c > platform.c
+ make test-all
+ cd ../
+
+ git_fetch https://github.com/morr0ne/libc-test f2bac7711bec93467b73bec1465579ea0b8d5071 libc-test
+ sed -e 's|-pipe||g' -e 's|-frounding-math||g' config.mak.def > config.mak
+ make CC=$PWD/../slimcc-musl/slimcc-stage2
+ grep '^FAIL ' src/REPORT | wc -l | grep '^7$'
+}
+
+bootstrap_uclibcng() {
+ local ROOT_DIR=$PWD/uclibcng_build
+
+ github_tar sabotage-linux kernel-headers v4.19.88-2
+ make ARCH=x86_64 prefix= DESTDIR=$PWD/../linuxhdr/ install
+ cd ../
+
+ git_fetch https://github.com/wbx-github/uclibc-ng 6d95aefc58a05b3cf92655603d5d0d2bc12a99fd uclibcng
+ sed -i 's|dN|dM|g' extra/scripts/gen_bits_syscall_h.sh
+ sed -i 's|:$(DEVEL_PREFIX)|:$(PREFIX)$(DEVEL_PREFIX)|g' Makefile.in
+ sed -i 's|:$(RUNTIME_PREFIX)|:$(PREFIX)$(RUNTIME_PREFIX)|g' Makefile.in
+ replace_line '#ifdef\t__GNUC__' '#if 1' include/alloca.h
+ replace_line '#if defined __GNUC__ && __GNUC__ >= 2' '#if 1' include/byteswap.h
+ replace_line '# if defined __GNUC__ && __GNUC__ >= 2' '#if 1' libc/sysdeps/linux/common/bits/sigset.h
+ replace_line '#if __GNUC_PREREQ (3,1)' '#if 1' include/sys/cdefs.h
+ replace_line '#if __GNUC__' '#if 1' libc/misc/ftw/ftw.c
+ sed -i 's|defined __ICC|1|g' include/libc-symbols.h
+ sed -i 's|# define __inline||g' include/sys/cdefs.h
+ sed -i 's|#if defined __GNUC__|#ifndef __USE_ISOCXX11\n#include<stdint.h>\ntypedef uint_least16_t char16_t;\ntypedef uint_least32_t char32_t;\n#elif 0|g' include/uchar.h
+ sed -i 's|__VERSION__||g' libc/misc/internals/version.c
+ perl -i -p0e 's|int rename\(const char \*oldpath, const char \*newpath\)\n\{\n\t_syscall5|static inline _syscall5|g' libc/sysdeps/linux/common/rename.c
+ perl -i -p0e 's|\treturn renameat2|int rename\(const char \*oldpath, const char \*newpath\)\n\{\n\treturn renameat2|g' libc/sysdeps/linux/common/rename.c
+ sed -i 's|int \*status|void*status|g' libc/sysdeps/linux/common/wait4.c
+ perl -i -p0e 's|__asm__ \("mov %rax, %rcx\\n\\t"\s+"neg %rcx"|__asm("neg %%eax;mov %%eax,%0":"=r"(err_no)|g' libc/sysdeps/linux/x86_64/__syscall_error.c
+
+ config=(
+  HAS_GLIBC_CUSTOM_STREAMS HAS_HEXADECIMAL_FLOATS HAS_WCHAR # for slimcc build-test
+  # for test suite
+  USE_NETLINK SUPPORT_AI_ADDRCONFIG HAS_PROGRAM_INVOCATION_NAME HAS_FTW HAS_NFTW HAS_UTMPX HAS_UTMP HAS_ARGP HAS_SHA256_CRYPT_IMPL HAS_SHA512_CRYPT_IMPL SUSV2_LEGACY
+  # HAS_LIBICONV HAS_RESOLVER_SUPPORT HAS_LOCALE BUILD_ALL_LOCALE # for disabled tests
+  SUSV4_LEGACY # utime.h
+ )
+ for i in ${config[@]}; do echo UCLIBC_$i=y >> extra/Configs/defconfigs/x86_64/defconfig; done
+
+ make CC=$CC HOSTCC=$CC CC_IPREFIX=$SRC_DIR/slimcc_headers/include KERNEL_HEADERS=$PWD/../linuxhdr/include/ PREFIX=$ROOT_DIR ARCH=x86_64 defconfig
+ make CC=$CC HOSTCC=$CC CC_IPREFIX=$SRC_DIR/slimcc_headers/include KERNEL_HEADERS=$PWD/../linuxhdr/include/ PREFIX=$ROOT_DIR ARCH=x86_64 install
+ cd ../
+ cp -r ./linuxhdr/include/* $ROOT_DIR/usr/x86_64-linux-uclibc/usr/include/
+
+ git clone $SRC_DIR slimcc-uclibcng && cd slimcc-uclibcng
+ mkdir -p $ROOT_DIR/usr/x86_64-linux-uclibc/lib/slimcc
+ cp -r ./slimcc_headers/include $ROOT_DIR/usr/x86_64-linux-uclibc/lib/slimcc/
+ sed 's|ROOT_DIR|'\"$ROOT_DIR/usr/x86_64-linux-uclibc/\"'|g' ./platform/linux-uclibcng-bootstrap.c > platform.c
+ rm test/atomic*.c test/tls*.c
+ make test-all
+ cd ../
+
+ git_fetch https://git.uclibc-ng.org/git/uclibc-ng-test.git a0ccc413f3b5bcb0de429e4bfbedd9a1b32db24e uclibc-ng-test
+ sed -i 's| strdupa |strdup|g' test/string/tester.c
+ cd test/
+ rm -r dlopen nptl pthread tls math # pthread/tls/math not built
+ rm -r iconv regex/tst-regexloc.c # skipped in upstream https://downloads.uclibc-ng.org/reports/
+ rm -r locale locale-mbwc # not in upstream test log?
+ rm inet/tst-ethers*.c mmap/mmap2.c stat/stat-loop256.c # nonexistent /dev/*
+ rm misc/tst-msgctl.c misc/tst-semctl.c misc/tst-shmctl.c # permission issues
+ rm string/test-ffs.c # nested function
+
+ rm inet/tst-getni2.c inet/tst-res.c # fail with unknwon reason
+ cd ../
+
+ make CC=$PWD/../slimcc-uclibcng/slimcc-stage2 test
 }
 
 # utilities

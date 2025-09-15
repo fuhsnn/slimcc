@@ -75,9 +75,11 @@ jobs:
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_busybox }
           - { vm: main, proj: test_bzip2 }
+          - { vm: main, proj: test_bzip3 }
           - { vm: main, proj: test_calc }
           - { vm: main, proj: test_cello }
           - { vm: main, proj: test_cjson }
+          - { vm: main, proj: test_cmocka }
           - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_cproc }
@@ -99,6 +101,7 @@ jobs:
           - { vm: main, proj: test_jemalloc }
           - { vm: main, proj: test_jerryscript }
           - { vm: main, proj: test_jq }
+          - { vm: main, proj: test_ksh93 }
           - { vm: main, proj: test_lame }
           - { vm: main, proj: test_libarchive }
           - { vm: main, proj: test_libevent }
@@ -159,6 +162,7 @@ jobs:
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: build_dash }
+          - { vm: main, proj: build_ellipsis }
           - { vm: main, proj: build_erlang }
           - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
@@ -168,6 +172,8 @@ jobs:
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_tin }
           - { vm: main, proj: build_zig }
+          - { vm: main, proj: bootstrap_musl }
+          - { vm: main, proj: bootstrap_uclibcng }
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
