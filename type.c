@@ -52,7 +52,7 @@ void init_ty_lp64(void) {
   define_macro("__LONG_MAX__", "0x7fffffffffffffffL");
   define_macro("__INT_MAX__", "0x7fffffff");
   define_macro("__SHRT_MAX__", "0x7fff");
-  define_macro("__SCHAR_MAX__", "0xf");
+  define_macro("__SCHAR_MAX__", "0x7f");
 
   ty_size_t = ty_ulong;
   ty_intptr_t = ty_ptrdiff_t = ty_long;
@@ -285,9 +285,8 @@ static bool is_enum_compat(EnumVal *ev1, EnumVal *ev2) {
 
 static int64_t *get_arr_len(Type *ty) {
   if ((ty->kind == TY_ARRAY && ty->array_len >= 0) ||
-    (ty->kind == TY_VLA && !ty->vla_len)) {
+    (ty->kind == TY_VLA && !ty->vla_len))
     return &ty->array_len;
-  }
   return NULL;
 }
 
@@ -656,11 +655,10 @@ void add_type(Node *node) {
     add_type(node->m.lhs);
     add_type(node->m.rhs);
     Node *ptr = node->m.lhs->ty->base ? node->m.lhs : node->m.rhs->ty->base ? node->m.rhs : NULL;
-    if (ptr) {
+    if (ptr)
       node->ty = ptr->ty;
-      return;
-    }
-    node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
+    else
+      node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   }
   case ND_MUL:
