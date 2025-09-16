@@ -5041,21 +5041,27 @@ static void resolve_goto_defer(Node *node, DeferStmt *dst_dfr) {
 }
 
 static void resolve_gotos(void) {
+  HashMap label_cache = {0};
   for (Node *x = gotos; x; x = x->lbl.next) {
-    Node *dest = NULL;
-    for (Node *lbl = labels; lbl; lbl = lbl->lbl.next) {
-      if (!equal_tok(lbl->tok, x->tok))
-        continue;
-      dest = lbl;
-      break;
-    }
-    if (!dest)
-      error_tok(x->tok, "use of undeclared label");
+    Node *dest = hashmap_get2(&label_cache, x->tok->loc, x->tok->len);
+    if (!dest) {
+      for (Node *lbl = labels; lbl; lbl = lbl->lbl.next) {
+        if (!equal_tok(lbl->tok, x->tok))
+          continue;
+        if (dest)
+          error_tok(x->tok, "duplicated label");
+        dest = lbl;
+      }
+      if (!dest)
+        error_tok(x->tok, "use of undeclared label");
 
+      hashmap_put2(&label_cache, x->tok->loc, x->tok->len, dest);
+    }
     x->lbl.unique_label = dest->lbl.unique_label;
     resolve_goto_defer(x, dest->dfr_from);
   }
-  gotos = labels = NULL;
+  free(label_cache.buckets);
+  gotos = NULL;
 }
 
 static Node *resolve_local_gotos(void) {
@@ -5148,7 +5154,9 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     (opt_reuse_stack && !current_fn->dont_reuse_stk))
     fn->dealloc_vla = true;
 
-  resolve_gotos();
+  if (gotos)
+    resolve_gotos();
+  labels = NULL;
   current_fn = NULL;
 
   emit_text(fn);
