@@ -87,6 +87,7 @@ static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok);
 static void newline_to_space(Token *tok);
+static Token *pragma_macro(Token *start);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -964,6 +965,9 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
 
   // Built-in dynamic macro application such as __LINE__
   if (m->handler) {
+    if (m->handler == &pragma_macro && !is_root)
+      return false;
+
     *rest = m->handler(tok);
     if (m->align)
       align_token(*rest, tok);
