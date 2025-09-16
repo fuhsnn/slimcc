@@ -342,7 +342,7 @@ static Token *make_token(char *str, Token *tmpl) {
 
   Token *tok = tokenize(&file, NULL);
   tok->file = tmpl->file;
-  tok->origin = tmpl;
+  tok->origin = tmpl->origin ? tmpl->origin : tmpl;
   tok->is_generated = true;
   tok->at_bol = false;
   return tok;
