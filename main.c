@@ -13,6 +13,17 @@ typedef enum {
   LT_PIE,
 } LinkType;
 
+typedef struct {
+  char *arg;
+  bool is_def;
+} MacroChange;
+
+typedef struct {
+  MacroChange *data;
+  int capacity;
+  int len;
+} MacroChangeArr;
+
 StringArray include_paths;
 StringArray iquote_paths;
 bool opt_fcommon;
@@ -75,6 +86,7 @@ static StringArray input_args;
 static StringArray sysincl_paths;
 static StringArray tmpfiles;
 static StringArray as_args;
+static MacroChangeArr macrodefs;
 
 char *argv0;
 
@@ -200,6 +212,40 @@ void set_fpie(char *lvl) {
   define_macro("__PIC__", lvl);
   define_macro("__pie__", lvl);
   define_macro("__PIE__", lvl);
+}
+
+static void macrochange_push(MacroChangeArr *arr, char *arg, bool is_def) {
+  if (arr->len == arr->capacity) {
+    arr->capacity += 4;
+    arr->data = realloc(arr->data, sizeof(MacroChange) * arr->capacity);
+  }
+  MacroChange *m = &arr->data[arr->len++];
+  m->arg = arg;
+  m->is_def = is_def;
+}
+
+static void build_macros(MacroChangeArr *arr, bool is_asm_pp) {
+  if (is_asm_pp) {
+    define_macro("__ASSEMBLER__", "1");
+  } else {
+    if (is_iso_std)
+      define_macro("__STRICT_ANSI__", "1");
+
+    switch (opt_std) {
+    case STD_C99: define_macro("__STDC_VERSION__", "199901L"); break;
+    case STD_C11: define_macro("__STDC_VERSION__", "201112L"); break;
+    case STD_C17: define_macro("__STDC_VERSION__", "201710L"); break;
+    case STD_C23: define_macro("__STDC_VERSION__", "202311L"); break;
+    }
+  }
+
+  for (int i = 0; i < arr->len; i++) {
+    MacroChange *m = &arr->data[i];
+    if (m->is_def)
+      define_macro_cli(m->arg);
+    else
+      undef_macro(m->arg);
+  }
 }
 
 static char *quote_makefile(char *s) {
@@ -378,12 +424,12 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-D")) {
-      define_macro_cli(arg);
+      macrochange_push(&macrodefs, arg, true);
       continue;
     }
 
     if (take_arg_s(argv, &i, &arg, "-U")) {
-      undef_macro(arg);
+      macrochange_push(&macrodefs, arg, false);
       continue;
     }
 
@@ -498,22 +544,19 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
 
     if (!strcmp(argv[i], "-ansi")) {
       set_std(true, "89");
-      define_macro_cli("__STRICT_ANSI__");
       continue;
     }
 
     if (startswith(argv[i], &arg, "-std=") ||
       startswith(argv[i], &arg, "--std=") ||
       take_arg(argv, &i, &arg, "--std")) {
-      if (startswith(arg, &arg, "c")) {
+      if (startswith(arg, &arg, "c"))
         set_std(true, arg);
-        continue;
-      }
-      if (startswith(arg, &arg, "gnu")) {
+      else if (startswith(arg, &arg, "gnu"))
         set_std(false, arg);
-        continue;
-      }
-      error("unknown c standard");
+      else
+        error("unknown c standard");
+      continue;
     }
 
     if (startswith(argv[i], &arg, "-f")) {
@@ -909,6 +952,8 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
+
+  build_macros(&macrodefs, is_asm_pp);
 
   if (!opt_E) {
     Token *last;

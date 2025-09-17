@@ -4,7 +4,6 @@
 void platform_init(void) {
   define_macro("__ELF__", "1");
 
-  define_macro("linux", "1");
   define_macro("__linux", "1");
   define_macro("__linux__", "1");
 

@@ -1645,20 +1645,6 @@ static Token *base_file_macro(Token *start) {
   return tok;
 }
 
-static Token *stdver_macro(Token *tok) {
-  tok->kind = TK_PP_NUM;
-  tok->len = 7;
-
-  switch (opt_std) {
-  case STD_C99: tok->loc = "199901L"; break;
-  case STD_C11: tok->loc = "201112L"; break;
-  case STD_C17: tok->loc = "201710L"; break;
-  case STD_C23: tok->loc = "202311L"; break;
-  default: tok->loc = "201710L";
-  }
-  return tok;
-}
-
 static Token *pragma_macro(Token *start) {
   Token *tok = start->next;
   Token *str_tok = NULL;
@@ -1827,7 +1813,6 @@ void init_macros(void) {
   define_macro("__C99_MACRO_WITH_VA_ARGS", "1");
   define_macro("__USER_LABEL_PREFIX__", "");
 
-  define_macro("unix", "1");
   define_macro("__unix", "1");
   define_macro("__unix__", "1");
 
@@ -1849,7 +1834,6 @@ void init_macros(void) {
   add_builtin("__COUNTER__", counter_macro, true);
   add_builtin("__TIMESTAMP__", timestamp_macro, true);
   add_builtin("__BASE_FILE__", base_file_macro, true);
-  add_builtin("__STDC_VERSION__", stdver_macro, true);
 
   add_builtin("_Pragma", pragma_macro, false);
 
@@ -2126,12 +2110,6 @@ static Token *preprocess3(Token *tok) {
 // Entry point function of the preprocessor.
 Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
   base_file = input_file;
-
-  if (opt_std == STD_C89) {
-    Macro *m = hashmap_get(&macros, "__STDC_VERSION__");
-    if (m && m->handler)
-      undef_macro("__STDC_VERSION__");
-  }
 
   if (imacros_tok)
     imacros_tok = preprocess2(imacros_tok);
