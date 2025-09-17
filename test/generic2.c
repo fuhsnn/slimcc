@@ -150,5 +150,7 @@ int main(int argc, char**argv) {
   SASSERT(2 == _Generic(volatile int, volatile int: 2, int: 1) );
   SASSERT(2 == _Generic(_Atomic int,  _Atomic int: 2, int :1) );
 
+  SASSERT(1 == _Generic(typeof(*(void*)0)*, void *: 1));
+
   printf("OK\n");
 }

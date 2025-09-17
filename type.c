@@ -771,8 +771,6 @@ void add_type(Node *node) {
     add_type(node->m.lhs);
     if (!node->m.lhs->ty->base)
       error_tok(node->tok, "invalid pointer dereference");
-    if (node->m.lhs->ty->base->kind == TY_VOID)
-      error_tok(node->tok, "dereferencing a void pointer");
 
     node->ty = node->m.lhs->ty->base;
     return;
