@@ -1975,7 +1975,7 @@ static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
-  bool gnu_if_battr = !is_bracket || (vendor && equal(vendor, "gnu"));
+  bool gnu_if_battr = !is_bracket || (vendor && equal_ext(vendor, "gnu"));
 
   if (gnu_if_battr && is_gnu_attr(tok))
     return true;
