@@ -900,7 +900,7 @@ static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
     error_tok(name, "conflict of attribute common/nocommon");
 }
 
-static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn) {
+static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_def) {
   apply_cdtor_attr("constructor", name, &fn->is_ctor, &fn->ctor_prior, attr->ctor_prior, attr->is_ctor);
   DeclAttr(cdtor_attr, "constructor", &fn->is_ctor, &fn->ctor_prior);
 
@@ -919,11 +919,16 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn) {
   fn->returns_twice |= attr->is_returns_twice;
   DeclAttr(bool_attr, "returns_twice", &fn->returns_twice);
 
-  if (equal(tok, "{")) {
-    fn->is_gnu_inline = attr->is_gnu_inline;
-    DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
-    if (fn->is_gnu_inline)
-      fn->is_inline |= attr->is_inline;
+  bool is_gnu_inline = attr->is_gnu_inline;
+  DeclAttr(bool_attr, "gnu_inline", &is_gnu_inline);
+
+  if (is_gnu_inline || opt_std == STD_C89 || opt_gnu89_inline) {
+    if (is_def)
+      fn->export_fn |= !(attr->is_inline && (attr->strg & SC_EXTERN));
+    else
+      fn->export_fn |= (attr->is_inline && !(attr->strg & SC_EXTERN));
+  } else {
+    fn->export_fn |= !(attr->is_inline && !(attr->strg & SC_EXTERN));
   }
 }
 
@@ -1676,7 +1681,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     assembler_name(&tok, tok, fn);
     aligned_attr(name, tok, attr, &fn->alt_align);
     symbol_attr(name, tok, attr, fn);
-    func_attr(name, tok, attr, fn);
+    func_attr(name, tok, attr, fn, false);
 
     *rest = tok;
     return NULL;
@@ -5182,13 +5187,11 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
     hashmap_put2(&symbols, name->loc, name->len, fn);
 
     fn->is_static = attr->strg & SC_STATIC;
-    fn->is_inline = attr->is_inline;
 
     if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
       strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
       fn->returns_twice = true;
   }
-  fn->is_extern_fn |= attr->strg & SC_EXTERN;
   return fn;
 }
 
@@ -5256,12 +5259,13 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       assembler_name(&tok, tok, fn);
       aligned_attr(name, tok, attr, &fn->alt_align);
       symbol_attr(name, tok, attr, fn);
-      func_attr(name, tok, attr, fn);
 
       if (first && !scope->parent && equal(tok, "{")) {
+        func_attr(name, tok, attr, fn, true);
         func_definition(rest, tok, fn, ty);
         return;
       }
+      func_attr(name, tok, attr, fn, false);
       continue;
     }
 

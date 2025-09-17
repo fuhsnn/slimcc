@@ -357,9 +357,7 @@ struct Obj {
   char *constexpr_data;
 
   // Function
-  bool is_inline;
-  bool is_gnu_inline;
-  bool is_extern_fn;
+  bool export_fn;
   bool is_naked;
   bool is_noreturn;
   bool returns_twice;
@@ -924,6 +922,7 @@ extern StdVer opt_std;
 extern bool is_iso_std;
 extern bool opt_fdefer_ts;
 extern bool opt_short_enums;
+extern bool opt_gnu89_inline;
 extern bool opt_ms_anon_struct;
 extern bool opt_disable_visibility;
 

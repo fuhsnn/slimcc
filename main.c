@@ -43,6 +43,7 @@ StdVer opt_std = STD_C17;
 bool is_iso_std;
 bool opt_fdefer_ts;
 bool opt_short_enums;
+bool opt_gnu89_inline;
 bool opt_ms_anon_struct;
 bool opt_disable_visibility;
 
@@ -567,7 +568,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         set_bool(arg, b, "function-sections", &opt_func_sections) ||
         set_bool(arg, b, "data-sections", &opt_data_sections) ||
         set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
-        set_bool(arg, b, "short-enums", &opt_short_enums))
+        set_bool(arg, b, "short-enums", &opt_short_enums) ||
+        set_bool(arg, b, "gnu89-inline", &opt_gnu89_inline))
         continue;
 
       if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct))
