@@ -87,6 +87,9 @@
 #define FLT_SNAN __builtin_math_constant_nansf()
 #define DBL_SNAN __builtin_math_constant_nans()
 #define LDBL_SNAN __builtin_math_constant_nansl()
+
+#define NAN __builtin_math_constant_nanf()
+#define INFINITY __builtin_math_constant_inff()
 #endif
 
 #endif

@@ -3427,6 +3427,8 @@ static long double eval_fp_cast(long double fval, Type *ty) {
 
 static void build_math_constant(Node *node, FPVal *fval) {
   switch (node->num.constant) {
+  case MATH_CONSTANT_NANF: fval->chunk[0] = 0x7FC00000; return;
+  case MATH_CONSTANT_INFF: fval->chunk[0] = 0x7F800000; return;
   case MATH_CONSTANT_NANSF: fval->chunk[0] = 0x7FA00000; return;
   case MATH_CONSTANT_NANS: fval->chunk[0] = 0x7FF4000000000000; return;
   case MATH_CONSTANT_NANSL: fval->chunk[1] = 0x7FFF;
@@ -4906,7 +4908,13 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     char *loc = tok->loc + 24;
     int len = tok->len - 24;
 
-    if (equal_substr(loc, len, "nansf")) {
+    if (equal_substr(loc, len, "nanf")) {
+      node->num.constant = MATH_CONSTANT_NANF;
+      node->ty = ty_float;
+    } else if (equal_substr(loc, len, "inff")) {
+      node->num.constant = MATH_CONSTANT_INFF;
+      node->ty = ty_float;
+    } else if (equal_substr(loc, len, "nansf")) {
       node->num.constant = MATH_CONSTANT_NANSF;
       node->ty = ty_float;
     } else if (equal_substr(loc, len, "nans")) {
