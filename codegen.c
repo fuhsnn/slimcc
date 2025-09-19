@@ -2371,7 +2371,10 @@ static void gen_expr2(Node *node, bool is_void) {
       load_bitint_val(node->ty, node->num.bitint_data);
     else if (is_flonum(node->ty))
       load_fval(node->ty, node->num.fval);
-    load_val(node->ty, node->num.val);
+    else if (is_integer(node->ty) || is_ptr(node->ty))
+      load_val(node->ty, node->num.val);
+    else
+      internal_error();
     return;
   }
   case ND_POS:

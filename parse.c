@@ -498,6 +498,7 @@ static Node *cond_cast(Node *expr) {
   case ND_NOT:
     return expr;
   }
+  ptr_convert(&expr);
   return new_cast(expr, ty_bool);
 }
 
