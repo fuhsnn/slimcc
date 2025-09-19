@@ -668,6 +668,14 @@ struct EnumVal {
   int64_t val;
 };
 
+typedef union {
+  uint64_t chunk[2];
+  uint32_t chunk32[4];
+  long double ld;
+  double d;
+  float f;
+} FPVal;
+
 typedef enum {
   TY_VOID,
   TY_BOOL,
@@ -805,7 +813,7 @@ bool is_redundant_cast(Node *expr, Type *ty);
 bool is_compatible(Type *t1, Type *t2);
 bool is_compatible2(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
-bool is_const_double(Node *node, long double *fval);
+bool is_const_fp(Node *node, FPVal *fval);
 bool is_nullptr(Node *node);
 bool is_ptr(Type *ty);
 int next_pow_of_two(int val);

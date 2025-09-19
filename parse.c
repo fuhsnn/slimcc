@@ -193,6 +193,7 @@ static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
 static long double eval_double(Node *node);
+static void eval_fp(Node *node, FPVal *fval);
 static uint64_t *eval_bitint(Node *node);
 static Node *conditional(Token **rest, Token *tok);
 static Node *new_add(Node *lhs, Node *rhs, Token *tok);
@@ -450,12 +451,9 @@ Node *new_cast(Node *expr, Type *ty) {
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .m.lhs = expr, .ty = ty};
   if (opt_optimize) {
     int64_t val = 0;
-    long double fval = 0;
-    if ((is_integer(ty) && is_const_expr(&tmp_node, &val)) ||
-      (is_flonum(ty) && is_const_double(&tmp_node, &fval))) {
+    if (is_integer(ty) && is_const_expr(&tmp_node, &val)) {
       expr->kind = ND_NUM;
       expr->num.val = val;
-      expr->num.fval = fval;
       expr->ty = ty;
       return expr;
     }
@@ -2286,11 +2284,14 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
       return cur;
     }
 
-    switch (init->ty->kind) {
-    case TY_FLOAT: BUFF_CAST(float, (buf + offset)) = eval_double(node); return cur;
-    case TY_DOUBLE: BUFF_CAST(double, (buf + offset)) = eval_double(node); return cur;
-    case TY_LDOUBLE: BUFF_CAST(long double, (buf + offset)) = eval_double(node); return cur;
-    case TY_BITINT: {
+    if (is_flonum(init->ty)) {
+      FPVal fval = {0};
+      eval_fp(node, &fval);
+      memcpy(buf + offset, &fval, init->ty->size);
+      return cur;
+    }
+
+    if (init->ty->kind == TY_BITINT) {
       uint64_t *data = eval_bitint(node);
       if (init->ty->bit_cnt < init->ty->size * 8)
         eval_bitint_sign_ext(init->ty->bit_cnt, data, init->ty->size * 8, init->ty->is_unsigned);
@@ -2298,7 +2299,7 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
       free(data);
       return cur;
     }
-    }
+
     error_tok(node->tok, "unknown initializer");
   }
   case INIT_STR_ARRAY: {
@@ -3379,15 +3380,13 @@ bool is_const_expr(Node *node, int64_t *val) {
   return !failed;
 }
 
-bool is_const_double(Node *node, long double *fval) {
-  add_type(node);
+bool is_const_fp(Node *node, FPVal *fval) {
   bool failed = false;
   bool *prev = eval_recover;
   eval_recover = &failed;
 
-  long double v = eval_double(node);
-  if (fval)
-    *fval = v;
+  eval_fp(node, fval);
+
   eval_recover = prev;
   return !failed;
 }
@@ -3420,6 +3419,20 @@ static long double eval_fp_cast(long double fval, Type *ty) {
   case TY_LDOUBLE: return fval;
   }
   internal_error();
+}
+
+static void eval_fp(Node *node, FPVal *fval) {
+  add_type(node);
+
+  long double v = eval_double(node);
+
+  if (fval) {
+    switch (node->ty->kind) {
+    case TY_FLOAT: fval->f = (float)v; break;
+    case TY_DOUBLE: fval->d = (double)v; break;
+    case TY_LDOUBLE: fval->ld = v; break;
+    }
+  }
 }
 
 static long double eval_double(Node *node) {
@@ -4719,7 +4732,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     add_type(exp);
 
     if (((is_integer(exp->ty) || is_ptr(exp->ty)) && is_const_expr(exp, NULL)) ||
-      (is_flonum(exp->ty) && is_const_double(exp, NULL)) ||
+      (is_flonum(exp->ty) && is_const_fp(exp, NULL)) ||
       (exp->kind == ND_VAR && exp->m.var->is_string_lit))
       node->num.val = 1;
 

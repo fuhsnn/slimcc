@@ -1171,45 +1171,36 @@ static void load_val(Type *ty, int64_t val) {
   load_val2(ty, val, "%eax", "%rax");
 }
 
-static void load_f32_f64(Type *ty, long double fval, int reg) {
-  if (ty->kind == TY_FLOAT) {
-    float pos_z = +0.0f;
-    float fv = fval;
-    if (!memcmp(&pos_z, &fv, sizeof(float))) {
-      Printftn("xorps %%xmm%d, %%xmm%d", reg, reg);
-      return;
-    }
-    union { float f32; uint32_t u32; } u = { fval };
-    Printftn("movl $%u, %%eax", u.u32);
-    Printftn("movd %%eax, %%xmm%d", reg);
-    return;
-  }
-
-  double pos_z = +0.0;
-  double dv = fval;
-  if (!memcmp(&pos_z, &dv, sizeof(double))) {
+static void load_f32_f64(Type *ty, FPVal *fval, int reg) {
+  if (!memcmp(&fval, &(int64_t){0}, ty->size)) {
     Printftn("xorps %%xmm%d, %%xmm%d", reg, reg);
     return;
   }
-  union { double f64; uint64_t u64; } u = { fval };
-  Printftn("movq $%"PRIu64", %%rax", u.u64);
-  Printftn("movq %%rax, %%xmm%d", reg);
-  return;
+  if (ty->kind == TY_FLOAT) {
+    Printftn("movl $%"PRIi32", %%eax", (int32_t)fval->chunk[0]);
+    Printftn("movd %%eax, %%xmm%d", reg);
+  } else {
+    Printftn("movq $%"PRIu64", %%rax", fval->chunk[0]);
+    Printftn("movq %%rax, %%xmm%d", reg);
+  }
 }
 
-static void load_fval(Type *ty, long double fval) {
+static void load_fval2(Type *ty, FPVal *fval) {
   if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE) {
     load_f32_f64(ty, fval, 0);
     return;
   }
 
-  union { long double f80; int32_t i32[3]; } u;
-  memset(&u, 0, sizeof(u));
-  u.f80 = fval;
-  Printftn("movl $%"PRIi32", %s(%s)", u.i32[0], tmpbuf(10), lvar_ptr);
-  Printftn("movl $%"PRIi32", 4+%s(%s)", u.i32[1], tmpbuf(10), lvar_ptr);
-  Printftn("movw $%"PRIu16", 8+%s(%s)", (uint16_t)u.i32[2], tmpbuf(10), lvar_ptr);
-  return;
+  Printftn("movl $%"PRIi32", %s(%s)", fval->chunk32[0], tmpbuf(10), lvar_ptr);
+  Printftn("movl $%"PRIi32", 4+%s(%s)", fval->chunk32[1], tmpbuf(10), lvar_ptr);
+  Printftn("movw $%"PRIu16", 8+%s(%s)", (uint16_t)fval->chunk32[2], tmpbuf(10), lvar_ptr);
+}
+
+static void load_fval(Node *node) {
+  FPVal fval;
+  if (!is_const_fp(node, &fval))
+    internal_error();
+  load_fval2(node->ty, &fval);
 }
 
 static void load_bitint_val(Type *ty, uint64_t *buf) {
@@ -1867,9 +1858,9 @@ static void gen_funcall_args(Node *node) {
         gp++;
         continue;
       }
-      long double fval;
-      if (is_flonum(arg_expr->ty) && is_const_double(arg_expr, &fval)) {
-        load_f32_f64(arg_expr->ty, fval, fp++);
+      FPVal fval;
+      if (is_flonum(arg_expr->ty) && is_const_fp(arg_expr, &fval)) {
+        load_f32_f64(arg_expr->ty, &fval, fp++);
         continue;
       }
       if (gen_load_opt_gp(arg_expr, (gp < 6 ? argreg[gp] : REG_X64_NULL))) {
@@ -2370,7 +2361,7 @@ static void gen_expr2(Node *node, bool is_void) {
     if (node->ty->kind == TY_BITINT)
       load_bitint_val(node->ty, node->num.bitint_data);
     else if (is_flonum(node->ty))
-      load_fval(node->ty, node->num.fval);
+      load_fval(node);
     else if (is_integer(node->ty) || is_ptr(node->ty))
       load_val(node->ty, node->num.val);
     else
@@ -3413,19 +3404,20 @@ static bool gen_gp_opt(Node *node) {
 }
 
 static bool gen_arith_opt_fp2(NodeKind kind, Node *lhs, Node *rhs, int pass) {
-  long double fval;
   char ofs[STRBUF_SZ], *ptr;
   char *sz = rhs->ty->kind == TY_FLOAT ? "ss" : "sd";
 
   switch (pass) {
-  case 0:
-    if (is_const_double(rhs, &fval)) {
+  case 0: {
+    FPVal fval;
+    if (is_const_fp(rhs, &fval)) {
       gen_expr(lhs);
-      load_f32_f64(rhs->ty, fval, 1);
+      load_f32_f64(rhs->ty, &fval, 1);
       Printftn("%s%s %%xmm1, %%xmm0", farith_ins(kind), sz);
       return true;
     }
     break;
+  }
   case 1:
     if (is_memop(rhs, ofs, &ptr, true)) {
       gen_expr(lhs);
@@ -3724,9 +3716,9 @@ static bool gen_expr_opt(Node *node) {
       load_val(ty, ival);
       return true;
     }
-    long double fval;
-    if (is_flonum(ty) && is_const_double(node, &fval)) {
-      load_fval(ty, fval);
+    FPVal fval;
+    if (is_flonum(ty) && is_const_fp(node, &fval)) {
+      load_fval2(ty, &fval);
       return true;
     }
   }
@@ -5105,9 +5097,9 @@ void prepare_funcall(Node *node, Scope *scope) {
       Node *arg_expr = var->arg_expr;
       reg_arg_cnt++;
 
-      if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, &(int64_t){0}))
+      if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, NULL))
         continue;
-      if (is_flonum(arg_expr->ty) && is_const_double(arg_expr, &(long double){0}))
+      if (is_flonum(arg_expr->ty) && is_const_fp(arg_expr, NULL))
         continue;
       if (gen_load_opt_gp(arg_expr, REG_X64_NULL))
         continue;
