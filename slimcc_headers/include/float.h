@@ -83,6 +83,10 @@
 #define FLT_NORM_MAX FLT_MAX
 #define DBL_NORM_MAX DBL_MAX
 #define LDBL_NORM_MAX LDBL_MAX
+
+#define FLT_SNAN __builtin_math_constant_nansf()
+#define DBL_SNAN __builtin_math_constant_nans()
+#define LDBL_SNAN __builtin_math_constant_nansl()
 #endif
 
 #endif

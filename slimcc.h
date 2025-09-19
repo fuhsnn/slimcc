@@ -538,6 +538,12 @@ ANON_UNION_START
     int64_t val;
     uint64_t *bitint_data;
     long double fval;
+    enum {
+      MATH_CONSTANT_NOT = 0,
+      MATH_CONSTANT_NANSF,
+      MATH_CONSTANT_NANS,
+      MATH_CONSTANT_NANSL,
+    } constant;
   } num;
 
   // Block or statement expression

@@ -325,6 +325,10 @@ bool equal_tok(Token *a, Token *b) {
   return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
 }
 
+static bool equal_substr(char *loc, size_t len, char *op) {
+  return strlen(op) == len && !memcmp(loc, op, len);
+}
+
 static void chk_vla_expr_side_effect(Node *expr) {
   while (expr->kind == ND_DEREF || expr->kind == ND_ADDR)
     expr = expr->m.lhs;
@@ -3421,11 +3425,29 @@ static long double eval_fp_cast(long double fval, Type *ty) {
   internal_error();
 }
 
+static void build_math_constant(Node *node, FPVal *fval) {
+  switch (node->num.constant) {
+  case MATH_CONSTANT_NANSF: fval->chunk[0] = 0x7FA00000; return;
+  case MATH_CONSTANT_NANS: fval->chunk[0] = 0x7FF4000000000000; return;
+  case MATH_CONSTANT_NANSL: fval->chunk[1] = 0x7FFF;
+    fval->chunk[0] = 0xA000000000000000; return;
+  }
+  internal_error();
+}
+
 static void eval_fp(Node *node, FPVal *fval) {
   add_type(node);
 
-  long double v = eval_double(node);
+  while (node->kind == ND_CAST && node->ty->kind == node->m.lhs->ty->kind)
+    node = node->m.lhs;
 
+  if (node->kind == ND_NUM && node->num.constant) {
+    if (fval)
+      build_math_constant(node, fval);
+    return;
+  }
+
+  long double v = eval_double(node);
   if (fval) {
     switch (node->ty->kind) {
     case TY_FLOAT: fval->f = (float)v; break;
@@ -3466,6 +3488,17 @@ static long double eval_double(Node *node) {
       return eval(lhs);
     error_tok(node->tok, "unimplemented cast");
   case ND_NUM:
+    if (node->num.constant) {
+      FPVal fval;
+      build_math_constant(node, &fval);
+
+      switch (node->ty->kind) {
+      case TY_FLOAT: return fval.f;
+      case TY_DOUBLE: return fval.d;
+      case TY_LDOUBLE: return fval.ld;
+      }
+      internal_error();
+    }
     return node->num.fval;
   }
 
@@ -4863,6 +4896,28 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     tok = skip(tok, ",");
     node->m.rhs = assign(&tok, tok);
     *rest = skip(tok, ")");
+    return node;
+  }
+
+  if (!strncmp(tok->loc, "__builtin_math_constant_", 24)) {
+    *rest = skip(skip(tok->next, "("), ")");
+
+    Node *node = new_node(ND_NUM, tok);
+    char *loc = tok->loc + 24;
+    int len = tok->len - 24;
+
+    if (equal_substr(loc, len, "nansf")) {
+      node->num.constant = MATH_CONSTANT_NANSF;
+      node->ty = ty_float;
+    } else if (equal_substr(loc, len, "nans")) {
+      node->num.constant = MATH_CONSTANT_NANS;
+      node->ty = ty_double;
+    } else if (equal_substr(loc, len, "nansl")) {
+      node->num.constant = MATH_CONSTANT_NANSL;
+      node->ty = ty_ldouble;
+    } else {
+      error_tok(tok, "unknown math constant");
+    }
     return node;
   }
 
