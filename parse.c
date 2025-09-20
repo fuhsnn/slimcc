@@ -3706,15 +3706,15 @@ static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
   char *loc = start->loc + 23;
   int len = start->len - 23;
 
-  if (!strncmp("add", loc, len))
+  if (equal_substr(loc, len, "add"))
     binary = new_add(obj, val, start);
-  else if (!strncmp("sub", loc, len))
+  else if (equal_substr(loc, len, "sub"))
     binary = new_sub(obj, val, start);
-  else if (!strncmp("and", loc, len))
+  else if (equal_substr(loc, len, "and"))
     binary = new_binary(ND_BITAND, obj, val, start);
-  else if (!strncmp("or", loc, len))
+  else if (equal_substr(loc, len, "or"))
     binary = new_binary(ND_BITOR, obj, val, start);
-  else if (!strncmp("xor", loc, len))
+  else if (equal_substr(loc, len, "xor"))
     binary = new_binary(ND_BITXOR, obj, val, start);
   else
     error_tok(start, "unsupported atomic op");
@@ -4373,15 +4373,16 @@ static Type *union_decl(Type *ty, int alt_align, int pack_align) {
 // Find a struct member by name.
 static Member *get_struct_member(Type *ty, Token *tok) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    // Anonymous struct member
-    if ((mem->ty->kind == TY_STRUCT || mem->ty->kind == TY_UNION) &&
-        !mem->name && get_struct_member(mem->ty, tok))
-      return mem;
-
-    // Regular struct member
-    if (mem->name && (mem->name->len == tok->len) &&
-        !strncmp(mem->name->loc, tok->loc, tok->len))
-      return mem;
+    if (mem->name) {
+      // Regular struct member
+      if (equal_tok(mem->name, tok))
+        return mem;
+    } else {
+      // Anonymous struct member
+      if ((mem->ty->kind == TY_STRUCT || mem->ty->kind == TY_UNION) &&
+        get_struct_member(mem->ty, tok))
+        return mem;
+    }
   }
   return NULL;
 }
