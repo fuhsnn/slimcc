@@ -4744,6 +4744,20 @@ static void emit_symbol(Obj *var, char *name) {
     Printftn(".%s \"%s\"", vis, name);
 }
 
+static bool is_rodata_obj(Obj *var) {
+  if (var->is_string_lit)
+    return true;
+  if (!is_const_var(var))
+    return false;
+  if (opt_fpic || opt_fpie) {
+    if (var->rel)
+      return false;
+    if (var->section_name)
+      return !strcmp(var->section_name, ".interp");
+  }
+  return true;
+}
+
 static void emit_data(Obj *var) {
   int64_t sz = var->ty->size;
   char *var_name = get_symbol(var);
@@ -4788,8 +4802,7 @@ static void emit_data(Obj *var) {
   }
 
   bool use_bss = !var->init_data;
-  bool use_rodata = var->is_string_lit ||
-    (is_const_var(var) && !((opt_fpic || opt_fpie) && (var->rel || var->section_name)));
+  bool use_rodata = is_rodata_obj(var);
 
   if (var->section_name)
     Printfts(".section \"%s\"", var->section_name);
