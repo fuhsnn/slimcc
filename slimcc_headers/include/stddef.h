@@ -1,13 +1,12 @@
-#ifndef __STDC_VERSION_STDDEF_H__
+#ifndef __STDDEF_H
+#define __STDDEF_H
 
 #if __STDC_VERSION__ >= 202311L
+#define __STDC_VERSION_STDDEF_H__ 202311L
+
 #define unreachable() __builtin_unreachable()
 
 typedef typeof(nullptr) nullptr_t;
-
-#define __STDC_VERSION_STDDEF_H__ 202311L
-#else
-#define __STDC_VERSION_STDDEF_H__
 #endif
 
 #define NULL ((void *)0)
