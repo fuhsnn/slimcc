@@ -296,11 +296,8 @@ static Type *find_tag_in_scope(Token *tok) {
   return hashmap_get2(&scope->tags, tok->loc, tok->len);
 }
 
-Obj *get_builtin_var(char *name) {
-  Obj *var = hashmap_get(&symbols, name);
-  if (!var)
-    internal_error();
-  return var;
+Obj *get_symbol_var(char *name) {
+  return hashmap_get(&symbols, name);
 }
 
 static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
@@ -868,12 +865,6 @@ static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token
 
   apply_str_attr("alias", name, &var->alias_name, attr->alias);
   DeclAttr(str_attr, "alias", &var->alias_name);
-  if (var->alias_name) {
-    Obj *alias_var = hashmap_get(&symbols, var->alias_name);
-    if (!alias_var)
-      error_tok(tok, "\'%s\' not found", var->alias_name);
-    alias_var->is_used = true;
-  }
 
   apply_str_attr("section", name, &var->section_name, attr->section);
   DeclAttr(str_attr, "section", &var->section_name);
@@ -886,6 +877,9 @@ static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token
 
   var->is_weak |= attr->is_weak;
   DeclAttr(bool_attr, "weak", &var->is_weak);
+
+  if (var->is_weak && var->is_static)
+    error_tok(name, "weak declaration cannot be `static`");
 
   var->is_common |= attr->is_common;
   DeclAttr(bool_attr, "common", &var->is_common);

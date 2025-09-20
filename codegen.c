@@ -191,6 +191,7 @@ static char *arith_ins(NodeKind kind);
 static void imm_tmpl(char *ins, char *op, int64_t val);
 
 static bool is_asm_symbolic_arg(Node *node, char *punct);
+static void mark_live(Obj *var);
 
 #define Prints(str) fprintf(output_file, str)
 #define Printsts(str) fprintf(output_file, "\t" str)
@@ -801,7 +802,9 @@ static void gen_bitint_builtin_call2(char *fn) {
   static HashMap map;
   Obj *var = hashmap_get(&map, fn);
   if (!var) {
-    var = get_builtin_var(fn);
+    var = get_symbol_var(fn);
+    if (!var)
+      error("missing builtin function %s", fn);
     hashmap_put(&map, fn, var);
   }
   push_ref(var);
@@ -4737,7 +4740,7 @@ static void emit_symbol(Obj *var, char *name) {
     Printftn(".globl \"%s\"", name);
 
   if (var->alias_name)
-    Printftn(".set \"%s\", \"%s\"", var->name, var->alias_name);
+    Printftn(".set \"%s\", \"%s\"", asm_name(var), var->alias_name);
 
   char *vis = var->visibility ? var->visibility : opt_visibility;
   if (is_valid_vis(vis))
@@ -5148,15 +5151,25 @@ static void peep_redunt_jmp(char *p) {
   }
 }
 
+static void mark_alias_live(char *name) {
+  Obj *alias = get_symbol_var(name);
+  if (alias)
+    mark_live(alias);
+}
+
 static void mark_live(Obj *var) {
   if (var->is_live)
     return;
   var->is_live = true;
 
+  if (!var->is_definition) {
+    if (var->alias_name)
+      mark_alias_live(var->alias_name);
+    return;
+  }
   if (var->ty->kind == TY_FUNC) {
-    if (var->output)
-      for (int i = 0; i < var->output->ref_cnt; i++)
-        mark_live(var->output->refs[i]);
+    for (int i = 0; i < var->output->ref_cnt; i++)
+      mark_live(var->output->refs[i]);
   } else {
     for (Relocation *rel = var->rel; rel; rel = rel->next)
       if (rel->var)
@@ -5182,14 +5195,18 @@ int codegen(Obj *prog, FILE *out) {
     }
   }
 
-  for (Obj *var = prog; var; var = var->next)
-    if (var->is_definition && (!var->is_static || var->is_used))
-      mark_live(var);
-
+  for (Obj *var = prog; var; var = var->next) {
+    if (var->is_definition) {
+      if (!var->is_static || var->is_used)
+        mark_live(var);
+    } else if (!var->is_static && var->alias_name) {
+      mark_alias_live(var->alias_name);
+    }
+  }
   for (Obj *var = prog; var; var = var->next) {
     if (!var->is_definition) {
-      if (var->alias_name ||
-        (var->is_live && (var->is_weak || is_valid_vis(var->visibility)))) {
+      if ((!var->is_static && var->alias_name) ||
+        (var->is_live && (var->is_weak || var->visibility))) {
         if (var->is_weak)
           Printftn(".weak \"%s\"", asm_name(var));
         else
@@ -5198,7 +5215,7 @@ int codegen(Obj *prog, FILE *out) {
         if (is_valid_vis(var->visibility))
           Printftn(".%s \"%s\"", var->visibility, asm_name(var));
         if (var->alias_name)
-          Printftn(".set \"%s\", \"%s\"", var->name, var->alias_name);
+          Printftn(".set \"%s\", \"%s\"", asm_name(var), var->alias_name);
       }
       continue;
     }

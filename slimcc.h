@@ -631,7 +631,7 @@ Obj *new_lvar(char *name, Type *ty);
 bool is_const_var(Obj *var);
 bool equal_tok(Token *a, Token *b);
 char *new_unique_name(void);
-Obj *get_builtin_var(char *);
+Obj *get_symbol_var(char *);
 
 //
 // bitint.c
