@@ -660,6 +660,16 @@ static Token *str_tok(Token **rest, Token *tok) {
   return tok;
 }
 
+static void assembler_name(Token **rest, Token *tok, Obj *var) {
+  if (tok->kind == TK_asm) {
+    char *str = str_tok(&tok, skip(tok->next, "("))->str;
+    *rest = skip(tok, ")");
+    if (var->asm_name && strcmp(var->asm_name, str))
+      error_tok(tok, "conflict of asm name");
+    var->asm_name = str;
+  }
+}
+
 static void push_tag_scope(Token *tag, Type *ty) {
   tag->is_live = true;
   ty->tag = tag;
@@ -852,16 +862,15 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   str_attr(tok, kind, "visibility", &attr->visibility);
 }
 
-#define DeclAttr(Fn, ...)                \
-  Fn(name, TK_ATTR, __VA_ARGS__);        \
-  Fn(name->next, TK_BATTR, __VA_ARGS__); \
-  Fn(tok, TK_ATTR, __VA_ARGS__)
+#define DeclAttr(Fn, ...) do {             \
+    Fn(name, TK_ATTR, __VA_ARGS__);        \
+    Fn(name->next, TK_BATTR, __VA_ARGS__); \
+    Fn(tok, TK_ATTR, __VA_ARGS__);         \
+  } while(0)
 
-static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token *name) {
-  if (tok->kind == TK_asm) {
-    var->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
-    *rest = skip(tok, ")");
-  }
+static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
+  if (var->asm_name && (attr->strg & SC_REGISTER))
+    error_tok(tok, "global register variables not supported");
 
   apply_str_attr("alias", name, &var->alias_name, attr->alias);
   DeclAttr(str_attr, "alias", &var->alias_name);
@@ -891,7 +900,7 @@ static void symbol_attr(Token **rest, Token *tok, Obj *var, VarAttr *attr, Token
     error_tok(name, "conflict of attribute common/nocommon");
 }
 
-static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
+static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn) {
   apply_cdtor_attr("constructor", name, &fn->is_ctor, &fn->ctor_prior, attr->ctor_prior, attr->is_ctor);
   DeclAttr(cdtor_attr, "constructor", &fn->is_ctor, &fn->ctor_prior);
 
@@ -915,6 +924,37 @@ static void func_attr(Obj *fn, VarAttr *attr, Token *name, Token *tok) {
     DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
     if (fn->is_gnu_inline)
       fn->is_inline |= attr->is_inline;
+  }
+}
+
+static void aligned_attr(Token *name, Token *tok, VarAttr *attr, int *align) {
+  if (name) {
+    attr_aligned(name, align, TK_ATTR);
+    attr_aligned(name->next, align, TK_BATTR);
+  }
+  attr_aligned(tok, align, TK_ATTR);
+  *align = MAX(*align, attr->align);
+}
+
+static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
+  Obj *fn = attr->cleanup_fn;
+  DeclAttr(attr_cleanup, &fn);
+
+  if (fn) {
+    Node *n = new_node(ND_FUNCALL, tok);
+    n->call.expr = new_var_node(fn, tok);
+    n->call.expr->ty = fn->ty;
+    n->ty = ty_void;
+
+    Node *arg = new_unary(ND_ADDR, new_var_node(var, tok), tok);
+    add_type(arg);
+
+    n->call.args = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
+    n->call.args->arg_expr = arg;
+    prepare_funcall(n, scope);
+
+    DeferStmt *defr2 = new_defr(DF_CLEANUP_FN);
+    defr2->cleanup_fn = n;
   }
 }
 
@@ -1360,18 +1400,6 @@ static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
   return type_suffix(rest, tok, ty);
 }
 
-static Type *declarator2(Token **rest, Token *tok, Type *basety, Token **name, int *align) {
-  Type *ty = declarator(&tok, tok, basety, name);
-
-  if (*name) {
-    attr_aligned(*name, align, TK_ATTR);
-    attr_aligned((**name).next, align, TK_BATTR);
-  }
-  attr_aligned(tok, align, TK_ATTR);
-  *rest = tok;
-  return ty;
-}
-
 // type-name = declspec abstract-declarator
 static Type *typename(Token **rest, Token *tok) {
   Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
@@ -1636,54 +1664,40 @@ static Node *new_vla(Token *name, Type *ty) {
   return node;
 }
 
-static void defr_cleanup(Obj *var, Obj *fn, Token *tok) {
-  Node *n = new_node(ND_FUNCALL, tok);
-  n->call.expr = new_var_node(fn, tok);
-  n->call.expr->ty = fn->ty;
-  n->ty = ty_void;
-
-  Node *arg = new_unary(ND_ADDR, new_var_node(var, tok), tok);
-  add_type(arg);
-
-  n->call.args = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
-  n->call.args->arg_expr = arg;
-  prepare_funcall(n, scope);
-
-  DeferStmt *defr2 = new_defr(DF_CLEANUP_FN);
-  defr2->cleanup_fn = n;
-}
-
 static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr, Obj **cond_var) {
-  Node *expr = NULL;
   Token *name = NULL;
-  int alt_align = attr ? attr->align : 0;
-
-  Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
+  Type *ty = declarator(&tok, tok, basety, &name);
 
   if (ty->kind == TY_FUNC) {
     if (!name)
       error_tok(tok, "function name omitted");
+
     Obj *fn = func_prototype(ty, attr, name);
-    func_attr(fn, attr, name, tok);
-    symbol_attr(&tok, tok, fn, attr, name);
+    assembler_name(&tok, tok, fn);
+    aligned_attr(name, tok, attr, &fn->alt_align);
+    symbol_attr(name, tok, attr, fn);
+    func_attr(name, tok, attr, fn);
+
     *rest = tok;
-    return expr;
+    return NULL;
   }
   if (ty->kind == TY_VOID)
     error_tok(tok, "variable declared void");
   if (!name)
     error_tok(tok, "variable name omitted");
 
-  if (attr && (attr->strg & SC_STATIC)) {
+  if (attr->strg & SC_STATIC) {
     if (ty->kind == TY_VLA)
       error_tok(tok, "variable length arrays cannot be 'static'");
 
     // static local variable
     Obj *var = new_static_lvar(ty);
     push_scope(get_ident(name))->var = var;
-    symbol_attr(&tok, tok, var, attr, name);
+
     var->is_tls = attr->strg & SC_THREAD;
-    var->alt_align = alt_align;
+    assembler_name(&tok, tok, var);
+    aligned_attr(name, tok, attr, &var->alt_align);
+    symbol_attr(name, tok, attr, var);
 
     if (attr->strg & SC_CONSTEXPR) {
       constexpr_initializer(&tok, skip(tok, "="), var, var);
@@ -1694,23 +1708,20 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
       is_global_init_context = ctx;
     }
     *rest = tok;
-    return expr;
+    return NULL;
   }
 
-  Obj *cleanup_fn = attr ? attr->cleanup_fn : NULL;
-  DeclAttr(attr_cleanup, &cleanup_fn);
+  Node *expr = NULL;
 
   if (ty->kind == TY_VLA) {
     fn_use_vla = true;
 
-    Node *node = new_vla(name, ty);
-
     DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
-    defr->vla = node->m.var;
-
-    if (cleanup_fn)
-      defr_cleanup(node->m.var, cleanup_fn, tok);
-    node->m.var->alt_align = alt_align;
+    Node *node = new_vla(name, ty);
+    Obj *var = defr->vla = node->m.var;
+    assembler_name(&tok, tok, var);
+    aligned_attr(name, tok, attr, &var->alt_align);
+    cleanup_attr(name, tok, attr, var);
 
     if (equal(tok, "=")) {
       tok = skip(skip(tok->next, "{"), "}");
@@ -1722,17 +1733,11 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
 
   Obj *var = new_lvar(get_ident(name), ty);
-  var->alt_align = alt_align;
+  assembler_name(&tok, tok, var);
+  aligned_attr(name, tok, attr, &var->alt_align);
+  cleanup_attr(name, tok, attr, var);
 
-  if (cleanup_fn)
-    defr_cleanup(var, cleanup_fn, tok);
-
-  if ((attr->strg & SC_REGISTER) && tok->kind == TK_asm) {
-    var->asm_name = str_tok(&tok, skip(tok->next, "("))->str;
-    tok = skip(tok, ")");
-  }
-
-  if (attr && (attr->strg & SC_CONSTEXPR)) {
+  if (attr->strg & SC_CONSTEXPR) {
     Obj *init_var = new_static_lvar(ty);
     constexpr_initializer(&tok, skip(tok, "="), init_var, var);
     chain_expr(&expr, new_binary(ND_ASSIGN,
@@ -4158,11 +4163,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
       Member *mem = calloc(1, sizeof(Member));
-      mem->alt_align = attr.align;
       mem->is_packed = attr.is_packed;
-      mem->ty = declarator2(&tok, tok, basety, &mem->name, &mem->alt_align);
+      mem->ty = declarator(&tok, tok, basety, &mem->name);
       if (mem->name)
         mem->name->is_live = true;
+      aligned_attr(mem->name, tok, &attr, &mem->alt_align);
 
       for (Type *t = mem->ty; t; t = t->base)
         if (t->kind == TY_VLA)
@@ -5083,14 +5088,16 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
   bool first = true;
   for (; comma_list(rest, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    int alt_align = attr->align;
-    Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
+    Type *ty = declarator(&tok, tok, basety, &name);
+
     if (!name)
       error_tok(tok, "typedef name omitted");
 
-    if (alt_align) {
+    int align = 0;
+    aligned_attr(name, tok, attr, &align);
+    if (align) {
       ty = new_qualified_type(ty);
-      ty->align = alt_align;
+      ty->align = align;
     }
     push_scope(get_ident(name))->type_def = ty;
     chain_expr(&node, calc_vla(ty, tok));
@@ -5239,16 +5246,17 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    int alt_align = attr->align;
-    Type *ty = declarator2(&tok, tok, basety, &name, &alt_align);
+    Type *ty = declarator(&tok, tok, basety, &name);
 
     if (ty->kind == TY_FUNC) {
       if (!name)
         error_tok(tok, "function name omitted");
 
       Obj *fn = func_prototype(ty, attr, name);
-      func_attr(fn, attr, name, tok);
-      symbol_attr(&tok, tok, fn, attr, name);
+      assembler_name(&tok, tok, fn);
+      aligned_attr(name, tok, attr, &fn->alt_align);
+      symbol_attr(name, tok, attr, fn);
+      func_attr(name, tok, attr, fn);
 
       if (first && !scope->parent && equal(tok, "{")) {
         func_definition(rest, tok, fn, ty);
@@ -5288,8 +5296,9 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
       var->is_tls = attr->strg & SC_THREAD;
     }
-    var->alt_align = MAX(var->alt_align, alt_align);
-    symbol_attr(&tok, tok, var, attr, name);
+    assembler_name(&tok, tok, var);
+    aligned_attr(name, tok, attr, &var->alt_align);
+    symbol_attr(name, tok, attr, var);
 
     if (!is_definition || var->init_data)
       continue;

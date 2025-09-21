@@ -4927,6 +4927,10 @@ void emit_text(Obj *fn) {
     Printftn(".section .text.\"%s\",\"ax\",@progbits", fn_name);
   else
     Printstn(".text");
+
+  int fnalign = get_align(fn);
+  if (fnalign > 1)
+    Printftn(".align %d", fnalign);
   Printftn(".type \"%s\", @function", fn_name);
   Printfsn("\"%s\":", fn_name);
 
