@@ -944,38 +944,14 @@ static char *get_path(char *mode, char *incl) {
 }
 
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
-  Token head = {0};
-  Token *cur = &head;
-
-  Token imacros_head = {0};
-  Token *imacros_cur = &imacros_head;
-
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
   build_macros(&macrodefs, is_asm_pp);
 
-  if (!opt_E) {
-    Token *last;
-    cur->next = tokenize(add_input_file("slimcc_builtins",
-    "typedef struct {"
-    "  unsigned int gp_offset;"
-    "  unsigned int fp_offset;"
-    "  void *overflow_arg_area;"
-    "  void *reg_save_area;"
-    "} __builtin_va_list[1];"
-    , NULL), &last);
-    cur = last;
-
-    char *path = search_include_paths("bitint_builtins");
-    char *contents;
-    if (path && (contents = read_file(path))) {
-      cur->next = tokenize(add_input_file(path, contents, NULL), &last);
-      cur = last;
-    }
-  }
-
   // Process -imacros option
+  Token imacros_head = {0};
+  Token *imacros_cur = &imacros_head;
   for (int i = 0; i < opt_imacros.len; i++) {
     char *path = get_path("-imacros", opt_imacros.data[i]);
     Token *end = NULL;
@@ -985,6 +961,8 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   }
 
   // Process -include option
+  Token head = {0};
+  Token *cur = &head;
   for (int i = 0; i < opt_include.len; i++) {
     char *path = get_path("-include", opt_include.data[i]);
     Token *end = NULL;

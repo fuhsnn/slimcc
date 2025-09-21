@@ -1292,6 +1292,12 @@ static void finalize_tok(Token *tok) {
   tok->is_root = true;
 }
 
+static void finalize_tok2(Token *tok) {
+  tok->display_file_no = tok->file->display_file->file_no;
+  tok->display_line_no = tok->line_no + tok->file->line_delta;
+  tok->is_root = true;
+}
+
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
 static Token *preprocess2(Token *tok) {
@@ -2117,6 +2123,31 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
 
   if (opt_E)
     return tok;
+
+  {
+    Token *cur;
+    Token *head = tokenize(add_input_file("slimcc_builtins",
+    "typedef struct {"
+    "  unsigned int gp_offset;"
+    "  unsigned int fp_offset;"
+    "  void *overflow_arg_area;"
+    "  void *reg_save_area;"
+    "} __builtin_va_list[1];"
+    , NULL), &cur);
+
+    char *path = search_include_paths("bitint_builtins");
+    char *contents;
+    if (path && (contents = read_file(path))) {
+      Token *end;
+      cur->next = tokenize(add_input_file(path, contents, NULL), &end);
+      cur = end;
+    }
+    for (Token *t = head; t; t = t->next)
+      finalize_tok2(t);
+
+    cur->next = tok;
+    tok = head;
+  }
 
   if (!(free_alloc = check_mem_usage())) {
     arena_off(&pp_arena);
