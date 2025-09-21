@@ -1,7 +1,7 @@
 #include "slimcc.h"
 
 typedef enum {
-  FILE_NONE, FILE_C, FILE_ASM, FILE_OBJ, FILE_AR, FILE_DSO, FILE_PP_ASM
+  FILE_NONE, FILE_C, FILE_ASM, FILE_PP_ASM, FILE_LDARG,
 } FileType;
 
 typedef enum {
@@ -1209,32 +1209,23 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
 }
 
 static FileType get_file_type(char *filename) {
-  if (endswith(filename, ".a"))
-    return FILE_AR;
-  if (endswith(filename, ".so") || endswith(filename, ".dso"))
-    return FILE_DSO;
-  if (endswith(filename, ".o") || endswith(filename, ".lo"))
-    return FILE_OBJ;
   if (endswith(filename, ".c"))
     return FILE_C;
   if (endswith(filename, ".s"))
     return FILE_ASM;
   if (endswith(filename, ".S"))
     return FILE_PP_ASM;
-
-  if (opt_E && (!strcmp(filename, "-") || endswith(filename, ".h")))
+  if (!strcmp(filename, "-")) {
+    if (!opt_E)
+      error("-E or -x required when input is from standard input");
     return FILE_C;
-
-  char *p = strstr(filename, ".so.");
-  if (p) {
-    p += 3;
-    while (Isdigit(*p) || (*p == '.' && Isdigit(p[1])))
-      p++;
-    if (!*p)
-      return FILE_DSO;
   }
-
-  error("<command line>: unknown file extension: %s", filename);
+  if (endswith(filename, ".h")) {
+    if (!opt_E)
+      error("pch not supported");
+    return FILE_C;
+  }
+  return FILE_LDARG;
 }
 
 int main(int argc, char **argv) {
@@ -1273,8 +1264,7 @@ int main(int argc, char **argv) {
     else
       type = get_file_type(input);
 
-    // Handle .o or .a
-    if (type == FILE_OBJ || type == FILE_AR || type == FILE_DSO) {
+    if (type == FILE_LDARG) {
       strarray_push(&ld_args, input);
       run_ld = true;
       continue;
