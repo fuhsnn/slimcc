@@ -1900,7 +1900,7 @@ static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
   return mem;
 }
 
-static void designation(Token **rest, Token *tok, Initializer *init) {
+static void designation(Token **rest, Token *tok, Initializer *init, bool post_bracket) {
   if (equal(tok, "[")) {
     if (init->ty->kind != TY_ARRAY)
       error_tok(tok, "array index in non-array initializer");
@@ -1911,7 +1911,7 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
 
     Token *start = tok;
     for (int i = begin; i <= end; i++)
-      designation(&tok, start, &init->mem_arr[i]);
+      designation(&tok, start, &init->mem_arr[i], true);
 
     list_initializer(rest, tok, init, end + 1);
     return;
@@ -1923,15 +1923,20 @@ static void designation(Token **rest, Token *tok, Initializer *init) {
 
     if (init->ty->kind == TY_UNION) {
       init->init_idx = mem->idx;
-      designation(rest, tok, &init->mem_arr[mem->idx]);
+      designation(rest, tok, &init->mem_arr[mem->idx], false);
     } else {
-      designation(&tok, tok, &init->mem_arr[mem->idx]);
+      designation(&tok, tok, &init->mem_arr[mem->idx], false);
       list_initializer(rest, tok, init, mem->idx + 1);
     }
     return;
   }
 
-  initializer2(rest, skip(tok, "="), init);
+  if (post_bracket)
+    consume(&tok, tok, "=");
+  else
+    tok = skip(tok, "=");
+
+  initializer2(rest, tok, init);
 }
 
 // An array length can be omitted if an array has an initializer
@@ -1947,7 +1952,7 @@ static int count_array_init_elements(Token *tok, Type *ty) {
       if (equal(tok, "..."))
         i = const_expr(&tok, tok->next);
       tok = skip(tok, "]");
-      designation(&tok, tok, &dummy);
+      designation(&tok, tok, &dummy, true);
     } else {
       initializer2(&tok, tok, &dummy);
     }
@@ -1966,7 +1971,7 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, b
   if (has_brace) {
     for (; comma_list(&tok, &tok, "}", tok != start);) {
       if (equal(tok, ".") || equal(tok, "[")) {
-        designation(&tok, tok, init);
+        designation(&tok, tok, init, false);
         continue;
       }
       tok = skip_excess_element(tok);
