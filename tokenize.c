@@ -340,12 +340,12 @@ TokenKind ident_keyword(Token *tok) {
     if (opt_std >= STD_C23)
       hashmap_put(&map, "constexpr", (void *)TK_constexpr);
 
-    if (!(is_iso_std && opt_std == STD_C89))
+    if (opt_std >= STD_C99 || !is_iso_std)
       hashmap_put(&map, "inline", (void *)TK_inline);
     hashmap_put(&map, "__inline", (void *)TK_inline);
     hashmap_put(&map, "__inline__", (void *)TK_inline);
 
-    if (opt_std > STD_C89)
+    if (opt_std >= STD_C99)
       hashmap_put(&map, "restrict", (void *)TK_restrict);
     hashmap_put(&map, "__restrict", (void *)TK_restrict);
     hashmap_put(&map, "__restrict__", (void *)TK_restrict);
@@ -354,7 +354,7 @@ TokenKind ident_keyword(Token *tok) {
     hashmap_put(&map, "__signed", (void *)TK_signed);
     hashmap_put(&map, "__signed__", (void *)TK_signed);
 
-    if (!is_iso_std || opt_std >= STD_C23)
+    if (opt_std >= STD_C23 || !is_iso_std)
       hashmap_put(&map, "typeof", (void *)TK_typeof);
     hashmap_put(&map, "__typeof", (void *)TK_typeof);
     hashmap_put(&map, "__typeof__", (void *)TK_typeof);
