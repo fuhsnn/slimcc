@@ -1,11 +1,5 @@
 #include "test.h"
 
-#if defined __GNUC__ && !defined __clang__
-#define FASSERT ASSERT
-#else
-#define FASSERT EASSERT
-#endif
-
 long double g0 = 343.4314;
 
 int main(void) {
@@ -15,29 +9,29 @@ int main(void) {
   ASSERT(0, g0 == l1);
   ASSERT(0, l0 == l1);
 
-  FASSERT(0, 0.0/0.0 == 0.0/0.0);
-  FASSERT(1, 0.0/0.0 != 0.0/0.0);
+  ASSERT(0, 0.0/0.0 == 0.0/0.0);
+  ASSERT(1, 0.0/0.0 != 0.0/0.0);
 
-  FASSERT(0, 0.0/0.0 < 0);
-  FASSERT(0, 0.0/0.0 <= 0);
-  FASSERT(0, 0.0/0.0 > 0);
-  FASSERT(0, 0.0/0.0 >= 0);
+  ASSERT(0, 0.0/0.0 < 0);
+  ASSERT(0, 0.0/0.0 <= 0);
+  ASSERT(0, 0.0/0.0 > 0);
+  ASSERT(0, 0.0/0.0 >= 0);
 
-  FASSERT(0, 0.0f/0.0f == 0.0f/0.0f);
-  FASSERT(1, 0.0f/0.0f != 0.0f/0.0f);
+  ASSERT(0, 0.0f/0.0f == 0.0f/0.0f);
+  ASSERT(1, 0.0f/0.0f != 0.0f/0.0f);
 
-  FASSERT(0, 0.0f/0.0f < 0);
-  FASSERT(0, 0.0f/0.0f <= 0);
-  FASSERT(0, 0.0f/0.0f > 0);
-  FASSERT(0, 0.0f/0.0f >= 0);
+  ASSERT(0, 0.0f/0.0f < 0);
+  ASSERT(0, 0.0f/0.0f <= 0);
+  ASSERT(0, 0.0f/0.0f > 0);
+  ASSERT(0, 0.0f/0.0f >= 0);
 
-  FASSERT(0, 0.0L/0.0L == 0.0L/0.0L);
-  FASSERT(1, 0.0L/0.0L != 0.0L/0.0L);
+  ASSERT(0, 0.0L/0.0L == 0.0L/0.0L);
+  ASSERT(1, 0.0L/0.0L != 0.0L/0.0L);
 
-  FASSERT(0, 0.0L/0.0L < 0);
-  FASSERT(0, 0.0L/0.0L <= 0);
-  FASSERT(0, 0.0L/0.0L > 0);
-  FASSERT(0, 0.0L/0.0L >= 0);
+  ASSERT(0, 0.0L/0.0L < 0);
+  ASSERT(0, 0.0L/0.0L <= 0);
+  ASSERT(0, 0.0L/0.0L > 0);
+  ASSERT(0, 0.0L/0.0L >= 0);
 
   ASSERT(1, ({ float f = 0.0f; (_Bool)(f/f); }));
   ASSERT(1, ({ double d = -0.0; (d/d)?1:0; }));

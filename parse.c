@@ -3482,7 +3482,13 @@ static long double eval_double(Node *node) {
   case ND_ADD: return eval_fp_cast(eval_double(lhs) + eval_double(rhs), ty);
   case ND_SUB: return eval_fp_cast(eval_double(lhs) - eval_double(rhs), ty);
   case ND_MUL: return eval_fp_cast(eval_double(lhs) * eval_double(rhs), ty);
-  case ND_DIV: return eval_fp_cast(eval_double(lhs) / eval_double(rhs), ty);
+  case ND_DIV: {
+    long double lval = eval_double(lhs);
+    long double rval = eval_double(rhs);
+    if (rval == 0 && !is_global_init_context)
+      break;
+    return eval_fp_cast(lval / rval, ty);
+  }
   case ND_POS:
     return eval_double(lhs);
   case ND_NEG:
