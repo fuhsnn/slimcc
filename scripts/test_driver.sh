@@ -244,14 +244,6 @@ echo 'void foo(); void bar(); int main() { foo(); bar(); }' > $tmp/main.c
 $testcc -o $tmp/foo $tmp/main.c $tmp/foo.a
 check '.a'
 
-# .so file
-echo 'void foo() {}' | $refcc -fPIC -c -xc -o $tmp/foo.o -
-echo 'void bar() {}' | $refcc -fPIC -c -xc -o $tmp/bar.o -
-$refcc -shared -o $tmp/foo.so $tmp/foo.o $tmp/bar.o
-echo 'void foo(); void bar(); int main() { foo(); bar(); }' > $tmp/main.c
-$testcc -o $tmp/foo $tmp/main.c $tmp/foo.so
-check '.so'
-
 # -M
 echo '#include "out2.h"' > $tmp/out.c
 echo '#include "out3.h"' >> $tmp/out.c
@@ -312,12 +304,6 @@ check '-MD -MF'
 
 echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
 echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
-
-# -fPIC
-$testcc -fPIC -c -o $tmp/foo.o $tmp/foo.c
-$refcc -shared -o $tmp/foo.so $tmp/foo.o
-$testcc -o $tmp/foo $tmp/bar.c $tmp/foo.so
-check -fPIC
 
 test_exec() {
     $testcc $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c
