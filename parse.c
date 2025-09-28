@@ -262,10 +262,6 @@ static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
   return blk;
 }
 
-static bool is_constant_context(void) {
-  return scope->parent == NULL || is_global_init_context;
-}
-
 // Find a variable by name.
 static VarScope *find_var(Token *tok) {
   for (Scope *sc = scope; sc; sc = sc->parent) {
@@ -1313,7 +1309,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
       return vla_of(ty, NULL, array_len);
     return array_of(ty, array_len);
   }
-  if (is_constant_context())
+  if (is_global_init_context)
     error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr, 0);
 }
@@ -1704,14 +1700,10 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);
 
-    if (attr->strg & SC_CONSTEXPR) {
+    if (attr->strg & SC_CONSTEXPR)
       constexpr_initializer(&tok, skip(tok, "="), var, var);
-    } else if (equal(tok, "=")) {
-      bool ctx = is_global_init_context;
-      is_global_init_context = true;
+    else if (equal(tok, "="))
       gvar_initializer(&tok, tok->next, var);
-      is_global_init_context = ctx;
-    }
     *rest = tok;
     return NULL;
   }
@@ -2389,6 +2381,9 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
 // objects to a flat byte array. It is a compile error if an
 // initializer list contains a non-constant expression.
 static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
+  bool ctx = is_global_init_context;
+  is_global_init_context = true;
+
   Initializer init = {0};
   initializer(rest, tok, &init, var);
 
@@ -2402,9 +2397,14 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
 
   var->init_data = buf;
   var->rel = head.next;
+
+  is_global_init_context = ctx;
 }
 
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var) {
+  bool ctx = is_global_init_context;
+  is_global_init_context = true;
+
   Initializer init = {0};
   initializer(rest, tok, &init, init_var);
 
@@ -2416,6 +2416,8 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
   init_var->init_data = var->constexpr_data = buf;
   init_var->rel = head.next;
   var->ty = init_var->ty;
+
+  is_global_init_context = ctx;
 }
 
 // Returns true if a given token represents a type.
@@ -4658,11 +4660,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
   if (ty->kind == TY_VLA)
     error_tok(tok, "compound literals cannot be VLA");
 
-  if (is_constant_context() || (attr.strg & SC_STATIC)) {
-    bool set_ctx = !is_constant_context();
-    if (set_ctx)
-      is_global_init_context = true;
-
+  if (is_global_init_context || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
     var->is_compound_lit = true;
     var->is_tls = attr.strg & SC_THREAD;
@@ -4673,8 +4671,6 @@ static Node *compound_literal(Token **rest, Token *tok) {
     else
       gvar_initializer(rest, tok, var);
 
-    if (set_ctx)
-      is_global_init_context = false;
     return new_var_node(var, start);
   }
 
@@ -4689,11 +4685,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
   Node *init;
   if (attr.strg & SC_CONSTEXPR) {
     Obj *init_var = new_anon_gvar(ty);
-    is_global_init_context = true;
-
     constexpr_initializer(&tok, tok, init_var, var);
-
-    is_global_init_context = false;
     init = new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok);
   } else {
     init = lvar_initializer(&tok, tok, var);
@@ -4950,7 +4942,7 @@ static Node *primary(Token **rest, Token *tok) {
       return compound_literal(rest, tok);
 
     if (equal(tok->next, "{")) {
-      if (is_constant_context())
+      if (is_global_init_context)
         error_tok(tok, "statement expresssion in constant context");
 
       Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
