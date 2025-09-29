@@ -322,19 +322,25 @@ static bool in_imm_range (int64_t val) {
   return val == (int32_t)val;
 }
 
+static bool export_fn(Obj *fn) {
+  if (fn->is_gnu_inline || opt_std == STD_C89 || opt_gnu89_inline)
+    return fn->export_fn_gnu;
+  return fn->export_fn;
+}
+
 static bool use_rip(Obj *var) {
   if (var->is_static || !(opt_fpie || opt_fpic))
     return true;
 
   if (opt_fpie) {
     if (var->ty->kind == TY_FUNC)
-      return var->is_definition && var->export_fn;
+      return var->is_definition && export_fn(var);
     return var->is_definition || !var->is_weak;
   }
   char *vis = var->visibility ? var->visibility : opt_visibility;
   if (vis && (!strcmp(vis, "hidden"))) {
     if (var->ty->kind == TY_FUNC)
-      return var->is_definition && var->export_fn;
+      return var->is_definition && export_fn(var);
     return var->is_definition || (!var->is_weak && var->visibility);
   }
   return false;
@@ -5192,7 +5198,7 @@ int codegen(Obj *prog, FILE *out) {
 
   for (Obj *var = prog; var; var = var->next) {
     if (var->is_definition && var->ty->kind == TY_FUNC &&
-      !var->is_static && !var->export_fn) {
+      !var->is_static && !export_fn(var)) {
       var->is_definition = false;
       var->output = NULL;
     }

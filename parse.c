@@ -915,16 +915,15 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
   fn->returns_twice |= attr->is_returns_twice;
   DeclAttr(bool_attr, "returns_twice", &fn->returns_twice);
 
-  bool is_gnu_inline = attr->is_gnu_inline;
-  DeclAttr(bool_attr, "gnu_inline", &is_gnu_inline);
+  fn->is_gnu_inline |= attr->is_gnu_inline;
+  DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
 
-  if (is_gnu_inline || opt_std == STD_C89 || opt_gnu89_inline) {
-    if (is_def)
-      fn->export_fn |= !(attr->is_inline && (attr->strg & SC_EXTERN));
-    else
-      fn->export_fn |= (attr->is_inline && !(attr->strg & SC_EXTERN));
-  } else {
+  if (!fn->is_static) {
     fn->export_fn |= !(attr->is_inline && !(attr->strg & SC_EXTERN));
+    if (is_def)
+      fn->export_fn_gnu |= !(attr->is_inline && (attr->strg & SC_EXTERN));
+    else
+      fn->export_fn_gnu |= (attr->is_inline && !(attr->strg & SC_EXTERN));
   }
 }
 

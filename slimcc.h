@@ -358,6 +358,8 @@ struct Obj {
 
   // Function
   bool export_fn;
+  bool export_fn_gnu;
+  bool is_gnu_inline;
   bool is_naked;
   bool is_noreturn;
   bool returns_twice;
