@@ -1024,7 +1024,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_typedef: attr->strg |= SC_TYPEDEF; continue;
     case TK_thread_local: attr->strg |= SC_THREAD; continue;
     case TK_inline: attr->is_inline = true; continue;
-    case TK_Noreturn: continue;
+    case TK_Noreturn: attr->is_noreturn = true; continue;
     case TK_alignas: {
       tok = skip(tok, "(");
       int align;
