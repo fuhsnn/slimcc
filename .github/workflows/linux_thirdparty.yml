@@ -12,7 +12,7 @@ jobs:
           - { vm: interop, file: debian_asan_interop }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -160,6 +160,7 @@ jobs:
           - { vm: main, proj: test_xz }
           - { vm: main, proj: test_yash }
           - { vm: main, proj: test_zlib }
+          - { vm: main, proj: test_zlibng }
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: build_dash }
@@ -195,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
