@@ -94,7 +94,7 @@ test_bzip2() {
 }
 
 test_bzip3() {
- git_fetch https://github.com/iczelia/bzip3 53984efe378df61a4d3eb41637355c453eec338f bzip3
+ git_fetch https://github.com/iczelia/bzip3 fe3b43d83d8388734c67480b4191a118e506dc45 bzip3
  libtoolize
  sh ./bootstrap.sh
  fix_and_configure --disable-arch-native
@@ -111,7 +111,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.7.5
+ github_tar c3lang c3c v0.7.6
  cmake_init
  make VERBOSE=1
  cd ../test
@@ -157,13 +157,15 @@ test_cpio() {
 }
 
 test_cproc() {
- git_fetch https://github.com/michaelforney/cproc 049d4d0df33dba8525d542c3627019e282c1ebed cproc
+ git_fetch https://github.com/michaelforney/cproc 14a8916e23bc6daebcb54f1384fa0eb2455072e3 cproc
  ./configure --host=x86_64-linux-gnu
  make CFLAGS=-std=c99 check
 }
 
 test_curl() {
- url_xz https://github.com/curl/curl/releases/download/curl-8_16_0/curl-8.16.0.tar.xz curl
+ github_tar curl curl curl-8_16_0
+ libtoolize
+ autoreconf -fi
  fix_and_configure --with-openssl
  make && make test
 }
@@ -219,7 +221,7 @@ test_gawk() {
 }
 
 test_git() {
- github_tar git git v2.51.0
+ github_tar git git v2.51.1
  make CC="$CC" test -j2
 }
 
@@ -269,7 +271,7 @@ test_gzip() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-3
+ github_tar ImageMagick ImageMagick 7.1.2-7
  fix_and_configure
  make check V=1
 }
@@ -304,13 +306,15 @@ test_jerryscript() {
 }
 
 test_jq() {
- url_tar https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-1.8.1.tar.gz jq
+ github_tar jqlang jq jq-1.8.1
+ libtoolize
+ autoreconf -fi
  fix_and_configure
  make check
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 310b28220776c6bc023678e8ee1058188724b466 ksh93
+ git_fetch https://github.com/ksh93/ksh 0f6866b6bebc26d003acb6f467d0694a8aea5177 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -326,7 +330,7 @@ test_lame() {
 }
 
 test_liballegro5() {
- git_fetch https://github.com/liballeg/allegro5 c870f466638b345639b46628e4d421443aacff71 liballegro5
+ git_fetch https://github.com/liballeg/allegro5 a71d1cf0435c37053e781739f6da11c9700adb64 liballegro5
  cmake_init
  make VERBOSE=1
  make run_standalone_tests
@@ -336,9 +340,11 @@ test_liballegro5() {
 }
 
 test_libarchive() {
- url_tar https://github.com/libarchive/libarchive/releases/download/v3.8.1/libarchive-3.8.1.tar.gz libarchive
+ github_tar libarchive libarchive v3.8.2
  replace_line "#elif defined(__GNUC__)" "#elif 1" libarchive/archive_blake2.h
  replace_line "#if defined(__GNUC__)" "#if 1" libarchive/archive_write_set_format_cpio_binary.c
+ libtoolize
+ autoreconf -fi
  fix_and_configure
  make check
 }
@@ -352,13 +358,14 @@ test_libevent() {
 }
 
 test_libexpat() {
- url_tar https://github.com/libexpat/libexpat/releases/download/R_2_7_1/expat-2.7.1.tar.gz libexpat
- fix_and_configure
- make check
+ github_tar libexpat libexpat R_2_7_3
+ cd expat
+ cmake_init
+ make && ctest
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc 9d83c00b5c146863397c31dbac0892c762e7530f libgc
+ git_fetch https://github.com/bdwgc/bdwgc 19a7f495cd7c48cdf6f56c593c6dd57187afa079 libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -404,13 +411,13 @@ test_libjpeg() {
 }
 
 test_libjsonc() {
- git_fetch https://github.com/json-c/json-c 7cee5237dc6c0831e3f9dc490394eaea44636861 json-c
+ git_fetch https://github.com/json-c/json-c 2372e9518e6ba95b48d37ec162bc7d93b297b52f json-c
  cmake_init -DHAVE_VASPRINTF=no
  make && make test
 }
 
 test_liblz4() {
- git_fetch https://github.com/lz4/lz4 2bc386d57cd9c36780366acead0054fd49dcd36b lz4
+ git_fetch https://github.com/lz4/lz4 f8e365036efc9e94bda616432eb8ad942c236d76 lz4
  make test
 }
 
@@ -439,7 +446,7 @@ test_libpng() {
 }
 
 test_libpsl() {
- url_tar https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.gz libpsl
+ url_lz https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.lz libpsl
  fix_and_configure
  make check
 }
@@ -452,7 +459,7 @@ test_libressl() {
 }
 
 test_libsamplerate() {
- git_fetch https://github.com/libsndfile/libsamplerate 15c392d47e71b9395a759544b3818a1235fe1a1d libsamplerate
+ git_fetch https://github.com/libsndfile/libsamplerate 2ccde9568cca73c7b32c97fefca2e418c16ae5e3 libsamplerate
  replace_line "#   define HAVE_SSE2_INTRINSICS" "" src/common.h
  libtoolize
  sh autogen.sh
@@ -478,7 +485,7 @@ test_libuev() {
 }
 
 test_libuv() {
- url_tar https://github.com/libuv/libuv/archive/refs/tags/v1.51.0.tar.gz libuv
+ github_tar libuv libuv v1.51.0
  replace_line "#elif __GNUC__ >= 4" "#elif 1" include/uv.h
  # https://github.com/libuv/libuv/issues/2635#issuecomment-575109464
  sed -i 's|TEST_DECLARE   (udp_multicast_join)||g' test/test-list.h
@@ -492,7 +499,7 @@ test_libuv() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.15.0
+ github_tar GNOME libxml2 v2.15.1
  libtoolize
  sh autogen.sh
  fix_configure
@@ -515,7 +522,7 @@ test_lua() {
 }
 
 test_lwan(){
- git_fetch https://github.com/lpereira/lwan 3557d0345d5e2f6ebef8a38b56b121ae61e23318 lwan
+ git_fetch https://github.com/lpereira/lwan 37d70b1f54c72c8f3e02d0765c7e58fbb3184fff lwan
  use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
  use_stdbit '#include <assert.h>' src/lib/timeout.c
  use_stdbit '#include <assert.h>' src/samples/techempower/json.c
@@ -596,7 +603,7 @@ test_msgpack() {
 }
 
 test_muon() {
- git_fetch https://github.com/muon-build/muon 699068975d943dc42e1485b0e68d48f12d4bee4f muon
+ git_fetch https://github.com/muon-build/muon aa8b8f7a2f98fc246c8b4cd9c70f093a4a285a1b muon
  sh ./bootstrap.sh build
  build/muon-bootstrap setup build
  sed -i 's/posix.default_linker = linker_posix/posix.default_linker = linker_ld/g' src/compilers.c
@@ -607,11 +614,11 @@ test_muon() {
 }
 
 test_nginx() {
- github_tar nginx nginx release-1.29.1
+ github_tar nginx nginx release-1.29.2
  auto/configure
  make
  cd ../
- git_fetch https://github.com/nginx/nginx-tests 06a36245e134eac985cdfc5fac982cb149f61412 nginx-tests
+ git_fetch https://github.com/nginx/nginx-tests 50b1dd3a7ba2fdc12c5818bbe191811f12eb23da nginx-tests
  prove .
 }
 
@@ -628,8 +635,9 @@ test_noplate() {
 
 test_ocaml() {
  github_tar ocaml ocaml 5.3.0
- fix_and_configure --enable-ocamltest --disable-ocamldoc --disable-debugger --disable-native-compiler
- make -j2  && make -C testsuite parallel -j2
+ sed -i 's|arguments = "mainarith|arguments = "-lm mainarith|g' testsuite/tests/asmgen/arith.cmm
+ fix_and_configure --enable-ocamltest --disable-ocamldoc --disable-debugger
+ make -j4  && make -C testsuite parallel -j4
 }
 
 test_oniguruma() {
@@ -665,7 +673,7 @@ test_pacman() {
 }
 
 test_pdpmake() {
- git_fetch https://github.com/rmyorston/pdpmake 7adf57a0171bf188ae14576223715215a06d5768 pdpmake
+ git_fetch https://github.com/rmyorston/pdpmake 51104994015dc14e90e3a59cea81f2f46d75fb41 pdpmake
  make test
 }
 
@@ -687,7 +695,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0RC1
+ github_tar php php-src php-8.5.0RC2
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -716,7 +724,7 @@ test_postgres() {
 }
 
 test_python() {
- github_tar python cpython v3.14.0rc2
+ github_tar python cpython v3.14.0
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
@@ -737,13 +745,13 @@ test_qbe_hare() {
 }
 
 test_quickjs() {
- git_fetch https://github.com/bellard/quickjs 20d2b404af65edc5d66ee6f11a59f930ea3d1b88 quickjs
+ git_fetch https://github.com/bellard/quickjs 2161640067cd2e2a0127d41eddcb5903d43e8aa2 quickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  make CC=$CC test
 }
 
 test_redis() {
- github_tar redis redis 8.2.1
+ github_tar redis redis 8.2.2
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -758,7 +766,7 @@ test_redis() {
 }
 
 test_valkey() {
- github_tar valkey-io valkey 8.1.2
+ github_tar valkey-io valkey 8.1.4
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -773,20 +781,20 @@ test_valkey() {
 }
 
 test_ruby() {
- git_fetch https://github.com/ruby/ruby 8d79187523cdc0b5b961f4e856df8824c241f16e ruby
+ git_fetch https://github.com/ruby/ruby ff8975dfc8732b3530dc04a22cd703abb5da7c37 ruby
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  make check -j4
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM e4c7e3247923de02f3bf0f803a09190c4308556c rvvm
+ git_fetch https://github.com/LekKit/RVVM 2247f2dca3955f22d651118d5a50e853cc77b780 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.23.1
+ github_tar samba-team samba samba-4.23.2
  sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
  sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
@@ -830,7 +838,7 @@ test_tcl() {
 }
 
 test_tinycc() {
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 19fdef46f960dd72fb5883514df25501db5b2d4e tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 01d1b7bc7601e2441d971583879f00a3905e3bf9 tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
@@ -843,7 +851,7 @@ test_toxcore() {
 }
 
 test_toybox() {
- github_tar landley toybox 0.8.12
+ github_tar landley toybox 0.8.13
  replace_line "#define QUIET" "#define QUIET = 0" lib/portability.h
  replace_line "  default n" "  default y" toys/pending/awk.c
  replace_line "  default n" "  default y" toys/pending/expr.c
@@ -884,7 +892,7 @@ test_wolfssl() {
 }
 
 test_wuffs() {
- git_fetch https://github.com/google/wuffs 67e9078eabcbda867ccc9fa912d81cba4fb0aa89 wuffs
+ git_fetch https://github.com/google/wuffs 1e2e58cea012ea4c7553f327b63fafe196b0f9e2 wuffs
  sed -i 's|Building (C)|Build CC:$CC|g' ./build-example.sh
  ./build-example.sh convert-to-nia
  ./build-example.sh gifplayer
@@ -899,12 +907,12 @@ test_wuffs() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash 1a08a8e2817e5ef3f04840407715bc1f0cc22269 xxhash
+ git_fetch https://github.com/Cyan4973/xxHash c961fbe61ad1ee1e430b9c304735a0534fda1c6d xxhash
  make CC=$CC DISPATCH=0 check
 }
 
 test_xz() {
- url_tar https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.gz xz
+ github_tar tukaani-project xz v5.8.1
  cmake_init
  make && make test
 }
@@ -924,6 +932,12 @@ test_zlib() {
  make test
 }
 
+test_zlibng() {
+ github_tar zlib-ng zlib-ng 2.2.5
+ ./configure --without-optimizations
+ make && make test
+}
+
 test_zsh() {
  url_xz https://sourceforge.net/projects/zsh/files/zsh-test/5.9.0.3-test/zsh-5.9.0.3-test.tar.xz zsh
  libtoolize
@@ -941,14 +955,14 @@ test_zstd() {
 }
 
 build_dash() {
- git_fetch https://git.kernel.org/pub/scm/utils/dash/dash.git b4ef25d7466c2f85247c6271a47c6ccc064b4625 dash
+ git_fetch https://git.kernel.org/pub/scm/utils/dash/dash.git 85ae9ea3b7a9d5bc4e95d1bacf3446c545b6ed8b dash
  sh autogen.sh
  ./configure
  make
 }
 
 build_ellipsis() {
- git_fetch https://gitlab.inria.fr/gustedt/ellipsis 478dd3606412f3627e2e38bec86c942507a0f585 ellipsis
+ git_fetch https://gitlab.inria.fr/gustedt/ellipsis 54d1629235883c86c372c49ae4300fd533ee91c8 ellipsis
  cd sources
  sed -i 's|gnu2x|gnu23|g' Makefile-options
  make distclean && make
@@ -980,7 +994,7 @@ build_gcc() {
 }
 
 build_glfw() {
- git_fetch https://github.com/glfw/glfw 768e81a0eb3ae411d108168fdff7cd3335f2a34a glfw
+ git_fetch https://github.com/glfw/glfw 8e15281d34a8b9ee9271ccce38177a3d812456f8 glfw
  cmake_init -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
  make
 }
@@ -992,7 +1006,7 @@ build_libev() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT f9140a622a0c44a99efb391cc1c2358bc8098ab7 luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT 25a61a182166fec06f1a1a025eb8fabbb6cf483e luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -1011,7 +1025,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20250823
+ github_tar ThomasDickey ncurses-snapshots v6_5_20251010
  ./configure
  make V=1
 }
@@ -1060,21 +1074,21 @@ build_raylib_raygui() {
 }
 
 build_sdl3() {
- github_tar libsdl-org SDL release-3.2.22
+ github_tar libsdl-org SDL release-3.2.24
  replace_line "#elif defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))" "#elif 1" src/atomic/SDL_spinlock.c
  cmake_init -DCMAKE_C_FLAGS=-DSTBI_NO_SIMD
  make VERBOSE=1
 }
 
 build_stb() {
- git_fetch https://github.com/nothings/stb f58f558c120e9b32c217290b80bad1a0729fbb2c stb
+ git_fetch https://github.com/nothings/stb fede005abaf93d9d7f3a679d1999b2db341b360f stb
  sed -i 's|-DSTB_DIVIDE_TEST|-DSTB_DIVIDE_TEST -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' tests/Makefile
  sed -i 's|$(CC) $(INCLUDES) $(CPPFLAGS) -std=c++0x test_cpp_compilation.cpp -lm -lstdc++||g' tests/Makefile
  make -C tests
 }
 
 build_tin() {
- github_tar ThomasDickey tin-beta-snapshots v2_6_5-20250707
+ github_tar ThomasDickey tin-beta-snapshots v2_6_5-20250919
  ./configure
  make build
 }
@@ -1098,7 +1112,7 @@ build_zig() {
 bootstrap_musl() {
  local ROOT_DIR=$PWD/musl_build
 
- git_fetch https://github.com/bminor/musl 0ccaf0572e9cccda2cced0f7ee659af4c1c6679a musl
+ git_fetch https://github.com/bminor/musl 1b76ff0767d01df72f692806ee5adee13c67ef88 musl
  rm -r src/complex/ include/complex.h
  AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
  make install
@@ -1278,6 +1292,8 @@ use_stdatomic() {
 
  sed -i 's|__atomic_load_n|atomic_load_explicit|g' "$2"
  sed -i 's|__atomic_store_n|atomic_store_explicit|g' "$2"
+
+ sed -i 's|__atomic_exchange_n|atomic_exchange_explicit|g' "$2"
 
  sed -i 's|__atomic_clear|atomic_flag_clear_explicit|g' "$2"
  sed -i 's|__atomic_test_and_set|atomic_flag_test_and_set_explicit|g' "$2"
