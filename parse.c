@@ -355,13 +355,6 @@ static Node *new_num(int64_t val, Token *tok) {
   return node;
 }
 
-static Node *new_intptr_t(int64_t val, Token *tok) {
-  Node *node = new_node(ND_NUM, tok);
-  node->num.val = val;
-  node->ty = ty_intptr_t;
-  return node;
-}
-
 static Node *new_size_t(int64_t val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->num.val = val;
@@ -1640,7 +1633,7 @@ static Node *vla_size(Type *ty, Token *tok) {
   if (ty->base->kind == TY_VLA)
     base_sz = vla_size(ty->base, tok);
   else
-    base_sz = new_num(ty->base->size, tok);
+    base_sz = new_size_t(ty->base->size, tok);
 
   return new_binary(ND_MUL, vla_count(ty, tok, false), base_sz, tok);
 }
@@ -2274,7 +2267,7 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
     }
 
     if (is_integer(init->ty) || init->ty->kind == TY_PTR || init->ty->kind == TY_NULLPTR) {
-      EvalContext ctx = {.kind = (init->ty->size != ty_intptr_t->size) ? EV_CONST : ev_kind};
+      EvalContext ctx = {.kind = (init->ty->size != ty_nullptr->size) ? EV_CONST : ev_kind};
       int64_t val = eval2(node, &ctx);
       if (ctx.label || ctx.var) {
         Relocation *rel = ast_arena_calloc(sizeof(Relocation));
@@ -3055,7 +3048,7 @@ static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
   if (!opt_optimize || !var->init_data || var->is_weak || !is_const_var(var))
     return false;
   for (Relocation *rel = var->rel; rel; rel = rel->next) {
-    if ((rel->offset + ty_intptr_t->size) <= ofs)
+    if ((rel->offset + ty_nullptr->size) <= ofs)
       continue;
     if ((ofs + read_sz) <= rel->offset)
       break;
@@ -4034,7 +4027,7 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
     if (ptr->ty->base->kind == TY_VLA)
       *ofs = new_binary(ND_MUL, *ofs, vla_size(ptr->ty->base, tok), tok);
     else
-      *ofs = new_binary(ND_MUL, *ofs, new_intptr_t(ptr->ty->base->size, tok), tok);
+      *ofs = new_binary(ND_MUL, *ofs, new_size_t(ptr->ty->base->size, tok), tok);
 
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
@@ -4059,16 +4052,17 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
     if (lhs->ty->base->kind == TY_VLA)
       rhs = new_binary(ND_MUL, rhs, vla_size(lhs->ty->base, tok), tok);
     else
-      rhs = new_binary(ND_MUL, rhs, new_intptr_t(lhs->ty->base->size, tok), tok);
+      rhs = new_binary(ND_MUL, rhs, new_size_t(lhs->ty->base->size, tok), tok);
 
     return new_binary(ND_SUB, lhs, rhs, tok);
   }
 
   // ptr - ptr, which returns how many elements are between the two.
-  if (lhs->ty->base && rhs->ty->base) {
-    int sz = lhs->ty->base->size;
-    Node *node = new_binary(ND_SUB, new_cast(lhs, ty_intptr_t), new_cast(rhs, ty_intptr_t), tok);
-    return new_cast(new_binary(ND_DIV, node, new_num(sz, tok), tok), ty_ptrdiff_t);
+  if (lhs->ty->base && rhs->ty->base && is_compatible(lhs->ty->base, rhs->ty->base)) {
+    Node *node = new_binary(ND_SUB, lhs, rhs, tok);
+    node = new_binary(ND_DIV, node, new_num(lhs->ty->base->size, tok), tok);
+    node->ty = node->m.lhs->ty = node->m.rhs->ty = ty_ptrdiff_t;
+    return node;
   }
 
   error_tok(tok, "invalid operands");

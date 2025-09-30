@@ -23,7 +23,6 @@ Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
 Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
 
 Type *ty_size_t;
-Type *ty_intptr_t;
 Type *ty_ptrdiff_t;
 
 Type *ty_char16_t;
@@ -55,7 +54,7 @@ void init_ty_lp64(void) {
   define_macro("__SCHAR_MAX__", "0x7f");
 
   ty_size_t = ty_ulong;
-  ty_intptr_t = ty_ptrdiff_t = ty_long;
+  ty_ptrdiff_t = ty_long;
 
   ty_char16_t = ty_ushort;
   ty_char32_t = ty_uint;

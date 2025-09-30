@@ -801,7 +801,6 @@ extern Type *ty_double;
 extern Type *ty_ldouble;
 
 extern Type *ty_size_t;
-extern Type *ty_intptr_t;
 extern Type *ty_ptrdiff_t;
 
 extern Type *ty_char16_t;
