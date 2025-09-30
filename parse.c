@@ -242,12 +242,13 @@ static bool leave_scope(void) {
   return !has_label;
 }
 
-static DeferStmt *new_block_scope(void) {
+static DeferStmt *new_stmt_scope(void) {
   enter_scope();
+  scope->is_stmt = true;
   return current_defr;
 }
 
-static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
+static Node *leave_stmt_scope(DeferStmt *defr, Node *stmt_node) {
   bool no_label = leave_scope();
 
   if (stmt_node->kind == ND_RETURN || stmt_node->kind == ND_GOTO)
@@ -268,6 +269,13 @@ static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
 static Scope *base_scope(void) {
   Scope *sc = scope;
   while (sc->parent && sc->parent->parent)
+    sc = sc->parent;
+  return sc;
+}
+
+static Scope *decl_scope(void) {
+  Scope *sc = scope;
+  while (sc->is_temporary || (sc->is_stmt && opt_std == STD_C89))
     sc = sc->parent;
   return sc;
 }
@@ -299,7 +307,13 @@ static Type *find_tag(Token *tok) {
 }
 
 static Type *find_tag_in_scope(Token *tok) {
-  return hashmap_get2(&scope->tags, tok->loc, tok->len);
+  return hashmap_get2(&decl_scope()->tags, tok->loc, tok->len);
+}
+
+static void push_tag_scope(Token *tag, Type *ty) {
+  tag->is_live = true;
+  ty->tag = tag;
+  hashmap_put2(&decl_scope()->tags, tag->loc, tag->len, ty);
 }
 
 Obj *get_symbol_var(char *name) {
@@ -656,12 +670,6 @@ static void assembler_name(Token **rest, Token *tok, Obj *var) {
       error_tok(tok, "conflict of asm name");
     var->asm_name = str;
   }
-}
-
-static void push_tag_scope(Token *tag, Type *ty) {
-  tag->is_live = true;
-  ty->tag = tag;
-  hashmap_put2(&scope->tags, tag->loc, tag->len, ty);
 }
 
 static void chain_expr(Node **lhs, Node *rhs) {
@@ -1548,9 +1556,10 @@ static Type *enum_specifier(Token **rest, Token *tok) {
       cur->name = name;
       name->is_live = true;
     }
-    VarScope *sc = push_scope(get_ident(name));
-    sc->enum_ty = ty;
-    sc->enum_val = v;
+    VarScope *vsc = ast_arena_calloc(sizeof(VarScope));
+    hashmap_put2(&decl_scope()->vars, name->loc, name->len, vsc);
+    vsc->enum_ty = ty;
+    vsc->enum_val = v;
   }
   if (first)
     error_tok(tok, "empty enum specifier");
@@ -2672,12 +2681,12 @@ static Node *secondary_block(Token **rest, Token *tok) {
   if (equal(tok, "{"))
     return compound_stmt(rest, tok, ND_BLOCK);
 
-  DeferStmt *dfr = new_block_scope();
+  DeferStmt *dfr = new_stmt_scope();
   Node head = {0};
   Node *cur = &head;
   Token *label_list = label_stmt(&cur, &tok, tok);
   cur->next = stmt(rest, tok, label_list);
-  return leave_block_scope(dfr, head.next);
+  return leave_stmt_scope(dfr, head.next);
 }
 
 static void loop_body(Token **rest, Token *tok, Node *node, Token *label_list) {
@@ -2728,7 +2737,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_if) {
-    DeferStmt *dfr = new_block_scope();
+    DeferStmt *dfr = new_stmt_scope();
 
     Node *node = new_node(ND_IF, tok);
     node->ctrl.cond = cond_cast(cond_declaration(&tok, skip(tok->next, "("), ")", 0));
@@ -2737,11 +2746,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       node->ctrl.els = secondary_block(&tok, tok->next);
 
     *rest = tok;
-    return leave_block_scope(dfr, node);
+    return leave_stmt_scope(dfr, node);
   }
 
   if (tok->kind == TK_switch) {
-    DeferStmt *dfr = new_block_scope();
+    DeferStmt *dfr = new_stmt_scope();
 
     Node *node = new_node(ND_SWITCH, tok);
     node->ctrl.cond = cond_declaration(&tok, skip(tok->next, "("), ")", 0);
@@ -2759,11 +2768,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     node->ctrl.then = secondary_block(rest, tok);
 
     jump_ctx = ctx.next;
-    return leave_block_scope(dfr, node);
+    return leave_stmt_scope(dfr, node);
   }
 
   if (tok->kind == TK_for) {
-    DeferStmt *dfr = new_block_scope();
+    DeferStmt *dfr = new_stmt_scope();
 
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
@@ -2790,11 +2799,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     loop_body(rest, tok, node, label_list);
 
-    return leave_block_scope(dfr, node);
+    return leave_stmt_scope(dfr, node);
   }
 
   if (tok->kind == TK_while) {
-    DeferStmt *dfr = new_block_scope();
+    DeferStmt *dfr = new_stmt_scope();
 
     Node *node = new_node(ND_FOR, tok);
     node->dfr_dest = current_defr;
@@ -2803,10 +2812,12 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     loop_body(rest, tok, node, label_list);
 
-    return leave_block_scope(dfr, node);
+    return leave_stmt_scope(dfr, node);
   }
 
   if (tok->kind == TK_do) {
+    DeferStmt *dfr = new_stmt_scope();
+
     Node *node = new_node(ND_DO, tok);
 
     loop_body(&tok, tok->next, node, label_list);
@@ -2816,7 +2827,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     node->ctrl.cond = cond_cast(expr(&tok, tok));
     tok = skip(tok, ")");
     *rest = skip(tok, ";");
-    return node;
+    return leave_stmt_scope(dfr, node);
   }
 
   if (tok->kind == TK_asm) {
@@ -4690,11 +4701,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
     return new_var_node(var, start);
   }
 
-  Scope *sc = scope;
-  while (sc->is_temporary)
-    sc = sc->parent;
-
-  Obj *var = new_lvar2(NULL, ty, sc);
+  Obj *var = new_lvar2(NULL, ty, decl_scope());
   var->is_compound_lit = true;
   var->alt_align = attr.align;
 

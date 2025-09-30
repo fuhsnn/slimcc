@@ -18,6 +18,34 @@ void va_fn(int i, ...) {
   ASSERT(66, ( va_start(ap,i), va_arg(ap, M).d[ ({ S1 s = {}; 0; }) ] ));
 }
 
+int decl_scope(void) {
+  {
+    enum { A = 5 };
+    struct S { char arr[9]; };
+    {
+      if (sizeof(enum {A = 7}))
+        (void)sizeof(struct S { char arr[3]; });
+      ASSERT(5, A);
+      ASSERT(9, sizeof(struct S));
+    }
+    ASSERT(5, A);
+    ASSERT(9, sizeof(struct S));
+    {
+      void proto(enum { A = 7 });
+      void proto2(struct S { char arr[7]; }*);
+      ASSERT(5, A);
+      ASSERT(9, sizeof(struct S));
+    }
+  }
+  {
+    struct S *p;
+    pass(&(struct S { char arr[7]; }){(enum { A = 6 })0});
+    ASSERT(7, sizeof(struct S));
+    ASSERT(7, sizeof(*p));
+    ASSERT(6, A);
+  }
+  return 1;
+}
 
 int main(void) {
   ASSERT(1, ({ S1 s = {1,2,3,4}; s; }).i[ ({ S1 s = {}; 0;}) ] );
@@ -50,6 +78,8 @@ int main(void) {
   ASSERT(1, complit_p3 != complit_p4);
 
   va_fn(0, (M){55,66});
+
+  ASSERT(1, decl_scope());
 
   printf("OK\n");
 }
