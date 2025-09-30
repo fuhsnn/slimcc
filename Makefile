@@ -123,6 +123,6 @@ slimcc-lto-mi: $(SRCS) slimcc.h
 
 clean:
 	rm -f slimcc slimcc-stage2 slimcc-asan slimcc-filc slimcc-lto slimcc-lto-je slimcc-lto-mi
-	rm -f *.o test/*.o test/*.exe test/host/*.o
+	rm -f *.o test/*.o test/*.exe test/host/*.o test/abi/*.o
 
 .PHONY: clean test test-stage2 test-all test-asan test-filc

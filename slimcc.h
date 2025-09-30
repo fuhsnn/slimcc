@@ -615,6 +615,7 @@ struct Scope {
   LocalLabel *labels;
   Node *gotos;
   bool is_temporary;
+  bool is_stmt;
   bool has_label;
 
   // C has two block scopes; one is for variables/typedefs and

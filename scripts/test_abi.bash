@@ -11,5 +11,6 @@ compile_exec() {
  test/"$1"_abi.exe >/dev/null
 }
 
+compile_exec c89 '-std=c89'
 compile_exec c11 '-std=c11'
 compile_exec c23 '-std=c23'
