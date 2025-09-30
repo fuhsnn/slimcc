@@ -35,17 +35,15 @@ EnumType ety_of_int;
 void init_ty_lp64(void) {
   define_macro("_LP64", "1");
   define_macro("__LP64__", "1");
+  define_macro("__SIZEOF_POINTER__", "8");
+
+  define_macro("__SIZEOF_LONG_DOUBLE__", "16");
   define_macro("__SIZEOF_DOUBLE__", "8");
   define_macro("__SIZEOF_FLOAT__", "4");
-  define_macro("__SIZEOF_INT__", "4");
-  define_macro("__SIZEOF_LONG_DOUBLE__", "16");
   define_macro("__SIZEOF_LONG_LONG__", "8");
   define_macro("__SIZEOF_LONG__", "8");
-  define_macro("__SIZEOF_POINTER__", "8");
-  define_macro("__SIZEOF_PTRDIFF_T__", "8");
+  define_macro("__SIZEOF_INT__", "4");
   define_macro("__SIZEOF_SHORT__", "2");
-  define_macro("__SIZEOF_SIZE_T__", "8");
-  define_macro("__SIZE_TYPE__", "long unsigned int");
 
   define_macro("__LONG_LONG_MAX__", "0x7fffffffffffffffLL");
   define_macro("__LONG_MAX__", "0x7fffffffffffffffL");
@@ -53,12 +51,20 @@ void init_ty_lp64(void) {
   define_macro("__SHRT_MAX__", "0x7fff");
   define_macro("__SCHAR_MAX__", "0x7f");
 
+  define_macro("__SIZEOF_SIZE_T__", "8");
+  define_macro("__SIZEOF_PTRDIFF_T__", "8");
+  define_macro("__SIZEOF_WCHAR_T__", "4");
+
+  define_macro("__SIZE_TYPE__", "long unsigned int");
+  define_macro("__PTRDIFF_TYPE__", "long int");
+  define_macro("__WCHAR_TYPE__", "int");
+
   ty_size_t = ty_ulong;
   ty_ptrdiff_t = ty_long;
+  ty_wchar_t = ty_int;
 
   ty_char16_t = ty_ushort;
   ty_char32_t = ty_uint;
-  ty_wchar_t = ty_int;
 
   enum_ty[ETY_I8] = ty_char;
   enum_ty[ETY_U8] = ty_uchar;
