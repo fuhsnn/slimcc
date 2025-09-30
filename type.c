@@ -264,6 +264,14 @@ static void cast_if_not(Type *ty, Node **node) {
     *node = new_cast(*node, ty);
 }
 
+static bool int_to_ptr(Node **node) {
+  if (!is_integer((*node)->ty))
+    return false;
+  if ((*node)->ty->size != ty_nullptr->size)
+    *node = new_cast(*node, pointer_to(ty_void));
+  return true;
+}
+
 bool match_enum_val(EnumVal **e, int64_t val, Token *name) {
   for (EnumVal *ev = *e; ev; ev = ev->next) {
     if ((ev->val == val) && equal_tok(ev->name, name)) {
@@ -697,10 +705,11 @@ void add_type(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-    add_type(node->m.lhs);
-    add_type(node->m.rhs);
     node->ty = ty_int;
-    if (common_ptr_conv(&node->m.lhs, &node->m.rhs))
+    ptr_convert(&node->m.lhs);
+    ptr_convert(&node->m.rhs);
+    if ((is_ptr(node->m.lhs->ty) && (is_ptr(node->m.rhs->ty) || int_to_ptr(&node->m.rhs))) ||
+      (is_ptr(node->m.rhs->ty) && (is_ptr(node->m.lhs->ty) || int_to_ptr(&node->m.lhs))))
       return;
     usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
