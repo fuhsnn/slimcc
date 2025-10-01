@@ -233,6 +233,12 @@ static void enter_scope(void) {
   scope = scope->children = sc;
 }
 
+static void enter_param_scope(void) {
+  Scope *sc = ast_arena_calloc(sizeof(Scope));
+  sc->parent = scope;
+  scope = sc;
+}
+
 static void enter_tmp_scope(void) {
   enter_scope();
   scope->is_temporary = true;
@@ -603,6 +609,14 @@ static Obj *new_lvar2(char *name, Type *ty, Scope *sc) {
 
 Obj *new_lvar(char *name, Type *ty) {
   return new_lvar2(name, ty, scope);
+}
+
+static Obj *new_param(char *name, Type *ty) {
+  Obj *var = new_var(name, ty, calloc(1, sizeof(Obj)));
+  var->is_local = true;
+  var->next = scope->locals;
+  scope->locals = var;
+  return var;
 }
 
 static Obj *new_gvar(char *name, Type *ty) {
@@ -1171,67 +1185,6 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
   return qual_type(qual, ty);
 }
 
-static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
-  Token *start = tok;
-  tok = skip_paren(tok);
-
-  enter_scope();
-  fn_ty->scopes = scope;
-  Node *expr = NULL;
-
-  while (is_typename(tok)) {
-    Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
-
-    do {
-      Token *name = NULL;
-      Type *ty = declarator(&tok, tok, basety, &name);
-      if (!name)
-        error_tok(tok, "expected identifier");
-
-      Obj *promoted = NULL;
-      if (is_integer(ty) && ty->size < ty_int->size)
-        promoted = new_lvar(NULL, ty_int);
-      else if (ty->kind == TY_FLOAT)
-        promoted = new_lvar(NULL, ty_double);
-      else
-        ty = ptr_decay(ty);
-
-      Obj *var = new_lvar(get_ident(name), ty);
-      if (promoted) {
-        var->param_promoted = promoted;
-        chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
-                                     new_var_node(promoted, tok), tok));
-      }
-      chain_expr(&expr, calc_vla(ty, tok));
-    } while (comma_list(&tok, &tok, ";", true));
-  }
-  *rest = tok;
-
-  Obj head = {0};
-  Obj *cur = &head;
-
-  for (tok = start; comma_list(&tok, &tok, ")", cur != &head);) {
-    VarScope *sc = hashmap_get2(&fn_ty->scopes->vars, tok->loc, tok->len);
-
-    Obj *nxt;
-    if (!sc)
-      nxt = new_lvar(get_ident(tok), ty_int);
-    else if (sc->var->param_promoted)
-      nxt = sc->var->param_promoted;
-    else
-      nxt = sc->var;
-
-    cur = cur->param_next = nxt;
-    tok = tok->next;
-  }
-  leave_scope();
-  add_type(expr);
-  fn_ty->param_list = head.param_next;
-  fn_ty->is_oldstyle = true;
-  fn_ty->pre_calc = expr;
-  return fn_ty;
-}
-
 static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Type *fn_ty = func_type(rtn_ty, tok);
 
@@ -1249,15 +1202,33 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   }
   bool is_def = end && is_func_def(*end ? *end : skip_paren(tok));
 
-  if (!is_typename(tok))
-    return func_params_old_style(rest, tok, fn_ty);
+  if (!is_typename(tok)) {
+    fn_ty->is_oldstyle = true;
+
+    if (!is_def) {
+      *rest = skip_paren(tok);
+    } else {
+      enter_param_scope();
+      fn_ty->scopes = scope;
+
+      Obj head = {0};
+      Obj *cur = &head;
+      for (; comma_list(rest, &tok, ")", cur != &head); tok = tok->next) {
+        cur = cur->param_next = new_param(NULL, NULL);
+        cur->name = get_ident(tok);
+      }
+      fn_ty->param_list = head.param_next;
+      leave_scope();
+    }
+    return fn_ty;
+  }
+
+  enter_param_scope();
+  fn_ty->scopes = scope;
 
   Obj head = {0};
   Obj *cur = &head;
   Node *expr = NULL;
-
-  enter_scope();
-  fn_ty->scopes = scope;
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
     if (equal(tok, "...")) {
@@ -1270,19 +1241,19 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     ty = declarator2(&tok, tok, ty, &name,
       &(DeclContext){.let_star = !is_def, .is_param = true});
 
-    chain_expr(&expr, calc_vla(ty, tok));
+    if (is_def)
+      chain_expr(&expr, calc_vla(ty, tok));
 
     Type *param_ty = ptr_decay(ty);
     if (ty->param_qual)
       param_ty = qual_type(ty->param_qual, param_ty);
 
     char *var_name = name ? get_ident(name) : NULL;
-    cur = cur->param_next = new_var(var_name, param_ty, calloc(1, sizeof(Obj)));
+    cur = cur->param_next = new_param(var_name, param_ty);
   }
-  leave_scope();
-  add_type(expr);
-  fn_ty->param_list = head.param_next;
   fn_ty->pre_calc = expr;
+  fn_ty->param_list = head.param_next;
+  leave_scope();
   return fn_ty;
 }
 
@@ -5225,6 +5196,8 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
       error_tok(name, "incompatible redeclaration");
     if (!fn->is_static && (attr->strg & SC_STATIC))
       error_tok(name, "static declaration follows a non-static declaration");
+    if (fn->ty->is_oldstyle && !ty->is_oldstyle)
+      fn->ty = ty;
   } else {
     char *name_str = get_ident(name);
     fn = new_gvar(name_str, ty);
@@ -5240,10 +5213,90 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
   return fn;
 }
 
+static Obj *find_param(Token *name, Obj *list) {
+  for (Obj *p = list; p; p = p->param_next)
+    if (equal(name, p->name))
+      return p;
+  return NULL;
+}
+
+static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type *def_ty) {
+  if (!prot_ty->is_oldstyle && def_ty->is_oldstyle) {
+    Obj *p1 = prot_ty->param_list;
+    Obj *p2 = def_ty->param_list;
+    while (p1 && p2) {
+      p2->ty = p1->ty;
+      p1 = p1->param_next;
+      p2 = p2->param_next;
+    }
+    if (!p1 != !p2)
+      error_tok(tok, "prototype mismatch");
+    def_ty->is_oldstyle = false;
+  }
+
+  Node *expr = NULL;
+  while (is_typename(tok)) {
+    Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
+
+    do {
+      Token *name = NULL;
+      Type *ty = declarator(&tok, tok, basety, &name);
+      if (!name)
+        error_tok(tok, "expected identifier");
+
+      chain_expr(&expr, calc_vla(ty, tok));
+
+      Obj *var = find_param(name, def_ty->param_list);
+      if (!var)
+        error_tok(name, "no such parameter");
+
+      if (!def_ty->is_oldstyle) {
+        ty = ptr_decay(ty);
+        if (!is_compatible(var->ty, ty))
+          error_tok(name, "incompatible type");
+        var->ty = ty;
+        push_scope(var->name)->var = var;
+        continue;
+      }
+
+      Type *promoted = NULL;
+      if (is_integer(ty) && ty->size < ty_int->size)
+        promoted = ty_int;
+      else if (ty->kind == TY_FLOAT)
+        promoted = ty_double;
+
+      if (!promoted) {
+        var->ty = ptr_decay(ty);
+        push_scope(var->name)->var = var;
+      } else {
+        var->ty = promoted;
+        Node *lhs = new_var_node(new_lvar(var->name, ty), name);
+        Node *rhs = new_var_node(var, name);
+        if (ty->kind == TY_BOOL)
+          rhs = new_binary(ND_BITAND, rhs, new_num(1, name), name);
+        chain_expr(&expr, new_binary(ND_ASSIGN, lhs, rhs, name));
+      }
+    } while (comma_list(&tok, &tok, ";", true));
+  }
+
+  if (def_ty->is_oldstyle) {
+    for (Obj *var = def_ty->param_list; var; var = var->param_next) {
+      if (var->ty)
+        continue;
+      var->ty = ty_int;
+      push_scope(var->name)->var = var;
+    }
+  }
+  *rest = tok;
+  return expr;
+}
+
 static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   if (fn->is_definition)
     error_tok(tok, "redefinition of %s", fn->name);
   fn->is_definition = true;
+
+  Type *prot_ty = fn->ty;
   fn->ty = ty;
 
   arena_on(&ast_arena);
@@ -5252,29 +5305,26 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   current_defr = NULL;
   fn_use_vla = dont_dealloc_vla = false;
 
+  Node *precalc = NULL;
   if (ty->scopes) {
     scope = ty->scopes;
 
-    if (!ty->is_oldstyle) {
-      Obj head = {0};
-      Obj *cur = &head;
-      for (Obj *var = ty->param_list; var; var = var->param_next) {
-        var->is_local = true;
-        cur = cur->next = var;
-      }
-      cur->next = scope->locals;
-      scope->locals = head.next;
-    }
+    if (ty->is_oldstyle)
+      precalc = func_old_style_param(&tok, tok, prot_ty, ty);
+    else
+      precalc = ty->pre_calc;
   } else {
     enter_scope();
     ty->scopes = scope;
   }
+
   fn->body = compound_stmt2(rest, tok, ND_BLOCK);
 
-  if (ty->pre_calc) {
-    Node *calc = new_unary(ND_EXPR_STMT, ty->pre_calc, tok);
-    calc->next = fn->body->blk.body;
-    fn->body->blk.body = calc;
+  if (precalc) {
+    precalc = new_unary(ND_EXPR_STMT, precalc, tok);
+    add_type(precalc);
+    precalc->next = fn->body->blk.body;
+    fn->body->blk.body = precalc;
   }
 
   if (fn_use_vla && !dont_dealloc_vla &&
@@ -5306,7 +5356,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       aligned_attr(name, tok, attr, &fn->alt_align);
       symbol_attr(name, tok, attr, fn);
 
-      if (first && !scope->parent && equal(tok, "{")) {
+      if (first && !scope->parent && is_func_def(tok)) {
         func_attr(name, tok, attr, fn, true);
         func_definition(rest, tok, fn, ty);
         return;

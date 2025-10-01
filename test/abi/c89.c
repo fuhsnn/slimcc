@@ -1,5 +1,29 @@
 #include "test.h"
 
+float mixed1(float f, _Bool, char i);
+float mixed2(float f, _Bool, char i);
+
+float mixed2(f, b, c)
+char c; float f; _Bool b; {
+  return f - b + c;
+}
+
+float conv1(
+#ifndef __clang__
+foo, bar
+#endif
+);
+float conv2(
+#ifndef __clang__
+foo, bar
+#endif
+);
+
+float conv2(f, b, c, i)
+char c; float f; _Bool b; {
+  return f - b + c + i;
+}
+
 void *pass(void *p){
   return p;
 }
@@ -45,6 +69,12 @@ int decl_scope(int t) {
 
 int main(void) {
   ASSERT(1, decl_scope(1));
+
+  ASSERT(1, 5.125 == mixed1(0.125, 1 << 30, 6));
+  ASSERT(1, 5.125 == mixed2(0.125, 1 << 30, 6));
+
+  ASSERT(1, 16.125 == conv1(0.125, 1 << 30, 6, 10));
+  ASSERT(1, 16.125 == conv2(0.125, 1 << 30, 6, 10));
 
   printf("OK\n");
   return 0;
