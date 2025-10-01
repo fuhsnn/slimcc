@@ -64,6 +64,10 @@ float c;
 register uint8_t b,d;
 int16_t (*a)[++b][(__typeof__(b))c][d++];
 {
+#ifdef NOTGCC
+  ASSERT(5, b);
+  ASSERT(9, d);
+#endif
   ASSERT(720, sizeof(*a));
   ASSERT(144, sizeof((*a)[0]));
   ASSERT(16, sizeof((*a)[1][2]));
@@ -95,4 +99,5 @@ int main(void){
   fn_oldstyle(0,260,f,264);
 
   printf("OK\n");
+  return 0;
 }
