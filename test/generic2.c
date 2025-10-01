@@ -152,5 +152,10 @@ int main(int argc, char**argv) {
 
   SASSERT(1 == _Generic(typeof(*(void*)0)*, void *: 1));
 
+  ASSERT(1, ({ typedef _Atomic int I; _Generic(const I, const _Atomic int: 1); }) );
+  ASSERT(1, ({ typedef const int I; _Generic(volatile I[3][7], int const volatile[3][7] : 1); }) );
+  ASSERT(1, ({ typedef volatile int I[7]; _Generic(const I[3], int const volatile[3][7] : 1); }) );
+  ASSERT(1, ({ typedef volatile int I[3][7]; _Generic(const I, int const volatile[3][7] : 1); }) );
+
   printf("OK\n");
 }

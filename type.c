@@ -304,7 +304,25 @@ static bool is_tag_compat(Type *t1, Type *t2) {
     t1->tag && t2->tag && equal_tok(t1->tag, t2->tag);
 }
 
+static bool is_arr_qual_compat(Type *t1, Type *t2) {
+  QualMask q1 = 0, q2 = 0;
+  do {
+    q1 |= t1->qual;
+    q2 |= t2->qual;
+
+    t1 = t1->base;
+    t2 = t2->base;
+  } while (is_array(t1) && is_array(t2));
+
+  q1 |= t1->qual;
+  q2 |= t2->qual;
+  return q1 == q2;
+}
+
 static bool is_qual_compat(Type *t1, Type *t2) {
+  if (is_array(t1) && is_array(t2))
+    return is_arr_qual_compat(t1, t2);
+
   return t1->qual == t2->qual;
 }
 
@@ -372,7 +390,7 @@ bool is_compatible(Type *t1, Type *t2) {
     int64_t *len2 = get_arr_len(t2);
 
     if (!len1 || !len2 || *len1 == *len2)
-      return is_compatible2(t1->base, t2->base);
+      return is_compatible(t1->base, t2->base);
     return false;
   }
 
