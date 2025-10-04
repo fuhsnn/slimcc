@@ -272,6 +272,13 @@ static Node *leave_block_scope(DeferStmt *defr, Node *stmt_node) {
   return blk;
 }
 
+static Scope *base_scope(void) {
+  Scope *sc = scope;
+  while (sc->parent && sc->parent->parent)
+    sc = sc->parent;
+  return sc;
+}
+
 // Find a variable by name.
 static VarScope *find_var(Token *tok) {
   for (Scope *sc = scope; sc; sc = sc->parent) {
@@ -1657,11 +1664,7 @@ static Node *vla_count(Type *ty, Token *tok, bool is_void) {
   if (ty->vla_cnt)
     return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
 
-  Scope *sc = scope;
-  while (sc->parent && sc->parent->parent)
-    sc = sc->parent;
-
-  ty->vla_cnt = new_lvar2(NULL, ty_size_t, sc);
+  ty->vla_cnt = new_lvar2(NULL, ty_size_t, base_scope());
   return new_binary(ND_ASSIGN, new_var_node(ty->vla_cnt, tok), ty->vla_len, tok);
 }
 
@@ -3837,6 +3840,37 @@ static Node *assign(Token **rest, Token *tok) {
 
   *rest = tok;
   return node;
+}
+
+static Node *vla_cond_result_len2(Type *ty) {
+  if (!ty->vla_len)
+    return NULL;
+  if (!ty->vla_cnt)
+    internal_error();
+  return new_var_node(ty->vla_cnt, ty->vla_len->tok);
+}
+
+Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **cond_var) {
+  Node *len1 = vla_cond_result_len2(ty1);
+  Node *len2 = vla_cond_result_len2(ty2);
+
+  if (!len1 + !len2 == 1)
+    return vla_of(base, len1 ? len1 : len2, 0);
+
+  if (!*cond_var) {
+    int64_t val;
+    if (is_const_expr(*cond, &val))
+      return vla_of(base, val ? len1 : len2, 0);
+
+    *cond_var = new_lvar2(NULL, ty_bool, base_scope());
+    *cond = new_binary(ND_ASSIGN, new_var_node(*cond_var, (*cond)->tok), *cond, (*cond)->tok);
+    add_type(*cond);
+  }
+  Node *node = new_node(ND_COND, (*cond)->tok);
+  node->ctrl.cond = new_var_node(*cond_var, (*cond)->tok);
+  node->ctrl.then = len1;
+  node->ctrl.els = len2;
+  return vla_of(base, node, 0);
 }
 
 // conditional = logor ("?" expr? ":" conditional)?

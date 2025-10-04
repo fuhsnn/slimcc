@@ -633,6 +633,7 @@ bool is_const_var(Obj *var);
 bool equal_tok(Token *a, Token *b);
 char *new_unique_name(void);
 Obj *get_symbol_var(char *);
+Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **cond_var);
 
 //
 // bitint.c

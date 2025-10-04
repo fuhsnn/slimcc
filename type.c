@@ -490,10 +490,13 @@ Type *array_of(Type *base, int64_t len) {
 Type *vla_of(Type *base, Node *len, int64_t arr_len) {
   Type *ty = new_type(TY_VLA, 8, 8);
   ty->base = base;
-  if (len)
+  if (len) {
+    add_type(len);
+    cast_if_not(ty_size_t, &len);
     ty->vla_len = len;
-  else
+  } else {
     ty->array_len = arr_len;
+  }
   return ty;
 }
 
@@ -536,13 +539,11 @@ bool is_nullptr(Node *node) {
     return true;
 
   if (node->kind == ND_CAST &&
-    node->ty->kind == TY_PTR && node->ty->base->kind == TY_VOID)
+    node->ty->kind == TY_PTR && is_compatible2(node->ty->base, ty_void))
     node = node->m.lhs;
 
   int64_t val;
-  if (is_integer(node->ty) && is_const_expr(node, &val) && val == 0)
-    return true;
-  return false;
+  return is_integer(node->ty) && is_const_expr(node, &val) && val == 0;
 }
 
 static void int_promotion(Node **node) {
@@ -577,38 +578,46 @@ static void int_promotion(Node **node) {
   }
 }
 
-static Type *get_common_ptr_type(Node *lhs, Node *rhs) {
-  Type *ty1 = lhs->ty;
-  Type *ty2 = rhs->ty;
-  bool np1 = is_nullptr(lhs);
-  bool np2 = is_nullptr(rhs);
+static Type *cond_ptr_conv2(Type *ty1, Type *ty2, int msk, Node **cond, Obj **cond_var) {
+  msk |= ty1->qual | ty2->qual;
 
-  if (ty1->base && np2)
-    return ty1;
-  if (ty2->base && np1)
-    return ty2;
-  if (ty1->kind == TY_NULLPTR && np2)
-    return ty1;
-  if (ty2->kind == TY_NULLPTR && np1)
-    return ty2;
-  if (ty1->base && ty2->base) {
-    if (is_compatible(ty1->base, ty2->base))
-      return ty1;
-    return pointer_to(ty_void);
+  if (is_array(ty1)) {
+    Type *base = cond_ptr_conv2(ty1->base, ty2->base, msk, cond, cond_var);
+    int64_t *len;
+    if ((len = get_arr_len(ty1)) || (len = get_arr_len(ty2))) {
+      if (base->kind == TY_VLA)
+        return vla_of(base, NULL, *len);
+      return array_of(base, *len);
+    }
+    if (ty1->vla_len || ty2->vla_len)
+      return vla_cond_result_len(ty1, ty2, base, cond, cond_var);
+
+    return array_of(base, -1);
   }
-  return NULL;
+  return qual_type(msk, ty1);
 }
 
-static bool common_ptr_conv(Node **lhs, Node **rhs) {
-  ptr_convert(lhs);
-  ptr_convert(rhs);
-  Type *ty = get_common_ptr_type(*lhs, *rhs);
-  if (ty) {
-    cast_if_not(ty, lhs);
-    cast_if_not(ty, rhs);
-    return true;
+static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
+  Type *ty1 = (*lhs)->ty;
+  Type *ty2 = (*rhs)->ty;
+
+  if (ty1->kind == TY_PTR && (int_to_ptr(rhs) || is_nullptr(*rhs)))
+    return ty1;
+  if (ty2->kind == TY_PTR && (int_to_ptr(lhs) || is_nullptr(*lhs)))
+    return ty2;
+  if (ty1->kind == TY_PTR && ty2->kind == TY_PTR) {
+    if (ty1->base->kind == TY_VOID || ty2->base->kind == TY_VOID)
+      return pointer_to(qual_type(ty1->base->qual | ty2->base->qual, ty_void));
+
+    if (is_compatible(ty1->base, ty2->base))
+      return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, 0, cond, &(Obj *){0}));
+
+    return pointer_to(ty_void);
   }
-  return false;
+  if (ty1->kind == TY_NULLPTR && ty2->kind == TY_NULLPTR)
+    return ty_nullptr;
+
+  internal_error();
 }
 
 static Type *get_common_type(Node **lhs, Node **rhs) {
@@ -760,19 +769,23 @@ void add_type(Node *node) {
   case ND_VAR:
     node->ty = node->m.var->ty;
     return;
-  case ND_COND:
+  case ND_COND: {
     add_type(node->ctrl.cond);
-    add_type(node->ctrl.then);
-    add_type(node->ctrl.els);
-    if (node->ctrl.then->ty->kind == TY_VOID || node->ctrl.els->ty->kind == TY_VOID)
+    Node **lhs = &node->ctrl.then;
+    Node **rhs = &node->ctrl.els;
+    ptr_convert(lhs);
+    ptr_convert(rhs);
+
+    if ((*lhs)->ty->kind == TY_VOID || (*rhs)->ty->kind == TY_VOID)
       node->ty = ty_void;
-    else if (common_ptr_conv(&node->ctrl.then, &node->ctrl.els))
-      node->ty = node->ctrl.then->ty;
-    else if (!is_numeric(node->ctrl.then->ty) && is_compatible(node->ctrl.then->ty, node->ctrl.els->ty))
-      node->ty = node->ctrl.then->ty;
+    else if (is_ptr((*lhs)->ty) || is_ptr((*rhs)->ty))
+      node->ty = cond_ptr_conv(lhs, rhs, &node->ctrl.cond);
+    else if (!is_numeric((*lhs)->ty) && is_compatible((*lhs)->ty, (*rhs)->ty))
+      node->ty = (*lhs)->ty;
     else
-      node->ty = usual_arith_conv(&node->ctrl.then, &node->ctrl.els);
+      node->ty = usual_arith_conv(lhs, rhs);
     return;
+  }
   case ND_CHAIN:
     add_type(node->m.lhs);
     add_type(node->m.rhs);

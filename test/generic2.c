@@ -117,6 +117,9 @@ int main(int argc, char**argv) {
   ASSERT(1, ({ double *p; char *q; _Generic(argc ? p : q, void*:1 ); }) );
   ASSERT(1, ({ double *p; char *q; _Generic(argc ? q : p, void*:1 ); }) );
 
+  SASSERT(1 == _Generic(0 ? 1 : (short*)0, short*:1));
+  SASSERT(1 == _Generic(0 ?: (short*)0, short*:1));
+
   SASSERT(1 == _Generic(**argv, unsigned char:0, char:1, signed char:0) );
   SASSERT(1 == _Generic("a", unsigned char*:0, char*:1, signed char*:0) );
 
