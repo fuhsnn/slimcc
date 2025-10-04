@@ -189,7 +189,7 @@ bool is_numeric(Type *ty) {
 }
 
 bool is_array(Type *ty) {
-  return ty->kind == TY_ARRAY || ty->kind == TY_VLA;
+  return ty->kind == TY_ARRAY || ty->kind == TY_VLA || ty->kind == TY_UNSIZED_VLA;
 }
 
 bool is_bitfield(Node *node) {
@@ -494,6 +494,12 @@ Type *vla_of(Type *base, Node *len, int64_t arr_len) {
     ty->vla_len = len;
   else
     ty->array_len = arr_len;
+  return ty;
+}
+
+Type *unsized_vla_of(Type *base) {
+  Type *ty = new_type(TY_UNSIZED_VLA, 0, 0);
+  ty->base = base;
   return ty;
 }
 

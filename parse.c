@@ -180,6 +180,7 @@ static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, bool is_root, Token *end, bool is_prot);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
@@ -314,6 +315,10 @@ bool is_const_var(Obj *var) {
 
 static bool is_int_class(Type *ty) {
   return is_integer(ty) || ty->kind == TY_BITINT;
+}
+
+static bool is_func_def(Token *end_tok) {
+  return equal(end_tok, "{") || is_typename(end_tok);
 }
 
 bool equal_tok(Token *a, Token *b) {
@@ -1214,7 +1219,7 @@ static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
   return fn_ty;
 }
 
-static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
+static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, bool is_def) {
   Type *fn_ty = func_type(rtn_ty, tok);
 
   if (equal(tok, "...") && consume(rest, tok->next, ")")) {
@@ -1245,10 +1250,9 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
       *rest = skip(tok->next, ")");
       break;
     }
-    Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
-
     Token *name = NULL;
-    ty = declarator(&tok, tok, ty, &name);
+    Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
+    ty = declarator2(&tok, tok, ty, &name, false, NULL, !is_def);
 
     chain_expr(&expr, calc_vla(ty, tok));
 
@@ -1267,9 +1271,15 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
 }
 
 // array-dimensions = ("static" | "restrict")* const-expr? "]" type-suffix
-static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
+static Type *array_dimensions(Token **rest, Token *tok, Type *ty, bool let_star) {
+  bool is_unspec_vla = false;
   Node *expr = NULL;
-  if (!(consume(&tok, tok, "]") || (equal(tok, "*") && consume(&tok, tok->next, "]")))) {
+  if (consume(&tok, tok, "]")) {
+  } else if (equal(tok, "*") && consume(&tok, tok->next, "]")) {
+    if (!(let_star))
+      error_tok(tok, "`[*]` not allowed here");
+    is_unspec_vla = true;
+  } else {
     expr = assign(&tok, tok);
     add_type(expr);
     if (!is_integer(expr->ty))
@@ -1278,11 +1288,13 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   }
 
   if (equal(tok, "["))
-    ty = array_dimensions(&tok, tok->next, ty);
+    ty = array_dimensions(&tok, tok->next, ty, let_star);
   if (ty->size < 0)
     error_tok(tok, "array has incomplete type");
 
   *rest = tok;
+  if (is_unspec_vla)
+    return unsized_vla_of(ty);
   if (!expr)
     return array_of(ty, -1);
 
@@ -1294,6 +1306,8 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
       return vla_of(ty, NULL, array_len);
     return array_of(ty, array_len);
   }
+  if (let_star)
+    return unsized_vla_of(ty);
   if (is_global_init_context)
     error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr, 0);
@@ -1314,12 +1328,9 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok) {
   return qual;
 }
 
-// type-suffix = "(" func-params
-//             | "[" array-dimensions
-//             | ε
-static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
+static Type *type_suffix(Token **rest, Token *tok, Type *ty, bool is_prot) {
   if (equal(tok, "("))
-    return func_params(rest, tok->next, ty);
+    return func_params(rest, tok->next, ty, false);
 
   if (consume(&tok, tok, "[")) {
     QualMask qual = 0;
@@ -1329,7 +1340,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
       if (!has_static)
         has_static = consume(&tok, tok, "static");
     }
-    Type *ty2 = array_dimensions(rest, tok, ty);
+    Type *ty2 = array_dimensions(rest, tok, ty, is_prot);
     if (has_static && ty2->array_len < 0)
       error_tok(tok, "'static' requires an array size");
     ty2->param_qual = qual;
@@ -1368,22 +1379,29 @@ Token *skip_paren(Token *tok) {
   return tok->next;
 }
 
-static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, bool is_root, Token *end, bool is_prot) {
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
     if (is_typename(tok) || equal(tok, "...") || equal(tok, ")"))
-      return func_params(rest, tok, ty);
+      return func_params(rest, tok, ty, false);
 
-    ty = type_suffix(rest, skip_paren(tok), ty);
-    return declarator(&(Token *){NULL}, tok, ty, name_tok);
+    ty = type_suffix(rest, skip_paren(tok), ty, is_prot);
+    return declarator2(&(Token *){0}, tok, ty, name_tok, false, is_root ? *rest : end, is_prot);
   }
 
   if (name_tok && tok->kind == TK_IDENT) {
     *name_tok = tok;
     tok = tok->next;
   }
-  return type_suffix(rest, tok, ty);
+  if (consume(&tok, tok, "("))
+    return func_params(rest, tok, ty, is_func_def(end ? end : skip_paren(tok)));
+
+  return type_suffix(rest, tok, ty, is_prot);
+}
+
+static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
+  return declarator2(rest, tok, ty, name_tok, false, NULL, false);
 }
 
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr) {
@@ -4587,7 +4605,9 @@ static Node *generic_selection(Token **rest, Token *tok) {
       continue;
     }
 
-    Type *t2 = typename(&tok, tok);
+    Type *t2 = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
+    t2 = declarator2(&tok, tok, t2, NULL, false, NULL, true);
+
     Node *node = assign(&tok, skip(tok, ":"));
     if (is_compatible2(t1, t2)) {
       if (ret) {
@@ -4992,7 +5012,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (ty->kind == TY_VLA)
       return vla_count(ty, start, false);
 
-    if (ty->kind == TY_ARRAY) {
+    if (ty->kind == TY_ARRAY || ty->kind == TY_UNSIZED_VLA) {
       if (ty->size < 0)
         error_tok(tok, "countof applied to incomplete array");
       return new_size_t(ty->array_len, start);
@@ -5231,7 +5251,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator(&tok, tok, basety, &name);
+    Type *ty = declarator2(&tok, tok, basety, &name, true, NULL, false);
 
     if (ty->kind == TY_FUNC) {
       if (!name)

@@ -702,6 +702,7 @@ typedef enum {
   TY_FUNC,
   TY_ARRAY,
   TY_VLA, // variable-length array
+  TY_UNSIZED_VLA,
   TY_STRUCT,
   TY_UNION,
   TY_BITINT,
@@ -838,6 +839,7 @@ Type *func_type(Type *return_ty, Token *tok);
 Type *get_func_ty(Type *ty);
 Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr, int64_t arr_len);
+Type *unsized_vla_of(Type *base);
 Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
 void add_type(Node *node);
