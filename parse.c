@@ -121,6 +121,13 @@ struct LocalLabel {
   Node *label;
 };
 
+typedef struct {
+  Token *end;
+  bool is_param;
+  bool is_glob;
+  bool let_star;
+} DeclContext;
+
 typedef enum {
   EV_CONST,     // constant expression
   EV_LABEL,     // relocation label
@@ -180,6 +187,7 @@ static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, DeclContext *ctx);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
@@ -316,6 +324,10 @@ static bool is_int_class(Type *ty) {
   return is_integer(ty) || ty->kind == TY_BITINT;
 }
 
+static bool is_func_def(Token *end_tok) {
+  return equal(end_tok, "{") || is_typename(end_tok);
+}
+
 bool equal_tok(Token *a, Token *b) {
   return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
 }
@@ -381,6 +393,12 @@ static Node *new_label(Token *tok) {
   Node *node = new_node(ND_LABEL, tok);
   node->dfr_from = current_defr;
   scope->has_label = true;
+  return node;
+}
+
+static Node *new_unknown(Type *ty, Token *tok) {
+  Node *node = new_node(ND_UNKNOWN, tok);
+  node->ty = ty;
   return node;
 }
 
@@ -1214,7 +1232,7 @@ static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
   return fn_ty;
 }
 
-static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
+static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Type *fn_ty = func_type(rtn_ty, tok);
 
   if (equal(tok, "...") && consume(rest, tok->next, ")")) {
@@ -1229,6 +1247,8 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
       fn_ty->is_oldstyle = true;
     return fn_ty;
   }
+  bool is_def = end && is_func_def(*end ? *end : skip_paren(tok));
+
   if (!is_typename(tok))
     return func_params_old_style(rest, tok, fn_ty);
 
@@ -1245,10 +1265,10 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
       *rest = skip(tok->next, ")");
       break;
     }
-    Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
-
     Token *name = NULL;
-    ty = declarator(&tok, tok, ty, &name);
+    Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
+    ty = declarator2(&tok, tok, ty, &name,
+      &(DeclContext){.let_star = !is_def, .is_param = true});
 
     chain_expr(&expr, calc_vla(ty, tok));
 
@@ -1266,10 +1286,16 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
   return fn_ty;
 }
 
-// array-dimensions = ("static" | "restrict")* const-expr? "]" type-suffix
-static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
-  Node *expr = NULL;
-  if (!(consume(&tok, tok, "]") || (equal(tok, "*") && consume(&tok, tok->next, "]")))) {
+static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
+  Node *expr;
+  if (consume(&tok, tok, "]")) {
+    expr = NULL;
+  } else if (equal(tok, "*") && equal(tok->next, "]")) {
+    if (!ctx->let_star)
+      error_tok(tok, "`[*]` not allowed here");
+    expr = new_unknown(ty_size_t, tok);
+    tok = tok->next->next;
+  } else {
     expr = assign(&tok, tok);
     add_type(expr);
     if (!is_integer(expr->ty))
@@ -1278,7 +1304,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   }
 
   if (equal(tok, "["))
-    ty = array_dimensions(&tok, tok->next, ty);
+    ty = array_dimensions(&tok, tok->next, ty, ctx);
   if (ty->size < 0)
     error_tok(tok, "array has incomplete type");
 
@@ -1314,25 +1340,29 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok) {
   return qual;
 }
 
-// type-suffix = "(" func-params
-//             | "[" array-dimensions
-//             | ε
-static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
+static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
   if (equal(tok, "("))
-    return func_params(rest, tok->next, ty);
+    return func_params(rest, tok->next, ty, NULL);
 
   if (consume(&tok, tok, "[")) {
     QualMask qual = 0;
-    bool has_static = consume(&tok, tok, "static");
-    if (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) {
-      qual = pointer_qualifiers(&tok, tok);
-      if (!has_static)
-        has_static = consume(&tok, tok, "static");
+    bool has_static = false;
+
+    if (ctx->is_param) {
+      has_static = consume(&tok, tok, "static");
+      if (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) {
+        qual = pointer_qualifiers(&tok, tok);
+        if (!has_static)
+          has_static = consume(&tok, tok, "static");
+      }
     }
-    Type *ty2 = array_dimensions(rest, tok, ty);
-    if (has_static && ty2->array_len < 0)
-      error_tok(tok, "'static' requires an array size");
-    ty2->param_qual = qual;
+    Type *ty2 = array_dimensions(rest, tok, ty, ctx);
+
+    if (ctx->is_param) {
+      if (has_static && ty2->array_len < 0)
+        error_tok(tok, "'static' requires an array size");
+      ty2->param_qual = qual;
+    }
     return ty2;
   }
   *rest = tok;
@@ -1368,22 +1398,33 @@ Token *skip_paren(Token *tok) {
   return tok->next;
 }
 
-static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, DeclContext *ctx) {
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
     if (is_typename(tok) || equal(tok, "...") || equal(tok, ")"))
-      return func_params(rest, tok, ty);
+      return func_params(rest, tok, ty, NULL);
 
-    ty = type_suffix(rest, skip_paren(tok), ty);
-    return declarator(&(Token *){NULL}, tok, ty, name_tok);
+    ty = type_suffix(rest, skip_paren(tok), ty, ctx);
+    if (ctx->is_glob) {
+      ctx->is_glob = false;
+      ctx->end = *rest;
+    }
+    return declarator2(&(Token *){0}, tok, ty, name_tok, ctx);
   }
 
   if (name_tok && tok->kind == TK_IDENT) {
     *name_tok = tok;
     tok = tok->next;
   }
-  return type_suffix(rest, tok, ty);
+  if (consume(&tok, tok, "("))
+    return func_params(rest, tok, ty, &ctx->end);
+
+  return type_suffix(rest, tok, ty, ctx);
+}
+
+static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
+  return declarator2(rest, tok, ty, name_tok, &(DeclContext){0});
 }
 
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr) {
@@ -4587,7 +4628,9 @@ static Node *generic_selection(Token **rest, Token *tok) {
       continue;
     }
 
-    Type *t2 = typename(&tok, tok);
+    Type *t2 = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
+    t2 = declarator2(&tok, tok, t2, NULL, &(DeclContext){.let_star = true});
+
     Node *node = assign(&tok, skip(tok, ":"));
     if (is_compatible2(t1, t2)) {
       if (ret) {
@@ -5231,7 +5274,8 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator(&tok, tok, basety, &name);
+    Type *ty = declarator2(&tok, tok, basety, &name,
+      &(DeclContext){.is_glob = !scope->parent});
 
     if (ty->kind == TY_FUNC) {
       if (!name)

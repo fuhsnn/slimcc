@@ -122,6 +122,12 @@ int main(int argc, char**argv) {
 
   ASSERT(1, ({ int vla[argc]; _Generic(vla, int*:1 ); }) );
 
+#ifdef __slimcc__
+  ASSERT(1, ({ int vla[argc]; _Generic(&vla, int(*)[*]:1 ); }) );
+  ASSERT(1, ({ int vla[argc]; _Generic(typeof(vla), int[*]:1 ); }) );
+  ASSERT(1, _Generic(int[argc][argc], int[][*]:1 ) );
+#endif
+
   SASSERT(0 == _Generic(int[2][argc], int[4][2]:1, default:0));
   SASSERT(1 == _Generic(int[argc][2], int[4][2]:1, default:0));
   SASSERT(1 == _Generic(int[4][argc], int[4][2]:1, default:0));

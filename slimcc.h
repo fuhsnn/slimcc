@@ -501,6 +501,7 @@ typedef enum {
   ND_RTN_ADDR,
   ND_THREAD_FENCE,
   ND_UNREACHABLE,
+  ND_UNKNOWN,
 } NodeKind;
 
 typedef struct CaseRange CaseRange;

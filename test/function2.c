@@ -201,6 +201,15 @@ static int incomplete_param(struct S *p, struct S2 *p2, struct S2 { char c[7]; }
   return sizeof(*p) * 100 + sizeof(*p2) * 10 + sizeof(*p3);
 }
 
+static int asterisk1(int[*]);
+static int asterisk1(int[3]) { return 0; }
+static int (*asterisk2(int[*]) )(int[*]);
+static int (*asterisk2(int[3]) )(int[*]) { return 0; }
+static int (* (*asterisk3(int[*]) )(int[*]) )(int[*]);
+static int (* (*asterisk3(int[3]) )(int[*]) )(int[*]) { return 0; }
+static void asterisk4(int (*p)[*], int (*p2)[sizeof *p][_Countof *p][_Alignof *p]);
+static void asterisk4(int (*p)[9], int (*p2)[sizeof *p][_Countof *p][_Alignof *p]) {}
+
 int main(void) {
   G g[] = {10,11,12,13,14,15};
   F f[] = {20,21,22,23,24,25,26,27};
