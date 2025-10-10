@@ -3847,36 +3847,30 @@ static Node *conditional(Token **rest, Token *tok) {
     *rest = tok;
     return cond;
   }
+  Node *node = new_node(ND_COND, tok);
+  if (!consume(&tok, tok->next, ":")) {
+    node->ctrl.then = expr(&tok, tok->next);
+    tok = skip(tok, ":");
+  }
+  node->ctrl.els = conditional(rest, tok);
 
-  if (equal(tok->next, ":")) {
-    // [GNU] Compile `a ?: b` as `tmp = a, tmp ? tmp : b`.
-    add_type(cond);
-
-    int64_t val;
-    Node n = *cond;
-    if (!is_const_expr(cond_cast(&n), &val)) {
-      enter_tmp_scope();
-      Obj *var = new_lvar(NULL, cond->ty);
-      Node *lhs = new_binary(ND_ASSIGN, new_var_node(var, tok), cond, tok);
-      Node *rhs = new_node(ND_COND, tok);
-      rhs->ctrl.cond = cond_cast(new_var_node(var, tok));
-      rhs->ctrl.then = new_var_node(var, tok);
-      rhs->ctrl.els = conditional(rest, tok->next->next);
-      leave_scope();
-      return new_binary(ND_CHAIN, lhs, rhs, tok);
-    }
-    Node *node = new_node(ND_COND, tok);
-    node->ctrl.cond = new_boolean(!!val, cond->tok);
-    node->ctrl.then = cond;
-    node->ctrl.els = conditional(rest, tok->next->next);
+  if (node->ctrl.then) {
+    node->ctrl.cond = cond_cast(cond);
     return node;
   }
-
-  Node *node = new_node(ND_COND, tok);
-  node->ctrl.cond = cond_cast(cond);
-  node->ctrl.then = expr(&tok, tok->next);
-  tok = skip(tok, ":");
-  node->ctrl.els = conditional(rest, tok);
+  int64_t val;
+  Node n = *cond;
+  if (is_const_expr(cond_cast(&n), &val)) {
+    node->ctrl.cond = new_boolean(!!val, cond->tok);
+    node->ctrl.then = cond;
+    return node;
+  }
+  add_type(cond);
+  enter_tmp_scope();
+  Obj *var = new_lvar(NULL, cond->ty);
+  node->ctrl.cond = cond_cast(new_binary(ND_ASSIGN, new_var_node(var, cond->tok), cond, tok));
+  node->ctrl.then = new_var_node(var, cond->tok);
+  leave_scope();
   return node;
 }
 
