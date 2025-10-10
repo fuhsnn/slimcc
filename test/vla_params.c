@@ -24,8 +24,8 @@ void fn3(i32 x, i32 y, u8 arr[++y][(x+=2,x)]){
 
 void fn4(i32 x,i32,i32 y,i32,i32,i32 z,i32 a[x+y][y+z][z+x]) {
   ASSERT(8, sizeof(a));
-  ASSERT(1008, sizeof(*a));
-  ASSERT(56, sizeof(**a));
+  ASSERT(1008, sizeof(a[0]));
+  ASSERT(56, sizeof(a[0][0]));
 }
 
 int max(i32 a, i32 b) {
@@ -65,9 +65,9 @@ register uint8_t b,d;
 int16_t (*a)[++b][(__typeof__(b))c][d++];
 {
   ASSERT(720, sizeof(*a));
-  ASSERT(144, sizeof(**a));
-  ASSERT(16, sizeof(***a));
-  ASSERT(2, sizeof(****a));
+  ASSERT(144, sizeof((*a)[0]));
+  ASSERT(16, sizeof((*a)[1][2]));
+  ASSERT(2, sizeof((*a)[1][2][3]));
 
   z = c;
   ASSERT(5, b);

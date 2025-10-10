@@ -132,6 +132,7 @@ jobs:
           - { vm: main, proj: test_mimalloc }
           - { vm: main, proj: test_mruby }
           - { vm: main, proj: test_nginx }
+          - { vm: main, proj: test_noplate }
           - { vm: main, proj: test_ocaml }
           - { vm: main, proj: test_oniguruma }
           - { vm: main, proj: test_openssh }
