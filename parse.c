@@ -4988,7 +4988,7 @@ static Node *primary(Token **rest, Token *tok) {
       ty = node->ty;
 
       if (ty->kind == TY_VLA)
-        chk_vla_expr_side_effect(node);
+        return new_binary(ND_COMMA, node, vla_size(ty, start), tok);
     }
     if (ty->kind == TY_VLA)
       return vla_size(ty, tok);
@@ -5030,7 +5030,7 @@ static Node *primary(Token **rest, Token *tok) {
       ty = node->ty;
 
       if (ty->kind == TY_VLA && ty->vla_len)
-        chk_vla_expr_side_effect(node);
+        return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
     }
     if (ty->kind == TY_VLA)
       return vla_count(ty, start, false);

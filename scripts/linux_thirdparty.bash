@@ -621,6 +621,11 @@ test_nob() {
  CC="$CC -fdefer-ts" bash ./run.sh
 }
 
+test_noplate() {
+ git_fetch https://github.com/fuhsnn/noplate 77e7ab9710749c2ab03389db670633b327e5471a noplate
+ make test examples
+}
+
 test_ocaml() {
  github_tar ocaml ocaml 5.3.0
  fix_and_configure --enable-ocamltest --disable-ocamldoc --disable-debugger --disable-native-compiler
