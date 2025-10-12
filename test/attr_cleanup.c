@@ -149,15 +149,18 @@ struct S {
 void add(struct S* s) {
   ASSERT(11, s->i += 7);
 }
-void stmt_expr(void) {
+int stmt_expr(void) {
   int i = ({
     struct S s __attribute__((cleanup(add))) = {3,4};
     s;
   }).i;
   ASSERT(4, i);
+  return 1;
 }
 
-static inline void livefn(void*){}
+static inline void livefn(void*){
+  rec_idx = 33;
+}
 
 int main(void) {
   test_decl();
@@ -212,9 +215,13 @@ int main(void) {
   ASSERT(1, 99wb == large_bitint_rtn());
   ASSERT(100, rec[0]);
 
-  stmt_expr();
+  ASSERT(1, stmt_expr());
 
-  int testlive [[gnu::cleanup(livefn)]];
+  {
+    rec_idx = 0;
+    int testlive [[gnu::cleanup(livefn)]];
+  }
+  ASSERT(33, rec_idx);
 
   printf("OK\n");
 }

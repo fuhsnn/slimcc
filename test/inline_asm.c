@@ -184,11 +184,13 @@ void x87_clobber(void) {
 
 int ptr_conversion(char *str) {
     int res;
-    __asm__ (
-    "  leaq %3, %%rsi;"
-    "  call *%2"
-    : "=a"(res)
-    : "D"("bar"), "r"(strcmp), "m"(*str));
+    __asm__ volatile (
+      "  leaq %3, %%rsi;"
+      "  call *%2"
+      : "=a"(res)
+      : "D"("bar"), "r"(strcmp), "m"(*str)
+      : "rsi"
+    );
     return !res;
 }
 
