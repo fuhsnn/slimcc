@@ -1,26 +1,26 @@
 #include "slimcc.h"
 
-Type *ty_void = &(Type){TY_VOID, 1, 1};
-Type *ty_bool = &(Type){TY_BOOL, 1, 1, true};
-Type *ty_nullptr = &(Type){TY_NULLPTR, 8, 8};
+Type *ty_void = &(Type){.kind = TY_VOID, .size = 1, .align = 1};
+Type *ty_bool = &(Type){.kind = TY_BOOL, .size = 1, .align = 1, .is_unsigned = true};
+Type *ty_nullptr = &(Type){.kind = TY_NULLPTR, .size = 8, .align = 8};
 
-Type *ty_pchar = &(Type){TY_PCHAR, 1, 1};
+Type *ty_pchar = &(Type){.kind = TY_PCHAR, .size = 1, .align = 1};
 
-Type *ty_char = &(Type){TY_CHAR, 1, 1};
-Type *ty_short = &(Type){TY_SHORT, 2, 2};
-Type *ty_int = &(Type){TY_INT, 4, 4};
-Type *ty_long = &(Type){TY_LONG, 8, 8};
-Type *ty_llong = &(Type){TY_LONGLONG, 8, 8};
+Type *ty_char = &(Type){.kind = TY_CHAR, .size = 1, .align = 1};
+Type *ty_short = &(Type){.kind = TY_SHORT, .size = 2, .align = 2};
+Type *ty_int = &(Type){.kind = TY_INT, .size = 4, .align = 4};
+Type *ty_long = &(Type){.kind = TY_LONG, .size = 8, .align = 8};
+Type *ty_llong = &(Type){.kind = TY_LONGLONG, .size = 8, .align = 8};
 
-Type *ty_uchar = &(Type){TY_CHAR, 1, 1, true};
-Type *ty_ushort = &(Type){TY_SHORT, 2, 2, true};
-Type *ty_uint = &(Type){TY_INT, 4, 4, true};
-Type *ty_ulong = &(Type){TY_LONG, 8, 8, true};
-Type *ty_ullong = &(Type){TY_LONGLONG, 8, 8, true};
+Type *ty_uchar = &(Type){.kind = TY_CHAR, .size = 1, .align = 1, .is_unsigned = true};
+Type *ty_ushort = &(Type){.kind = TY_SHORT, .size = 2, .align = 2, .is_unsigned = true};
+Type *ty_uint = &(Type){.kind = TY_INT, .size = 4, .align = 4, .is_unsigned = true};
+Type *ty_ulong = &(Type){.kind = TY_LONG, .size = 8, .align = 8, .is_unsigned = true};
+Type *ty_ullong = &(Type){.kind = TY_LONGLONG, .size = 8, .align = 8, .is_unsigned = true};
 
-Type *ty_float = &(Type){TY_FLOAT, 4, 4};
-Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
-Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
+Type *ty_float = &(Type){.kind = TY_FLOAT, .size = 4, .align = 4};
+Type *ty_double = &(Type){.kind = TY_DOUBLE, .size = 8, .align = 8};
+Type *ty_ldouble = &(Type){.kind = TY_LDOUBLE, .size = 16, .align = 16};
 
 Type *ty_size_t;
 Type *ty_ptrdiff_t;
@@ -115,25 +115,24 @@ Type *copy_type(Type *ty) {
 }
 
 Type *unqual(Type *ty) {
-  if (ty->origin)
-    ty = ty->origin;
-
-  if (ty->is_atomic || ty->is_const || ty->is_volatile || ty->is_restrict) {
-    ty = copy_type(ty);
-    ty->is_atomic = false;
-    ty->is_const = false;
-    ty->is_volatile = false;
-    ty->is_restrict = false;
-  }
-  return ty;
+  return ty->origin ? ty->origin : ty;
 }
 
-Type *new_qualified_type(Type *ty) {
-  if (ty->origin)
-    ty = ty->origin;
+Type *new_derived_type(Type *newty, QualMask qual, Type *ty) {
+  ty = ty->origin ? ty->origin : ty;
+  if (!newty)
+    newty = malloc(sizeof(Type));
+  *newty = *ty;
+  newty->origin = ty;
+  newty->qual = qual;
+  return newty;
+}
 
-  Type *ret = copy_type(ty);
-  ret->origin = ty;
+Type *qual_type(QualMask msk, Type *ty) {
+  if (msk == (msk & ty->qual))
+    return ty;
+
+  Type *ret = new_derived_type(NULL, msk | ty->qual, ty);
 
   if (ty->size < 0) {
     ret->decl_next = ty->decl_next;
@@ -143,12 +142,9 @@ Type *new_qualified_type(Type *ty) {
 }
 
 void cvqual_type(Type **ty_p, Type *ty2) {
-  Type *ty = *ty_p;
-  if (ty->is_const < ty2->is_const || ty->is_volatile < ty2->is_volatile) {
-    *ty_p = new_qualified_type(ty);
-    (*ty_p)->is_const = ty->is_const | ty2->is_const;
-    (*ty_p)->is_volatile = ty->is_volatile | ty2->is_volatile;
-  }
+  QualMask msk = ty2->qual & (Q_CONST | Q_VOLATILE);
+  if (msk)
+    *ty_p = qual_type(msk, *ty_p);
 }
 
 bool mem_iter(Member **mem) {
@@ -309,10 +305,7 @@ static bool is_tag_compat(Type *t1, Type *t2) {
 }
 
 static bool is_qual_compat(Type *t1, Type *t2) {
-  return t1->is_atomic == t2->is_atomic &&
-    t1->is_const == t2->is_const &&
-    t1->is_volatile == t2->is_volatile &&
-    t1->is_restrict == t2->is_restrict;
+  return t1->qual == t2->qual;
 }
 
 static bool is_record_compat(Type *t1, Type *t2) {
@@ -361,14 +354,14 @@ bool is_compatible2(Type *t1, Type *t2) {
 }
 
 bool is_compatible(Type *t1, Type *t2) {
-  if (t1 == t2)
-    return true;
-
   if (t1->origin)
-    return is_compatible(t1->origin, t2);
+    t1 = t1->origin;
 
   if (t2->origin)
-    return is_compatible(t1, t2->origin);
+    t2 = t2->origin;
+
+  if (t1 == t2)
+    return true;
 
   if (t1->is_enum && t2->is_enum)
     return t1->is_int_enum == t2->is_int_enum &&

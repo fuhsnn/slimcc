@@ -2953,7 +2953,7 @@ static void gen_void_assign(Node *node) {
   Node *lhs = node->m.lhs;
   Node *rhs = node->m.rhs;
 
-  if (is_gp_ty(lhs->ty) && !is_bitfield(lhs) && !lhs->ty->is_atomic &&
+  if (is_gp_ty(lhs->ty) && !is_bitfield(lhs) && !(lhs->ty->qual & Q_ATOMIC) &&
     is_const_expr(rhs, NULL)) {
     memop_arith(lhs, rhs, "mov");
     return;
@@ -2968,7 +2968,7 @@ static void gen_void_assign(Node *node) {
       gen_mem_copy(sofs, sptr, dofs, dptr, write_size(lhs));
       return;
     }
-    if (!is_bitfield(lhs) && !lhs->ty->is_atomic) {
+    if (!is_bitfield(lhs) && !(lhs->ty->qual & Q_ATOMIC)) {
       gen_addr(lhs);
       gen_mem_copy(sofs, sptr, "0", "%rax", write_size(lhs));
       return;
@@ -2981,7 +2981,7 @@ static void gen_void_assign(Node *node) {
       Printftn("movq $%s, %s(%s)", sofs, dofs, dptr);
       return;
     }
-    if (!is_bitfield(lhs) && !lhs->ty->is_atomic) {
+    if (!is_bitfield(lhs) && !(lhs->ty->qual & Q_ATOMIC)) {
       gen_addr(lhs);
       Printftn("movq $%s, (%%rax)", sofs);
       return;
@@ -2992,7 +2992,7 @@ static void gen_void_assign(Node *node) {
 }
 
 static void gen_void_expr(Node *node) {
-  if (node->ty->is_atomic || node->ty->is_volatile) {
+  if ((node->ty->qual & Q_VOLATILE) || (node->ty->qual & Q_ATOMIC)) {
     gen_expr2(node, true);
     return;
   }

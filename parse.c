@@ -307,9 +307,9 @@ static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
 bool is_const_var(Obj *var) {
   Type *ty = var->ty;
   for (; ty && ty->kind == TY_ARRAY; ty = ty->base)
-    if (ty->is_const)
+    if (ty->qual & Q_CONST)
       return true;
-  return ty->is_const;
+  return ty->qual & Q_CONST;
 }
 
 static bool is_int_class(Type *ty) {
@@ -986,10 +986,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
   Type *ty = NULL;
   int counter = 0;
-  bool is_atomic = false;
-  bool is_const = false;
-  bool is_restrict = false;
-  bool is_volatile = false;
+  QualMask qual = 0;
 
   if (tok->attr_next)
     tyspec_attr(tok, attr, TK_BATTR);
@@ -1014,7 +1011,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
     switch (tk_kind) {
     case TK_auto: attr->strg |= SC_AUTO; continue;
-    case TK_constexpr: attr->strg |= SC_CONSTEXPR; is_const = true; continue;
+    case TK_constexpr: attr->strg |= SC_CONSTEXPR; qual |= Q_CONST; continue;
     case TK_extern: attr->strg |= SC_EXTERN; continue;
     case TK_register: attr->strg |= SC_REGISTER; continue;
     case TK_static: attr->strg |= SC_STATIC; continue;
@@ -1039,11 +1036,11 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     }
 
     switch (tk_kind) {
-    case TK_const: is_const = true; continue;
-    case TK_restrict: is_restrict = true; continue;
-    case TK_volatile: is_volatile = true; continue;
+    case TK_const: qual |= Q_CONST; continue;
+    case TK_restrict: qual |= Q_RESTRICT; continue;
+    case TK_volatile: qual |= Q_VOLATILE; continue;
     case TK_Atomic: {
-      is_atomic = true;
+      qual |= Q_ATOMIC;
       if (consume(&tok, tok , "(")) {
         if (ty)
           error_tok(tok, "invalid type");
@@ -1153,14 +1150,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     if (ty->bit_cnt < (1 + !ty->is_unsigned))
       error_tok(tok, "invalid bit width for _BitInt");
 
-  if (is_atomic || is_const || is_volatile || is_restrict) {
-    ty = new_qualified_type(ty);
-    ty->is_atomic = is_atomic;
-    ty->is_const = is_const;
-    ty->is_volatile = is_volatile;
-    ty->is_restrict = is_restrict;
-  }
-  return ty;
+  return qual_type(qual, ty);
 }
 
 static Type *func_params_old_style(Token **rest, Token *tok, Type *fn_ty) {
@@ -1263,13 +1253,8 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty) {
     chain_expr(&expr, calc_vla(ty, tok));
 
     Type *param_ty = ptr_decay(ty);
-
-    if (ty->qty) {
-      param_ty->is_atomic = ty->qty->is_atomic;
-      param_ty->is_const = ty->qty->is_const;
-      param_ty->is_volatile = ty->qty->is_volatile;
-      param_ty->is_restrict = ty->qty->is_restrict;
-    }
+    if (ty->param_qual)
+      param_ty = qual_type(ty->param_qual, param_ty);
 
     char *var_name = name ? get_ident(name) : NULL;
     cur = cur->param_next = new_var(var_name, param_ty, calloc(1, sizeof(Obj)));
@@ -1314,17 +1299,19 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty) {
   return vla_of(ty, expr, 0);
 }
 
-static void pointer_qualifiers(Token **rest, Token *tok, Type *ty) {
+static QualMask pointer_qualifiers(Token **rest, Token *tok) {
+  QualMask qual = 0;
   for (;; tok = tok->next) {
     switch (tok->kind) {
-    case TK_Atomic: ty->is_atomic = true; continue;
-    case TK_const: ty->is_const = true; continue;
-    case TK_restrict: ty->is_restrict = true; continue;
-    case TK_volatile: ty->is_volatile = true; continue;
+    case TK_Atomic: qual |= Q_ATOMIC; continue;
+    case TK_const: qual |= Q_CONST; continue;
+    case TK_restrict: qual |= Q_RESTRICT; continue;
+    case TK_volatile: qual |= Q_VOLATILE; continue;
     }
     break;
   }
   *rest = tok;
+  return qual;
 }
 
 // type-suffix = "(" func-params
@@ -1335,18 +1322,17 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
     return func_params(rest, tok->next, ty);
 
   if (consume(&tok, tok, "[")) {
-    Type *qty = NULL;
+    QualMask qual = 0;
     bool has_static = consume(&tok, tok, "static");
     if (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) {
-      qty = new_type(TY_VOID, 0, 0);
-      pointer_qualifiers(&tok, tok, qty);
+      qual = pointer_qualifiers(&tok, tok);
       if (!has_static)
         has_static = consume(&tok, tok, "static");
     }
     Type *ty2 = array_dimensions(rest, tok, ty);
     if (has_static && ty2->array_len < 0)
       error_tok(tok, "'static' requires an array size");
-    ty2->qty = qty;
+    ty2->param_qual = qual;
     return ty2;
   }
   *rest = tok;
@@ -1356,8 +1342,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
 // pointers = ("*" ("const" | "volatile" | "restrict")*)*
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
   while (consume(&tok, tok, "*")) {
-    ty = pointer_to(ty);
-    pointer_qualifiers(&tok, tok, ty);
+    ty = qual_type(pointer_qualifiers(&tok, tok), pointer_to(ty));
   }
   *rest = tok;
   return ty;
@@ -2051,22 +2036,11 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   Type *ty = var->ty;
 
   if (ty->kind == TY_AUTO) {
-    bool is_atomic = ty->is_atomic;
-    bool is_const = ty->is_const;
-    bool is_volatile = ty->is_volatile;
-    bool is_restrict = ty->is_restrict;
-
     init->kind = INIT_EXPR;
     init->expr = assign(rest, tok);
     ptr_convert(&init->expr);
-    *ty = *init->expr->ty;
+    new_derived_type(ty, ty->qual, init->expr->ty);
     init->ty = ty;
-
-    ty->origin = init->expr->ty->origin ? init->expr->ty->origin : init->expr->ty;
-    ty->is_atomic = is_atomic;
-    ty->is_const = is_const;
-    ty->is_volatile = is_volatile;
-    ty->is_restrict = is_restrict;
     return;
   }
 
@@ -2080,9 +2054,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   var->ty = init->ty;
 
   if (ty->is_flexible && init->kind == INIT_LIST) {
-    Type *orig = ty->origin ? ty->origin : ty;
-    ty = copy_type(ty);
-    ty->origin = orig;
+    ty = new_derived_type(NULL, ty->qual, ty);
 
     Initializer *i = &init->mem_arr[init->mem_cnt - 1];
     if (i->ty->size > 0)
@@ -3033,8 +3005,8 @@ static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
 
 static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile, bool let_atomic) {
   if (node->kind == ND_VAR && node->ty->kind != TY_VLA) {
-    if ((let_volatile || !node->ty->is_volatile) &&
-      (let_atomic || !node->ty->is_atomic)) {
+    if ((let_volatile || !(node->ty->qual & Q_VOLATILE)) &&
+      (let_atomic || !(node->ty->qual & Q_ATOMIC))) {
       *ofs = 0;
       return node->m.var;
     }
@@ -3293,8 +3265,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   }
 
   if (ctx->kind == EV_AGGREGATE) {
-    if ((ty->is_atomic && !ctx->let_atomic) ||
-      (ty->is_volatile && !ctx->let_volatile))
+    if (((ty->qual & Q_ATOMIC) && !ctx->let_atomic) ||
+      ((ty->qual & Q_VOLATILE) && !ctx->let_volatile))
       return eval_error(node->tok, "not a compile-time constant");
 
     if (node->kind == ND_DEREF) {
@@ -3751,7 +3723,7 @@ static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
 static Node *to_assign(Node *binary) {
   add_type(binary->m.lhs);
 
-  if (binary->m.lhs->ty->is_atomic)
+  if (binary->m.lhs->ty->qual & Q_ATOMIC)
     return atomic_op(binary, false);
 
   binary->arith_kind = binary->kind;
@@ -3767,13 +3739,13 @@ static Node *assign(Token **rest, Token *tok) {
   Node *node = conditional(&tok, tok);
   add_type(node);
 
-  if (node->ty->is_const || is_array(node->ty)) {
+  if ((node->ty->qual & Q_CONST) || is_array(node->ty)) {
     *rest = tok;
     return node;
   }
 
   // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
-  if (equal(tok, "=") && node->ty->is_atomic) {
+  if (equal(tok, "=") && (node->ty->qual & Q_ATOMIC)) {
     Node *rhs = assign(rest, tok->next);
     add_type(rhs);
     Obj *tmp = new_lvar(NULL, rhs->ty);
@@ -4286,12 +4258,9 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *ty2 = find_tag_in_scope(tag);
   if (ty2) {
     if (ty2->size < 0) {
-      for (Type *t = ty2; t; t = t->decl_next) {
-        t->size = ty->size;
-        t->align = ty->align;
-        t->members = ty->members;
-        t->is_flexible = ty->is_flexible;
-        t->origin = ty;
+      for (Type *t = ty2, *nxt; t; t = nxt) {
+        nxt = t->decl_next;
+        new_derived_type(t, t->qual, ty);
       }
       return ty2;
     }
@@ -4450,7 +4419,7 @@ static Node *struct_ref(Node *node, Token *tok) {
 static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   add_type(node);
 
-  if (node->ty->is_atomic)
+  if (node->ty->qual & Q_ATOMIC)
     return atomic_op(new_add(node, new_num(addend, tok), tok), true);
 
   if (opt_optimize && node->ty->kind != TY_BOOL && !is_bitfield(node) && !is_flonum(node->ty)) {
@@ -4757,10 +4726,9 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     add_type(node);
     if (node->ty->kind != TY_PTR || node->ty->base->kind == TY_VOID)
       error_tok(tok, "expected pointer to non-void type");
-    if (!node->ty->base->is_atomic) {
-      node->ty = pointer_to(new_qualified_type(node->ty->base));
-      node->ty->base->is_atomic = true;
-    }
+    Type *base = node->ty->base;
+    if (!(base->qual & Q_ATOMIC))
+      node->ty = pointer_to(qual_type(Q_ATOMIC, base));
     return node;
   }
 

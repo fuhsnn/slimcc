@@ -709,17 +709,21 @@ typedef enum {
   TY_ASM,
 } TypeKind;
 
+typedef enum {
+  Q_CONST    = 1,
+  Q_VOLATILE = 1 << 1,
+  Q_ATOMIC   = 1 << 2,
+  Q_RESTRICT = 1 << 3,
+} QualMask;
+
 struct Type {
   TypeKind kind;
   int64_t size;       // sizeof() value
-  int align;          // alignment
+  int32_t align;      // alignment
   bool is_unsigned;   // unsigned or signed
-  bool is_atomic;     // true if _Atomic
-  bool is_const;
-  bool is_volatile;
-  bool is_restrict;
   bool is_int_enum;
   bool is_enum;
+  QualMask qual;
   Type *origin;       // for type compatibility check
   Type *decl_next;    // forward declarations
   Token *tag;
@@ -750,7 +754,7 @@ struct Type {
   bool is_flexible;
 
   // Function parameter
-  Type *qty;
+  QualMask param_qual;
 
   // Function type
   Scope *scopes;
@@ -838,7 +842,8 @@ Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
 void add_type(Node *node);
 Type *unqual(Type *ty);
-Type *new_qualified_type(Type *ty);
+Type *new_derived_type(Type *newty, QualMask qual, Type *ty);
+Type *qual_type(QualMask msk, Type *ty);
 void cvqual_type(Type **ty_p, Type *ty2);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
