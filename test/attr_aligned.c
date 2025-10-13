@@ -220,7 +220,26 @@ int main(int argc, char **argv) {
   ASSERT(2,    ({ typedef struct { struct { char c; } j, k; char m6; } A1 T; offsetof(T,m6); }));
   ASSERT(2,    ({ typedef struct { struct { char c; } j, k; char m6; } T A1; offsetof(T,m6); }));
 
+  ASSERT(2, ({ _Alignas(__attribute__((aligned(2))) long) char v; _Alignof(v); }));
+
+  {
+    typedef const int Ic;
+    typedef A1 Ic Ica;
+    typedef A1 int Ia;
+    typedef volatile Ia Iav;
+    Ica v1;
+    Iav v2;
+    SASSERT(alignof(Ica) == 1024);
+    SASSERT(alignof(Iav) == 1024);
+    SASSERT(alignof(v1) == 1024);
+    SASSERT(alignof(v2) == 1024);
+    SASSERT(_Generic(Ica, int const: 1));
+    SASSERT(_Generic(Iav, int volatile: 1));
+    SASSERT(_Generic(&v1, int const*: 1));
+    SASSERT(_Generic(&v2, int volatile*: 1));
+    ASSERT(0, 1023 & (int)&v1);
+    ASSERT(0, 1023 & (int)&v2);
+  }
+
   printf("OK\n");
 }
-
-

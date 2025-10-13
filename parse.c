@@ -25,6 +25,7 @@ typedef struct {
   Type *type_def;
   Type *enum_ty;
   int64_t enum_val;
+  int32_t type_def_align;
 } VarScope;
 
 typedef enum {
@@ -175,6 +176,7 @@ static Token *defer_context;
 
 static bool is_typename(Token *tok);
 static Type *typename(Token **rest, Token *tok);
+static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
@@ -626,11 +628,11 @@ static char *get_ident(Token *tok) {
   return strndup(tok->loc, tok->len);
 }
 
-static Type *find_typedef(Token *tok) {
+static VarScope *find_typedef(Token *tok) {
   if (tok->kind == TK_IDENT) {
     VarScope *sc = find_var(tok);
-    if (sc)
-      return sc->type_def;
+    if (sc && sc->type_def)
+      return sc;
   }
   return NULL;
 }
@@ -998,7 +1000,10 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
     TokenKind tk_kind = tok->kind;
     if (!(tk_kind >= TK_TYPEKW && tk_kind < TK_TYPEKW_END)) {
-      if (!ty && (ty = find_typedef(tok))) {
+      VarScope *vsc;
+      if (!ty && (vsc = find_typedef(tok))) {
+        ty = vsc->type_def;
+        attr->align = MAX(attr->align, vsc->type_def_align);
         tok = tok->next;
         counter |= OTHER;
         continue;
@@ -1020,10 +1025,13 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_alignas: {
       tok = skip(tok, "(");
       int align;
-      if (is_typename(tok))
-        align = typename(&tok, tok)->align;
-      else
+      if (is_typename(tok)) {
+        VarAttr attr2 = {0};
+        Type *ty2 = typename2(&tok, tok, &attr2);
+        align = attr2.align ? attr2.align : ty2->align;
+      } else {
         align = align_expr(&tok, tok);
+      }
       attr->align = MAX(attr->align, align);
       tok = skip(tok, ")");
       continue;
@@ -1393,10 +1401,13 @@ static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
   return type_suffix(rest, tok, ty);
 }
 
-// type-name = declspec abstract-declarator
-static Type *typename(Token **rest, Token *tok) {
-  Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
+static Type *typename2(Token **rest, Token *tok, VarAttr *attr) {
+  Type *ty = declspec(&tok, tok, attr, SC_NONE);
   return declarator(rest, tok, ty, NULL);
+}
+
+static Type *typename(Token **rest, Token *tok) {
+  return typename2(rest, tok, &(VarAttr){0});
 }
 
 static void new_enum(Type **ty) {
@@ -1585,7 +1596,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     t->kind = base_ty->kind;
     t->is_unsigned = base_ty->is_unsigned;
     t->size = base_ty->size;
-    t->align = MAX(t->align, base_ty->align);
+    t->align = base_ty->align;
     t->is_int_enum = is_int;
   }
   return ty;
@@ -2417,14 +2428,18 @@ static bool is_typename(Token *tok) {
   return (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) || find_typedef(tok);
 }
 
-static bool is_typename_paren(Token **rest, Token *tok, Type **ty) {
+static bool is_typename_paren2(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
   if (equal(tok, "(") && is_typename(tok->next) &&
     !equal(skip_paren(tok->next->next), "{")) {
-    *ty = typename(&tok, tok->next);
+    *ty = typename2(&tok, tok->next, attr);
     *rest = skip(tok, ")");
     return true;
   }
   return false;
+}
+
+static bool is_typename_paren(Token **rest, Token *tok, Type **ty) {
+  return is_typename_paren2(rest, tok, ty, &(VarAttr){0});
 }
 
 static bool static_assertion(Token **rest, Token *tok) {
@@ -4273,7 +4288,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
     if (ty2->size < 0) {
       for (Type *t = ty2; t; t = t->decl_next) {
         t->size = ty->size;
-        t->align = MAX(t->align, ty->align);
+        t->align = ty->align;
         t->members = ty->members;
         t->is_flexible = ty->is_flexible;
         t->origin = ty;
@@ -4976,7 +4991,11 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (tok->kind == TK_alignof) {
     Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
+    VarAttr attr = {0};
+    int attr_align = 0;
+    if (is_typename_paren2(rest, tok->next, &ty, &attr)) {
+      attr_align = attr.align;
+    } else {
       Node *node = unary(rest, tok->next);
       switch (node->kind) {
       case ND_MEMBER:
@@ -4989,7 +5008,7 @@ static Node *primary(Token **rest, Token *tok) {
     }
     while (is_array(ty))
       ty = ty->base;
-    return new_size_t(ty->align, tok);
+    return new_size_t(MAX(ty->align, attr_align), tok);
   }
 
   if (tok->kind == TK_Countof) {
@@ -5096,11 +5115,10 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
 
     int align = 0;
     aligned_attr(name, tok, attr, &align);
-    if (align) {
-      ty = new_qualified_type(ty);
-      ty->align = align;
-    }
-    push_scope(get_ident(name))->type_def = ty;
+
+    VarScope *vsc = push_scope(get_ident(name));
+    vsc->type_def = ty;
+    vsc->type_def_align = align;
     chain_expr(&node, calc_vla(ty, tok));
   }
   return node;
