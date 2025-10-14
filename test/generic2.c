@@ -111,6 +111,8 @@ int main(int argc, char**argv) {
   SASSERT(1 == _Generic(argc ? "a" : (void*)(void*)0, void*:1 ) );
   SASSERT(1 == _Generic(argc ? (void*)(void*)0 : "a", void*:1 ) );
 
+  ASSERT(1, ({ typedef void *vp; _Generic(argc ? "a" : (vp)(vp)0, void*:1 ); }));
+
   ASSERT(1, ({ void *p; _Generic(argc ? p : "a", void*:1, char*:2); }) );
   ASSERT(1, ({ void *p; _Generic(argc ? "a" : p, void*:1, char*:2); }) );
 

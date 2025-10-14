@@ -475,21 +475,6 @@ Node *new_cast(Node *expr, Type *ty) {
       return expr;
     }
 
-    if (!is_bitfield(expr)) {
-      if (expr->ty == ty)
-        return expr;
-
-      if (expr->ty->origin && expr->ty->origin == ty) {
-        expr->ty = ty;
-        return expr;
-      }
-
-      if (expr->ty->kind == TY_BITINT && ty->kind == TY_BITINT &&
-        expr->ty->is_unsigned == ty->is_unsigned &&
-        expr->ty->bit_cnt == ty->bit_cnt)
-        return expr;
-    }
-
     if (is_redundant_cast(expr, ty)) {
       expr->ty = ty;
       return expr;
