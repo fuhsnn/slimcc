@@ -2280,7 +2280,7 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
       return cur;
     }
 
-    error_tok(node->tok, "unknown initializer");
+    error_tok(node->tok, "invalid initializer");
   }
   case INIT_STR_ARRAY: {
     size_t len = MIN(init->ty->array_len, init->tok->ty->array_len);

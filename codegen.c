@@ -451,10 +451,12 @@ static int32_t ovf_headroom(Type *ty, NodeKind kind) {
   return bits + 1 + ty->is_unsigned;
 }
 
-static int write_size(Node *node)  {
-  if (node->ty->kind == TY_LDOUBLE)
+static int write_size(Type *ty)  {
+  if (ty->kind == TY_LDOUBLE)
     return 10;
-  return node->ty->size;
+  if (ty->is_flexible && ty->origin)
+    return ty->origin->size;
+  return ty->size;
 }
 
 static int64_t limit_imm(int64_t val, int sz) {
@@ -1123,7 +1125,7 @@ static void store3(Type *ty, char *dofs, char *dptr) {
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION:
-    gen_mem_copy("0", "%rax", dofs, dptr, ty->size);
+    gen_mem_copy("0", "%rax", dofs, dptr, write_size(ty));
     return;
   case TY_FLOAT:
     Printftn("movss %%xmm0, %s(%s)", dofs, dptr);
@@ -2965,12 +2967,12 @@ static void gen_void_assign(Node *node) {
     lhs->ty->kind != TY_BOOL && is_memop(rhs->m.lhs, sofs, &sptr, true))) {
     char dofs[STRBUF_SZ], *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
-      gen_mem_copy(sofs, sptr, dofs, dptr, write_size(lhs));
+      gen_mem_copy(sofs, sptr, dofs, dptr, write_size(lhs->ty));
       return;
     }
     if (!is_bitfield(lhs) && !(lhs->ty->qual & Q_ATOMIC)) {
       gen_addr(lhs);
-      gen_mem_copy(sofs, sptr, "0", "%rax", write_size(lhs));
+      gen_mem_copy(sofs, sptr, "0", "%rax", write_size(lhs->ty));
       return;
     }
   }

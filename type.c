@@ -489,8 +489,7 @@ Node *assign_cast(Type *to_ty, Node *expr) {
     if (is_nullptr(expr))
       return new_cast(expr, to_ty);
   } else if (is_compatible(to_ty, expr->ty)) {
-    if (expr->ty->size == to_ty->size)
-      return expr;
+    return expr;
   } else if (is_numeric(to_ty)) {
     return new_cast(expr, to_ty);
   }
