@@ -436,6 +436,15 @@ bool is_compatible(Type *t1, Type *t2) {
 }
 
 Type *pointer_to(Type *base) {
+  if (base == ty_void) {
+    static Type *vp;
+    if (!vp) {
+      vp = new_type(TY_PTR, 8, 8);
+      vp->base = base;
+      vp->is_unsigned = true;
+    }
+    return vp;
+  }
   Type *ty = new_type(TY_PTR, 8, 8);
   ty->base = base;
   ty->is_unsigned = true;
