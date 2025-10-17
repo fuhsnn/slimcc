@@ -762,6 +762,38 @@ static void gen_mem_zero(int dofs, char *dptr, int sz) {
   }
 }
 
+static bool is_fp_arith(Node *node) {
+  switch (node->kind) {
+  case ND_ADD:
+  case ND_SUB:
+  case ND_MUL:
+  case ND_DIV:
+  case ND_NEG:
+    return true;
+  }
+  return false;
+}
+
+static bool is_int_arith(Node *node) {
+  switch (node->kind) {
+  case ND_ADD:
+  case ND_SUB:
+  case ND_MUL:
+  case ND_DIV:
+  case ND_MOD:
+  case ND_NEG:
+  case ND_BITNOT:
+  case ND_BITAND:
+  case ND_BITOR:
+  case ND_BITXOR:
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR:
+    return true;
+  }
+  return false;
+}
+
 static bool is_cmp(Node *node) {
   switch (node->kind) {
   case ND_EQ:
@@ -2066,6 +2098,7 @@ static void gen_xmm_arith(Node *node) {
     }
     return;
   }
+
   gen_expr(node->m.lhs);
   pushf();
   gen_expr(node->m.rhs);
@@ -2121,8 +2154,7 @@ static void gen_xmm_arith(Node *node) {
       Printstn("setae %%al");
     return;
   }
-
-  error_tok(node->tok, "invalid expression");
+  internal_error();
 }
 
 static void gen_x87_arith(Node *node) {
@@ -2133,6 +2165,7 @@ static void gen_x87_arith(Node *node) {
     Printftn("fstpt %s(%s)", tmpbuf(10), lvar_ptr);
     return;
   }
+
   gen_expr(node->m.lhs);
   push_x87();
   gen_expr(node->m.rhs);
@@ -2191,8 +2224,7 @@ static void gen_x87_arith(Node *node) {
       Printstn("setae %%al");
     return;
   }
-
-  error_tok(node->tok, "invalid expression");
+  internal_error();
 }
 
 static void gen_bitint_arith(Node *node) {
@@ -2265,7 +2297,7 @@ static void gen_bitint_arith(Node *node) {
     return;
   }
   }
-  error_tok(node->tok, "invalid expression");
+  internal_error();
 }
 
 static void gen_gp_arith(Node *node) {
@@ -2352,8 +2384,7 @@ static void gen_gp_arith(Node *node) {
     gen_cmp_setcc(node->kind, node->m.lhs->ty->is_unsigned);
     return;
   }
-
-  error_tok(node->tok, "invalid expression");
+  internal_error();
 }
 
 // Generate code for a given node.
@@ -2672,23 +2703,30 @@ static void gen_expr2(Node *node, bool is_void) {
   }
   }
 
-  switch (node->m.lhs->ty->kind) {
-  case TY_FLOAT:
-  case TY_DOUBLE:
-    gen_xmm_arith(node);
-    return;
-  case TY_LDOUBLE:
-    gen_x87_arith(node);
-    return;
-  case TY_BITINT:
-    gen_bitint_arith(node);
-    return;
+  if (is_int_arith(node) || is_cmp(node)) {
+    if (is_gp_ty(node->m.lhs->ty)) {
+      gen_gp_arith(node);
+      return;
+    }
+    if (node->m.lhs->ty->kind == TY_BITINT) {
+      gen_bitint_arith(node);
+      return;
+    }
   }
-  if (is_gp_ty(node->ty)) {
-    gen_gp_arith(node);
-    return;
+
+  if (is_fp_arith(node) || is_cmp(node)) {
+    switch (node->m.lhs->ty->kind) {
+    case TY_FLOAT:
+    case TY_DOUBLE:
+      gen_xmm_arith(node);
+      return;
+    case TY_LDOUBLE:
+      gen_x87_arith(node);
+      return;
+    }
   }
-  error_tok(node->tok, "invalid expression");
+
+  internal_error();
 }
 
 static void gen_expr(Node *node) {
