@@ -695,7 +695,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.0RC1
+ github_tar php php-src php-8.5.0RC2
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
  sed -i 's/defined(__SUNPRO_CC)$/defined(__SUNPRO_CC) || 1/g' ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
@@ -766,7 +766,7 @@ test_redis() {
 }
 
 test_valkey() {
- github_tar valkey-io valkey 8.1.2
+ github_tar valkey-io valkey 8.1.4
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -838,7 +838,7 @@ test_tcl() {
 }
 
 test_tinycc() {
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 19589288cb8cdde4c9a9cb783e9fe4d0af51d6ed tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 01d1b7bc7601e2441d971583879f00a3905e3bf9 tinycc
  ./configure && make && cd tests/tests2/ && make
 }
 
