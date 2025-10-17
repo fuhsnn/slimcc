@@ -181,7 +181,7 @@ static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
-static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, Token *end, bool is_prot);
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, Token *end, bool is_prot, bool is_func);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
@@ -1226,7 +1226,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     }
     Token *name = NULL;
     Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
-    ty = declarator2(&tok, tok, ty, &name, NULL, !is_def);
+    ty = declarator2(&tok, tok, ty, &name, NULL, !is_def, true);
 
     if (is_def)
       chain_expr(&expr, calc_vla(ty, tok));
@@ -1302,22 +1302,29 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok) {
   return qual;
 }
 
-static Type *type_suffix(Token **rest, Token *tok, Type *ty, bool is_prot) {
+static Type *type_suffix(Token **rest, Token *tok, Type *ty, bool is_prot, bool is_func) {
   if (equal(tok, "("))
     return func_params(rest, tok->next, ty, NULL);
 
   if (consume(&tok, tok, "[")) {
     QualMask qual = 0;
-    bool has_static = consume(&tok, tok, "static");
-    if (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) {
-      qual = pointer_qualifiers(&tok, tok);
-      if (!has_static)
-        has_static = consume(&tok, tok, "static");
+    bool has_static = false;
+
+    if (is_func) {
+      has_static = consume(&tok, tok, "static");
+      if (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) {
+        qual = pointer_qualifiers(&tok, tok);
+        if (!has_static)
+          has_static = consume(&tok, tok, "static");
+      }
     }
     Type *ty2 = array_dimensions(rest, tok, ty, is_prot);
-    if (has_static && ty2->array_len < 0)
-      error_tok(tok, "'static' requires an array size");
-    ty2->param_qual = qual;
+
+    if (is_func) {
+      if (has_static && ty2->array_len < 0)
+        error_tok(tok, "'static' requires an array size");
+      ty2->param_qual = qual;
+    }
     return ty2;
   }
   *rest = tok;
@@ -1353,17 +1360,17 @@ Token *skip_paren(Token *tok) {
   return tok->next;
 }
 
-static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, Token *end, bool is_prot) {
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, Token *end, bool is_prot, bool is_func) {
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
     if (is_typename(tok) || equal(tok, "...") || equal(tok, ")"))
       return func_params(rest, tok, ty, NULL);
 
-    ty = type_suffix(rest, skip_paren(tok), ty, is_prot);
+    ty = type_suffix(rest, skip_paren(tok), ty, is_prot, is_func);
     if (end == need_end_tok)
       end = *rest;
-    return declarator2(&(Token *){0}, tok, ty, name_tok, end, is_prot);
+    return declarator2(&(Token *){0}, tok, ty, name_tok, end, is_prot, is_func);
   }
 
   if (name_tok && tok->kind == TK_IDENT) {
@@ -1373,11 +1380,11 @@ static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, T
   if (consume(&tok, tok, "("))
     return func_params(rest, tok, ty, &end);
 
-  return type_suffix(rest, tok, ty, is_prot);
+  return type_suffix(rest, tok, ty, is_prot, is_func);
 }
 
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
-  return declarator2(rest, tok, ty, name_tok, NULL, false);
+  return declarator2(rest, tok, ty, name_tok, NULL, false, false);
 }
 
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr) {
@@ -4606,7 +4613,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
     }
 
     Type *t2 = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
-    t2 = declarator2(&tok, tok, t2, NULL, NULL, true);
+    t2 = declarator2(&tok, tok, t2, NULL, NULL, true, false);
 
     Node *node = assign(&tok, skip(tok, ":"));
     if (is_compatible2(t1, t2)) {
@@ -5326,7 +5333,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator2(&tok, tok, basety, &name, need_end_tok, false);
+    Type *ty = declarator2(&tok, tok, basety, &name, need_end_tok, false, false);
 
     if (ty->kind == TY_FUNC) {
       if (!name)
