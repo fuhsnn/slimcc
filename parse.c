@@ -2980,16 +2980,20 @@ static Node *expr(Token **rest, Token *tok) {
   return node;
 }
 
-static int64_t eval_error(Token *tok, char *fmt, ...) {
+static int64_t eval_error2(Node *node, char *fmt, ...) {
   if (eval_recover) {
     *eval_recover = true;
     return 0;
   }
   va_list ap;
   va_start(ap, fmt);
-  verror_at_tok(tok, fmt, ap);
+  verror_at_tok(node->tok, fmt, ap);
   va_end(ap);
   exit(1);
+}
+
+static int64_t eval_error(Node *node) {
+  return eval_error2(node, "not a compile-time constant");
 }
 
 static bool eval_ctx(Node *node, EvalContext *ctx, int64_t *val) {
@@ -3061,12 +3065,12 @@ static char *eval_constexpr_data(Node *node) {
 
   if (!var || !(var->constexpr_data || var->is_string_lit ||
     is_static_const_var(var, ofs, node->ty->size)))
-    return (char *)eval_error(node->tok, "not a compile-time constant");
+    return (char *)eval_error(node);
 
   int32_t access_sz = !is_bitfield(node) ? node->ty->size : bitfield_footprint(node->m.member);
 
   if (ofs < 0 || (var->ty->size < (ofs + access_sz)))
-    return (char *)eval_error(node->tok, "constexpr access out of bounds");
+    return (char *)eval_error2(node, "constexpr access out of bounds");
 
   if (var->constexpr_data)
     return var->constexpr_data + ofs;
@@ -3084,8 +3088,11 @@ int64_t eval_sign_extend(Type *ty, int64_t val) {
 }
 
 static void eval_void(Node *node) {
-  if (node->kind == ND_VAR)
+  if (node->kind == ND_VAR) {
+    if (!node->m.var->constexpr_data)
+      eval_error(node);
     return;
+  }
   if (node->ty->kind == TY_BITINT)
     free(eval_bitint(node));
   else if (is_flonum(node->ty))
@@ -3175,7 +3182,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     int64_t lval = eval(lhs);
     int64_t rval = eval(rhs);
     if (!rval)
-      return eval_error(rhs->tok, "division by zero during constant evaluation");
+      return eval_error2(rhs, "division by zero during constant evaluation");
     if (ty->is_unsigned)
       return (uint64_t)lval / rval;
     if ((lval == INT64_MIN || lval == INT32_MIN) && rval == -1)
@@ -3186,7 +3193,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     int64_t lval = eval(lhs);
     int64_t rval = eval(rhs);
     if (!rval)
-      return eval_error(rhs->tok, "remainder by zero during constant evaluation");
+      return eval_error2(rhs, "remainder by zero during constant evaluation");
     if (ty->is_unsigned)
       return (uint64_t)lval % rval;
     if (lval == INT64_MIN && rval == -1)
@@ -3278,7 +3285,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   if (ctx->kind == EV_AGGREGATE) {
     if (((ty->qual & Q_ATOMIC) && !ctx->let_atomic) ||
       ((ty->qual & Q_VOLATILE) && !ctx->let_volatile))
-      return eval_error(node->tok, "not a compile-time constant");
+      return eval_error(node);
 
     if (node->kind == ND_DEREF) {
       ctx->deref_cnt++;
@@ -3295,7 +3302,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 
     if (ctx->deref_cnt < 0) {
       if (!ctx->let_array)
-        return eval_error(node->tok, "not a compile-time constant");
+        return eval_error(node);
       ctx->let_array = false;
       ctx->deref_cnt = 0;
     }
@@ -3369,7 +3376,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       }
     }
   }
-  return eval_error(node->tok, "not a compile-time constant");
+  return eval_error(node);
 }
 
 bool is_const_expr(Node *node, int64_t *val) {
@@ -3515,7 +3522,7 @@ static long double eval_double(Node *node) {
   if (data)
     return read_double_buf(data, ty);
 
-  return eval_error(node->tok, "not a compile-time constant");
+  return eval_error(node);
 }
 
 static uint64_t *eval_bitint(Node *node) {
@@ -3551,7 +3558,7 @@ static uint64_t *eval_bitint(Node *node) {
     case ND_MOD: {
       bool res = eval_bitint_to_bool(ty->bit_cnt, rval);
       if (!res)
-        return (void *)eval_error(node->tok, "division by zero during constant evaluation");
+        return (void *)eval_error2(node, "division by zero during constant evaluation");
       eval_bitint_div(ty->bit_cnt, lval, rval, ty->is_unsigned, node->kind == ND_DIV);
       break;
     }
@@ -3567,7 +3574,7 @@ static uint64_t *eval_bitint(Node *node) {
       return free(val), NULL;
 
     if (amount >= ty->bit_cnt)
-      return (void *)eval_error(rhs->tok, "invalid shift amount");
+      return (void *)eval_error2(rhs, "invalid shift amount");
 
     if (node->kind == ND_SHL)
       eval_bitint_shl(ty->bit_cnt, val, val, amount);
@@ -3632,7 +3639,7 @@ static uint64_t *eval_bitint(Node *node) {
     return val;
   }
 
-  return (void *)eval_error(node->tok, "not a compile-time constant");
+  return (void *)eval_error(node);
 }
 
 static Node *atomic_op(Node *binary, bool return_old) {
