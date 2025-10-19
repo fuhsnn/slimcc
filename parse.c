@@ -94,15 +94,18 @@ struct Initializer {
     INIT_STR_ARRAY,
     INIT_EXPR,
     INIT_TOK
-  } kind : 16;
+  } kind;
 
   bool is_root;
-  int32_t mem_cnt;
-  Initializer *mem_arr;
 ANON_UNION_START
     Token *tok;
     Node *expr;
-    int32_t init_idx;
+
+    struct {
+      Initializer *data;
+      int32_t cnt;
+      int32_t union_idx;
+    } list;
 ANON_UNION_END
 };
 
@@ -534,22 +537,17 @@ static VarScope *push_scope(char *name) {
 }
 
 static void free_initializers(Initializer *init) {
-  if (init->mem_cnt) {
-    for (int i = 0; i < init->mem_cnt; i++)
-      free_initializers(&init->mem_arr[i]);
-    free(init->mem_arr);
-    init->mem_arr = NULL;
+  if (init->kind == INIT_LIST && init->list.cnt) {
+    for (int i = 0; i < init->list.cnt; i++)
+      free_initializers(&init->list.data[i]);
+    free(init->list.data);
   }
 }
 
 static void set_init(Initializer *init, int kind) {
   if (init->kind == kind)
     return;
-  if (init->kind == INIT_LIST) {
-    free_initializers(init);
-    init->mem_arr = NULL;
-    init->mem_cnt = 0;
-  }
+  free_initializers(init);
   init->kind = kind;
 }
 
@@ -558,12 +556,12 @@ static void prepare_array_init(Initializer *init, Type *ty) {
     return;
 
   init->kind = INIT_LIST;
-  if (!(init->mem_cnt = ty->array_len))
+  if (!(init->list.cnt = ty->array_len))
     return;
-  init->mem_arr = calloc(init->mem_cnt, sizeof(Initializer));
+  init->list.data = calloc(init->list.cnt, sizeof(Initializer));
 
-  for (int i = 0; i < init->mem_cnt; i++)
-    init->mem_arr[i].ty = ty->base;
+  for (int i = 0; i < init->list.cnt; i++)
+    init->list.data[i].ty = ty->base;
 }
 
 static void prepare_struct_init(Initializer *init, Type *ty) {
@@ -575,12 +573,12 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
     mem->idx = len++;
 
   init->kind = INIT_LIST;
-  if (!(init->mem_cnt = len))
+  if (!(init->list.cnt = len))
     return;
-  init->mem_arr = calloc(init->mem_cnt, sizeof(Initializer));
+  init->list.data = calloc(init->list.cnt, sizeof(Initializer));
 
   for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
-    Initializer *child = &init->mem_arr[mem->idx];
+    Initializer *child = &init->list.data[mem->idx];
 
     if (!mem->next && ty->is_flexible) {
       child->ty = mem->ty;
@@ -1900,7 +1898,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
 
     Token *start = tok;
     for (int i = begin; i <= end; i++)
-      designation(&tok, start, &init->mem_arr[i], true);
+      designation(&tok, start, &init->list.data[i], true);
 
     list_initializer(rest, tok, init, end + 1);
     return;
@@ -1911,10 +1909,10 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
     prepare_struct_init(init, init->ty);
 
     if (init->ty->kind == TY_UNION) {
-      init->init_idx = mem->idx;
-      designation(rest, tok, &init->mem_arr[mem->idx], false);
+      init->list.union_idx = mem->idx;
+      designation(rest, tok, &init->list.data[mem->idx], false);
     } else {
-      designation(&tok, tok, &init->mem_arr[mem->idx], false);
+      designation(&tok, tok, &init->list.data[mem->idx], false);
       list_initializer(rest, tok, init, mem->idx + 1);
     }
     return;
@@ -1970,16 +1968,16 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, b
 }
 
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int idx) {
-  for (; idx < init->mem_cnt && !equal(tok, "}"); idx++) {
+  for (; idx < init->list.cnt && !equal(tok, "}"); idx++) {
     Token *tok2 = (idx == 0) ? tok : skip(tok, ",");
 
     if (equal(tok2, "}") || equal(tok2, "[") || equal(tok2, "."))
       break;
 
-    initializer2(&tok, tok2, &init->mem_arr[idx]);
+    initializer2(&tok, tok2, &init->list.data[idx]);
 
     if (init->ty->kind == TY_UNION) {
-      init->init_idx = idx;
+      init->list.union_idx = idx;
       break;
     }
   }
@@ -2005,6 +2003,9 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
         return;
       }
     }
+    if (init->is_root && !has_brace)
+      error_tok(tok, "expected initializer list");
+
     if (init->kind == INIT_FLEX) {
       int len = count_array_init_elements(tok, init->ty);
       init->ty = array_of(init->ty->base, len);
@@ -2065,7 +2066,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   if (ty->is_flexible && init->kind == INIT_LIST) {
     ty = new_derived_type(NULL, ty->qual, ty);
 
-    Initializer *i = &init->mem_arr[init->mem_cnt - 1];
+    Initializer *i = &init->list.data[init->list.cnt - 1];
     if (i->ty->size > 0)
       ty->size += i->ty->size;
     var->ty = ty;
@@ -2106,9 +2107,6 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
   case INIT_EXPR: {
     Node *node = init_num_tok(init, new_node(ND_NUM, init->tok));
 
-    if (init->ty->kind == TY_ARRAY)
-      error_tok(node->tok, "array initializer must be an initializer list");
-
     Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), node, tok);
     add_type(n);
     return expr->next = n;
@@ -2137,19 +2135,19 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
   }
   case INIT_LIST:
     if (init->ty->kind == TY_ARRAY) {
-      for (int i = 0; i < init->mem_cnt; i++) {
+      for (int i = 0; i < init->list.cnt; i++) {
         InitDesg desg2 = {.parent = desg, .idx = i};
-        expr = create_lvar_init(expr, &init->mem_arr[i], &desg2, tok);
+        expr = create_lvar_init(expr, &init->list.data[i], &desg2, tok);
       }
       return expr;
     }
     if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
       for (Member *mem = init->ty->members; mem_iter(&mem); mem = mem->next) {
-        if (init->ty->kind == TY_UNION && init->init_idx != mem->idx)
+        if (init->ty->kind == TY_UNION && init->list.union_idx != mem->idx)
           continue;
 
         InitDesg desg2 = {.parent = desg, .member = mem};
-        expr = create_lvar_init(expr, &init->mem_arr[mem->idx], &desg2, tok);
+        expr = create_lvar_init(expr, &init->list.data[mem->idx], &desg2, tok);
       }
       return expr;
     }
@@ -2299,17 +2297,17 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
   case INIT_LIST:
     if (init->ty->kind == TY_ARRAY) {
       int sz = init->ty->base->size;
-      for (int i = 0; i < init->mem_cnt; i++)
-        cur = write_gvar_data(cur, &init->mem_arr[i], buf, offset + sz * i, ev_kind);
+      for (int i = 0; i < init->list.cnt; i++)
+        cur = write_gvar_data(cur, &init->list.data[i], buf, offset + sz * i, ev_kind);
       return cur;
     }
 
     if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
       for (Member *mem = init->ty->members; mem_iter(&mem); mem = mem->next) {
-        if (init->ty->kind == TY_UNION && init->init_idx != mem->idx)
+        if (init->ty->kind == TY_UNION && init->list.union_idx != mem->idx)
           continue;
 
-        Initializer *init2 = &init->mem_arr[mem->idx];
+        Initializer *init2 = &init->list.data[mem->idx];
         if (mem->is_bitfield && (init2->kind == INIT_EXPR || init2->kind == INIT_TOK)) {
           Node *node = init_num_tok(init2, &(Node){.kind = ND_NUM, .tok = init2->tok});
           node = assign_cast(mem->ty, node);
