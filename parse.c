@@ -90,6 +90,7 @@ struct Initializer {
     INIT_NONE = 0,
     INIT_FLEX,
     INIT_FLEX_NESTED,
+    INIT_COPY,
     INIT_LIST,
     INIT_STR_ARRAY,
     INIT_EXPR,
@@ -97,6 +98,8 @@ struct Initializer {
   } kind;
 
   bool is_root;
+  bool has_copy;
+
 ANON_UNION_START
     Token *tok;
     Node *expr;
@@ -106,6 +109,11 @@ ANON_UNION_START
       int32_t cnt;
       int32_t union_idx;
     } list;
+
+    struct {
+      Obj *var;
+      Initializer *init;
+    } cpy;
 ANON_UNION_END
 };
 
@@ -117,6 +125,14 @@ struct InitDesg {
   Member *member;
   Obj *var;
 };
+
+typedef struct {
+  Initializer *init;
+  Obj *var;
+  Token *end;
+  int lvl;
+  int init_lvl;
+} DesgContext;
 
 struct LocalLabel {
   LocalLabel *next;
@@ -1887,7 +1903,8 @@ static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
   return mem;
 }
 
-static void designation(Token **rest, Token *tok, Initializer *init, bool post_bracket) {
+static void designation(Token **rest, Token *tok, Initializer *init,
+  bool post_bracket, DesgContext *ctx) {
   if (equal(tok, "[")) {
     if (init->ty->kind != TY_ARRAY)
       error_tok(tok, "array index in non-array initializer");
@@ -1897,8 +1914,33 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
     prepare_array_init(init, init->ty);
 
     Token *start = tok;
-    for (int i = begin; i <= end; i++)
-      designation(&tok, start, &init->list.data[i], true);
+    if (begin == end || is_global_init_context) {
+      for (int i = begin; i <= end; i++)
+        designation(&tok, start, &init->list.data[i], true, ctx);
+    } else {
+      ctx = ctx ? ctx : &(DesgContext){0};
+      ctx->lvl++;
+
+      for (int i = begin; i <= end; i++) {
+        if (ctx->init_lvl != ctx->lvl) {
+          designation(&tok, start, &init->list.data[i], true, ctx);
+
+          if (ctx->init)
+            continue;
+          ctx->init = arena_malloc(&ast_arena, sizeof(Initializer));
+          *ctx->init = init->list.data[i];
+
+          ctx->var = new_lvar(NULL, init->list.data[i].ty);
+          ctx->end = tok;
+          ctx->init_lvl = ctx->lvl;
+        }
+        init->list.data[i].kind = INIT_COPY;
+        init->list.data[i].cpy.init = ctx->init;
+        init->list.data[i].cpy.var = ctx->var;
+      }
+      ctx->lvl--;
+      tok = ctx->end;
+    }
 
     list_initializer(rest, tok, init, end + 1);
     return;
@@ -1910,9 +1952,9 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
 
     if (init->ty->kind == TY_UNION) {
       init->list.union_idx = mem->idx;
-      designation(rest, tok, &init->list.data[mem->idx], false);
+      designation(rest, tok, &init->list.data[mem->idx], false, ctx);
     } else {
-      designation(&tok, tok, &init->list.data[mem->idx], false);
+      designation(&tok, tok, &init->list.data[mem->idx], false, ctx);
       list_initializer(rest, tok, init, mem->idx + 1);
     }
     return;
@@ -1939,7 +1981,7 @@ static int count_array_init_elements(Token *tok, Type *ty) {
       if (equal(tok, "..."))
         i = const_expr(&tok, tok->next);
       tok = skip(tok, "]");
-      designation(&tok, tok, &dummy, true);
+      designation(&tok, tok, &dummy, true, NULL);
     } else {
       initializer2(&tok, tok, &dummy);
     }
@@ -1958,7 +2000,7 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, b
   if (has_brace) {
     for (; comma_list(&tok, &tok, "}", tok != start);) {
       if (equal(tok, ".") || equal(tok, "[")) {
-        designation(&tok, tok, init, false);
+        designation(&tok, tok, init, false, NULL);
         continue;
       }
       tok = skip_excess_element(tok);
@@ -2133,7 +2175,7 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
       n->m.lhs->ty = init->ty;
     return expr->next = n;
   }
-  case INIT_LIST:
+  case INIT_LIST: {
     if (init->ty->kind == TY_ARRAY) {
       for (int i = 0; i < init->list.cnt; i++) {
         InitDesg desg2 = {.parent = desg, .idx = i};
@@ -2151,6 +2193,21 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
       }
       return expr;
     }
+    break;
+  }
+  case INIT_COPY: {
+    Node *n;
+    if (!init->cpy.init->has_copy) {
+      init->cpy.init->has_copy = true;
+      expr = create_lvar_init(expr, init->cpy.init, desg, tok);
+
+      n = new_binary(ND_ASSIGN, new_var_node(init->cpy.var, tok), init_desg_expr(desg, tok), tok);
+    } else {
+      n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), new_var_node(init->cpy.var, tok), tok);
+    }
+    add_type(n);
+    return expr->next = n;
+  }
   }
   internal_error();
 }

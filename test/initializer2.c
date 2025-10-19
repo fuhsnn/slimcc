@@ -86,6 +86,103 @@ int flexible_structs(void) {
   return 1;
 }
 
+static int gnu_array_range(void) {
+  {
+    int i[2][4] = {[0][0 ... 1] = 4, 2, 3, 7, [1][1 ... 2] = 1, 9};
+    int ans[] = {4,4,2,3,7,1,1,9};
+    ASSERT(0, memcmp(&i, &ans, sizeof(ans)));
+  }
+
+#ifdef NOTCLANG
+  {
+    struct S { int a; int b; };
+    int i;
+    i = 1;
+    struct { struct S s[4]; } arr1[5] = { [2 ... 3].s[1 ... 2] = { i += 2, i *= 3} };
+    struct { struct S s[4]; } ans1[5] = {0};
+    ans1[2].s[1] = ans1[2].s[2] = ans1[3].s[1] = ans1[3].s[2] = (struct S){3, 9};
+    ASSERT(0, memcmp(&arr1, &ans1, sizeof(arr1)));
+    ASSERT(9, i);
+
+    i = 1;
+    struct { struct S s[3]; } arr2[5] = { [1 ... 3].s[1] = {i++, ++i} };
+    struct { struct S s[3]; } ans2[5] = {0};
+    ans2[1].s[1] = ans2[3].s[1] = ans2[2].s[1] = (struct S){1, 3};
+    ASSERT(0, memcmp(&arr2, &ans2, sizeof(arr2)));
+    ASSERT(3, i);
+
+    i = 1;
+    struct { int i[4]; } arr3[5] = { [4].i[1 ... 2] = ({ int j = i + 7; j - i; }) };
+    struct { int i[4]; } ans3[5] = {0};
+    ans3[4].i[1] = ans3[4].i[2] = 7;
+    ASSERT(0, memcmp(&arr3, &ans3, sizeof(arr3)));
+    ASSERT(1, i);
+
+    {
+      struct S2 { struct { struct { struct { int i[3]; }s[3]; }s[3]; }s[3]; };
+      struct S2 s = { .s[0 ... 1].s[1 ... 2].s[0 ... 1].i[1 ... 2] = i*=7 };
+      struct S2 ans = {0};
+      ans.s[0].s[1].s[0].i[1] = ans.s[0].s[1].s[0].i[2] = ans.s[0].s[1].s[1].i[1] =
+      ans.s[0].s[1].s[1].i[2] = ans.s[0].s[2].s[0].i[1] = ans.s[0].s[2].s[0].i[2] =
+      ans.s[0].s[2].s[1].i[1] = ans.s[0].s[2].s[1].i[2] = ans.s[1].s[1].s[0].i[1] =
+      ans.s[1].s[1].s[0].i[2] = ans.s[1].s[1].s[1].i[1] = ans.s[1].s[1].s[1].i[2] =
+      ans.s[1].s[2].s[0].i[1] = ans.s[1].s[2].s[0].i[2] = ans.s[1].s[2].s[1].i[1] =
+      ans.s[1].s[2].s[1].i[2] = 7;
+      ASSERT(0, memcmp(&s, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+#ifdef __slimcc__
+      i = 1;
+      struct S2 s2 = { .s[0 ... 1].s[1 ... 2].s[0 ... 1].i = { [1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s2, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s3 = { .s[0 ... 1].s[1 ... 2].s[0 ... 1] = { .i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s3, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s4 = { .s[0 ... 1].s[1 ... 2].s = { [0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s4, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s5 = { .s[0 ... 1].s[1 ... 2] = { .s[0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s5, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s6 = { .s[0 ... 1].s = { [1 ... 2].s[0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s6, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s7 = { .s[0 ... 1].s[1 ... 2] = { .s[0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s7, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s8 = { .s[0 ... 1].s = { [1 ... 2].s[0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s8, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s9 = { .s[0 ... 1] = { .s[1 ... 2].s[0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s9, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+
+      i = 1;
+      struct S2 s10 = { .s = { [0 ... 1].s[1 ... 2].s[0 ... 1].i[1 ... 2] = i *= 7} };
+      ASSERT(0, memcmp(&s10, &ans, sizeof(struct S2)));
+      ASSERT(7, i);
+#endif
+    }
+  }
+#endif
+  return 1;
+}
+
 int main(void) {
   ASSERT(3, *p1);
 
@@ -114,11 +211,6 @@ int main(void) {
   ASSERT(0, strcmp("obar", (char *)obar));
 
   {
-    int i[2][4] = {[0][0 ... 1] = 4, 2, 3, 7, [1][1 ... 2] = 1, 9};
-    int ans[] = {4,4,2,3,7,1,1,9};
-    ASSERT(0, memcmp(&i, &ans, sizeof(ans)));
-  }
-  {
     struct Sub {
       int i;
     };
@@ -135,6 +227,7 @@ int main(void) {
   }
   ASSERT(1, c23_zinit());
   ASSERT(1, flexible_structs());
+  ASSERT(1, gnu_array_range());
 
   printf("OK\n");
 }
