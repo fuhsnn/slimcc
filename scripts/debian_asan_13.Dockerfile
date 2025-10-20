@@ -1,14 +1,14 @@
-FROM debian:12-slim
+FROM debian:13-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
- gcc-12 \
- file binutils libc-dev libgcc-12-dev \
+ gcc-14 \
+ file binutils libc-dev libgcc-14-dev \
  make cmake pkg-config \
- zip lzip \
+ zip lzip xz-utils bzip2 zlib1g-dev \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates wget locales \
- tcl-dev bison flex re2c \
- libcurl4-openssl-dev libssl-dev libexpat1-dev zlib1g-dev libicu-dev \
+ tcl-dev bison flex re2c libpcre2-dev \
+ libcurl4-openssl-dev libssl-dev libexpat1-dev libicu-dev \
  libncurses-dev libreadline-dev libpsl-dev libffi-dev libxml2-dev libsqlite3-dev \
  # build_gcc
  libgmp-dev libmpfr-dev libmpc-dev \
@@ -18,9 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  netbase \
  # for ocaml testsuite
  parallel \
- # glib
- libpcre3-dev libmount-dev desktop-file-utils shared-mime-info \
- python3.11-minimal python3-distutils \
  # memcached
  libevent-dev \
  # libxml
@@ -42,31 +39,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # libpsl
  libunistring-dev \
  # binutils
- dejagnu libzstd-dev
+ dejagnu libzstd-dev \
+ # lwan
+ python3-requests libsqlite3-dev liblua5.1-0-dev libmariadb-dev \
+ # rsync
+ python3-commonmark \
+ # got
+ uuid-dev libbsd-dev libtls-dev \
+ # openrc
+ libcap-dev \
+ # hare simple-cc
+ qbe
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci.c platform.c
-RUN gcc-12 scripts/amalgamation.c -O2 -flto=auto -march=native -fsanitize=address -o slimcc
-RUN apt-get -y autoremove gcc-12 && apt-get clean
+RUN ln -s platform/linux-ci-debian13.c platform.c
+RUN gcc-14 scripts/amalgamation.c -O2 -flto=auto -march=x86-64-v3 -mtune=znver3 -fsanitize=address -o slimcc
+RUN apt-get -y autoremove gcc-14 && apt-get clean
 
 RUN ! command -v cc
 RUN ! command -v cpp
 RUN ! command -v gcc
-RUN ! command -v gcc-12
+RUN ! command -v gcc-14
 
 ENV CC=/work/slimcc/slimcc
 
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 ENV LANG=en_US.UTF-8
 
-RUN bash scripts/linux_thirdparty.bash install_libtool
+RUN bash scripts/linux_thirdparty.bash ci_libtool
+RUN bash scripts/linux_thirdparty.bash ci_muon
 
 RUN useradd -m non-root -s /bin/bash && \
  su non-root -c "git config --global advice.detachedHead false" && \
  su non-root -c "git config --global init.defaultBranch init" && \
- su non-root -c "git config --global --add safe.directory '*'" && \
- mv scripts/linux_thirdparty.bash /home/non-root
+ su non-root -c "git config --global --add safe.directory '*'"
 
 WORKDIR /home/non-root
