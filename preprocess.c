@@ -712,19 +712,23 @@ static void newline_to_space(Token *tok) {
 }
 
 // Concatenate two tokens to create a new token.
-static void paste(Token *lhs, Token *rhs) {
+static Token *paste(Token *lhs, Token *rhs) {
   // Paste the two tokens.
   char *buf = format("%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
   // Tokenize the resulting string.
   Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf), NULL);
   align_token(tok, lhs);
-  if (tok->next->kind != TK_EOF)
-    error_tok(lhs, "pasting forms '%s', an invalid token", buf);
 
+  if (tok->next->kind != TK_EOF) {
+    if (opt_cc1_asm_pp)
+      return lhs->next = tok->next;
+    error_tok(lhs, "pasting forms '%s', an invalid token", buf);
+  }
   Token *t = lhs->alloc_next;
   *lhs = *tok;
   lhs->alloc_next = t;
+  return lhs;
 }
 
 // Replace func-like macro parameters with given arguments.
@@ -779,13 +783,13 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           continue;
 
         if (arg->tok->kind != TK_PMARK)
-          paste(cur, arg->tok);
+          cur = paste(cur, arg->tok);
 
         for (Token *t = arg->tok->next; t->kind != TK_EOF; t = t->next)
           cur = cur->next = copy_token(t);
         continue;
       }
-      paste(cur, tok->next);
+      cur = paste(cur, tok->next);
       tok = tok->next->next;
       continue;
     }
