@@ -156,6 +156,7 @@ typedef enum {
   TK_PUNCT,   // Punctuators
   TK_KEYWORD, // Keywords
   TK_STR,     // String literals
+  TK_ASM_STR,
   TK_INT_NUM, // Integer Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
   TK_FMARK,   // Filemarkers for -E
@@ -163,7 +164,6 @@ typedef enum {
   TK_ATTR,    // GNU attribute
   TK_BATTR,   // C23 attribute
   TK_EOF,     // End-of-file markers
-
   TK_return,
   TK_if,
   TK_else,

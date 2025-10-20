@@ -654,7 +654,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
     if ((t->has_space || t->at_bol) && len != 1)
       len++;
 
-    if (add_slash && (t->kind == TK_STR || t->kind == TK_INT_NUM))
+    if (add_slash && (t->kind == TK_INT_NUM || t->kind == TK_STR || t->kind == TK_ASM_STR))
       for (int i = 0; i < t->len; i++)
         if (t->loc[i] == '\\' || t->loc[i] == '"')
           len++;
@@ -670,7 +670,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
     if ((t->has_space || t->at_bol) && pos != 0)
       buf[pos++] = ' ';
 
-    if (add_slash && (t->kind == TK_STR || t->kind == TK_INT_NUM)) {
+    if (add_slash && (t->kind == TK_INT_NUM || t->kind == TK_STR || t->kind == TK_ASM_STR)) {
       for (int i = 0; i < t->len; i++) {
         if (t->loc[i] == '\\' || t->loc[i] == '"')
           buf[pos++] = '\\';
@@ -1103,7 +1103,7 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
   }
 
   char *filename = NULL;
-  if (tok->kind == TK_STR) {
+  if (tok->kind == TK_STR || tok->kind == TK_ASM_STR) {
     // Pattern 1: #include "foo.h"
     // A double-quoted filename for #include is a special kind of
     // token, and we don't want to interpret any escape sequences in it.
@@ -1279,7 +1279,7 @@ static void read_line_marker(Token **rest, Token *tok) {
   if (tok->kind == TK_EOF)
     return;
 
-  if (tok->kind != TK_STR)
+  if (tok->kind != TK_STR && tok->kind != TK_ASM_STR)
     error_tok(tok, "filename expected");
 
   start->file->display_file = add_input_file(tok->str, NULL, NULL);
@@ -1672,7 +1672,7 @@ static Token *pragma_macro(Token *start) {
       tok = skip(tok, "(");
       continue;
     case 1:
-      if (tok->kind != TK_STR)
+      if (tok->kind != TK_STR && tok->kind != TK_ASM_STR)
         error_tok(tok, "expected string literal");
       str_tok = tok;
       tok = tok->next;

@@ -450,6 +450,25 @@ static uint32_t read_escape_seq(char **new_pos, char *p) {
   }
 }
 
+static Token *asm_string_literal(char *p, char end) {
+  char *start = p++;
+  bool is_closed = false;
+  for (;;) {
+    if (*p == end) {
+      is_closed = true;
+      break;
+    }
+    if (*p == '\n' || *p == '\0')
+      break;
+    if (*p == '\\')
+      p++;
+    p++;
+  }
+  Token *tok = new_token(TK_ASM_STR, start, p + is_closed);
+  tok->str = strndup(start + 1, p - start - 1);
+  return tok;
+}
+
 // Find a closing double-quote.
 static char *string_literal_end(char *p) {
   char *start = p;
@@ -950,74 +969,87 @@ Token *tokenize(File *file, Token **end) {
       continue;
     }
 
-    // String literal
-    if (*p == '"') {
-      cur = cur->next = read_string_literal(p, p, ty_pchar);
-      p += cur->len;
-      continue;
-    }
+    if (opt_cc1_asm_pp) {
+      if (*p == '"') {
+        cur = cur->next = asm_string_literal(p, '"');
+        p += cur->len;
+        continue;
+      }
+      if (*p == '\'') {
+        cur = cur->next = asm_string_literal(p, '\'');
+        p += cur->len;
+        continue;
+      }
+    } else {
+      // String literal
+      if (*p == '"') {
+        cur = cur->next = read_string_literal(p, p, ty_pchar);
+        p += cur->len;
+        continue;
+      }
 
-    // UTF-8 string literal
-    if (startswith3(p, 'u', '8', '\"')) {
-      cur = cur->next = read_string_literal(p, p + 2, opt_std >= STD_C23 ? ty_uchar : ty_pchar);
-      p += cur->len;
-      continue;
-    }
+      // UTF-8 string literal
+      if (startswith3(p, 'u', '8', '\"')) {
+        cur = cur->next = read_string_literal(p, p + 2, opt_std >= STD_C23 ? ty_uchar : ty_pchar);
+        p += cur->len;
+        continue;
+      }
 
-    // UTF-16 string literal
-    if (startswith2(p, 'u', '\"')) {
-      cur = cur->next = read_utf16_string_literal(p, p + 1);
-      p += cur->len;
-      continue;
-    }
+      // UTF-16 string literal
+      if (startswith2(p, 'u', '\"')) {
+        cur = cur->next = read_utf16_string_literal(p, p + 1);
+        p += cur->len;
+        continue;
+      }
 
-    // Wide string literal
-    if (startswith2(p, 'L', '\"')) {
-      cur = cur->next = read_utf32_string_literal(p, p + 1, ty_wchar_t);
-      p += cur->len;
-      continue;
-    }
+      // Wide string literal
+      if (startswith2(p, 'L', '\"')) {
+        cur = cur->next = read_utf32_string_literal(p, p + 1, ty_wchar_t);
+        p += cur->len;
+        continue;
+      }
 
-    // UTF-32 string literal
-    if (startswith2(p, 'U', '\"')) {
-      cur = cur->next = read_utf32_string_literal(p, p + 1, ty_char32_t);
-      p += cur->len;
-      continue;
-    }
+      // UTF-32 string literal
+      if (startswith2(p, 'U', '\"')) {
+        cur = cur->next = read_utf32_string_literal(p, p + 1, ty_char32_t);
+        p += cur->len;
+        continue;
+      }
 
-    // Character literal
-    if (*p == '\'') {
-      cur = cur->next = read_char_literal(p);
-      p += cur->len;
-      continue;
-    }
+      // Character literal
+      if (*p == '\'') {
+        cur = cur->next = read_char_literal(p);
+        p += cur->len;
+        continue;
+      }
 
-    // UTF-8 character literal
-    if (startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
-      cur = cur->next = read_unicode_char_literal(p, p + 2, ty_uchar);
-      p += cur->len;
-      continue;
-    }
+      // UTF-8 character literal
+      if (startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
+        cur = cur->next = read_unicode_char_literal(p, p + 2, ty_uchar);
+        p += cur->len;
+        continue;
+      }
 
-    // UTF-16 character literal
-    if (startswith2(p, 'u', '\'')) {
-      cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char16_t);
-      p += cur->len;
-      continue;
-    }
+      // UTF-16 character literal
+      if (startswith2(p, 'u', '\'')) {
+        cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char16_t);
+        p += cur->len;
+        continue;
+      }
 
-    // Wide character literal
-    if (startswith2(p, 'L', '\'')) {
-      cur = cur->next = read_unicode_char_literal(p, p + 1, ty_wchar_t);
-      p += cur->len;
-      continue;
-    }
+      // Wide character literal
+      if (startswith2(p, 'L', '\'')) {
+        cur = cur->next = read_unicode_char_literal(p, p + 1, ty_wchar_t);
+        p += cur->len;
+        continue;
+      }
 
-    // UTF-32 character literal
-    if (startswith2(p, 'U', '\'')) {
-      cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char32_t);
-      p += cur->len;
-      continue;
+      // UTF-32 character literal
+      if (startswith2(p, 'U', '\'')) {
+        cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char32_t);
+        p += cur->len;
+        continue;
+      }
     }
 
     // Identifier or keyword
