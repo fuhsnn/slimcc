@@ -8,11 +8,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - { vm: main, file: debian_asan }
           - { vm: interop, file: debian_asan_interop }
+          - { vm: main, file: debian_asan_13 }
+          - { vm: debian12, file: debian_asan_12 }
+          - { vm: cctest, file: debian_asan_cctest }
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -31,6 +33,7 @@ jobs:
         with:
           name: ${{ matrix.vm }}
           path: /tmp/${{ matrix.vm }}.tar
+          compression-level: 0
 
   run:
     runs-on: ubuntu-latest
@@ -39,43 +42,43 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { vm: interop, proj: test_bfs }
-          - { vm: interop, proj: test_c23doku }
           - { vm: interop, proj: test_c3 }
           - { vm: interop, proj: test_flex }
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
-          - { vm: interop, proj: test_lwan }
-          - { vm: interop, proj: test_micropython }
+          - { vm: interop, proj: test_libxo_chimerautils }
           - { vm: interop, proj: test_msgpack }
           - { vm: interop, proj: test_muon }
           - { vm: interop, proj: test_nob }
-          - { vm: interop, proj: test_quickjs }
           - { vm: interop, proj: test_redis }
           - { vm: interop, proj: test_rvvm }
           - { vm: interop, proj: test_sokol }
-          - { vm: interop, proj: test_valkey }
-          - { vm: interop, proj: test_wasm3 }
           - { vm: interop, proj: test_wuffs }
+          - { vm: interop, proj: build_cairo }
+          - { vm: interop, proj: build_foot }
           - { vm: interop, proj: build_glfw }
-          - { vm: interop, proj: build_luajit }
+          - { vm: interop, proj: build_i3 }
           - { vm: interop, proj: build_ncurses }
           - { vm: interop, proj: build_nuklear }
           - { vm: interop, proj: build_q2rtx }
           - { vm: interop, proj: build_quake3e }
           - { vm: interop, proj: build_raylib_raygui }
           - { vm: interop, proj: build_sdl3 }
+          - { vm: interop, proj: build_wayst }
+          - { vm: interop, proj: build_wlroots_sway }
           - { vm: interop, proj: build_yquake2 }
           - { vm: main, proj: test_ag }
+          - { vm: main, proj: test_apk }
           - { vm: main, proj: test_bash }
           - { vm: main, proj: test_bearssl }
+          - { vm: main, proj: test_bfs }
           - { vm: main, proj: test_binutils }
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
-          - { vm: main, proj: test_busybox }
           - { vm: main, proj: test_bzip2 }
           - { vm: main, proj: test_bzip3 }
+          - { vm: main, proj: test_c23doku }
           - { vm: main, proj: test_calc }
           - { vm: main, proj: test_cello }
           - { vm: main, proj: test_cjson }
@@ -84,19 +87,22 @@ jobs:
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_cproc }
           - { vm: main, proj: test_curl }
+          - { vm: main, proj: test_diffutils }
           - { vm: main, proj: test_doom }
           - { vm: main, proj: test_elk }
           - { vm: main, proj: test_espruino }
           - { vm: main, proj: test_file }
+          - { vm: main, proj: test_findutils }
           - { vm: main, proj: test_fossil }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
-          - { vm: main, proj: test_glib }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_go }
+          - { vm: main, proj: test_got }
           - { vm: main, proj: test_gsed }
           - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
+          - { vm: main, proj: test_hare }
           - { vm: main, proj: test_janet }
           - { vm: main, proj: test_jemalloc }
           - { vm: main, proj: test_jerryscript }
@@ -125,16 +131,19 @@ jobs:
           - { vm: main, proj: test_libxml }
           - { vm: main, proj: test_libyaml }
           - { vm: main, proj: test_lua }
+          - { vm: main, proj: test_lwan }
           - { vm: main, proj: test_mawk }
           - { vm: main, proj: test_mbedtls }
           - { vm: main, proj: test_memcached }
           - { vm: main, proj: test_metalang99 }
+          - { vm: main, proj: test_micropython }
           - { vm: main, proj: test_mimalloc }
           - { vm: main, proj: test_mruby }
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_noplate }
           - { vm: main, proj: test_ocaml }
           - { vm: main, proj: test_oniguruma }
+          - { vm: main, proj: test_openrc }
           - { vm: main, proj: test_openssh }
           - { vm: main, proj: test_openssl }
           - { vm: main, proj: test_pacman }
@@ -144,16 +153,19 @@ jobs:
           - { vm: main, proj: test_php }
           - { vm: main, proj: test_postgres }
           - { vm: main, proj: test_python }
-          - { vm: main, proj: test_qbe_hare }
+          - { vm: main, proj: test_qbe }
+          - { vm: main, proj: test_quickjs }
+          - { vm: main, proj: test_rsync }
           - { vm: main, proj: test_ruby }
           - { vm: main, proj: test_samba }
           - { vm: main, proj: test_scrapscript }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }
-          - { vm: main, proj: test_tinycc }
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }
+          - { vm: main, proj: test_valkey }
           - { vm: main, proj: test_vim }
+          - { vm: main, proj: test_wasm3 }
           - { vm: main, proj: test_wget }
           - { vm: main, proj: test_wolfssl }
           - { vm: main, proj: test_xxhash }
@@ -169,16 +181,27 @@ jobs:
           - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
           - { vm: main, proj: build_libev }
+          - { vm: main, proj: build_luajit }
           - { vm: main, proj: build_lynx }
+          - { vm: main, proj: build_mg }
           - { vm: main, proj: build_nano }
+          - { vm: main, proj: build_oksh }
+          - { vm: main, proj: build_simplecc }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_tin }
           - { vm: main, proj: build_zig }
           - { vm: main, proj: bootstrap_musl }
-          - { vm: main, proj: bootstrap_uclibcng }
+          - { vm: debian12, proj: test_busybox }
+          - { vm: debian12, proj: test_glib }
+          - { vm: debian12, proj: bootstrap_uclibcng }
+          - { vm: cctest, proj: cctest_lcc }
+          - { vm: cctest, proj: cctest_wacc }
+          - { vm: cctest, proj: test_kefir }
+          - { vm: cctest, proj: test_tinycc }
+          - { vm: cctest, proj: build_lacc }
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ matrix.vm }}
           path: /tmp
@@ -190,13 +213,13 @@ jobs:
         run: >
           sudo docker run ${{ matrix.vm }}
           su non-root -c
-          'bash "$0" "$1"' linux_thirdparty.bash ${{ matrix.proj }}
+          'bash "$0" "$1"' /work/slimcc/scripts/linux_thirdparty.bash ${{ matrix.proj }}
 
   musl-bootstrap:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
