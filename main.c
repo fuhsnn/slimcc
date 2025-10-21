@@ -53,9 +53,11 @@ static StringArray opt_include;
 bool opt_E;
 bool opt_dM;
 static bool opt_P;
-static bool opt_M;
-static bool opt_MD;
+bool opt_M;
 static bool opt_MM;
+static bool opt_MD;
+static bool opt_MMD;
+static bool opt_MG;
 static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
@@ -505,12 +507,17 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (!strcmp(argv[i], "-MMD")) {
-      opt_MD = opt_MM = true;
+      opt_MD = opt_MMD = true;
       continue;
     }
 
     if (take_arg(argv, &i, &arg, "-MF")) {
       opt_MF = arg;
+      continue;
+    }
+
+    if (!strcmp(argv[i], "-MG")) {
+      opt_MG = true;
       continue;
     }
 
@@ -703,6 +710,9 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   if (!opt_E && opt_dM)
     error("option -dM without -E not supported");
 
+  if (opt_MG && !opt_M)
+    error("option -MG must be used with -M or -MM");
+
   if (opt_disable_visibility && opt_visibility)
     error("-fvisibility disabled with -fdisable-visibility");
 
@@ -883,9 +893,22 @@ bool in_sysincl_path(char *path) {
   return false;
 }
 
+bool ignore_missing_dep(char *path, char *filename, Token *tok) {
+  if (!path) {
+    if (opt_MG) {
+      add_dep_file(filename, false);
+      return true;
+    }
+    if (tok)
+      error_tok(tok, "file not found");
+    error("`%s` file not found", filename);
+  }
+  return false;
+}
+
 void add_dep_file(char *path, bool is_sys) {
   if (opt_M || opt_MD) {
-    if (is_sys && opt_MM)
+    if (is_sys && (opt_MM || opt_MMD))
       return;
 
     static HashMap map;
@@ -940,14 +963,10 @@ static Token *must_tokenize_file(char *path, Token **end) {
   return tok;
 }
 
-static char *get_path(char *mode, char *incl) {
-  if (file_exists(incl)) {
+static char *get_path(char *incl) {
+  if (file_exists(incl))
     return incl;
-  }
-  char *path = search_include_paths(incl);
-  if (!path)
-    error("%s: %s: %s", mode, incl, strerror(errno));
-  return path;
+  return search_include_paths(incl);
 }
 
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
@@ -962,7 +981,9 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   Token imacros_head = {0};
   Token *imacros_cur = &imacros_head;
   for (int i = 0; i < opt_imacros.len; i++) {
-    char *path = get_path("-imacros", opt_imacros.data[i]);
+    char *path = get_path(opt_imacros.data[i]);
+    if (ignore_missing_dep(path, opt_imacros.data[i], NULL))
+      continue;
     Token *end = NULL;
     imacros_cur->next = must_tokenize_file(path, &end);
     if (end)
@@ -973,7 +994,9 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   Token head = {0};
   Token *cur = &head;
   for (int i = 0; i < opt_include.len; i++) {
-    char *path = get_path("-include", opt_include.data[i]);
+    char *path = get_path(opt_include.data[i]);
+    if (ignore_missing_dep(path, opt_include.data[i], NULL))
+      continue;
     Token *end = NULL;
     cur->next = must_tokenize_file(path, &end);
     if (end)

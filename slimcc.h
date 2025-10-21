@@ -904,8 +904,8 @@ typedef enum {
 
 bool file_exists(char *path);
 bool in_sysincl_path(char *path);
+bool ignore_missing_dep(char *path, char *filename, Token *tok);
 void add_dep_file(char *path, bool is_sys);
-
 char *find_dir_w_file(char *pattern);
 void run_subprocess(char **argv);
 void set_fpic(char *lvl);
@@ -921,6 +921,7 @@ extern StringArray iquote_paths;
 extern StringArray display_files;
 extern bool opt_E;
 extern bool opt_dM;
+extern bool opt_M;
 extern bool opt_fpic;
 extern bool opt_fpie;
 extern bool opt_femulated_tls;

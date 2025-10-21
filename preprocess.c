@@ -1145,9 +1145,6 @@ static char *read_include_filename(Token *tok, bool *is_dquote) {
 }
 
 static Token *include_file(Token *tok, char *path, Token *filename_tok, int *incl_no) {
-  if (!path)
-    error_tok(filename_tok, "file not found");
-
   // Check for "#pragma once"
   if (hashmap_get(&pragma_once, realpath(path, NULL)))
     return tok;
@@ -1354,6 +1351,8 @@ static Token *directives(Token **cur, Token *start) {
     bool is_dquote;
     char *filename = read_filename(&tok, split_line(&cont, tok->next), &is_dquote);
     char *path = search_include_paths2(filename, start, is_dquote, NULL);
+    if (ignore_missing_dep(path, filename, start->next->next))
+      return cont;
     return embed_file(cont, tok, path, start->next->next);
   }
 
@@ -1362,6 +1361,8 @@ static Token *directives(Token **cur, Token *start) {
     char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
     int incl_no = -1;
     char *path = search_include_paths2(filename, start, is_dquote, &incl_no);
+    if (ignore_missing_dep(path, filename, start->next->next))
+      return tok;
     return include_file(tok, path, start->next->next, &incl_no);
   }
 
@@ -1372,6 +1373,8 @@ static Token *directives(Token **cur, Token *start) {
     int incl_no = tok->file->incl_no + 1;
     char *filename = read_include_filename(split_line(&tok, tok->next), &(bool){0});
     char *path = search_include_next(filename, start->file->name, &incl_no);
+    if (ignore_missing_dep(path, filename, start->next->next))
+      return tok;
     return include_file(tok, path, start->next->next, &incl_no);
   }
 
@@ -2097,7 +2100,7 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
 
   tok = preprocess2(tok, true);
 
-  if (opt_E)
+  if (opt_E || opt_M)
     return tok;
 
   {
