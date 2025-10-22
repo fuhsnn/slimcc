@@ -1,3 +1,5 @@
+testcc=$1
+
 tmp=`mktemp -d /tmp/testcc-test-XXXXXX`
 trap 'rm -rf $tmp' INT TERM HUP EXIT
 
@@ -5,11 +7,6 @@ trap 'rm -rf $tmp' INT TERM HUP EXIT
 
 if [ ! $? -eq 0 ]; then
     echo 'please set FILE to Fine Free File Command from https://www.darwinsys.com/file'
-    exit 1
-fi
-
-if [ -z "$CC" ]; then
-    echo "please set CC"
     exit 1
 fi
 
@@ -26,7 +23,7 @@ echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
 echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
 
 test_obj() {
-    $CC $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c
+    $testcc $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c
     check "$1 build"
 
     STR=`$FILE $tmp/foo`

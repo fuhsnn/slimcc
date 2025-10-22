@@ -79,9 +79,11 @@ test-asan: $(TESTS_ASAN)
 	./slimcc-asan scripts/amalgamation.c -c -o/dev/null
 	./slimcc-asan -hashmap-test
 
-test-abi: slimcc-asan test/host/common.o
-	bash scripts/test_abi.bash $(PWD)/slimcc-asan $(CC)
-	bash scripts/test_abi.bash $(CC) $(PWD)/slimcc-asan
+test-misc: slimcc-asan test/host/common.o
+	$(SHELL) scripts/test_abi.sh $(PWD)/slimcc-asan $(CC)
+	$(SHELL) scripts/test_abi.sh $(CC) $(PWD)/slimcc-asan
+	$(SHELL) scripts/test_include_next.sh $(PWD)/slimcc-asan
+	FILE=file $(SHELL) scripts/test_linker.sh $(PWD)/slimcc-asan
 
 # Fil-C build
 

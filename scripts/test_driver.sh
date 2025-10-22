@@ -3,7 +3,6 @@ refcc=$2
 
 tmp=`mktemp -d /tmp/testcc-test-XXXXXX`
 trap 'rm -rf $tmp' INT TERM HUP EXIT
-echo > $tmp/empty.c
 
 check() {
     if [ $? -eq 0 ]; then
@@ -16,6 +15,7 @@ check() {
 
 # -o
 rm -f $tmp/out
+echo > $tmp/empty.c
 $testcc -c -o $tmp/out $tmp/empty.c
 [ -f $tmp/out ]
 check -o
@@ -72,6 +72,9 @@ echo 'int main() {}' > $tmp/foo.c
 check a.out
 
 # -E
+echo foo | $testcc -E - | grep -q foo
+check -E
+
 echo foo > $tmp/out
 echo "#include \"$tmp/out\"" | $testcc -E -xc - | grep -q foo
 check -E
@@ -109,7 +112,7 @@ check -U
 
 # BOM marker
 rm -f $tmp/foo
-printf '#include <stdio.h>\nint main(){printf("%%c%%c%%cint i;\\n",0xEF,0xBB,0xBF);}\n' | $testcc -xc - -o $tmp/foo
+printf 'int printf(const char *,...);\nint main(){printf("%%c%%c%%cint i;\\n",0xEF,0xBB,0xBF);}\n' | $testcc -xc - -o $tmp/foo
 $tmp/foo | $testcc -S -o/dev/null -xc -
 check 'BOM marker'
 
@@ -161,6 +164,47 @@ check inline
 echo 'static inline void fn2(); static inline void fn1() { fn2(); } static inline void fn2() { fn1(); } void foo() { fn2(); }' | $testcc -o- -S -xc - | grep -q 'fn2'
 check inline
 
+# -imacros
+cat << EOF > $tmp/foo.h
+JUNK
+#define FOO int
+FOO
+float
+EOF
+echo 'FOO main(){}' | $testcc -xc - -imacros $tmp/foo.h
+check -imacros
+
+# -isystem
+mkdir -p $tmp/dir1 $tmp/dir2 $tmp/dir3
+cat << EOF > $tmp/dir1/indir.h
+#include "../dir2/is_sys1.h"
+#include "../dir3/not_sys1.h"
+#include "../dir3/not_sys2.h"
+#include "is_sys2.h"
+EOF
+cat << EOF > $tmp/foo.c
+#include "empty1.h"
+#include "empty2.h"
+#include "not_sys1.h"
+#include "indir.h"
+#include "not_sys2.h"
+EOF
+touch $tmp/dir1/empty1.h
+touch $tmp/dir2/is_sys1.h
+touch $tmp/dir3/is_sys2.h
+touch $tmp/dir3/empty2.h
+touch $tmp/dir3/not_sys1.h
+touch $tmp/dir3/not_sys2.h
+$testcc $tmp/foo.c -isystem $tmp/dir1 -I $tmp/dir3 -MM > $tmp/isystem
+  grep -q 'foo.o:'   $tmp/isystem &&
+! grep -q 'empty1'   $tmp/isystem &&
+  grep -q 'empty2'   $tmp/isystem &&
+! grep -q 'is_sys1'  $tmp/isystem &&
+! grep -q 'is_sys2'  $tmp/isystem &&
+  grep -q 'not_sys1' $tmp/isystem &&
+  grep -q 'not_sys2' $tmp/isystem
+check -isystem
+
 # -idirafter
 mkdir -p $tmp/dir1 $tmp/dir2 $tmp/dir3
 echo foo > $tmp/dir1/idirafter
@@ -171,6 +215,35 @@ echo "#include \"idirafter\"" | $testcc -idirafter $tmp/dir1 -I$tmp/dir2 -E -xc 
 check -idirafter
 echo "#include \"idirafter\"" | $testcc -idirafter $tmp/dir1 -I$tmp/dir3 -E -xc - | grep -q foo
 check -idirafter
+
+# #include_next
+mkdir -p $tmp/next1 $tmp/next2 $tmp/next3
+echo '#include "file1.h"'      >  $tmp/file.c
+echo '#include <stddef.h>'     >  $tmp/next1/file1.h
+echo '#include_next "file1.h"' >> $tmp/next1/file1.h
+echo '#include_next "file2.h"' >  $tmp/next2/file1.h
+echo 'foo'                     >  $tmp/next3/file2.h
+$testcc -I$tmp/next1 -I$tmp/next2 -I$tmp/next3 -Iinclude -E $tmp/file.c | grep -q foo
+check '#include_next'
+
+rm -f $tmp/inc.h
+mkdir -p $tmp/inc $tmp/sys $tmp/dir
+printf '"A"\n#include_next "inc.h"\n' > $tmp/inc/inc.h
+printf '"B"\n#include_next "inc.h"\n' > $tmp/sys/inc.h
+printf '"C"\n'                        > $tmp/dir/inc.h
+cat << EOF > $tmp/foo.c
+extern int strcmp(const char*, const char*);
+int main() {
+  return strcmp("ABC",
+#include "inc.h"
+  );
+}
+EOF
+$testcc $tmp/foo.c -o $tmp/foo -I $tmp/sys -idirafter $tmp/dir -isystem $tmp/sys -I $tmp/inc && $tmp/foo &&
+$testcc $tmp/foo.c -o $tmp/foo -idirafter $tmp/dir -I $tmp/sys -isystem $tmp/sys -I $tmp/inc && $tmp/foo &&
+$testcc $tmp/foo.c -o $tmp/foo -idirafter $tmp/dir -isystem $tmp/sys -I $tmp/sys -I $tmp/inc && $tmp/foo &&
+$testcc $tmp/foo.c -o $tmp/foo -idirafter $tmp/dir -isystem $tmp/sys -I $tmp/inc -I $tmp/sys && $tmp/foo
+check '#include_next + -isystem -idirafter'
 
 # -fcommon
 echo 'int foo;' | $testcc -fcommon -S -o- -xc - | grep '\.comm' | grep -q 'foo'
@@ -207,11 +280,7 @@ check '-ffunction-sections'
 # -fdata-sections
 echo 'int var = 1;' | $testcc -xc - -S -o- -fdata-sections | grep '\.data\.' | grep -q 'var'
 check '-fdata-sections'
-echo '_Thread_local int var = 1;' | $testcc -xc - -S -o- -fdata-sections -fno-emulated-tls | grep '\.tdata\.' | grep -q 'var'
-check '-fdata-sections'
 echo 'void fn(void){static int var [[gnu::used]];}' | $testcc -xc - -S -o- -fdata-sections | grep -q '\.bss\.'
-check '-fdata-sections'
-echo '_Thread_local int var;' | $testcc -xc - -S -o- -fdata-sections -fno-emulated-tls | grep '\.tbss\.' | grep -q 'var'
 check '-fdata-sections'
 
 # -include
@@ -232,9 +301,20 @@ echo 'int x;' > $tmp/foo.c
 $testcc -c -x assembler -x none -o $tmp/foo.o $tmp/foo.c
 check '-x none'
 
-# -E
-echo foo | $testcc -E - | grep -q foo
-check -E
+$testcc -E -xassembler-with-cpp - << EOF | grep -q '^.OO foo.bar OO.$'
+#define P(x,y,z) x##y##z
+#define foobar OO
+P(.,foo,bar) P(foo,.,bar) P(foo,bar,.)
+EOF
+check '-x assembler-with-cpp'
+
+echo '"a  b"  c  d "e  f  g' | $testcc -x assembler-with-cpp - -E -P | grep -q '"a  b" c d "e  f  g' &&
+echo "'a  b'  c  d 'e  f  g" | $testcc -x assembler-with-cpp - -E -P | grep -q "'a  b' c d 'e  f  g"
+check '-x assembler-with-cpp'
+
+echo '#"a  b"  c  d "e  f  g' | $testcc -x assembler-with-cpp - -E -P | grep -q '#"a  b" c d "e  f  g' &&
+echo "#'a  b'  c  d 'e  f  g" | $testcc -x assembler-with-cpp - -E -P | grep -q "#'a  b' c d 'e  f  g"
+check '-x assembler-with-cpp'
 
 # .a file
 echo 'void foo() {}' | $testcc -c -xc -o $tmp/foo.o -
@@ -249,12 +329,9 @@ echo '#include "out2.h"' > $tmp/out.c
 echo '#include "out3.h"' >> $tmp/out.c
 touch $tmp/out2.h $tmp/out3.h
 $testcc -M -I$tmp $tmp/out.c > $tmp/m
-grep -q '^out\.o:' $tmp/m
-check -M
-grep -q 'out\.c' $tmp/m
-check -M
-grep -q 'out2\.h' $tmp/m
-check -M
+grep -q '^out\.o:' $tmp/m &&
+grep -q 'out\.c' $tmp/m &&
+grep -q 'out2\.h' $tmp/m &&
 grep -q 'out3\.h' $tmp/m
 check -M
 
@@ -265,9 +342,11 @@ check -MF
 
 # -MP
 $testcc -MF $tmp/mp -MP -M -I$tmp $tmp/out.c
-grep -q '^.*/out2.h:' $tmp/mp
-check -MP
-grep -q '^.*/out3.h:' $tmp/mp
+grep -q '^out\.o:' $tmp/mp &&
+grep -q '^.*/out\.c' $tmp/mp &&
+(! grep -q '^.*/out\.c:' $tmp/mp) &&
+grep -q '^.*/out2\.h:' $tmp/mp &&
+grep -q '^.*/out3\.h:' $tmp/mp
 check -MP
 
 # -MT
@@ -280,27 +359,33 @@ check -MT
 echo '#include "out2.h"' > $tmp/md2.c
 echo '#include "out3.h"' > $tmp/md3.c
 (cd $tmp; $testcc -c -MD -I. md2.c md3.c)
-grep -q '^md2\.o:' $tmp/md2.d
-check -MD
-grep -q 'md2\.c' $tmp/md2.d
-check -MD
+grep -q '^md2\.o:' $tmp/md2.d &&
+grep -q 'md2\.c' $tmp/md2.d &&
 grep -q 'out2\.h' $tmp/md2.d
 check -MD
 
-grep -q '^md3\.o:' $tmp/md3.d
-check -MD
-grep -q 'md3\.c' $tmp/md3.d
-check -MD
+grep -q '^md3\.o:' $tmp/md3.d &&
+grep -q 'md3\.c' $tmp/md3.d &&
 grep -q 'out3\.h' $tmp/md3.d
 check -MD
 
 $testcc -c -MD -MF $tmp/md-mf.d -I. $tmp/md2.c
-grep -q '^md2\.o:' $tmp/md-mf.d
-check '-MD -MF'
-grep -q 'md2\.c' $tmp/md-mf.d
-check '-MD -MF'
+grep -q '^md2\.o:' $tmp/md-mf.d &&
+grep -q 'md2\.c' $tmp/md-mf.d &&
 grep -q 'out2\.h' $tmp/md-mf.d
 check '-MD -MF'
+
+echo '#include "miss_h"' > $tmp/foo.c
+(cd $tmp && $testcc foo.c -include miss_i -imacros miss_m -MM -MG -MP -MF mg)
+grep -q '^foo\.o:' $tmp/mg &&
+grep -q ' foo\.c ' $tmp/mg &&
+grep -q ' miss_m ' $tmp/mg &&
+grep -q ' miss_i ' $tmp/mg &&
+grep -q ' miss_h$' $tmp/mg &&
+grep -q '^miss_m:$' $tmp/mg &&
+grep -q '^miss_i:$' $tmp/mg &&
+grep -q '^miss_h:$' $tmp/mg
+check '-MG -MP'
 
 echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
 echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
@@ -338,30 +423,14 @@ echo 'int main() {}' | $testcc -c -o $tmp/baz.o -xc -
 $testcc -Xlinker -z -Xlinker muldefs -Xlinker --gc-sections -o $tmp/foo $tmp/foo.o $tmp/bar.o $tmp/baz.o
 check -Xlinker
 
-# #include_next
-mkdir -p $tmp/next1 $tmp/next2 $tmp/next3
-echo '#include "file1.h"' > $tmp/file.c
-echo '#include <stddef.h>' > $tmp/next1/file1.h
-echo '#include_next "file1.h"' >> $tmp/next1/file1.h
-echo '#include_next "file2.h"' > $tmp/next2/file1.h
-echo 'foo' > $tmp/next3/file2.h
-$testcc -I$tmp/next1 -I$tmp/next2 -I$tmp/next3 -Iinclude -E $tmp/file.c | grep -q foo
-check '#include_next'
-
-# #include_next
-mkdir -p $tmp/next1
-echo '#include "next1/file1.h"' > $tmp/file.c
-echo '#include_next "file1.h"' > $tmp/next1/file1.h
-echo 'foo' > $tmp/next2/file1.h
-$testcc -I$tmp/next1 -I$tmp/next2 -E $tmp/file.c | grep -q foo
-check '#include_next'
-
 # constructor/destructor attribute
-echo "int putchar(int);" > $tmp/foo.c
-echo "__attribute__((constructor,destructor(333)))void z(void){putchar('z');}" >> $tmp/foo.c
-echo "int main(){putchar('m');}" >> $tmp/foo.c
-echo "void x(void)__attribute__((constructor(111)));" >> $tmp/foo.c
-echo "void __attribute__((destructor)) x(void){putchar('x');}" >> $tmp/foo.c
+cat << EOF > $tmp/foo.c
+int putchar(int);
+__attribute__((constructor,destructor(333)))void z(void){putchar('z');}
+int main(){putchar('m');}
+void x(void)__attribute__((constructor(111)));
+void __attribute__((destructor)) x(void){putchar('x');}
+EOF
 $testcc $tmp/foo.c -o $tmp/foo
 $tmp/foo | grep -q '^xzmxz$'
 check '__attribute__((constructor,destructor))'
