@@ -79,7 +79,6 @@ Token *tok_freelist;
 static char *base_file;
 struct tm *cur_time;
 
-static Token *preprocess2(Token *tok);
 static Token *preprocess3(Token *tok);
 static bool has_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok, bool is_root);
@@ -1305,7 +1304,7 @@ static void finalize_tok2(Token *tok) {
 
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
-static Token *preprocess2(Token *tok) {
+static Token *preprocess2(Token *tok, bool is_final) {
   Token head = {0};
   Token *cur = &head;
   Macro *start_m = locked_macros;
@@ -1319,12 +1318,13 @@ static Token *preprocess2(Token *tok) {
       tok = directives(&cur, tok);
       continue;
     }
-    finalize_tok(tok);
+    if (is_final)
+      finalize_tok(tok);
 
     cur = cur->next = tok;
     tok = tok->next;
   }
-  tok->is_root = true;
+  tok->is_root = is_final;
   cur->next = tok;
 
   CondIncl *cond;
@@ -2123,8 +2123,9 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
   base_file = input_file;
 
   if (imacros_tok)
-    imacros_tok = preprocess2(imacros_tok);
-  tok = preprocess2(tok);
+    preprocess2(imacros_tok, false);
+
+  tok = preprocess2(tok, true);
 
   if (opt_E)
     return tok;
@@ -2157,13 +2158,6 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
   if (!(free_alloc = check_mem_usage())) {
     arena_off(&pp_arena);
     return preprocess3(tok);
-  }
-
-  if (imacros_tok) {
-    Token *t = imacros_tok;
-    while (t->kind != TK_EOF)
-      t->is_root = false;
-    t->is_root = false;
   }
 
   Token *t = tok;
