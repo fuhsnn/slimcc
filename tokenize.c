@@ -721,6 +721,8 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
       p += 2;
       base = 2;
     } else {
+      if (Casecmp(p[1], 'o') && Inrange(p[2], '0', '7'))
+        p += 2;
       base = 8;
     }
   }
