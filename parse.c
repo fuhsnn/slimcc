@@ -4220,6 +4220,69 @@ static Node *unary(Token **rest, Token *tok) {
     return node;
   }
 
+  if (tok->kind == TK_alignof) {
+    Type *ty;
+    VarAttr attr = {0};
+    int attr_align = 0;
+    if (is_typename_paren2(rest, tok->next, &ty, &attr)) {
+      attr_align = attr.align;
+    } else {
+      Node *node = unary(rest, tok->next);
+      switch (node->kind) {
+      case ND_MEMBER:
+        return new_size_t(MAX(node->m.member->ty->align, node->m.member->alt_align), tok);
+      case ND_VAR:
+        return new_size_t(node->m.var->alt_align ? node->m.var->alt_align : node->m.var->ty->align, tok);
+      }
+      add_type(node);
+      ty = node->ty;
+    }
+    while (is_array(ty))
+      ty = ty->base;
+    return new_size_t(MAX(ty->align, attr_align), tok);
+  }
+
+  if (tok->kind == TK_Countof) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+
+      if (ty->kind == TY_VLA && ty->vla_len)
+        return new_binary(ND_COMMA, node, vla_count(ty, tok, false), tok);
+    }
+    if (ty->kind == TY_VLA)
+      return vla_count(ty, tok, false);
+
+    if (ty->kind == TY_ARRAY) {
+      if (ty->size < 0)
+        error_tok(tok, "countof applied to incomplete array");
+      return new_size_t(ty->array_len, tok);
+    }
+    error_tok(tok, "countof applied to non-array type");
+  }
+
+  if (tok->kind == TK_sizeof) {
+    Type *ty;
+    if (!is_typename_paren(rest, tok->next, &ty)) {
+      Node *node = unary(rest, tok->next);
+      add_type(node);
+      ty = node->ty;
+
+      if (ty->kind == TY_VLA)
+        return new_binary(ND_COMMA, node, vla_size(ty, tok), tok);
+    }
+    if (ty->kind == TY_VLA)
+      return vla_size(ty, tok);
+
+    if (ty->is_flexible && ty->origin)
+      ty = ty->origin;
+    if (ty->size < 0)
+      error_tok(tok, "sizeof applied to incomplete type");
+    return new_size_t(ty->size, tok);
+  }
+
   Node *node = primary(&tok, tok);
   return postfix(node, rest, tok);
 }
@@ -5013,8 +5076,6 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 }
 
 static Node *primary(Token **rest, Token *tok) {
-  Token *start = tok;
-
   if (equal(tok, "(")) {
     if (is_typename(tok->next))
       return compound_literal(rest, tok);
@@ -5031,69 +5092,6 @@ static Node *primary(Token **rest, Token *tok) {
     Node *node = expr(&tok, tok->next);
     *rest = skip(tok, ")");
     return node;
-  }
-
-  if (tok->kind == TK_sizeof) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      add_type(node);
-      ty = node->ty;
-
-      if (ty->kind == TY_VLA)
-        return new_binary(ND_COMMA, node, vla_size(ty, start), tok);
-    }
-    if (ty->kind == TY_VLA)
-      return vla_size(ty, tok);
-
-    if (ty->is_flexible && ty->origin)
-      ty = ty->origin;
-    if (ty->size < 0)
-      error_tok(tok, "sizeof applied to incomplete type");
-    return new_size_t(ty->size, start);
-  }
-
-  if (tok->kind == TK_alignof) {
-    Type *ty;
-    VarAttr attr = {0};
-    int attr_align = 0;
-    if (is_typename_paren2(rest, tok->next, &ty, &attr)) {
-      attr_align = attr.align;
-    } else {
-      Node *node = unary(rest, tok->next);
-      switch (node->kind) {
-      case ND_MEMBER:
-        return new_size_t(MAX(node->m.member->ty->align, node->m.member->alt_align), tok);
-      case ND_VAR:
-        return new_size_t(node->m.var->alt_align ? node->m.var->alt_align : node->m.var->ty->align, tok);
-      }
-      add_type(node);
-      ty = node->ty;
-    }
-    while (is_array(ty))
-      ty = ty->base;
-    return new_size_t(MAX(ty->align, attr_align), tok);
-  }
-
-  if (tok->kind == TK_Countof) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      add_type(node);
-      ty = node->ty;
-
-      if (ty->kind == TY_VLA && ty->vla_len)
-        return new_binary(ND_COMMA, node, vla_count(ty, start, false), tok);
-    }
-    if (ty->kind == TY_VLA)
-      return vla_count(ty, start, false);
-
-    if (ty->kind == TY_ARRAY) {
-      if (ty->size < 0)
-        error_tok(tok, "countof applied to incomplete array");
-      return new_size_t(ty->array_len, start);
-    }
-    error_tok(tok, "countof applied to non-array type");
   }
 
   if (tok->kind == TK_Generic)
