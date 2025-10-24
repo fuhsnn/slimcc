@@ -169,6 +169,7 @@ static Token *new_fmark(Token *tok){
   t->kind = TK_FMARK;
   t->len = 0;
   t->line_no = 1;
+  t->at_bol = false;
   return t;
 }
 

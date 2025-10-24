@@ -837,7 +837,9 @@ static void print_linemarker(FILE *out, Token *tok) {
     internal_error();
   if (!strcmp(name, "-"))
     name = "<stdin>";
-  fprintf(out, "\n# %d \"%s\"\n", tok->display_line_no, name);
+  if (!tok->at_bol)
+    fprintf(out, "\n");
+  fprintf(out, "# %d \"%s\"\n", tok->display_line_no, name);
 }
 
 // Print tokens to stdout. Used for -E.
@@ -847,6 +849,10 @@ static void print_tokens(Token *tok, FILE *out) {
   tok->at_bol = false;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
+    if (tok->kind == TK_FMARK)
+      if (tok->display_file_no == tok->next->display_file_no)
+        continue;
+
     if (tok->at_bol) {
       fprintf(out, "\n");
       line++;
@@ -857,11 +863,12 @@ static void print_tokens(Token *tok, FILE *out) {
         print_linemarker(out, tok);
       } else {
         int diff = tok->display_line_no - line;
-        if (diff > 0 && diff <= 8)
+        if (diff > 0 && diff <= 8) {
           while (line++ < tok->display_line_no)
             fprintf(out, "\n");
-        else if (diff)
+        } else if (diff) {
           print_linemarker(out, tok);
+        }
       }
       line = tok->display_line_no;
     }
