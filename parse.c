@@ -2478,23 +2478,17 @@ static bool is_typename_paren(Token **rest, Token *tok, Type **ty) {
   return is_typename_paren2(rest, tok, ty, &(VarAttr){0});
 }
 
-static bool static_assertion(Token **rest, Token *tok) {
-  if (tok->kind == TK_static_assert) {
-    tok = skip(tok->next, "(");
-    int64_t result = const_expr(&tok, tok);
-    if (!result)
-      error_tok(tok, "static assertion failed");
+static void eval_static_assert(Token **rest, Token *tok) {
+  int64_t result = const_expr(&tok, skip(tok, "("));
+  if (!result)
+    error_tok(tok, "static assertion failed");
 
-    if (equal(tok, ",")) {
-      if (tok->next->kind != TK_STR)
-        error_tok(tok, "expected string literal");
-      tok = tok->next->next;
-    }
-    tok = skip(tok, ")");
-    *rest = skip(tok, ";");
-    return true;
+  if (equal(tok, ",")) {
+    if (tok->next->kind != TK_STR)
+      error_tok(tok, "expected string literal");
+    tok = tok->next->next;
   }
-  return false;
+  *rest = skip(tok, ")");
 }
 
 static AsmParam *asm_params(Token **rest, Token *tok) {
@@ -2826,14 +2820,12 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
 
-    if (!static_assertion(&tok, tok)) {
-      if (is_typename(tok)) {
-        Node *expr = declaration(&tok, tok);
-        if (expr)
-          node->ctrl.for_init = new_unary(ND_EXPR_STMT, expr, tok);
-      } else {
-        node->ctrl.for_init = expr_stmt(&tok, tok);
-      }
+    if (is_typename(tok)) {
+      Node *expr = declaration(&tok, tok);
+      if (expr)
+        node->ctrl.for_init = new_unary(ND_EXPR_STMT, expr, tok);
+    } else {
+      node->ctrl.for_init = expr_stmt(&tok, tok);
     }
 
     if (!consume(&tok, tok, ";")) {
@@ -2967,8 +2959,6 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
     if (consume(&tok, tok, ";"))
       continue;
     if (pragma_pack(&tok, tok))
-      continue;
-    if (static_assertion(&tok, tok))
       continue;
 
     Node *node;
@@ -4283,6 +4273,11 @@ static Node *unary(Token **rest, Token *tok) {
     return new_size_t(ty->size, tok);
   }
 
+  if (tok->kind == TK_static_assert) {
+    eval_static_assert(rest, tok->next);
+    return new_node(ND_NULL_EXPR, tok);
+  }
+
   Node *node = primary(&tok, tok);
   return postfix(node, rest, tok);
 }
@@ -4298,8 +4293,11 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       continue;
     if (pragma_pack(&tok, tok))
       continue;
-    if (static_assertion(&tok, tok))
+    if (tok->kind == TK_static_assert) {
+      eval_static_assert(&tok, tok->next);
+      tok = skip(tok, ";");
       continue;
+    }
 
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr, SC_NONE);
@@ -5523,7 +5521,8 @@ Obj *parse(Token *tok) {
       arena_on(&ast_arena);
       Obj *last = globals;
 
-      static_assertion(&tok, tok);
+      eval_static_assert(&tok, tok->next);
+      tok = skip(tok, ";");
 
       for (Obj *obj = last->next; obj;) {
         Obj *tmp = obj;

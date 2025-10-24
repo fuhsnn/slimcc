@@ -16,6 +16,21 @@ int main(void) {
   for (_Static_assert(1); 0;) {
     _Static_assert(1, "msg");
   }
+
+  for (static_assert(1), static_assert(1);
+    static_assert(1), 0;
+    static_assert(1), static_assert(1))
+   static_assert(1);
+
+  static_assert(1), static_assert(1);
+  (static_assert(1)), static_assert(1);
+  static_assert(1), (static_assert(1));
+  (static_assert(1, "msg"), static_assert(1));
+  static_assert(1),  ({ static_assert(1, "msg"); });
+  ({ static_assert(1), static_assert(1, "msg"); });
+
+  static_assert(2==_Generic(static_assert(1==_Generic(static_assert(1), void:1)), void:2));
+
   printf("OK\n");
   return 0;
 }
