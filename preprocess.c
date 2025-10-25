@@ -1683,6 +1683,18 @@ static Token *has_include_macro(Token *start) {
   return new_num_token(found, start, tok);
 }
 
+static Token *has_include_next_macro(Token *start) {
+  Token *file_tok = skip(start->next, "(");
+  InclIdx idx = file_tok->file->incl_idx + 1;
+  char *dir = NULL;
+  Token *end;
+  char *filename = read_include_filename(split_paren(&end, file_tok), &dir);
+  bool found = search_include_paths2(filename, dir, &idx);
+
+  pop_macro_lock_until(start, end);
+  return new_num_token(found, start, end);
+}
+
 static Token *has_embed_macro(Token *start) {
   Token *tok = skip(start->next, "(");
   Token *end;
@@ -1819,6 +1831,7 @@ void init_macros(void) {
   add_builtin("__has_builtin", has_builtin_macro, true);
   add_builtin("__has_extension", has_extension_macro, true);
   add_builtin("__has_include", has_include_macro, true);
+  add_builtin("__has_include_next", has_include_next_macro, true);
   add_builtin("__has_embed", has_embed_macro, true);
 }
 
