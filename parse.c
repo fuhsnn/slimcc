@@ -221,7 +221,7 @@ static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
-static long double eval_double(Node *node);
+static long_double_t eval_double(Node *node);
 static void eval_fp(Node *node, FPVal *fval);
 static uint64_t *eval_bitint(Node *node);
 static Node *conditional(Token **rest, Token *tok);
@@ -2257,13 +2257,13 @@ static uint64_t read_buf(char *buf, int sz) {
   internal_error();
 }
 
-static long double read_double_buf(char *buf, Type *ty) {
+static long_double_t read_double_buf(char *buf, Type *ty) {
   if (ty->kind == TY_FLOAT)
     return BUFF_CAST(float, buf);
   if (ty->kind == TY_DOUBLE)
     return BUFF_CAST(double, buf);
   if (ty->kind == TY_LDOUBLE)
-    return BUFF_CAST(long double, buf);
+    return BUFF_CAST(long_double_t, buf);
   internal_error();
 }
 
@@ -3469,7 +3469,7 @@ static int64_t align_expr(Token **rest, Token *tok) {
   return val;
 }
 
-static long double eval_fp_cast(long double fval, Type *ty) {
+static long_double_t eval_fp_cast(long_double_t fval, Type *ty) {
   switch (ty->kind) {
   case TY_FLOAT: return (float)fval;
   case TY_DOUBLE: return (double)fval;
@@ -3502,7 +3502,7 @@ static void eval_fp(Node *node, FPVal *fval) {
     return;
   }
 
-  long double v = eval_double(node);
+  long_double_t v = eval_double(node);
   if (fval) {
     switch (node->ty->kind) {
     case TY_FLOAT: fval->f = (float)v; break;
@@ -3512,7 +3512,7 @@ static void eval_fp(Node *node, FPVal *fval) {
   }
 }
 
-static long double eval_double(Node *node) {
+static long_double_t eval_double(Node *node) {
   if (eval_recover && *eval_recover)
     return false;
 
@@ -3525,8 +3525,8 @@ static long double eval_double(Node *node) {
   case ND_SUB: return eval_fp_cast(eval_double(lhs) - eval_double(rhs), ty);
   case ND_MUL: return eval_fp_cast(eval_double(lhs) * eval_double(rhs), ty);
   case ND_DIV: {
-    long double lval = eval_double(lhs);
-    long double rval = eval_double(rhs);
+    long_double_t lval = eval_double(lhs);
+    long_double_t rval = eval_double(rhs);
     if (rval == 0 && !is_global_init_context)
       break;
     return eval_fp_cast(lval / rval, ty);

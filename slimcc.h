@@ -67,6 +67,12 @@
 #define BUFF_CAST(__t, __ptr) (*((__t*)(__ptr)))
 #endif
 
+#ifdef NO_LONG_DOUBLE
+typedef double long_double_t;
+#else
+typedef long double long_double_t;
+#endif
+
 #if __STDC_VERSION__ >= 201112L
 #define ANON_UNION_START union {
 #define ANON_UNION_END };
@@ -538,7 +544,7 @@ ANON_UNION_START
   struct {
     int64_t val;
     uint64_t *bitint_data;
-    long double fval;
+    long_double_t fval;
     enum {
       MATH_CONSTANT_NOT = 0,
       MATH_CONSTANT_NANF,
@@ -682,7 +688,7 @@ struct EnumVal {
 typedef union {
   uint64_t chunk[2];
   uint32_t chunk32[4];
-  long double ld;
+  long_double_t ld;
   double d;
   float f;
 } FPVal;
