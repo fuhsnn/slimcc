@@ -618,7 +618,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
 
   int idx = 0;
   for (Token *t = ctx->m->params; t; t = t->next) {
-    if (tok->len == t->len && !memcmp(tok->loc, t->loc, tok->len)) {
+    if (equal_tok(t, tok)) {
       if (rest)
         *rest = tok->next;
       return &ctx->args[idx];
@@ -1390,15 +1390,14 @@ static Token *directives(Token **cur, Token *start) {
     if (tok->kind != TK_IDENT)
       error_tok(tok, "macro name must be an identifier");
     undef_macro(strndup(tok->loc, tok->len));
-    tok = skip_line(tok->next);
-    return tok;
+    return skip_line(tok->next);
   }
 
   if (equal(tok, "if")) {
     bool active = eval_const_expr(split_line(&tok, tok->next));
     push_cond_incl(start, active);
     if (!active)
-      tok = skip_cond_incl(tok);
+      return skip_cond_incl(tok);
     return tok;
   }
 
@@ -1407,7 +1406,7 @@ static Token *directives(Token **cur, Token *start) {
     push_cond_incl(tok, active);
     tok = skip_line(tok->next->next);
     if (!active)
-      tok = skip_cond_incl(tok);
+      return skip_cond_incl(tok);
     return tok;
   }
 
@@ -1416,7 +1415,7 @@ static Token *directives(Token **cur, Token *start) {
     push_cond_incl(tok, active);
     tok = skip_line(tok->next->next);
     if (!active)
-      tok = skip_cond_incl(tok);
+      return skip_cond_incl(tok);
     return tok;
   }
 
@@ -1469,7 +1468,7 @@ static Token *directives(Token **cur, Token *start) {
     tok = skip_line(tok->next);
 
     if (cond->been_active)
-      tok = skip_cond_incl(tok);
+      return skip_cond_incl(tok);
     return tok;
   }
 
@@ -1485,8 +1484,7 @@ static Token *directives(Token **cur, Token *start) {
     }
 
     cond_incl.cnt--;
-    tok = skip_line(tok->next);
-    return tok;
+    return skip_line(tok->next);
   }
 
   if (equal(tok, "line")) {
@@ -1513,8 +1511,7 @@ static Token *directives(Token **cur, Token *start) {
   if (equal(tok, "pragma")) {
     if (equal(tok->next, "once")) {
       hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
-      tok = skip_line(tok->next->next);
-      return tok;
+      return skip_line(tok->next->next);
     }
     return pass_line(cur, start);
   }
