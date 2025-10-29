@@ -4931,7 +4931,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     Type *ty = typename(&tok, tok);
     Node *node = new_unary(ND_DEREF, new_cast(new_num(0, tok), pointer_to(ty)), tok);
     tok = skip(tok, ",");
-    Token dot = {.kind = TK_PUNCT, .loc = ".", .len = 1, .next = tok, .file = tok->file};
+    Token dot = {.kind = TK_PUNCT, .loc = ".", .len = 1, .next = tok, .origin = tok};
     node = postfix(node, &tok, &dot);
     add_type(node);
     *rest = skip(tok, ")");

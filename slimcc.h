@@ -253,7 +253,6 @@ struct Token {
   bool is_incl_guard : 1;
   bool is_root : 1;
   bool is_live : 1;
-  bool is_generated : 1;
   bool has_ucn : 1;
   int len;                // Token length
   char *loc;              // Token location

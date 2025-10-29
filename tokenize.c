@@ -58,9 +58,10 @@ static void verror_at(char *filename, char *input, int line_no,
 }
 
 void verror_at_tok(Token *tok, char *fmt, va_list ap) {
-  if (tok->is_generated) {
-    vfprintf(stderr, fmt, ap);
-    return;
+  if (!tok->file) {
+    tok = tok->origin;
+    if (!tok)
+      internal_error();
   }
   if (tok->file->file_no != tok->display_file_no) {
     File **files = get_input_files();

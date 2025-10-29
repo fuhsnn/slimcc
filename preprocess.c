@@ -230,24 +230,6 @@ static Token *skip_cond_incl(Token *tok) {
   return tok;
 }
 
-// Double-quote a given string and returns it.
-static char *quote_string(char *str) {
-  size_t len = strlen(str);
-  char *buf = malloc(len + 3);
-  memcpy(buf + 1, str, len);
-  buf[0] = buf[len + 1] = '"';
-  buf[len + 2] = '\0';
-  return buf;
-}
-
-static Token *new_str_token2(char *str, Token *tmpl) {
-  return tokenize(new_file(tmpl->file->name, tmpl->file->file_no, str), NULL);
-}
-
-static Token *new_str_token(char *str, Token *tmpl) {
-  return new_str_token2(quote_string(str), tmpl);
-}
-
 // Copy all tokens until the next newline, terminate them with
 // an EOF token and then returns them. This function is used to
 // create a new list of tokens for `#if` arguments.
@@ -335,22 +317,39 @@ static Token *find_last_tok(Token *tok) {
   return tok;
 }
 
-static Token *make_token(char *str, Token *tmpl) {
-  File file = {0};
-  file.name = tmpl->file->name;
-  file.file_no = tmpl->file->file_no;
-  file.contents = str;
+static Token *tokenize_buf(char *buf, Token *orig, Token **end) {
+  if (orig->origin)
+    orig = orig->origin;
 
-  Token *tok = tokenize(&file, NULL);
-  tok->file = tmpl->file;
-  tok->origin = tmpl->origin ? tmpl->origin : tmpl;
-  tok->is_generated = true;
-  tok->at_bol = false;
+  File file = *orig->file;
+  file.contents = buf;
+  Token *tok = tokenize(&file, end);
+
+  for (Token *t = tok; t->kind != TK_EOF; t = t->next) {
+    t->file = NULL;
+    t->origin = orig;
+  }
   return tok;
 }
 
-static Token *new_num_token(int val, Token *tmpl) {
-  return make_token(format("%d\n", val), tmpl);
+static Token *make_token(char *str, Token *orig, Token *nxt) {
+  Token *tok = tokenize_buf(str, orig, NULL);
+  tok->at_bol = false;
+  tok->next = nxt;
+  return tok;
+}
+
+static Token *new_num_token(int val, Token *orig, Token *nxt) {
+  return make_token(format("%d\n", val), orig, nxt);
+}
+
+static Token *new_str_token(char *str, Token *orig) {
+  size_t len = strlen(str);
+  char *buf = malloc(len + 3);
+  memcpy(buf + 1, str, len);
+  buf[0] = buf[len + 1] = '"';
+  buf[len + 2] = '\0';
+  return make_token(buf, orig, orig->next);
 }
 
 static Token *to_int_token(Token *tok, int64_t val) {
@@ -470,7 +469,7 @@ static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
 
     if (tok->kind != TK_IDENT) {
       *rest = skip(skip(tok, "..."), ")");
-      static Token va_args = {.loc = "__VA_ARGS__", .len = 11, .is_generated = true};
+      static Token va_args = {.loc = "__VA_ARGS__", .len = 11};
       cur = cur->next = &va_args;
       m->has_va_arg = true;
       break;
@@ -713,11 +712,9 @@ static void newline_to_space(Token *tok) {
 
 // Concatenate two tokens to create a new token.
 static Token *paste(Token *lhs, Token *rhs) {
-  // Paste the two tokens.
   char *buf = format("%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
-  // Tokenize the resulting string.
-  Token *tok = tokenize(new_file(lhs->file->name, lhs->file->file_no, buf), NULL);
+  Token *tok = tokenize_buf(buf, lhs, NULL);
   align_token(tok, lhs);
 
   if (tok->next->kind != TK_EOF) {
@@ -725,6 +722,9 @@ static Token *paste(Token *lhs, Token *rhs) {
       return lhs->next = tok->next;
     error_tok(lhs, "pasting forms '%s', an invalid token", buf);
   }
+  if (tok->origin == lhs)
+    tok->origin = copy_token(lhs);
+
   Token *t = lhs->alloc_next;
   *lhs = *tok;
   lhs->alloc_next = t;
@@ -1244,9 +1244,9 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
       break;
 
     if (cur != &head)
-      cur = cur->next = make_token(",", start);
+      cur = cur->next = make_token(",", start, NULL);
 
-    cur = cur->next = new_num_token(buf, start);
+    cur = cur->next = new_num_token(buf, start, NULL);
   }
   fclose(fp);
   if (cur == &head) {
@@ -1546,7 +1546,7 @@ void define_macro_cli(char *str) {
     tok = tok->next;
   }
   if (!has_eq) {
-    cur = cur->next = make_token("1", tok);
+    cur = cur->next = make_token("1", tok, NULL);
     cur->has_space = true;
   }
   cur->next = tok;
@@ -1571,9 +1571,7 @@ static Token *file_macro(Token *start) {
   Token *tok = start;
   if (tok->origin)
     tok = tok->origin;
-  tok = new_str_token(tok->file->display_file->name, tok);
-  tok->next = start->next;
-  return tok;
+  return new_str_token(tok->file->display_file->name, start);
 }
 
 static Token *line_macro(Token *start) {
@@ -1581,17 +1579,13 @@ static Token *line_macro(Token *start) {
   if (tok->origin)
     tok = tok->origin;
   int i = tok->line_no + tok->file->line_delta;
-  tok = new_num_token(i, tok);
-  tok->next = start->next;
-  return tok;
+  return new_num_token(i, tok, start->next);
 }
 
 // __COUNTER__ is expanded to serial values starting from 0.
 static Token *counter_macro(Token *start) {
   static int i = 0;
-  Token *tok = new_num_token(i++, start);
-  tok->next = start->next;
-  return tok;
+  return new_num_token(i++, start, start->next);
 }
 
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
@@ -1608,9 +1602,7 @@ static Token *date_macro(Token *start) {
     str = format("\"%s %2d %d\"",
       mon[cur_time->tm_mon], cur_time->tm_mday, cur_time->tm_year + 1900);
   }
-  Token *tok = new_str_token2(str, start);
-  tok->next = start->next;
-  return tok;
+  return make_token(str, start, start->next);
 }
 
 // __TIME__ is expanded to the current time, e.g. "13:34:03".
@@ -1623,9 +1615,7 @@ static Token *time_macro(Token *start) {
     str = format("\"%02d:%02d:%02d\"",
       cur_time->tm_hour, cur_time->tm_min, cur_time->tm_sec);
   }
-  Token *tok = new_str_token2(str, start);
-  tok->next = start->next;
-  return tok;
+  return make_token(str, start, start->next);
 }
 
 // __TIMESTAMP__ is expanded to a string describing the last
@@ -1645,15 +1635,11 @@ static Token *timestamp_macro(Token *start) {
       str = buf;
     }
   }
-  Token *tok = new_str_token2(str, start);
-  tok->next = start->next;
-  return tok;
+  return make_token(str, start, start->next);
 }
 
 static Token *base_file_macro(Token *start) {
-  Token *tok = new_str_token(base_file, start);
-  tok->next = start->next;
-  return tok;
+  return new_str_token(base_file, start);
 }
 
 static Token *pragma_macro(Token *start) {
@@ -1687,12 +1673,9 @@ static Token *pragma_macro(Token *start) {
   char *buf = format("#pragma %s", str_tok->str);
 
   Token *end;
-  Token *hash = tokenize(new_file(start->file->name, start->file->file_no, buf), &end);
-  end->next = tok;
-  Token *orig = start->origin ? start->origin : start;
-  for (Token *t = hash; t != tok; t = t->next)
-    t->origin = orig;
+  Token *hash = tokenize_buf(buf, start, &end);
   hash->at_bol = true;
+  end->next = tok;
   return hash;
 }
 
@@ -1704,9 +1687,7 @@ static Token *has_include_macro(Token *start) {
   bool found = search_include_paths2(filename, start, is_dquote, NULL);
 
   pop_macro_lock_until(start, tok);
-  Token *tok2 = new_num_token(found, start);
-  tok2->next = tok;
-  return tok2;
+  return new_num_token(found, start, tok);
 }
 
 static Token *has_embed_macro(Token *start) {
@@ -1730,9 +1711,7 @@ static Token *has_attribute_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  Token *tok2 = new_num_token(val, start);
-  tok2->next = tok;
-  return tok2;
+  return new_num_token(val, start, tok);
 }
 
 static Token *has_c_attribute_macro(Token *start) {
@@ -1747,9 +1726,7 @@ static Token *has_c_attribute_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  Token *tok2 = new_num_token(val, start);
-  tok2->next = tok;
-  return tok2;
+  return new_num_token(val, start, tok);
 }
 
 static Token *has_builtin_macro(Token *start) {
@@ -1775,9 +1752,7 @@ static Token *has_builtin_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  Token *tok2 = new_num_token(has_it, start);
-  tok2->next = tok;
-  return tok2;
+  return new_num_token(has_it, start, tok);
 }
 
 static Token *has_extension_macro(Token *start) {
@@ -1800,9 +1775,7 @@ static Token *has_extension_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  Token *tok2 = new_num_token(has_it, start);
-  tok2->next = tok;
-  return tok2;
+  return new_num_token(has_it, start, tok);
 }
 
 void init_macros(void) {
