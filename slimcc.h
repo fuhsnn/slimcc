@@ -236,7 +236,7 @@ struct File {
   char *contents;
 
   // For #line directive
-  File *display_file;
+  int display_file_no;
   int line_delta;
   bool is_input;
   bool is_syshdr;
@@ -284,9 +284,9 @@ bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);
-File **get_input_files(void);
 char *read_file(char *path);
-File *new_file(char *name, int file_no, char *contents);
+File *new_file(char *name, char *contents);
+int add_display_file(char *path);
 Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 Token *tokenize_file(char *filename, Token **end, int *incl_no);
@@ -904,6 +904,7 @@ typedef enum {
 
 bool file_exists(char *path);
 bool in_sysincl_path(char *path);
+void add_dep_file(char *path, bool is_sys);
 
 char *find_dir_w_file(char *pattern);
 void run_subprocess(char **argv);
@@ -917,6 +918,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
 extern char *argv0;
 extern StringArray include_paths;
 extern StringArray iquote_paths;
+extern StringArray display_files;
 extern bool opt_E;
 extern bool opt_dM;
 extern bool opt_fpic;

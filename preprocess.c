@@ -1161,6 +1161,9 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
   if (!start)
     error_tok(filename_tok, "%s: cannot open file: %s", path, strerror(errno));
 
+  start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(path);
+  add_dep_file(path, start->file->is_syshdr);
+
   Token *fmark = opt_E ? new_fmark(start) : NULL;
 
   if (!end) {
@@ -1174,9 +1177,6 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
   if (is_hash(start) && equal(start->next, "ifndef") &&
     start->next->next->kind == TK_IDENT && equal(end, "endif"))
     start->next->is_incl_guard = end->is_incl_guard = true;
-
-  if (tok->file->is_syshdr || in_sysincl_path(end->file->name))
-    end->file->is_syshdr = true;
 
   end->next = tok;
 
@@ -1282,7 +1282,7 @@ static void read_line_marker(Token **rest, Token *tok) {
   if (tok->kind != TK_STR && tok->kind != TK_ASM_STR)
     error_tok(tok, "filename expected");
 
-  start->file->display_file = add_input_file(tok->str, NULL, NULL);
+  start->file->display_file_no = add_display_file(tok->str);
 }
 
 static void finalize_tok(Token *tok) {
@@ -1291,13 +1291,13 @@ static void finalize_tok(Token *tok) {
     orig = tok->origin;
     orig->is_root = true;
   }
-  tok->display_file_no = orig->file->display_file->file_no;
+  tok->display_file_no = orig->file->display_file_no;
   tok->display_line_no = orig->line_no + orig->file->line_delta;
   tok->is_root = true;
 }
 
 static void finalize_tok2(Token *tok) {
-  tok->display_file_no = tok->file->display_file->file_no;
+  tok->display_file_no = tok->file->display_file_no;
   tok->display_line_no = tok->line_no + tok->file->line_delta;
   tok->is_root = true;
 }
@@ -1527,7 +1527,7 @@ static Token *directives(Token **cur, Token *start) {
 }
 
 void define_macro_cli(char *str) {
-  Token *tok = tokenize(new_file("<built-in>", 1, str), NULL);
+  Token *tok = tokenize(new_file("<command-line>", str), NULL);
   Macro *m = read_macro_name(&tok, tok);
 
   Token head = {0};
@@ -1551,7 +1551,7 @@ void define_macro_cli(char *str) {
 }
 
 void define_macro(char *name, char *buf) {
-  new_macro(name, true)->body = tokenize(new_file("<built-in>", 1, buf), NULL);
+  new_macro(name, true)->body = tokenize(new_file("<built-in>", buf), NULL);
 }
 
 static void add_builtin(char *name, macro_handler_fn *fn, bool align) {
@@ -1568,7 +1568,7 @@ static Token *file_macro(Token *start) {
   Token *tok = start;
   if (tok->origin)
     tok = tok->origin;
-  return new_str_token(tok->file->display_file->name, start);
+  return new_str_token(display_files.data[tok->file->display_file_no], start);
 }
 
 static Token *line_macro(Token *start) {

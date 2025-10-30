@@ -3,9 +3,6 @@
 // Input file
 static File *current_file;
 
-// A list of all input files.
-static File **input_files;
-
 // True if the current position is at the beginning of a line
 static bool at_bol;
 
@@ -63,13 +60,10 @@ void verror_at_tok(Token *tok, char *fmt, va_list ap) {
     if (!tok)
       internal_error();
   }
-  if (tok->file->file_no != tok->display_file_no) {
-    File **files = get_input_files();
-    if (files)
-      for (int i = 0; files[i]; i++)
-        if (tok->display_file_no == files[i]->file_no)
-          fprintf(stderr, "#line %d \"%s\"\n", tok->display_line_no, files[i]->name);
-  }
+  if (tok->display_line_no)
+    if (tok->file->file_no != tok->display_file_no || tok->line_no != tok->display_line_no)
+      fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no], tok->display_line_no);
+
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
 
   if (tok->origin)
@@ -1116,15 +1110,24 @@ char *read_file(char *path) {
   return buf;
 }
 
-File **get_input_files(void) {
-  return input_files;
+int add_display_file(char *path) {
+  static HashMap map;
+  int *idx = hashmap_get(&map, path);
+  if (idx)
+    return *idx;
+
+  strarray_push(&display_files, path);
+
+  idx = arena_malloc(&pp_arena, sizeof(*idx));
+  *idx = display_files.len - 1;
+  hashmap_put(&map, path, idx);
+  return *idx;
 }
 
-File *new_file(char *name, int file_no, char *contents) {
+File *new_file(char *name, char *contents) {
   File *file = calloc(1, sizeof(File));
   file->name = name;
-  file->display_file = file;
-  file->file_no = file_no;
+  file->file_no = file->display_file_no = add_display_file(name);
   file->contents = contents;
   return file;
 }
@@ -1179,17 +1182,11 @@ File *add_input_file(char *path, char *contents, int *incl_no) {
   if (file)
     return file;
 
-  static int file_no;
-  file = new_file(path, file_no + 1, contents);
+  file = new_file(path, contents);
   if (incl_no) {
     file->is_input = true;
     file->incl_no = *incl_no;
   }
-
-  input_files = realloc(input_files, sizeof(File *) * (file_no + 2));
-  input_files[file_no] = file;
-  input_files[file_no + 1] = NULL;
-  file_no++;
 
   hashmap_put(&input_files_map, path, file);
   return file;

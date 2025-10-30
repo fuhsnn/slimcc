@@ -26,6 +26,7 @@ typedef struct {
 
 StringArray include_paths;
 StringArray iquote_paths;
+StringArray display_files;
 bool opt_fcommon;
 bool opt_fpic;
 bool opt_fpie;
@@ -85,6 +86,7 @@ static char *opt_o;
 static StringArray ld_paths;
 static StringArray input_args;
 static StringArray sysincl_paths;
+static StringArray dep_files;
 static StringArray tmpfiles;
 static StringArray as_args;
 static MacroChangeArr macrodefs;
@@ -825,16 +827,7 @@ static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
 }
 
 static void print_linemarker(FILE *out, Token *tok) {
-  char *name = NULL;
-  File **files = get_input_files();
-  for (int i = 0; files[i]; i++) {
-    if (files[i]->file_no == tok->display_file_no) {
-      name = files[i]->name;
-      break;
-    }
-  }
-  if (!name)
-    internal_error();
+  char *name = display_files.data[tok->display_file_no];
   if (!strcmp(name, "-"))
     name = "<stdin>";
   if (!tok->at_bol)
@@ -845,7 +838,7 @@ static void print_linemarker(FILE *out, Token *tok) {
 // Print tokens to stdout. Used for -E.
 static void print_tokens(Token *tok, FILE *out) {
   int line = 0;
-  int markerfile = 0;
+  int file_no = -1;
   tok->at_bol = false;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
@@ -858,8 +851,8 @@ static void print_tokens(Token *tok, FILE *out) {
       line++;
     }
     if (!opt_P) {
-      if (markerfile != tok->display_file_no) {
-        markerfile = tok->display_file_no;
+      if (file_no != tok->display_file_no) {
+        file_no = tok->display_file_no;
         print_linemarker(out, tok);
       } else {
         int diff = tok->display_line_no - line;
@@ -890,6 +883,19 @@ bool in_sysincl_path(char *path) {
   return false;
 }
 
+void add_dep_file(char *path, bool is_sys) {
+  if (opt_M || opt_MD) {
+    if (is_sys && opt_MM)
+      return;
+
+    static HashMap map;
+    if (hashmap_get(&map, path))
+      return;
+    hashmap_put(&map, path, (void *)1);
+    strarray_push(&dep_files, path);
+  }
+}
+
 // If -M options is given, the compiler write a list of input files to
 // stdout in a format that "make" command can read. This feature is
 // used to automate file dependency management.
@@ -910,25 +916,15 @@ static void print_dependencies(char *input) {
   else
     fprintf(out, "%s:", quote_makefile(replace_extn(input, ".o")));
 
-  File **files = get_input_files();
+  for (int i = 0; i < dep_files.len; i++)
+    fprintf(out, " \\\n  %s", dep_files.data[i]);
 
-  for (int i = 0; files[i]; i++) {
-    char *name = files[i]->name;
-    if ((opt_MM && files[i]->is_syshdr) || !files[i]->is_input)
-      continue;
-    fprintf(out, " \\\n  %s", name);
-  }
+  fputc('\n', out);
 
-  fprintf(out, "\n\n");
+  if (opt_MP)
+    for (int i = 0; i < dep_files.len; i++)
+      fprintf(out, "%s:\n", quote_makefile(dep_files.data[i]));
 
-  if (opt_MP) {
-    for (int i = 1; files[i]; i++) {
-      char *name = files[i]->name;
-      if ((opt_MM && files[i]->is_syshdr) || !files[i]->is_input)
-        continue;
-      fprintf(out, "%s:\n\n", quote_makefile(name));
-    }
-  }
   if (out == stdout)
     fflush(out);
   else
@@ -940,6 +936,7 @@ static Token *must_tokenize_file(char *path, Token **end) {
   Token *tok = tokenize_file(path, end, &incl_no);
   if (!tok)
     error("%s: %s", path, strerror(errno));
+  add_dep_file(path, false);
   return tok;
 }
 
@@ -958,6 +955,8 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
     opt_E = opt_cc1_asm_pp = true;
 
   build_macros(&macrodefs, is_asm_pp);
+
+  Token *in_tok = must_tokenize_file(input_file, NULL);
 
   // Process -imacros option
   Token imacros_head = {0};
@@ -980,9 +979,8 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
     if (end)
       cur = end;
   }
+  cur->next = in_tok;
 
-  // Tokenize and parse.
-  cur->next = must_tokenize_file(input_file, NULL);
   Token *tok = preprocess(head.next, imacros_head.next, input_file);
 
   // If -M or -MD are given, print file dependencies.

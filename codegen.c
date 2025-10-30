@@ -107,6 +107,9 @@ static int peak_stk_usage;
 static int tmpbuf_sz;
 static int64_t rtn_label;
 static HashMap *ext_refs;
+static bool *debug_file_used;
+static int *debug_file_id;
+static StringArray debug_files;
 
 static struct {
   bool in[REG_X64_END];
@@ -1832,15 +1835,22 @@ static void gen_defr(Node *node) {
 }
 
 static void print_loc(Token *tok) {
-  static int file_no, line_no;
+  static int file_no, line_no, id;
 
   if (file_no == tok->display_file_no && line_no == tok->display_line_no)
     return;
 
-  Printftn(".loc %d %d", tok->display_file_no, tok->display_line_no);
-
-  file_no = tok->display_file_no;
   line_no = tok->display_line_no;
+
+  if (file_no != tok->display_file_no) {
+    file_no = tok->display_file_no;
+    if (!debug_file_used[file_no]) {
+      debug_file_used[file_no] = true;
+      debug_file_id[file_no] = id++;
+      strarray_push(&debug_files, display_files.data[file_no]);
+    }
+  }
+  Printftn(".loc %d %d", debug_file_id[file_no], line_no);
 }
 
 static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
@@ -4955,6 +4965,10 @@ static void emit_cdtor(char *sec, uint16_t priority, char *fn_name) {
 }
 
 void emit_text(Obj *fn) {
+  if (!debug_file_used) {
+    debug_file_used = calloc(1, display_files.len * sizeof(bool));
+    debug_file_id = malloc(display_files.len * sizeof(int));
+  }
   fn->output = calloc(1, sizeof(FuncObj));
   output_file = open_memstream(&fn->output->buf, &fn->output->buflen);
 
@@ -5230,11 +5244,9 @@ static void mark_live(Obj *var) {
 int codegen(Obj *prog, FILE *out) {
   output_file = out;
 
-  if (opt_g) {
-    File **files = get_input_files();
-    for (int i = 0; files[i]; i++)
-      Printftn(".file %d \"%s\"", files[i]->file_no, files[i]->name);
-  }
+  if (opt_g)
+    for (int i = 0; i < debug_files.len; i++)
+      Printftn(".file %d \"%s\"", i, debug_files.data[i]);
 
   for (Obj *var = prog; var; var = var->next) {
     if (var->is_definition && var->ty->kind == TY_FUNC &&
