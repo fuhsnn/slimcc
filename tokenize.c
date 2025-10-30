@@ -1076,7 +1076,7 @@ Token *tokenize(File *file, Token **end) {
 }
 
 // Returns the contents of a given file.
-char *read_file(char *path, Token *tok, bool canon) {
+File *read_file(char *path, Token *tok, bool canon) {
   FILE *fp;
 
   if (strcmp(path, "-") == 0) {
@@ -1115,7 +1115,7 @@ char *read_file(char *path, Token *tok, bool canon) {
   fclose(out);
 
   if (canon)
-    return buf;
+    return new_file(path, buf);
 
   // Wipe BOM markers
   if (startswith3(buf, (char)0xef, (char)0xbb, (char)0xbf))
@@ -1123,7 +1123,7 @@ char *read_file(char *path, Token *tok, bool canon) {
 
   canonicalize_newline(buf);
   remove_backslash_newline(buf);
-  return buf;
+  return new_file(path, buf);
 }
 
 int add_display_file(char *path) {
@@ -1145,6 +1145,7 @@ File *new_file(char *name, char *contents) {
   file->name = name;
   file->file_no = file->display_file_no = add_display_file(name);
   file->contents = contents;
+  file->incl_idx = INCL_ABS;
   return file;
 }
 
@@ -1189,21 +1190,4 @@ static void remove_backslash_newline(char *p) {
 
     *q = '\0';
   }
-}
-
-File *add_input_file(char *path, char *contents, int *incl_no) {
-  static HashMap input_files_map;
-
-  File *file = hashmap_get(&input_files_map, path);
-  if (file)
-    return file;
-
-  file = new_file(path, contents);
-  if (incl_no) {
-    file->is_input = true;
-    file->incl_no = *incl_no;
-  }
-
-  hashmap_put(&input_files_map, path, file);
-  return file;
 }

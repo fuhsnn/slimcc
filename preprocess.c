@@ -1040,51 +1040,47 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   return true;
 }
 
-static char *search_include_paths2(char *filename, char *dir, int *incl_no) {
-  if (filename[0] == '/')
+static char *search_include_paths2(char *filename, char *dir, InclIdx *idx) {
+  if (filename[0] == '/') {
+    *idx = INCL_ABS;
     return filename;
+  }
 
-  if (dir) {
-    char *path = format("%s/%s", dirname(strdup(dir)), filename);
-    if (file_exists(path)) {
-      return path;
-    }
-    for (int i = 0; i < iquote_paths.len; i++) {
-      char *path = format("%s/%s", iquote_paths.data[i], filename);
-      if (file_exists(path))
+  if (*idx <= INCL_REL) {
+    if (dir) {
+      dir = strdup(dir);
+      char *path = format("%s/%s", dirname(dir), filename);
+      if (file_exists(path)) {
+        *idx = INCL_REL;
+        free(dir);
         return path;
+      }
+      free(path);
+      free(dir);
+
+      for (int i = 0; i < iquote_paths.len; i++) {
+        char *path = format("%s/%s", iquote_paths.data[i], filename);
+        if (file_exists(path)) {
+          *idx = INCL_REL;
+          return path;
+        }
+        free(path);
+      }
     }
+    *idx = 0;
   }
 
-  static HashMap cache;
-  char *cached = hashmap_get(&cache, filename);
-  if (cached)
-    return cached;
-
-  // Search a file from the include paths.
-  for (int i = 0; i < include_paths.len; i++) {
-    char *path = format("%s/%s", include_paths.data[i], filename);
-    if (!file_exists(path))
-      continue;
-    hashmap_put(&cache, filename, path);
-    if (incl_no)
-      *incl_no = i;
-    return path;
-  }
-  return NULL;
-}
-
-char *search_include_paths(char *filename) {
-  return search_include_paths2(filename, ".", NULL);
-}
-
-static char *search_include_next(char *filename, char *cur_file, int *idx) {
   for (; *idx < include_paths.len; (*idx)++) {
     char *path = format("%s/%s", include_paths.data[*idx], filename);
-    if (file_exists(path) && strcmp(realpath(path, NULL), realpath(cur_file, NULL)))
+    if (file_exists(path))
       return path;
+    free(path);
   }
   return NULL;
+}
+
+char *search_include_paths(char *filename, char *dir) {
+  return search_include_paths2(filename, dir, &(InclIdx){INCL_REL});
 }
 
 static char *read_filename(Token **rest, Token *tok, char **dir) {
@@ -1140,7 +1136,7 @@ static char *read_include_filename(Token *tok, char **dir) {
   return read_filename(NULL, tok, dir);
 }
 
-static Token *include_file(Token *tok, char *path, Token *filename_tok, int *incl_no) {
+static Token *include_file(Token *tok, char *path, Token *filename_tok, InclIdx idx) {
   // Check for "#pragma once"
   if (hashmap_get(&pragma_once, realpath(path, NULL)))
     return tok;
@@ -1149,12 +1145,10 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
   if (guard_name && hashmap_get(&macros, guard_name))
     return tok;
 
-  char *buf = read_file(path, filename_tok, false);
-
   Token *end = NULL;
-  Token *start = tokenize(add_input_file(path, buf, incl_no), &end);
-
-  start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(path);
+  Token *start = tokenize(read_file(path, filename_tok, false), &end);
+  start->file->incl_idx = idx;
+  start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(idx);
   add_dep_file(path, start->file->is_syshdr);
 
   Token *fmark = opt_E ? new_fmark(start) : NULL;
@@ -1343,36 +1337,38 @@ static Token *directives(Token **cur, Token *start) {
   Token *tok = start->next;
 
   if (equal(tok, "embed")) {
+    Token *file_tok = tok->next;
     Token *cont;
     char *dir = NULL;
-    char *filename = read_filename(&tok, split_line(&cont, tok->next), &dir);
-    char *path = search_include_paths2(filename, dir, NULL);
-    if (ignore_missing_dep(path, filename, start->next->next))
+    char *filename = read_filename(&tok, split_line(&cont, file_tok), &dir);
+    char *path = search_include_paths(filename, dir);
+    if (ignore_missing_dep(path, filename, file_tok))
       return cont;
-    return embed_file(cont, tok, path, start->next->next);
+    return embed_file(cont, tok, path, file_tok);
   }
 
   if (equal(tok, "include")) {
+    Token *file_tok = tok->next;
     char *dir = NULL;
-    char *filename = read_include_filename(split_line(&tok, tok->next), &dir);
-    int incl_no = -1;
-    char *path = search_include_paths2(filename, dir, &incl_no);
-    if (ignore_missing_dep(path, filename, start->next->next))
+    char *filename = read_include_filename(split_line(&tok, file_tok), &dir);
+
+    InclIdx idx = INCL_REL;
+    char *path = search_include_paths2(filename, dir, &idx);
+    if (ignore_missing_dep(path, filename, file_tok))
       return tok;
-    return include_file(tok, path, start->next->next, &incl_no);
+    return include_file(tok, path, file_tok, idx);
   }
 
   if (equal(tok, "include_next")) {
-    if (!tok->file || !tok->file->is_input)
-      error_tok(tok, "cannot infer #include_next search path");
-
-    int incl_no = tok->file->incl_no + 1;
+    Token *file_tok = tok->next;
     char *dir = NULL;
-    char *filename = read_include_filename(split_line(&tok, tok->next), &dir);
-    char *path = search_include_next(filename, start->file->name, &incl_no);
-    if (ignore_missing_dep(path, filename, start->next->next))
+    char *filename = read_include_filename(split_line(&tok, file_tok), &dir);
+
+    InclIdx idx = file_tok->file->incl_idx + 1;
+    char *path = search_include_paths2(filename, dir, &idx);
+    if (ignore_missing_dep(path, filename, file_tok))
       return tok;
-    return include_file(tok, path, start->next->next, &incl_no);
+    return include_file(tok, path, file_tok, idx);
   }
 
   if (equal(tok, "define")) {
@@ -1681,7 +1677,7 @@ static Token *has_include_macro(Token *start) {
 
   char *dir = NULL;
   char *filename = read_include_filename(split_paren(&tok, tok), &dir);
-  bool found = search_include_paths2(filename, dir, NULL);
+  bool found = search_include_paths(filename, dir);
 
   pop_macro_lock_until(start, tok);
   return new_num_token(found, start, tok);
@@ -1693,7 +1689,7 @@ static Token *has_embed_macro(Token *start) {
 
   char *dir = NULL;
   char *filename = read_filename(&tok, split_paren(&end, tok), &dir);
-  char *path = search_include_paths2(filename, dir, NULL);
+  char *path = search_include_paths(filename, dir);
   Token *tok2 = embed_file(NULL, tok, path, start->next->next);
 
   pop_macro_lock_until(start, end);
@@ -2102,20 +2098,18 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
 
   {
     Token *cur;
-    Token *head = tokenize(add_input_file("slimcc_builtins",
+    Token *head = tokenize(new_file("slimcc_builtins",
     "typedef struct {"
     "  unsigned int gp_offset;"
     "  unsigned int fp_offset;"
     "  void *overflow_arg_area;"
     "  void *reg_save_area;"
-    "} __builtin_va_list[1];"
-    , NULL), &cur);
+    "} __builtin_va_list[1];"), &cur);
 
-    char *path = search_include_paths("bitint_builtins");
+    char *path = search_include_paths("bitint_builtins", NULL);
     if (path) {
       Token *end;
-      char *buf = read_file(path, NULL, true);
-      cur->next = tokenize(add_input_file(path, buf, NULL), &end);
+      cur->next = tokenize(read_file(path, NULL, true), &end);
       cur = end;
     }
     for (Token *t = head; t; t = t->next)

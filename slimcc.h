@@ -228,17 +228,21 @@ typedef enum {
   TK_TYPEKW_END,
 } TokenKind;
 
+typedef enum {
+  INCL_ABS = -2,
+  INCL_REL = -1,
+} InclIdx;
+
 typedef struct File File;
 struct File {
   char *name;
-  int file_no;
-  int incl_no;
   char *contents;
+  int file_no;
 
   // For #line directive
   int display_file_no;
   int line_delta;
-  bool is_input;
+  InclIdx incl_idx;
   bool is_syshdr;
 };
 
@@ -284,12 +288,11 @@ bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);
-char *read_file(char *path, Token *tok, bool canon);
+File *read_file(char *path, Token *tok, bool canon);
 File *new_file(char *name, char *contents);
 int add_display_file(char *path);
 Token *tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
-File *add_input_file(char *path, char *content, int *incl_no);
 void convert_pp_number(Token *tok, Node *node);
 TokenKind ident_keyword(Token *tok);
 void convert_ucn_ident(Token *tok);
@@ -301,7 +304,7 @@ void convert_ucn_ident(Token *tok);
 // preprocess.c
 //
 
-char *search_include_paths(char *filename);
+char *search_include_paths(char *filename, char *dir);
 void init_macros(void);
 void define_macro(char *name, char *buf);
 void define_macro_cli(char *str);
@@ -902,7 +905,7 @@ typedef enum {
 } StdVer;
 
 bool file_exists(char *path);
-bool in_sysincl_path(char *path);
+bool in_sysincl_path(int idx);
 bool ignore_missing_dep(char *path, char *filename, Token *tok);
 void add_dep_file(char *path, bool is_sys);
 char *find_dir_w_file(char *pattern);

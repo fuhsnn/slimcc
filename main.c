@@ -92,6 +92,7 @@ static StringArray dep_files;
 static StringArray tmpfiles;
 static StringArray as_args;
 static MacroChangeArr macrodefs;
+static int incl_cnt;
 
 char *argv0;
 
@@ -295,7 +296,6 @@ static void build_incl_paths(char *opt_B, bool opt_nostdinc, StringArray *isyste
     add_include_path(&sysincl_paths, idirafter->data[i]);
 
   // Filter system directories passed as -I
-  int incl_cnt = 0;
   for (int i = 0; i < include_paths.len; i++) {
     bool match = false;
     for (int j = 0; j < sysincl_paths.len; j++)
@@ -883,14 +883,8 @@ static void print_tokens(Token *tok, FILE *out) {
   fprintf(out, "\n");
 }
 
-bool in_sysincl_path(char *path) {
-  for (int i = 0; i < sysincl_paths.len; i++) {
-    char *dir = sysincl_paths.data[i];
-    int len = strlen(dir);
-    if (strncmp(dir, path, len) == 0 && path[len] == '/')
-      return true;
-  }
-  return false;
+bool in_sysincl_path(int idx) {
+  return idx >= incl_cnt;
 }
 
 bool ignore_missing_dep(char *path, char *filename, Token *tok) {
@@ -956,12 +950,12 @@ static void print_dependencies(char *input) {
 
  static void include_files_cli(StringArray *arr, Token **cur) {
    for (int i = 0; i < arr->len; i++) {
-    char *path = search_include_paths(arr->data[i]);
+    char *path = search_include_paths(arr->data[i], ".");
     if (ignore_missing_dep(path, arr->data[i], NULL))
       continue;
-    char *buf = read_file(path, NULL, false);
+
     Token *end = NULL;
-    (*cur)->next = tokenize(add_input_file(path, buf, &(int){-1}), &end);
+    (*cur)->next = tokenize(read_file(path, NULL, false), &end);
     if (end)
       (*cur) = end;
     add_dep_file(path, false);
@@ -974,8 +968,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 
   build_macros(&macrodefs, is_asm_pp);
 
-  char *in_buf = read_file(input_file, NULL, false);
-  Token *in_tok = tokenize(add_input_file(input_file, in_buf, &(int){-1}), NULL);
+  Token *in_tok = tokenize(read_file(input_file, NULL, false), NULL);
   add_dep_file(input_file, false);
 
   Token imacros_head = {0};
