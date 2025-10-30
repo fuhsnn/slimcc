@@ -1149,10 +1149,10 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, int *inc
   if (guard_name && hashmap_get(&macros, guard_name))
     return tok;
 
+  char *buf = read_file(path, filename_tok, false);
+
   Token *end = NULL;
-  Token *start = tokenize_file(path, &end, incl_no);
-  if (!start)
-    error_tok(filename_tok, "%s: cannot open file: %s", path, strerror(errno));
+  Token *start = tokenize(add_input_file(path, buf, incl_no), &end);
 
   start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(path);
   add_dep_file(path, start->file->is_syshdr);
@@ -2112,10 +2112,10 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
     , NULL), &cur);
 
     char *path = search_include_paths("bitint_builtins");
-    char *contents;
-    if (path && (contents = read_file(path))) {
+    if (path) {
       Token *end;
-      cur->next = tokenize(add_input_file(path, contents, NULL), &end);
+      char *buf = read_file(path, NULL, true);
+      cur->next = tokenize(add_input_file(path, buf, NULL), &end);
       cur = end;
     }
     for (Token *t = head; t; t = t->next)

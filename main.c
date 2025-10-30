@@ -954,19 +954,18 @@ static void print_dependencies(char *input) {
     fclose(out);
 }
 
-static Token *must_tokenize_file(char *path, Token **end) {
-  int incl_no = -1;
-  Token *tok = tokenize_file(path, end, &incl_no);
-  if (!tok)
-    error("%s: %s", path, strerror(errno));
-  add_dep_file(path, false);
-  return tok;
-}
-
-static char *get_path(char *incl) {
-  if (file_exists(incl))
-    return incl;
-  return search_include_paths(incl);
+ static void include_files_cli(StringArray *arr, Token **cur) {
+   for (int i = 0; i < arr->len; i++) {
+    char *path = search_include_paths(arr->data[i]);
+    if (ignore_missing_dep(path, arr->data[i], NULL))
+      continue;
+    char *buf = read_file(path, NULL, false);
+    Token *end = NULL;
+    (*cur)->next = tokenize(add_input_file(path, buf, &(int){-1}), &end);
+    if (end)
+      (*cur) = end;
+    add_dep_file(path, false);
+  }
 }
 
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
@@ -975,33 +974,18 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 
   build_macros(&macrodefs, is_asm_pp);
 
-  Token *in_tok = must_tokenize_file(input_file, NULL);
+  char *in_buf = read_file(input_file, NULL, false);
+  Token *in_tok = tokenize(add_input_file(input_file, in_buf, &(int){-1}), NULL);
+  add_dep_file(input_file, false);
 
-  // Process -imacros option
   Token imacros_head = {0};
   Token *imacros_cur = &imacros_head;
-  for (int i = 0; i < opt_imacros.len; i++) {
-    char *path = get_path(opt_imacros.data[i]);
-    if (ignore_missing_dep(path, opt_imacros.data[i], NULL))
-      continue;
-    Token *end = NULL;
-    imacros_cur->next = must_tokenize_file(path, &end);
-    if (end)
-      imacros_cur = end;
-  }
+  include_files_cli(&opt_imacros, &imacros_cur);
 
-  // Process -include option
   Token head = {0};
   Token *cur = &head;
-  for (int i = 0; i < opt_include.len; i++) {
-    char *path = get_path(opt_include.data[i]);
-    if (ignore_missing_dep(path, opt_include.data[i], NULL))
-      continue;
-    Token *end = NULL;
-    cur->next = must_tokenize_file(path, &end);
-    if (end)
-      cur = end;
-  }
+  include_files_cli(&opt_include, &cur);
+
   cur->next = in_tok;
 
   Token *tok = preprocess(head.next, imacros_head.next, input_file);

@@ -9,6 +9,9 @@ static bool at_bol;
 // True if the current position follows a space character
 static bool has_space;
 
+static void canonicalize_newline(char *p);
+static void remove_backslash_newline(char *p);
+
 #define startswith2(p, x, y) ((*(p) == x) && ((p)[1] == y))
 #define startswith3(p, x, y, z) ((*(p) == x) && ((p)[1] == y) && ((p)[2] == z))
 
@@ -1073,7 +1076,7 @@ Token *tokenize(File *file, Token **end) {
 }
 
 // Returns the contents of a given file.
-char *read_file(char *path) {
+char *read_file(char *path, Token *tok, bool canon) {
   FILE *fp;
 
   if (strcmp(path, "-") == 0) {
@@ -1081,8 +1084,11 @@ char *read_file(char *path) {
     fp = stdin;
   } else {
     fp = fopen(path, "r");
-    if (!fp)
-      return NULL;
+    if (!fp) {
+      if (tok)
+        error_tok(tok, "%s: cannot open file: %s", path, strerror(errno));
+      error("%s: cannot open file: %s", path, strerror(errno));
+    }
   }
 
   char *buf;
@@ -1107,6 +1113,16 @@ char *read_file(char *path) {
     fputc('\n', out);
   fputc('\0', out);
   fclose(out);
+
+  if (canon)
+    return buf;
+
+  // Wipe BOM markers
+  if (startswith3(buf, (char)0xef, (char)0xbb, (char)0xbf))
+    buf[0] = buf[1] = buf[2] = ' ';
+
+  canonicalize_newline(buf);
+  remove_backslash_newline(buf);
   return buf;
 }
 
@@ -1190,22 +1206,4 @@ File *add_input_file(char *path, char *contents, int *incl_no) {
 
   hashmap_put(&input_files_map, path, file);
   return file;
-}
-
-Token *tokenize_file(char *path, Token **end, int *incl_no) {
-  char *p = read_file(path);
-  if (!p)
-    return NULL;
-
-  // UTF-8 texts may start with a 3-byte "BOM" marker sequence.
-  // If exists, just skip them because they are useless bytes.
-  // (It is actually not recommended to add BOM markers to UTF-8
-  // texts, but it's not uncommon particularly on Windows.)
-  if (!memcmp(p, "\xef\xbb\xbf", 3))
-    p += 3;
-
-  canonicalize_newline(p);
-  remove_backslash_newline(p);
-
-  return tokenize(add_input_file(path, p, incl_no), end);
 }
