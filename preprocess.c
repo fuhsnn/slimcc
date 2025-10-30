@@ -1040,9 +1040,21 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   return true;
 }
 
-static char *search_include_paths3(char *filename, int *incl_no) {
+static char *search_include_paths2(char *filename, char *dir, int *incl_no) {
   if (filename[0] == '/')
     return filename;
+
+  if (dir) {
+    char *path = format("%s/%s", dirname(strdup(dir)), filename);
+    if (file_exists(path)) {
+      return path;
+    }
+    for (int i = 0; i < iquote_paths.len; i++) {
+      char *path = format("%s/%s", iquote_paths.data[i], filename);
+      if (file_exists(path))
+        return path;
+    }
+  }
 
   static HashMap cache;
   char *cached = hashmap_get(&cache, filename);
@@ -1062,23 +1074,8 @@ static char *search_include_paths3(char *filename, int *incl_no) {
   return NULL;
 }
 
-static char *search_include_paths2(char *filename, Token *start, bool is_dquote, int *incl_no) {
-  if (filename[0] != '/' && is_dquote) {
-    char *path = format("%s/%s", dirname(strdup(start->file->name)), filename);
-    if (file_exists(path)) {
-      return path;
-    }
-    for (int i = 0; i < iquote_paths.len; i++) {
-      char *path = format("%s/%s", iquote_paths.data[i], filename);
-      if (file_exists(path))
-        return path;
-    }
-  }
-  return search_include_paths3(filename, incl_no);
-}
-
 char *search_include_paths(char *filename) {
-  return search_include_paths3(filename, NULL);
+  return search_include_paths2(filename, ".", NULL);
 }
 
 static char *search_include_next(char *filename, char *cur_file, int *idx) {
@@ -1090,7 +1087,7 @@ static char *search_include_next(char *filename, char *cur_file, int *idx) {
   return NULL;
 }
 
-static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
+static char *read_filename(Token **rest, Token *tok, char **dir) {
   // Pattern 3: #include FOO
   // In this case FOO must be macro-expanded to either
   // a single string token or a sequence of "<" ... ">".
@@ -1111,7 +1108,7 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
     filename = strndup(tok->loc + 1, tok->len - 2);
-    *is_dquote = true;
+    *dir = (tok->origin ? tok->origin : tok)->file->name;
   } else if (equal(tok, "<")) {
     // Pattern 2: #include <foo.h>
     // Reconstruct a filename from between "<" and ">".
@@ -1126,7 +1123,6 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
       filename = strndup(start->loc + 1, tok->loc - start->loc - 1);
     else
       filename = join_tokens(start->next, tok, false);
-    *is_dquote = false;
   }
 
   if (filename && *filename != '\0') {
@@ -1140,8 +1136,8 @@ static char *read_filename(Token **rest, Token *tok, bool *is_dquote) {
 }
 
 // Read an #include argument.
-static char *read_include_filename(Token *tok, bool *is_dquote) {
-  return read_filename(NULL, tok, is_dquote);
+static char *read_include_filename(Token *tok, char **dir) {
+  return read_filename(NULL, tok, dir);
 }
 
 static Token *include_file(Token *tok, char *path, Token *filename_tok, int *incl_no) {
@@ -1348,19 +1344,19 @@ static Token *directives(Token **cur, Token *start) {
 
   if (equal(tok, "embed")) {
     Token *cont;
-    bool is_dquote;
-    char *filename = read_filename(&tok, split_line(&cont, tok->next), &is_dquote);
-    char *path = search_include_paths2(filename, start, is_dquote, NULL);
+    char *dir = NULL;
+    char *filename = read_filename(&tok, split_line(&cont, tok->next), &dir);
+    char *path = search_include_paths2(filename, dir, NULL);
     if (ignore_missing_dep(path, filename, start->next->next))
       return cont;
     return embed_file(cont, tok, path, start->next->next);
   }
 
   if (equal(tok, "include")) {
-    bool is_dquote;
-    char *filename = read_include_filename(split_line(&tok, tok->next), &is_dquote);
+    char *dir = NULL;
+    char *filename = read_include_filename(split_line(&tok, tok->next), &dir);
     int incl_no = -1;
-    char *path = search_include_paths2(filename, start, is_dquote, &incl_no);
+    char *path = search_include_paths2(filename, dir, &incl_no);
     if (ignore_missing_dep(path, filename, start->next->next))
       return tok;
     return include_file(tok, path, start->next->next, &incl_no);
@@ -1371,7 +1367,8 @@ static Token *directives(Token **cur, Token *start) {
       error_tok(tok, "cannot infer #include_next search path");
 
     int incl_no = tok->file->incl_no + 1;
-    char *filename = read_include_filename(split_line(&tok, tok->next), &(bool){0});
+    char *dir = NULL;
+    char *filename = read_include_filename(split_line(&tok, tok->next), &dir);
     char *path = search_include_next(filename, start->file->name, &incl_no);
     if (ignore_missing_dep(path, filename, start->next->next))
       return tok;
@@ -1682,9 +1679,9 @@ static Token *pragma_macro(Token *start) {
 static Token *has_include_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  bool is_dquote;
-  char *filename = read_include_filename(split_paren(&tok, tok), &is_dquote);
-  bool found = search_include_paths2(filename, start, is_dquote, NULL);
+  char *dir = NULL;
+  char *filename = read_include_filename(split_paren(&tok, tok), &dir);
+  bool found = search_include_paths2(filename, dir, NULL);
 
   pop_macro_lock_until(start, tok);
   return new_num_token(found, start, tok);
@@ -1694,9 +1691,9 @@ static Token *has_embed_macro(Token *start) {
   Token *tok = skip(start->next, "(");
   Token *end;
 
-  bool is_dquote;
-  char *filename = read_filename(&tok, split_paren(&end, tok), &is_dquote);
-  char *path = search_include_paths2(filename, start, is_dquote, NULL);
+  char *dir = NULL;
+  char *filename = read_filename(&tok, split_paren(&end, tok), &dir);
+  char *path = search_include_paths2(filename, dir, NULL);
   Token *tok2 = embed_file(NULL, tok, path, start->next->next);
 
   pop_macro_lock_until(start, end);
