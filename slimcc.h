@@ -19,6 +19,8 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
+
 
 #if defined(__SANITIZE_ADDRESS__)
 #define USE_ASAN 1
@@ -59,6 +61,12 @@
 #endif
 #ifndef NORETURN
 #define NORETURN
+#endif
+
+#if defined(__has_builtin) && !(USE_ASAN || defined(__FILC__))
+#if __has_builtin(__builtin_popcount)
+#define BITCNT_POP(x) __builtin_popcount(x)
+#endif
 #endif
 
 #if defined(__GNUC__)
@@ -427,16 +435,12 @@ struct AsmParam {
   Obj *ptr;
   Obj *var;
   int64_t val;
+  uint64_t reg_constraint;
   int label_id;
   int reg;
-  bool is_mem;
-  bool is_gp;
-  bool is_fp;
-  bool is_x87;
+  int var_asm_reg;
+  bool is_mem_inreg;
   bool is_early_clobber;
-  bool is_gp_highbyte;
-  bool is_gp_legacy;
-  bool is_gp_free;
   bool is_clobbered_x87;
 };
 

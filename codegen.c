@@ -116,11 +116,9 @@ static struct {
   bool out[REG_X64_END];
 } asm_use;
 
-static struct {
- AsmParam **data;
- int capacity;
- int cnt;
-} asm_ops;
+#define ASMOP_BUFSZ 32
+static int asm_ops_cnt;
+static AsmParam *asm_ops[ASMOP_BUFSZ];
 
 static struct {
   char *rbp;
@@ -3890,19 +3888,16 @@ static bool gen_addr_opt(Node *node) {
 }
 
 static int asm_ops_push(AsmParam *ap) {
-  int idx = asm_ops.cnt++;
-  if (idx >= asm_ops.capacity) {
-    asm_ops.capacity = idx + 4;
-    asm_ops.data = realloc(asm_ops.data, sizeof(AsmParam *) * asm_ops.capacity);
-    asm_ops.data[idx] = NULL;
-  }
-  asm_ops.data[idx] = ap;
+  int idx = asm_ops_cnt++;
+  if (idx >= ASMOP_BUFSZ)
+    internal_error();
+  asm_ops[idx] = ap;
   return idx;
 }
 
 static void asm_fill_ops(Node *node) {
-  asm_ops.cnt = 0;
-  memset(asm_ops.data, 0, sizeof(*asm_ops.data) * asm_ops.capacity);
+  asm_ops_cnt = 0;
+  memset(asm_ops, 0, sizeof(asm_ops));
 
   for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next)
     asm_ops_push(ap);
@@ -4009,103 +4004,146 @@ static void asm_prepare_clobbers(Token *tok, int *x87_clobber) {
   }
 }
 
-static bool has_matching(AsmParam *ap) {
-  return ap->match && !ap->match->kind;
-}
+static bool asm_get_use(AsmParam *ap, Reg r, bool is_reg) {
+  if (ap->match && !ap->match->kind && is_reg)
+    return asm_use.in[r] || asm_use.out[r];
 
-static bool asm_get_use(AsmParam *ap, Reg r) {
   if (ap->constraint->str[0] != '=' && ap->constraint->str[0] != '+')
     return asm_use.in[r];
 
-  if (ap->constraint->str[0] == '=' && ap->kind == ASMOP_REG &&
-    !ap->is_early_clobber && !has_matching(ap))
+  if (ap->constraint->str[0] == '=' && !ap->is_early_clobber && is_reg)
     return asm_use.out[r];
 
   return asm_use.in[r] || asm_use.out[r];
 }
 
 static void asm_set_use(AsmParam *ap) {
+  if (ap->match && !ap->match->kind && ap->kind == ASMOP_REG) {
+    ap->match->kind = ASMOP_REG;
+    ap->match->reg = ap->reg;
+    asm_use.in[ap->reg] = asm_use.out[ap->reg] = true;
+    return;
+  }
   if (ap->constraint->str[0] != '=' && ap->constraint->str[0] != '+') {
     asm_use.in[ap->reg] = true;
     return;
   }
-  if (ap->constraint->str[0] == '=' && ap->kind == ASMOP_REG &&
-    !ap->is_early_clobber && !has_matching(ap)) {
+  if (ap->constraint->str[0] == '=' && !ap->is_early_clobber && ap->kind == ASMOP_REG) {
     asm_use.out[ap->reg] = true;
     return;
   }
-  asm_use.out[ap->reg] = asm_use.in[ap->reg] = true;
+  asm_use.in[ap->reg] = asm_use.out[ap->reg] = true;
+}
 
-  if (has_matching(ap)) {
-    ap->match->kind = ASMOP_REG;
-    ap->match->reg = ap->reg;
+static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
+  static uint64_t reg_free, reg_highbyte, reg_legacy, reg_gp, reg_fp, reg_x87;
+  if (!reg_free) {
+    reg_free = 1ULL << REG_X64_AX | 1ULL << REG_X64_CX | 1ULL << REG_X64_DX;
+    reg_highbyte = reg_free | 1ULL << REG_X64_BX;
+    reg_free |= 1ULL << REG_X64_SI | 1ULL << REG_X64_DI;
+    reg_legacy = reg_free | 1ULL << REG_X64_BX | 1ULL << REG_X64_BP;
+    reg_free |= 1ULL << REG_X64_R8 | 1ULL << REG_X64_R9 |
+      1ULL << REG_X64_R10 | 1ULL << REG_X64_R11;
+
+    for(int i = REG_X64_AX; i <= REG_X64_BP; i++)
+      reg_gp |= 1ULL << i;
+    for(int i = REG_X64_XMM0; i <= REG_X64_XMM15; i++)
+      reg_fp |= 1ULL << i;
+    for(int i = REG_X64_X87_ST0; i <= REG_X64_X87_ST7; i++)
+      reg_x87 |= 1ULL << i;
   }
-}
 
-static void fixed_reg(Reg *reg, Reg spec, Token *tok) {
-  if (*reg && *reg != spec)
-    error_tok(tok, "conflicting register constraints");
-  *reg = spec;
-}
-
-static void asm_constraint(AsmParam *ap, int x87_clobber) {
   for (; ap; ap = ap->next) {
-    Reg reg = REG_X64_NULL;
-    char *p = ap->constraint->str;
-    Token *tok = ap->arg->tok;
+    uint64_t reg_msk = 0;
     int match_idx = -1;
+    bool is_mem = false;
     bool is_num = false;
     bool is_symbolic = false;
+    bool is_x87_st0 = false;
+    bool is_x87_st1 = false;
 
-    if (!strncmp(p, "=@cc", 4)) {
-      ap->kind = ASMOP_FLAG;
-      ap->flag = strdup(&p[4]);
-      continue;
+    char *p = ap->constraint->str;
+    if (is_input) {
+      if (*p == '%')
+        p++;
+    } else {
+      if (!strncmp(p, "=@cc", 4)) {
+        ap->kind = ASMOP_FLAG;
+        ap->flag = strdup(&p[4]);
+        continue;
+      }
+      if (*p != '=' && *p != '+')
+        error_tok(ap->constraint, "output constraint should start with '=' or '+'");
+      p++;
     }
     for (; *p; p++) {
       switch (*p) {
-      case '=':
-      case '+':
-      case '%': continue;
-      case '&': ap->is_early_clobber = true; continue;
       case 'm':
-      case 'o': ap->is_mem = true; continue;
+      case 'o': is_mem = true; continue;
       case 'r':
-      case 'q': ap->is_gp = true; continue;
-      case 'Q': ap->is_gp_highbyte = true; continue;
-      case 'R': ap->is_gp_legacy = true; continue;
-      case 'U': ap->is_gp_free = true; continue;
-      case 'n':
-      case 'I':
-      case 'J':
-      case 'K':
-      case 'L':
-      case 'M':
-      case 'N':
-      case 'O':
-      case 'P': is_num = true; continue;
-      case 'i': is_num = is_symbolic = true; continue;
+      case 'q': reg_msk |= reg_gp; continue;
+      case 'Q': reg_msk |= reg_highbyte; continue;
+      case 'R': reg_msk |= reg_legacy; continue;
+      case 'U': reg_msk |= reg_free; continue;
       case 'x':
-      case 'v': ap->is_fp = true; continue;
-      case 'f': ap->is_x87 = true; continue;
-      case 'X': ap->is_fp = true;
-      case 'g': ap->is_mem = ap->is_gp = is_num = true; continue;
-      case 'a': fixed_reg(&reg, REG_X64_AX, tok); continue;
-      case 'b': fixed_reg(&reg, REG_X64_BX, tok); continue;
-      case 'c': fixed_reg(&reg, REG_X64_CX, tok); continue;
-      case 'd': fixed_reg(&reg, REG_X64_DX, tok); continue;
-      case 'S': fixed_reg(&reg, REG_X64_SI, tok); continue;
-      case 'D': fixed_reg(&reg, REG_X64_DI, tok); continue;
-      case 't': fixed_reg(&reg, REG_X64_X87_ST0, tok); continue;
-      case 'u': fixed_reg(&reg, REG_X64_X87_ST1, tok); continue;
+      case 'v': reg_msk |= reg_fp; continue;
+      case 'f': reg_msk |= reg_x87; continue;
+      case 'X': reg_msk |= reg_fp;
+      case 'g': reg_msk |= reg_gp; is_mem = is_num = true; continue;
+      case 'a': reg_msk |= 1ULL << REG_X64_AX; continue;
+      case 'b': reg_msk |= 1ULL << REG_X64_BX; continue;
+      case 'c': reg_msk |= 1ULL << REG_X64_CX; continue;
+      case 'd': reg_msk |= 1ULL << REG_X64_DX; continue;
+      case 'S': reg_msk |= 1ULL << REG_X64_SI; continue;
+      case 'D': reg_msk |= 1ULL << REG_X64_DI; continue;
+      case 't': is_x87_st0 = true; continue;
+      case 'u': is_x87_st1 = true; continue;
       }
-      if (Isdigit(*p)) {
-        char *pos;
-        match_idx = strtoul(p, &pos, 10);
-        p = pos - 1;
+
+      if (is_input) {
+        switch (*p) {
+        case 'i': is_symbolic = true;
+        case 'n':
+        case 'I':
+        case 'J':
+        case 'K':
+        case 'L':
+        case 'M':
+        case 'N':
+        case 'O':
+        case 'P': is_num = true; continue;
+        }
+        if (Isdigit(*p)) {
+          char *pos;
+          match_idx = strtoul(p, &pos, 10);
+          if (*pos)
+            error_tok(ap->constraint, "matching constraint not last");
+          break;
+        }
+      } else if (*p == '&') {
+        ap->is_early_clobber = true;
         continue;
       }
       error_tok(ap->constraint, "unknown constraint \"%c\"", *p);
+    }
+
+    if (reg_msk && ap->arg->kind == ND_VAR && ap->arg->m.var->asm_name) {
+      ap->var_asm_reg = ident_reg(ap->arg->m.var->asm_name, ap->arg->tok);
+      reg_msk &= 1ULL << ap->var_asm_reg;
+    }
+    if (ap->match) {
+      if (!ap->match->kind) {
+        uint64_t match_r = reg_msk;
+        if (ap->match->var_asm_reg)
+          match_r &= 1ULL << ap->match->var_asm_reg;
+        if (match_r) {
+          ap->reg_constraint = match_r;
+          // Ensure the input is sorted after the output during asm_assign_oprands()
+          ap->match->reg_constraint |= match_r;
+          continue;
+        }
+      }
+      ap->match = NULL;
     }
     if (is_num && is_integer(ap->arg->ty) && is_const_expr(ap->arg, &ap->val)) {
       ap->kind = ASMOP_NUM;
@@ -4115,91 +4153,107 @@ static void asm_constraint(AsmParam *ap, int x87_clobber) {
       ap->kind = ASMOP_SYMBOLIC;
       continue;
     }
-    if (ap->is_mem && has_memop(ap->arg)) {
-      ap->kind = ASMOP_MEM;
-      continue;
+    if (is_mem) {
+      if (has_memop(ap->arg)) {
+        ap->kind = ASMOP_MEM;
+        continue;
+      }
+      ap->is_mem_inreg = true;
     }
-    if (ap->arg->kind == ND_VAR && ap->arg->m.var->asm_name) {
-      Reg r = ident_reg(ap->arg->m.var->asm_name, ap->arg->tok);
-      if ((is_gp_reg(r) && !ap->is_gp) || (is_xmm_reg(r) && !ap->is_fp) ||
-        (is_x87_reg(r) && !ap->is_x87))
-        error_tok(ap->arg->tok, "constraint mismatch with variable register");
-      fixed_reg(&reg, r, tok);
-    }
-    if (reg) {
-      if (reg == REG_X64_X87_ST0 && x87_clobber >= 1)
-        ap->is_clobbered_x87 = true;
-      else if (reg == REG_X64_X87_ST1 && x87_clobber >= 2)
-        ap->is_clobbered_x87 = true;
-
-      ap->reg = reg;
-      ap->kind = ASMOP_REG;
-      asm_set_use(ap);
-      continue;
+    if (is_x87_st0 || is_x87_st1) {
+      Reg r = is_x87_st0 ? REG_X64_X87_ST0 : REG_X64_X87_ST1;
+      if (!asm_get_use(ap, r, true)) {
+        ap->is_clobbered_x87 = x87_clobber >= (is_x87_st0 ? 1 : 2);
+        ap->reg = r;
+        ap->kind = ASMOP_REG;
+        asm_set_use(ap);
+        continue;
+      }
     }
     if (match_idx >= 0) {
-      if (match_idx >= asm_ops.cnt)
-        error_tok(ap->arg->tok, "matching constraint exceeds operand count");
-      asm_ops.data[match_idx]->match = ap;
+      if (match_idx >= asm_ops_cnt)
+        error_tok(ap->constraint, "invalid matching constraint");
+
+      AsmParam *matchap = asm_ops[match_idx];
+      if (matchap->match || matchap->constraint->str[0] != '=')
+        error_tok(ap->constraint, "invalid matching operand");
+      matchap->match = ap;
     }
+    ap->reg_constraint = reg_msk;
   }
 }
 
-static Reg find_free_reg(AsmParam *ap, Reg start, Reg end) {
-  for (Reg i = start; i <= end; i++) {
-    if (!asm_get_use(ap, i)) {
-      ap->reg = i;
-      return true;
-    }
-  }
-  return false;
+static int asm_reg_msk_popcount(AsmParam *ap) {
+#ifdef BITCNT_POP
+  return BITCNT_POP(ap->reg_constraint);
+#else
+  int pop = 0;
+  for (uint64_t i = 0; i < REG_X64_END; i++)
+    pop += !!(ap->reg_constraint & (1ULL << i));
+  return pop;
+#endif
 }
 
-static void asm_assign_oprands2(Reg *reg_list, size_t bofs) {
-  for (int i = 0; i < asm_ops.cnt; i++) {
-    AsmParam *ap = asm_ops.data[i];
-    if (ap->kind || !*((bool *)ap + bofs))
+static int asm_assign_oprands_presort(AsmParam **sorted) {
+  uint8_t counts[REG_X64_END] = {0};
+
+  for (int i = 0; i < asm_ops_cnt; i++) {
+    AsmParam *ap = asm_ops[i];
+    if (ap->kind || !ap->reg_constraint)
       continue;
-    for (Reg *r = reg_list; *r != REG_X64_NULL; r++) {
-      if (!asm_get_use(ap, *r)) {
-        ap->reg = *r;
+    counts[asm_reg_msk_popcount(ap)]++;
+  }
+
+  for (uint64_t idx = 1; idx < REG_X64_END; idx++)
+    counts[idx] += counts[idx - 1];
+
+  int sorted_cnt = 0;
+  for (int i = asm_ops_cnt; --i >= 0;) {
+    AsmParam *ap = asm_ops[i];
+    if (ap->kind || !ap->reg_constraint)
+      continue;
+    sorted[--counts[asm_reg_msk_popcount(ap)]] = ap;
+    sorted_cnt++;
+  }
+  return sorted_cnt;
+}
+
+static void asm_assign_oprands(void) {
+  AsmParam *sorted[ASMOP_BUFSZ];
+
+  int sorted_cnt = asm_assign_oprands_presort(sorted);
+
+  for (uint64_t i = 0; i < sorted_cnt; i++) {
+    AsmParam *ap = sorted[i];
+    if (ap->kind)
+      continue;
+    for (uint64_t i = 0; i < REG_X64_END; i++) {
+      if ((ap->reg_constraint & (1ULL << i)) && !asm_get_use(ap, i, true)) {
+        ap->reg = i;
         ap->kind = ASMOP_REG;
         asm_set_use(ap);
         break;
       }
     }
   }
-}
 
-static void asm_assign_oprands(void) {
-  static Reg highbyte[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_BX, REG_X64_NULL};
-  static Reg legacy[] = {REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI,
-    REG_X64_BX, REG_X64_BP, REG_X64_NULL};
-  static Reg free[] = {
-    REG_X64_AX, REG_X64_CX, REG_X64_DX, REG_X64_SI, REG_X64_DI,
-    REG_X64_R8, REG_X64_R9, REG_X64_R10, REG_X64_R11, REG_X64_NULL};
-
-  asm_assign_oprands2(highbyte, offsetof(AsmParam, is_gp_highbyte));
-  asm_assign_oprands2(legacy, offsetof(AsmParam, is_gp_legacy));
-  asm_assign_oprands2(free, offsetof(AsmParam, is_gp_free));
-
-  for (int i = 0; i < asm_ops.cnt; i++) {
-    AsmParam *ap = asm_ops.data[i];
+  for (int i = 0; i < asm_ops_cnt; i++) {
+    AsmParam *ap = asm_ops[i];
     if (ap->kind)
       continue;
-    if ((ap->is_fp && find_free_reg(ap, REG_X64_XMM0, REG_X64_XMM15)) ||
-      (ap->is_x87 && find_free_reg(ap, REG_X64_X87_ST0, REG_X64_X87_ST7)) ||
-      (ap->is_gp && find_free_reg(ap, REG_X64_AX, REG_X64_R15))) {
-      ap->kind = ASMOP_REG;
-      asm_set_use(ap);
-      continue;
+    if (ap->is_mem_inreg) {
+      for (uint64_t i = REG_X64_AX; i <= REG_X64_BP; i++) {
+        if (!asm_get_use(ap, i, false)) {
+          ap->reg = i;
+          ap->kind = ASMOP_MEM;
+          asm_set_use(ap);
+          break;
+        }
+      }
+      if (ap->kind)
+        continue;
     }
-    if (ap->is_mem && find_free_reg(ap, REG_X64_AX, REG_X64_R15)) {
-      ap->kind = ASMOP_MEM;
-      asm_set_use(ap);
-      continue;
-    }
-    error_tok(ap->arg->tok, "cannot assign register");
+    error_tok(ap->arg->tok, "out of registers");
   }
 }
 
@@ -4279,8 +4333,8 @@ void prepare_inline_asm(Node *node) {
   int x87_clobber = 0;
   asm_prepare_clobbers(node->gasm.clobbers, &x87_clobber);
 
-  asm_constraint(node->gasm.inputs, x87_clobber);
-  asm_constraint(node->gasm.outputs, 0);
+  asm_constraint(node->gasm.inputs, true, x87_clobber);
+  asm_constraint(node->gasm.outputs, false, 0);
 
   asm_assign_oprands();
 
@@ -4313,8 +4367,8 @@ static char *reg_sz(Reg reg, int sz) {
 }
 
 static void asm_gen_operands(void) {
-  for (int i = 0; i < asm_ops.cnt; i++) {
-    AsmParam *ap = asm_ops.data[i];
+  for (int i = 0; i < asm_ops_cnt; i++) {
+    AsmParam *ap = asm_ops[i];
     if (ap->ptr) {
       Node addr_node = {.kind = ND_ADDR, .m.lhs = ap->arg, .tok = ap->arg->tok};
       gen_var_assign(ap->ptr, &addr_node);
@@ -4417,16 +4471,16 @@ static Reg get_input_reg(AsmParam *ap) {
 }
 
 static void asm_xmm_inputs(void) {
-  for (int i = 0; i < asm_ops.cnt; i++) {
-    AsmParam *ap = asm_ops.data[i];
+  for (int i = 0; i < asm_ops_cnt; i++) {
+    AsmParam *ap = asm_ops[i];
     if (is_xmm_reg(get_input_reg(ap)))
       asm_reg_input(ap, REG_X64_DX);
   }
 }
 
 static void asm_gp_inputs(void) {
-  for (int i = 0; i < asm_ops.cnt; i++) {
-    AsmParam *ap = asm_ops.data[i];
+  for (int i = 0; i < asm_ops_cnt; i++) {
+    AsmParam *ap = asm_ops[i];
     if (ap->kind == ASMOP_MEM && ap->reg)
       Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), regs[ap->reg][3]);
     if (is_gp_reg(get_input_reg(ap)))
@@ -4437,8 +4491,8 @@ static void asm_gp_inputs(void) {
 static int asm_x87_inputs(void) {
   AsmParam *sort_buf[8] = {0};
 
-  for (int i = 0; i < asm_ops.cnt; i++) {
-    AsmParam *ap = asm_ops.data[i];
+  for (int i = 0; i < asm_ops_cnt; i++) {
+    AsmParam *ap = asm_ops[i];
     Reg reg = get_input_reg(ap);
     if (is_x87_reg(reg))
       sort_buf[reg - REG_X64_X87_ST0] = ap;
@@ -4530,8 +4584,8 @@ static bool named_op(char **rest, char *p, Token *tok) {
 
 static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
   if (*p == '[') {
-    for (int i = 0; i < asm_ops.cnt; i++) {
-      AsmParam *op = asm_ops.data[i];
+    for (int i = 0; i < asm_ops_cnt; i++) {
+      AsmParam *op = asm_ops[i];
       if (is_label) {
         if (named_op(rest, p + 1, op->arg->tok))
           return op;
@@ -4542,8 +4596,8 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
     }
   } else if (Isdigit(*p)) {
     unsigned long idx = strtoul(p, rest, 10);
-    if (idx < asm_ops.cnt)
-      return asm_ops.data[idx];
+    if (idx < asm_ops_cnt)
+      return asm_ops[idx];
   }
   error_tok(tok, "operand not found");
 }
@@ -4722,8 +4776,8 @@ static void gen_asm(Node *node) {
   asm_fill_ops2(node);
   asm_body(node);
 
-  int fallthrough_label = asm_ops.cnt;
-  int meet_label = asm_ops.cnt + 1;
+  int fallthrough_label = asm_ops_cnt;
+  int meet_label = asm_ops_cnt + 1;
   bool is_goto_with_output = node->gasm.outputs && node->gasm.labels;
   if (is_goto_with_output) {
     char *tmp_gp = regs[node->gasm.ctx->output_tmp1][3];
