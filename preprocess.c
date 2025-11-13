@@ -796,19 +796,17 @@ static Token *subst(Token *tok, MacroContext *ctx) {
 
     MacroArg *arg = find_arg(&tok, tok, ctx);
     if (arg) {
-      Token *t;
-      if (equal(tok, "##"))
-        t = arg->tok;
-      else
-        t = expand_arg(arg);
+      Token *t = equal(tok, "##") ? arg->tok : expand_arg(arg);
 
       if (t->kind == TK_EOF) {
         cur = cur->next = new_pmark(t);
+        align_token(cur, start);
         continue;
       }
+      cur = cur->next = copy_token(t);
+      align_token(cur, start);
 
-      align_token(t, start);
-      for (; t->kind != TK_EOF; t = t->next)
+      while ((t = t->next)->kind != TK_EOF)
         cur = cur->next = copy_token(t);
       continue;
     }
@@ -884,13 +882,17 @@ static Token *insert_funclike(Token *tok, Token *stop_tok, Token *orig) {
   if (orig->origin)
     orig = orig->origin;
 
+  bool space = false;
   for (; tok->kind != TK_EOF; tok = tok->next) {
-    if (tok->kind == TK_PMARK)
+    if (tok->kind == TK_PMARK) {
+      space |= tok->has_space;
       continue;
-
+    }
     cur = cur->next = tok;
     cur->origin = orig;
     cur->is_root = true;
+    cur->has_space |= space;
+    space = false;
   }
   cur->next = stop_tok;
   return head.next;
