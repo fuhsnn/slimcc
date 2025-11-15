@@ -1801,6 +1801,8 @@ void init_macros(void) {
   define_macro("__STDC_UTF_32__", "1");
   define_macro("__STDC__", "1");
 
+  define_macro("__STDC_DEFER_TS25755__", "1");
+
   define_macro("__C99_MACRO_WITH_VA_ARGS", "1");
   define_macro("__USER_LABEL_PREFIX__", "");
 

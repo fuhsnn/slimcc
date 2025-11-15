@@ -1,4 +1,5 @@
 #include "test.h"
+#include <stddefer.h>
 
 // Adapted from https://www.open-std.org/JTC1/SC22/WG14/www/docs/n3199.htm
 

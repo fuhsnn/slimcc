@@ -604,7 +604,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       // -f only options
       if (b) {
         if (set_true(arg, "defer-ts", &opt_fdefer_ts)) {
-          define_macro("__STDC_DEFER_TS25755__", "1");
+          define_macro("__STDC_DEFER_TS25755__", "2");
           continue;
         }
         if (set_bool(arg, false, "signed-char", &ty_pchar->is_unsigned) ||
