@@ -3,7 +3,7 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
  - C11 features: `_Static_assert()`, over-aligned locals, `_Generic` with qualifiers.
  - C23 features: `constexpr`, `enum:T`, `#embed`, `auto`, `_BitInt`, `nullptr`, `={}`
  - C2Y features: named loops, `if` declarations, `_Countof`.
- - `defer`: enable with `-fdefer-ts`, or use `_Defer`.
+ - `defer/_Defer`: enable non-unglified form with `-fdefer-ts` option or `#include <stddefer.h>`.
  - WG14 proposals:  `__VA_TAIL__`, `#def #enddef`.
  - GNU features: inline assembly, commonly used `__attribute__`'s.
  - MSVC features: `#pragma pack`, anonymous struct.
@@ -11,9 +11,9 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
 
 ## What can it build?
 Compiling real C projects with slimcc has been a major focus, the [CI workflow](https://github.com/fuhsnn/slimcc/blob/main/.github/workflows/linux_thirdparty.yml) now regularly build-test a healthy collection of familiar names, for bragging rights:
- - Core system commands (GNU coreutils, busybox, toybox)
- - Developer tools (binutils, Bash, Curl, Git, jq, wget, Zsh)
- - Programming languages (Python, Go, Lua, Perl, Ruby, PHP, Ocaml, Zig)
+ - Core system commands (GNU utils, busybox, toybox, bash, zsh)
+ - Command-line tools (curl, git, jq, wget, rsync, apk, pacman)
+ - Programming languages (Python, Go, Lua, Perl, Ruby, PHP, Ocaml, Erlang, C3, Zig)
  - Gamedev/graphics libraries (SDL3, glfw, stb, raylib, sokol)
  - Critical infrastructure softwares (Redis, Valkey, Nginx, PostgreSQL)
 
@@ -45,11 +45,31 @@ Compiling real C projects with slimcc has been a major focus, the [CI workflow](
 lt_prog_compiler_pic=
 lt_prog_compiler_static=
 ```
- - It might be necessary to configure with `CFLAGS=-fPIC`, for CMake, `-DCMAKE_C_FLAGS=-fPIC`.
- - CMake `find_package()` might fail to find installed libraries, help it with `-DCMAKE_PREFIX_PATH`.
- - Meson: see https://github.com/mesonbuild/meson/issues/5406. Try [Muon](https://github.com/muon-build/muon) or hope for slimcc to join the club.
+ - CMake: these extra flags might be helpful:
+ - - `-DCMAKE_PREFIX_PATH`: help `find_package()` find installed libraries.
+ - - `-DCMAKE_C_COMPILE_OPTIONS_PIC=-fPIC`
+ - - `-DCMAKE_C_COMPILE_OPTIONS_PIE=-fPIE`
+ - Meson: see https://github.com/mesonbuild/meson/issues/5406. Try [Muon](https://github.com/muon-build/muon).
+ - [Muon](https://github.com/muon-build/muon): slimcc works ok under Muon's posix cc mode, for better compatibility, register slimcc in Muon's `src/script/runtime/toolchains.meson` with:
+```
+toolchain.register_compiler(
+    'slimcc',
+    inherit: 'posix',
+    linker: 'ld',
+    detect: func(out str) -> int
+        return 'slimcc' in out ? 100 : 0
+    endfunc,
+    handlers: {
+        'print_search_dirs': ['-print-search-dirs'],
+    },
+)
+```
  - Projects with deep GCC assumptions might actually work if you carefully opt in/out of `#if __GNUC__` blocks, see the [CI test scripts](https://github.com/fuhsnn/slimcc/blob/main/scripts/linux_thirdparty.bash) for a taste of hacks that can be done.
- - Some projects adopt an idiom that globally set `-fvisibility=hidden` then selectively export public API with `__attribute__((visibility("default")))`. slimcc support both, yet a problem arises when the former is probed by build system while the latter hardcoded in `#if __GNUC__` blocks regardless of the build system's decision. An option `-fdisable-visibility` is added to simply disable both features to prevent the conflict.
+
+## Compatibility options
+ - `-fms-anon-struct`: Enable declaring anonymous struct member with tags like GCC's `-fms-extensions` or `-fplan9-extensions`.
+ - `-fdisable-visibility`: Some projects adopt an idiom that globally set `-fvisibility=hidden` then selectively export public API with `__attribute__((visibility("default")))`. slimcc support both, yet a problem arises when the former is probed by build system while the latter hardcoded in `#if __GNUC__` blocks regardless of the build system's decision. The option simply disable both features to prevent the conflict.
+ - `-ffake-always-inline`: slimcc currently don't inline functions, but some projects' usage of GCC `always_inline` on non-static inline functions would cause missing definition at link time. This option turns these definitions into `static inline`'s to work around compile error.
 
 ## How optimized is the compiler?
 The coding style is highly influenced by `chibicc`, which means in the eyes of C veterans there might be all kinds of inefficiencies in the name of readability. While micro-optimizing is fun, I only commit changes that noticeably improve fully-optimized builds.
@@ -58,5 +78,6 @@ As such, optimization flags and custom allocators have great impact on its perfo
 
 ## How portable is the compiler?
  - It's written in C99 with several POSIX 2008 functions.
- - `TinyCC`(mob branch), `kefir`, `pcc`, and vanilla `chibicc` should be able to compile it.
- - `cproc` is blocked by the lack of `long double` support in its backend, `QBE`.
+ - Little endian is assumed.
+ - `tcc(TinyCC)`, `kefir` and `pcc` should be able to compile it, `chibicc` needs [a few patches](https://github.com/fuhsnn/chibicc/tree/minimum-fix).
+ - `cproc`(QBE), `cparser`(libFirm) have incomplete support for `long double`, adding `-DNO_LONG_DOUBLE` to the flags allow these otherwise capable compilers to bootstrap slimcc. `long double` constants would be broken so don't use the build for anything other than self-hosting slimcc.
