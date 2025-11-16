@@ -516,6 +516,18 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
+    if (startswith(argv[i], &arg, "-Wp,-MD,")) {
+      opt_MD = true;
+      opt_MF = arg;
+      continue;
+    }
+
+    if (startswith(argv[i], &arg, "-Wp,-MMD,")) {
+      opt_MD = opt_MMD = true;
+      opt_MF = arg;
+      continue;
+    }
+
     if (!strcmp(argv[i], "-MG")) {
       opt_MG = true;
       continue;
@@ -526,7 +538,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
-    if (take_arg(argv, &i, &arg, "-MT")) {
+    if (take_arg(argv, &i, &arg, "-MT") || startswith(argv[i], &arg, "-Wp,-MT,")) {
       if (opt_MT == NULL)
         opt_MT = arg;
       else
@@ -534,7 +546,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
-    if (take_arg(argv, &i, &arg, "-MQ")) {
+    if (take_arg(argv, &i, &arg, "-MQ") || startswith(argv[i], &arg, "-Wp,-MQ,")) {
       if (opt_MT == NULL)
         opt_MT = quote_makefile(arg);
       else
@@ -678,9 +690,14 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       set_bool(argv[i], false, "-Wno-error", &opt_werror))
       continue;
 
+    if (startswith(argv[i], &arg, "-W")) {
+      if (strchr(arg, ','))
+        error("unknown argument: %s", argv[i]);
+      continue;
+    }
+
     // These options are ignored for now.
-    if (startswith(argv[i], &arg, "-W") ||
-        startswith(argv[i], &arg, "-march=") ||
+    if (startswith(argv[i], &arg, "-march=") ||
         !strcmp(argv[i], "-ffreestanding") ||
         !strcmp(argv[i], "-fno-builtin") ||
         !strcmp(argv[i], "-fno-lto") ||
