@@ -1,5 +1,5 @@
-#ifndef _PLAT_SYS_CDEFS_H
-#define _PLAT_SYS_CDEFS_H
+#ifndef _SLIMCC_PLAT_SYS_CDEFS_H
+#define _SLIMCC_PLAT_SYS_CDEFS_H
 
 #include_next <sys/cdefs.h>
 
