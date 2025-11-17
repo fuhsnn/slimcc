@@ -3092,7 +3092,7 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic) {
 }
 
 static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
-  if (!opt_optimize || !var->init_data || var->is_weak || !is_const_var(var))
+  if (!var->init_data || var->is_weak || !is_const_var(var))
     return false;
   for (Relocation *rel = var->rel; rel; rel = rel->next) {
     if ((rel->offset + ty_nullptr->size) <= ofs)
