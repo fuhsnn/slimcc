@@ -930,6 +930,14 @@ void add_dep_file(char *path, bool is_sys) {
   }
 }
 
+static char *skip_dot_slash(char *p) {
+  if (*p == '.' && p[1] == '/') {
+    for (p += 2; *p == '/';)
+      p++;
+  }
+  return p;
+}
+
 // If -M options is given, the compiler write a list of input files to
 // stdout in a format that "make" command can read. This feature is
 // used to automate file dependency management.
@@ -951,13 +959,13 @@ static void print_dependencies(char *input) {
     fprintf(out, "%s:", quote_makefile(replace_extn(input, ".o")));
 
   for (int i = 0; i < dep_files.len; i++)
-    fprintf(out, " \\\n  %s", dep_files.data[i]);
+    fprintf(out, " \\\n  %s", skip_dot_slash(dep_files.data[i]));
 
   fputc('\n', out);
 
   if (opt_MP)
-    for (int i = 0; i < dep_files.len; i++)
-      fprintf(out, "%s:\n", quote_makefile(dep_files.data[i]));
+    for (int i = 1; i < dep_files.len; i++)
+      fprintf(out, "%s:\n", quote_makefile(skip_dot_slash(dep_files.data[i])));
 
   if (out == stdout)
     fflush(out);
@@ -986,7 +994,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   build_macros(&macrodefs, is_asm_pp);
 
   Token *in_tok = tokenize(read_file(input_file, NULL, false), NULL);
-  add_dep_file(input_file, false);
+  add_dep_file(input_file, false); // input file must be first in dep_files
 
   Token imacros_head = {0};
   Token *imacros_cur = &imacros_head;
