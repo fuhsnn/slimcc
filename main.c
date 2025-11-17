@@ -753,8 +753,6 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   }
   if (no_input)
     error("no input files");
-  else if (input_cnt > 1 && opt_o && (opt_c || opt_S || opt_E))
-    error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
 
   *no_fork = (input_cnt == 1);
   *run_ld = has_wl && !(opt_c || opt_S || opt_E);
@@ -1272,6 +1270,7 @@ int main(int argc, char **argv) {
 
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
+  int src_cnt = 0;
 
   for (int i = 0; i < input_args.len; i++) {
     if (!strcmp(input_args.data[i], "-x")) {
@@ -1282,14 +1281,6 @@ int main(int argc, char **argv) {
       continue;
 
     char *input = input_args.data[i];
-
-    char *output;
-    if (opt_o)
-      output = opt_o;
-    else if (opt_S)
-      output = replace_extn(input, ".s");
-    else
-      output = replace_extn(input, ".o");
 
     FileType type;
     if (opt_x != FILE_NONE)
@@ -1303,6 +1294,17 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    char *output;
+    if (opt_o) {
+      if (opt_c || opt_S || opt_E)
+        if (src_cnt++)
+          error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
+      output = opt_o;
+    } else if (opt_S) {
+      output = replace_extn(input, ".s");
+    } else {
+      output = replace_extn(input, ".o");
+    }
     // Handle .s
     if (type == FILE_ASM) {
       if (opt_S || opt_E || opt_M)
@@ -1373,8 +1375,11 @@ int main(int argc, char **argv) {
     continue;
   }
 
-  if (run_ld)
-    run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
-
+  if (run_ld) {
+    if (opt_c || opt_S || opt_E || opt_M)
+      fprintf(stderr, "linker input unused\n");
+    else
+      run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
+  }
   return 0;
 }
