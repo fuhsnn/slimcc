@@ -564,6 +564,9 @@ static Token *read_char_literal(char *start) {
   uint32_t val = 0;
   bool is_multi = false;
   char *p = start + 1;
+  if (*p == '\'')
+    error_at(p, "empty character literal");
+
   for (;;) {
     if (*p == '\0')
       error_at(start, "unclosed character literal");

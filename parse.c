@@ -455,6 +455,11 @@ static Node *new_unknown(Type *ty, Token *tok) {
 }
 
 static bool invalid_cast(Node *node, Type *to) {
+  if (is_array(to) || to->kind == TY_FUNC)
+    return true;
+  if (node->ty->size < 0 && node->ty->kind != TY_ARRAY)
+    return true;
+
   if (to->kind == TY_NULLPTR)
     return !is_nullptr(node);
 
@@ -469,15 +474,15 @@ static bool invalid_cast(Node *node, Type *to) {
   }
 
   if (to->kind != TY_VOID) {
-    switch (node->ty->kind) {
-    case TY_STRUCT:
-    case TY_UNION:
-      return !is_compatible(node->ty, to);
-    case TY_VOID:
+    if (node->ty->kind == TY_VOID)
       return true;
-    }
+    if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION)
+      return !is_compatible(node->ty, to);
+    if (to->kind == TY_STRUCT || to->kind == TY_UNION)
+      return true;
   }
-  if (node->ty->base && is_flonum(to))
+  if ((node->ty->base && is_flonum(to)) ||
+    (is_flonum(node->ty) && to->base))
     return true;
 
   return false;
@@ -1249,15 +1254,17 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   if (!is_typename(tok)) {
     fn_ty->is_oldstyle = true;
 
+    Token *start = tok;
     if (!is_def) {
-      *rest = skip_paren(tok);
+      while (comma_list(rest, &tok, ")", tok != start))
+        ident_tok(&tok, tok);
     } else {
       enter_param_scope();
       fn_ty->scopes = scope;
 
       Obj head = {0};
       Obj *cur = &head;
-      while (comma_list(rest, &tok, ")", cur != &head)) {
+      while (comma_list(rest, &tok, ")", tok != start)) {
         Token *name = ident_tok(&tok, tok);
         cur = cur->param_next = new_param(get_ident(name), NULL);
       }
@@ -1321,8 +1328,9 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
 
   if (equal(tok, "["))
     ty = array_dimensions(&tok, tok->next, ty, ctx);
-  if (ty->size < 0)
-    error_tok(tok, "array has incomplete type");
+
+  if (ty->size < 0 || ty->kind == TY_VOID || ty->kind == TY_FUNC)
+    error_tok(tok, "invalid array element type");
 
   *rest = tok;
   if (!expr)
@@ -2094,6 +2102,8 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
         init->expr = expr;
         return;
       }
+      if (init->is_root)
+        error_tok(tok, "expected initializer list");
     }
     prepare_struct_init(init, init->ty);
     aggregate_initializer(rest, tok, init, has_brace);
@@ -2802,7 +2812,10 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     if (consume(rest, tok->next, ";"))
       return node;
 
-    node->m.lhs = assign_cast(current_fn->ty->return_ty, expr(&tok, tok->next));
+    Node *n = expr(&tok, tok->next);
+    if (current_fn->ty->return_ty->kind != TY_VOID)
+      n = assign_cast(current_fn->ty->return_ty, n);
+    node->m.lhs = n;
     *rest = skip(tok, ";");
     return node;
   }
@@ -3036,8 +3049,13 @@ static Node *expr_stmt(Token **rest, Token *tok) {
   if (consume(rest, tok, ";"))
     return new_node(ND_NULL_STMT, tok);
 
+  Node *n = expr(&tok, tok);
+  add_type(n);
+  if (n->ty->size < 0 && n->ty->kind != TY_ARRAY)
+    error_tok(n->tok, "expression has incomplete type");
+
   Node *node = new_node(ND_EXPR_STMT, tok);
-  node->m.lhs = expr(&tok, tok);
+  node->m.lhs = n;
   *rest = skip(tok, ";");
   return node;
 }
@@ -4354,8 +4372,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         mem->name->is_live = true;
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
 
-      if (is_vm_ty(mem->ty))
-        error_tok(tok, "members cannot be of variably-modified type");
+      if (is_vm_ty(mem->ty) || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
+        error_tok(tok, "invalid member type");
 
       bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
 
@@ -4850,8 +4868,9 @@ static Node *compound_literal(Token **rest, Token *tok) {
   ty = declarator(&tok, tok, ty, NULL);
   tok = skip(tok, ")");
 
-  if (ty->kind == TY_VLA)
-    error_tok(tok, "compound literals cannot be VLA");
+  if (ty->kind == TY_VOID || ty->kind == TY_FUNC ||
+    ty->kind == TY_VLA || (ty->size < 0 && ty->kind != TY_ARRAY))
+    error_tok(tok, "invalid compound literal type");
 
   if (is_global_init_context || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
@@ -5128,7 +5147,7 @@ static Node *primary(Token **rest, Token *tok) {
       return compound_literal(rest, tok);
 
     if (equal(tok->next, "{")) {
-      if (is_global_init_context)
+      if (is_global_init_context || !scope->parent)
         error_tok(tok, "statement expresssion in constant context");
 
       Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
@@ -5303,6 +5322,9 @@ static Node *resolve_local_gotos(void) {
 }
 
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
+  if (scope->parent && (attr->strg & SC_STATIC))
+    error_tok(name, "static function not in file scope");
+
   HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
   Obj *fn = ent->val;
   if (fn) {
@@ -5405,6 +5427,8 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
 }
 
 static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
+  if (ty->return_ty->size < 0)
+    error_tok(tok, "incomplate return type");
   if (fn->is_definition)
     error_tok(tok, "redefinition of %s", fn->name);
   fn->is_definition = true;
@@ -5493,6 +5517,9 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     if (var) {
       if (!is_compatible2(var->ty, ty))
         error_tok(tok, "incompatible type");
+      if ((!var->is_static && !!(attr->strg & SC_STATIC)) ||
+        (var->is_static && !(attr->strg & (SC_STATIC | SC_EXTERN))))
+        error_tok(name, "inconsistent static");
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;
     } else {

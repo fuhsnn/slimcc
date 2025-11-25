@@ -471,8 +471,8 @@ void ptr_convert(Node **node) {
 }
 
 Type *func_type(Type *return_ty, Token *tok) {
-  if (return_ty->base && return_ty->kind != TY_PTR)
-    error_tok(tok, "function return type cannot be array");
+  if (is_array(return_ty) || return_ty->kind == TY_FUNC)
+    error_tok(tok, "invalid function return type");
 
   // The C spec disallows sizeof(<function type>), but
   // GCC allows that and the expression is evaluated to 1.
@@ -519,7 +519,8 @@ Node *assign_cast(Type *to_ty, Node *expr) {
     if (is_nullptr(expr))
       return new_cast(expr, to_ty);
   } else if (is_compatible(to_ty, expr->ty)) {
-    return expr;
+    if (to_ty->kind != TY_VOID && to_ty->size >= 0)
+      return expr;
   } else if (is_numeric(to_ty)) {
     return new_cast(expr, to_ty);
   }
@@ -793,7 +794,8 @@ void add_type(Node *node) {
       node->ty = ty_void;
     else if (is_ptr((*lhs)->ty) || is_ptr((*rhs)->ty))
       node->ty = cond_ptr_conv(lhs, rhs, &node->ctrl.cond);
-    else if (!is_numeric((*lhs)->ty) && is_compatible((*lhs)->ty, (*rhs)->ty))
+    else if (!is_numeric((*lhs)->ty) && (*lhs)->ty->size >= 0 &&
+      is_compatible((*lhs)->ty, (*rhs)->ty))
       node->ty = (*lhs)->ty;
     else
       node->ty = usual_arith_conv(lhs, rhs);

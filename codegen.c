@@ -4878,9 +4878,6 @@ static void emit_data(Obj *var) {
   if (var->ty->kind == TY_ARRAY && sz < 0)
     sz = var->ty->base->size;
 
-  if (sz < 0)
-    error("object \'%s\' has incomplete type", var_name);
-
   if (opt_femulated_tls && var->is_tls) {
     char name_t[STRBUF_SZ], name_v[STRBUF_SZ];
     snprintf(name_t, STRBUF_SZ, "__emutls_t.%s", var_name);
@@ -5338,6 +5335,8 @@ int codegen(Obj *prog, FILE *out) {
       Printfsn("%s", var->asm_name);
       continue;
     }
+    if (var->ty->kind != TY_ARRAY && var->ty->size < 0)
+      error("object \'%s\' has incomplete type", get_symbol(var));
     if (!var->is_live)
       continue;
     if (var->ty->kind == TY_FUNC) {
