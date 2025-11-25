@@ -1048,10 +1048,10 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     LONG     = 1 << 10,
     FLOAT    = 1 << 12,
     DOUBLE   = 1 << 14,
-    OTHER    = 1 << 16,
-    SIGNED   = 1 << 17,
+    SIGNED   = 1 << 16,
     UNSIGNED = 1 << 18,
-    BITINT   = 1 << 19,
+    OTHER    = 1 << 20,
+    BITINT   = 1 << 21,
   };
 
   Type *ty = NULL;
@@ -1147,8 +1147,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_long: counter += LONG; break;
     case TK_float: counter += FLOAT; break;
     case TK_double: counter += DOUBLE; break;
-    case TK_signed: counter |= SIGNED; break;
-    case TK_unsigned: counter |= UNSIGNED; break;
+    case TK_signed: counter += SIGNED; break;
+    case TK_unsigned: counter += UNSIGNED; break;
     case TK_BitInt: {
       counter += BITINT;
       ty = new_bitint(const_expr(&tok, skip(tok, "(")), tok);

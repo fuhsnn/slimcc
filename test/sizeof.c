@@ -38,9 +38,7 @@ int main() {
 
   EASSERT(1, sizeof(char));
   EASSERT(1, sizeof(signed char));
-  EASSERT(1, sizeof(signed char signed));
   EASSERT(1, sizeof(unsigned char));
-  EASSERT(1, sizeof(unsigned char unsigned));
 
   EASSERT(2, sizeof(short));
   EASSERT(2, sizeof(int short));
@@ -53,10 +51,8 @@ int main() {
   EASSERT(4, sizeof(int));
   EASSERT(4, sizeof(signed int));
   EASSERT(4, sizeof(signed));
-  EASSERT(4, sizeof(signed signed));
   EASSERT(4, sizeof(unsigned int));
   EASSERT(4, sizeof(unsigned));
-  EASSERT(4, sizeof(unsigned unsigned));
 
   EASSERT(8, sizeof(long));
   EASSERT(8, sizeof(signed long));
