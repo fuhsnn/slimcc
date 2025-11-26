@@ -629,6 +629,12 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
   internal_error();
 }
 
+static void add_int_type(Node *node) {
+  add_type(node);
+  if (!(is_integer(node->ty) || node->ty->kind == TY_BITINT))
+    error_tok(node->tok, "invalid operand");
+}
+
 static Type *get_common_type(Node **lhs, Node **rhs) {
   Type *ty1 = (*lhs)->ty;
   Type *ty2 = (*rhs)->ty;
@@ -704,12 +710,16 @@ void add_type(Node *node) {
   }
   case ND_MUL:
   case ND_DIV:
+    add_type(node->m.lhs);
+    add_type(node->m.rhs);
+    node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
+    return;
   case ND_MOD:
   case ND_BITAND:
   case ND_BITOR:
   case ND_BITXOR:
-    add_type(node->m.lhs);
-    add_type(node->m.rhs);
+    add_int_type(node->m.lhs);
+    add_int_type(node->m.rhs);
     node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   case ND_POS:
@@ -755,21 +765,15 @@ void add_type(Node *node) {
     node->ty = ty_int;
     return;
   case ND_BITNOT:
-    add_type(node->m.lhs);
-    if (!(is_integer(node->m.lhs->ty) || node->m.lhs->ty->kind == TY_BITINT))
-      error_tok(node->m.lhs->tok, "invalid operand");
+    add_int_type(node->m.lhs);
     int_promotion(&node->m.lhs);
     node->ty = node->m.lhs->ty;
     return;
   case ND_SHL:
   case ND_SHR:
   case ND_SAR:
-    add_type(node->m.lhs);
-    add_type(node->m.rhs);
-    if (!(is_integer(node->m.lhs->ty) || node->m.lhs->ty->kind == TY_BITINT))
-      error_tok(node->m.lhs->tok, "invalid operand");
-    if (!(is_integer(node->m.rhs->ty) || node->m.rhs->ty->kind == TY_BITINT))
-      error_tok(node->m.rhs->tok, "invalid operand");
+    add_int_type(node->m.lhs);
+    add_int_type(node->m.rhs);
     if (node->m.rhs->ty->kind == TY_BITINT)
       node->m.rhs = new_cast(node->m.rhs, ty_ullong);
     int_promotion(&node->m.lhs);
