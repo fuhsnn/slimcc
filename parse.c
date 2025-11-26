@@ -422,6 +422,12 @@ static Node *new_size_t(int64_t val, Token *tok) {
   return node;
 }
 
+static Node *base_size(Type *base, Token *tok) {
+  if (base->size < 0)
+    error_tok(tok, "pointer has incomplete type");
+  return new_size_t(base->size, tok);
+}
+
 static Node *new_boolean(bool val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->num.val = val;
@@ -4124,7 +4130,7 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
     if (ptr->ty->base->kind == TY_VLA)
       *ofs = new_binary(ND_MUL, *ofs, vla_size(ptr->ty->base, tok), tok);
     else
-      *ofs = new_binary(ND_MUL, *ofs, new_size_t(ptr->ty->base->size, tok), tok);
+      *ofs = new_binary(ND_MUL, *ofs, base_size(ptr->ty->base, tok), tok);
 
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
@@ -4149,7 +4155,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
     if (lhs->ty->base->kind == TY_VLA)
       rhs = new_binary(ND_MUL, rhs, vla_size(lhs->ty->base, tok), tok);
     else
-      rhs = new_binary(ND_MUL, rhs, new_size_t(lhs->ty->base->size, tok), tok);
+      rhs = new_binary(ND_MUL, rhs, base_size(lhs->ty->base, tok), tok);
 
     return new_binary(ND_SUB, lhs, rhs, tok);
   }
@@ -4157,7 +4163,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   // ptr - ptr, which returns how many elements are between the two.
   if (lhs->ty->base && rhs->ty->base && is_compatible(lhs->ty->base, rhs->ty->base)) {
     Node *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node = new_binary(ND_DIV, node, new_num(lhs->ty->base->size, tok), tok);
+    node = new_binary(ND_DIV, node, base_size(lhs->ty->base, tok), tok);
     node->ty = node->m.lhs->ty = node->m.rhs->ty = ty_ptrdiff_t;
     return node;
   }
