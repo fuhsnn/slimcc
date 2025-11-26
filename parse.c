@@ -370,6 +370,13 @@ static bool is_int_class(Type *ty) {
   return is_integer(ty) || ty->kind == TY_BITINT;
 }
 
+static bool is_vm_ty(Type *ty) {
+  Type *t = ty;
+  while (t->kind == TY_PTR)
+    t = t->base;
+  return t->kind == TY_VLA;
+}
+
 static bool is_func_def(Token *end_tok) {
   return equal(end_tok, "{") || is_typename(end_tok);
 }
@@ -1626,10 +1633,7 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
     add_type(node);
     ty = node->ty;
 
-    Type *t = ty;
-    while (t->kind == TY_PTR)
-      t = t->base;
-    if (t->kind == TY_VLA)
+    if (is_vm_ty(ty))
       chk_vla_expr_side_effect(node);
   }
   *rest = skip(tok, ")");
@@ -4326,9 +4330,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         mem->name->is_live = true;
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
 
-      for (Type *t = mem->ty; t; t = t->base)
-        if (t->kind == TY_VLA)
-          error_tok(tok, "members cannot be of variably-modified type");
+      if (is_vm_ty(mem->ty))
+        error_tok(tok, "members cannot be of variably-modified type");
 
       bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
 
