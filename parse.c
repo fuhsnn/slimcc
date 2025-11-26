@@ -612,28 +612,33 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
   }
 }
 
-static Obj *new_var(char *name, Type *ty, Obj *var) {
-  var->name = name;
+static Obj *alloc_lvar(Type *ty) {
+  Obj *var = ast_arena_calloc(sizeof(Obj));
   var->ty = ty;
-  if (name)
-    push_scope(name)->var = var;
   return var;
 }
 
-static Obj *new_lvar2(char *name, Type *ty, Scope *sc) {
-  Obj *var = new_var(name, ty, ast_arena_calloc(sizeof(Obj)));
+static Obj *new_lvar2(Type *ty, Scope *sc) {
+  Obj *var = alloc_lvar(ty);
   var->is_local = true;
   var->next = sc->locals;
   sc->locals = var;
   return var;
 }
 
-Obj *new_lvar(char *name, Type *ty) {
-  return new_lvar2(name, ty, scope);
+Obj *new_lvar(Type *ty) {
+  return new_lvar2(ty, scope);
+}
+
+static Obj *alloc_var(char *name, Type *ty) {
+  Obj *var = calloc(1, sizeof(Obj));
+  var->ty = ty;
+  var->name = name;
+  return var;
 }
 
 static Obj *new_param(char *name, Type *ty) {
-  Obj *var = new_var(name, ty, calloc(1, sizeof(Obj)));
+  Obj *var = alloc_var(name, ty);
   var->is_local = true;
   var->next = scope->locals;
   scope->locals = var;
@@ -641,7 +646,7 @@ static Obj *new_param(char *name, Type *ty) {
 }
 
 static Obj *new_gvar(char *name, Type *ty) {
-  return globals = globals->next = new_var(name, ty, calloc(1, sizeof(Obj)));
+  return globals = globals->next = alloc_var(name, ty);
 }
 
 char *new_unique_name(void) {
@@ -650,7 +655,7 @@ char *new_unique_name(void) {
 }
 
 static Obj *new_static_lvar(Type *ty) {
-  Obj *var = new_var(NULL, ty, ast_arena_calloc(sizeof(Obj)));
+  Obj *var = alloc_lvar(ty);
   var->name = new_unique_name();
   var->is_definition = true;
   var->is_static = true;
@@ -663,8 +668,7 @@ static Obj *new_static_lvar(Type *ty) {
 static Obj *new_anon_gvar(Type *ty) {
   if (current_fn)
     return new_static_lvar(ty);
-  Obj *var = new_gvar(NULL, ty);
-  var->name = new_unique_name();
+  Obj *var = new_gvar(new_unique_name(), ty);
   var->is_definition = true;
   var->is_static = true;
   return var;
@@ -997,7 +1001,7 @@ static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
     Node *arg = new_unary(ND_ADDR, new_var_node(var, tok), tok);
     add_type(arg);
 
-    n->call.args = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
+    n->call.args = alloc_lvar(arg->ty);
     n->call.args->arg_expr = arg;
     prepare_funcall(n, scope);
 
@@ -1234,9 +1238,9 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
 
       Obj head = {0};
       Obj *cur = &head;
-      for (; comma_list(rest, &tok, ")", cur != &head); tok = tok->next) {
-        cur = cur->param_next = new_param(NULL, NULL);
-        cur->name = get_ident(tok);
+      while (comma_list(rest, &tok, ")", cur != &head)) {
+        Token *name = ident_tok(&tok, tok);
+        cur = cur->param_next = new_param(get_ident(name), NULL);
       }
       fn_ty->param_list = head.param_next;
       leave_scope();
@@ -1269,8 +1273,9 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     if (ty->param_qual)
       param_ty = qual_type(ty->param_qual, param_ty);
 
-    char *var_name = name ? get_ident(name) : NULL;
-    cur = cur->param_next = new_param(var_name, param_ty);
+    cur = cur->param_next = new_param(NULL, param_ty);
+    if (name)
+      push_scope(get_ident(name))->var = cur;
   }
   fn_ty->pre_calc = expr;
   fn_ty->param_list = head.param_next;
@@ -1647,7 +1652,7 @@ static Node *vla_count(Type *ty, Token *tok, bool is_void) {
   if (ty->vla_cnt)
     return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
 
-  ty->vla_cnt = new_lvar2(NULL, ty_size_t, base_scope());
+  ty->vla_cnt = new_lvar2(ty_size_t, base_scope());
   return new_binary(ND_ASSIGN, new_var_node(ty->vla_cnt, tok), ty->vla_len, tok);
 }
 
@@ -1669,15 +1674,6 @@ static Node *calc_vla(Type *ty, Token *tok) {
   if (ty->base)
     chain_expr(&n, calc_vla(ty->base, tok));
   return n;
-}
-
-static Node *new_vla(Token *name, Type *ty) {
-  Node *node = vla_size(ty, name);
-  add_type(node);
-  node = new_unary(ND_ALLOCA, node, name);
-  node->ty = pointer_to(ty_void);
-  node->m.var = new_lvar(get_ident(name), ty);
-  return node;
 }
 
 static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr, Obj **cond_var) {
@@ -1724,14 +1720,20 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
 
   Node *expr = NULL;
+  Obj *var = new_lvar(ty);
+  push_scope(get_ident(name))->var = var;
 
   if (ty->kind == TY_VLA) {
     fn_use_vla = true;
 
-    DeferStmt *defr = new_defr(DF_VLA_DEALLOC);
-    Node *node = new_vla(name, ty);
-    Obj *var = defr->vla = node->m.var;
-    assembler_name(&tok, tok, var);
+    Node *node = vla_size(ty, name);
+    add_type(node);
+    node = new_unary(ND_ALLOCA, node, name);
+    node->ty = pointer_to(ty_void);
+    node->m.var = var;
+
+    new_defr(DF_VLA_DEALLOC)->vla = var;
+
     aligned_attr(name, tok, attr, &var->alt_align);
     cleanup_attr(name, tok, attr, var);
 
@@ -1744,7 +1746,6 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     return expr;
   }
 
-  Obj *var = new_lvar(get_ident(name), ty);
   assembler_name(&tok, tok, var);
   aligned_attr(name, tok, attr, &var->alt_align);
   cleanup_attr(name, tok, attr, var);
@@ -1934,7 +1935,7 @@ static void designation(Token **rest, Token *tok, Initializer *init,
           ctx->init = arena_malloc(&ast_arena, sizeof(Initializer));
           *ctx->init = init->list.data[i];
 
-          ctx->var = new_lvar(NULL, init->list.data[i].ty);
+          ctx->var = new_lvar(init->list.data[i].ty);
           ctx->end = tok;
           ctx->init_lvl = ctx->lvl;
         }
@@ -2990,7 +2991,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
     add_type(cur->m.lhs);
     Type *ty = cur->m.lhs->ty;
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      Obj *var = new_lvar(NULL, ty);
+      Obj *var = new_lvar(ty);
       Node *expr = new_binary(ND_ASSIGN, new_var_node(var, tok), cur->m.lhs, tok);
       chain_expr(&expr, new_var_node(var, tok));
       cur->m.lhs = expr;
@@ -3704,10 +3705,10 @@ static Node *atomic_op(Node *binary, bool return_old) {
   Node head = {0};
   Node *cur = &head;
 
-  Obj *addr = new_lvar(NULL, pointer_to(binary->m.lhs->ty));
-  Obj *val = new_lvar(NULL, binary->m.rhs->ty);
-  Obj *old = new_lvar(NULL, binary->m.lhs->ty);
-  Obj *new = new_lvar(NULL, binary->m.lhs->ty);
+  Obj *addr = new_lvar(pointer_to(binary->m.lhs->ty));
+  Obj *val = new_lvar(binary->m.rhs->ty);
+  Obj *old = new_lvar(binary->m.lhs->ty);
+  Obj *new = new_lvar(binary->m.lhs->ty);
 
   cur = cur->next =
     new_unary(ND_EXPR_STMT,
@@ -3815,7 +3816,7 @@ static Node *assign(Token **rest, Token *tok) {
   if (equal(tok, "=") && (node->ty->qual & Q_ATOMIC)) {
     Node *rhs = assign(rest, tok->next);
     add_type(rhs);
-    Obj *tmp = new_lvar(NULL, rhs->ty);
+    Obj *tmp = new_lvar(rhs->ty);
     Node *expr = new_binary(ND_ASSIGN, new_var_node(tmp, tok), rhs, tok);
     chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok),
                                           new_var_node(tmp, tok),
@@ -3885,7 +3886,7 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
     if (is_const_expr(*cond, &val))
       return vla_of(base, val ? len1 : len2, 0);
 
-    *cond_var = new_lvar2(NULL, ty_bool, base_scope());
+    *cond_var = new_lvar2(ty_bool, base_scope());
     *cond = new_binary(ND_ASSIGN, new_var_node(*cond_var, (*cond)->tok), *cond, (*cond)->tok);
     add_type(*cond);
   }
@@ -3924,7 +3925,7 @@ static Node *conditional(Token **rest, Token *tok) {
   }
   add_type(cond);
   enter_tmp_scope();
-  Obj *var = new_lvar(NULL, cond->ty);
+  Obj *var = new_lvar(cond->ty);
   node->ctrl.cond = cond_cast(new_binary(ND_ASSIGN, new_var_node(var, cond->tok), cond, tok));
   node->ctrl.then = new_var_node(var, cond->tok);
   leave_scope();
@@ -4701,7 +4702,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
       else
         ptr_convert(&arg);
     }
-    cur = cur->param_next = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
+    cur = cur->param_next = alloc_lvar(arg->ty);
     cur->arg_expr = arg;
   }
   if (param)
@@ -4719,7 +4720,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   // to allocate a space for the return value.
   if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION ||
     (node->ty->kind == TY_BITINT && bitint_rtn_need_copy(node->ty->bit_cnt)))
-    node->call.rtn_buf = new_lvar(NULL, node->ty);
+    node->call.rtn_buf = new_lvar(node->ty);
   return node;
 }
 
@@ -4821,7 +4822,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
     return new_var_node(var, start);
   }
 
-  Obj *var = new_lvar2(NULL, ty, decl_scope());
+  Obj *var = new_lvar2(ty, decl_scope());
   var->is_compound_lit = true;
   var->alt_align = attr.align;
 
@@ -5016,7 +5017,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 
     Type *ty = typename(&tok, tok);
     if (va_arg_need_copy(ty))
-      node->m.var = new_lvar(NULL, ty);
+      node->m.var = new_lvar(ty);
 
     node->ty = pointer_to(ty);
     *rest = skip(tok, ")");
@@ -5260,15 +5261,15 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
     if (fn->ty->is_oldstyle && !ty->is_oldstyle)
       fn->ty = ty;
   } else {
-    char *name_str = get_ident(name);
-    fn = new_gvar(name_str, ty);
+    fn = new_gvar(get_ident(name), ty);
+    push_scope(fn->name)->var = fn;
 
     hashmap_put2(&symbols, name->loc, name->len, fn);
 
     fn->is_static = attr->strg & SC_STATIC;
 
-    if (strstr(name_str, "setjmp") || strstr(name_str, "savectx") ||
-      strstr(name_str, "vfork") || strstr(name_str, "getcontext"))
+    if (strstr(fn->name, "setjmp") || strstr(fn->name, "savectx") ||
+      strstr(fn->name, "vfork") || strstr(fn->name, "getcontext"))
       fn->returns_twice = true;
   }
   return fn;
@@ -5331,7 +5332,9 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         push_scope(var->name)->var = var;
       } else {
         var->ty = promoted;
-        Node *lhs = new_var_node(new_lvar(var->name, ty), name);
+        Node *lhs = new_var_node(new_lvar(ty), name);
+        push_scope(var->name)->var = lhs->m.var;
+
         Node *rhs = new_var_node(var, name);
         if (ty->kind == TY_BOOL)
           rhs = new_binary(ND_BITAND, rhs, new_num(1, name), name);
@@ -5451,6 +5454,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
         var->ty = ty;
     } else {
       var = new_gvar(get_ident(name), ty);
+      push_scope(var->name)->var = var;
 
       hashmap_put2(&symbols, name->loc, name->len, var);
 

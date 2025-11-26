@@ -4268,7 +4268,7 @@ static void asm_prepare_args(Node *node, int *out_tmp) {
     has_bitfield_out = is_bitfield(ap->arg);
     has_ptr_out = true;
 
-    ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
+    ap->ptr = new_lvar(pointer_to(ap->arg->ty));
   }
   *out_tmp = has_ptr_out + has_bitfield_out;
 
@@ -4278,9 +4278,9 @@ static void asm_prepare_args(Node *node, int *out_tmp) {
     if (has_memop(ap->arg))
       continue;
     if (ap->kind == ASMOP_REG)
-      ap->var = new_lvar(NULL, ap->arg->ty);
+      ap->var = new_lvar(ap->arg->ty);
     else if (ap->kind == ASMOP_MEM)
-      ap->ptr = new_lvar(NULL, pointer_to(ap->arg->ty));
+      ap->ptr = new_lvar(pointer_to(ap->arg->ty));
   }
 }
 
