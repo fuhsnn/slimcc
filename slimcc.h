@@ -139,6 +139,7 @@ typedef struct {
   int used;
 } HashMap;
 
+HashEntry *hashmap_get_or_insert(HashMap *map, char *key, int keylen);
 void *hashmap_get(HashMap *map, char *key);
 void *hashmap_get2(HashMap *map, char *key, int keylen);
 void hashmap_put(HashMap *map, char *key, void *val);

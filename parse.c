@@ -612,6 +612,22 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
   }
 }
 
+static VarScope *push_var_scope(char *key, int keylen, Obj *var) {
+  HashEntry *ent = hashmap_get_or_insert(&scope->vars, key, keylen);
+  VarScope *vsc = ent->val;
+  if (vsc)
+    return vsc;
+  vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
+  vsc->var = var;
+  return NULL;
+}
+
+static void push_gvar_name(Token *name, Obj *var) {
+  VarScope *vsc = push_var_scope(name->loc, name->len, var);
+  if (vsc && var != vsc->var)
+    error_tok(name, "invalid redefinition of '%.*s'", name->len, name->loc);
+}
+
 static Obj *alloc_lvar(Type *ty) {
   Obj *var = ast_arena_calloc(sizeof(Obj));
   var->ty = ty;
@@ -5245,15 +5261,9 @@ static Node *resolve_local_gotos(void) {
 }
 
 static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
-  Obj *fn = hashmap_get2(&symbols, name->loc, name->len);
-
-  Obj *sc_var = find_var_in_scope(name);
-  if (sc_var && sc_var != fn)
-    error_tok(name, "invalid redeclaration");
-
+  HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
+  Obj *fn = ent->val;
   if (fn) {
-    if (!sc_var)
-      push_scope(fn->name)->var = fn;
     if (!is_compatible(fn->ty, ty))
       error_tok(name, "incompatible redeclaration");
     if (!fn->is_static && (attr->strg & SC_STATIC))
@@ -5261,17 +5271,14 @@ static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
     if (fn->ty->is_oldstyle && !ty->is_oldstyle)
       fn->ty = ty;
   } else {
-    fn = new_gvar(get_ident(name), ty);
-    push_scope(fn->name)->var = fn;
-
-    hashmap_put2(&symbols, name->loc, name->len, fn);
-
+    fn = ent->val = new_gvar(get_ident(name), ty);
     fn->is_static = attr->strg & SC_STATIC;
 
     if (strstr(fn->name, "setjmp") || strstr(fn->name, "savectx") ||
       strstr(fn->name, "vfork") || strstr(fn->name, "getcontext"))
       fn->returns_twice = true;
   }
+  push_gvar_name(name, fn);
   return fn;
 }
 
@@ -5439,28 +5446,20 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       is_definition = true;
     }
 
-    Obj *var = hashmap_get2(&symbols, name->loc, name->len);
-
-    Obj *sc_var = find_var_in_scope(name);
-    if (sc_var && sc_var != var)
-      error_tok(tok, "invalid redeclaration");
-
+    HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
+    Obj *var = ent->val;
     if (var) {
-      if (!sc_var)
-        push_scope(var->name)->var = var;
       if (!is_compatible2(var->ty, ty))
         error_tok(tok, "incompatible type");
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;
     } else {
-      var = new_gvar(get_ident(name), ty);
-      push_scope(var->name)->var = var;
-
-      hashmap_put2(&symbols, name->loc, name->len, var);
-
+      var = ent->val = new_gvar(get_ident(name), ty);
       var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
       var->is_tls = attr->strg & SC_THREAD;
     }
+    push_gvar_name(name, var);
+
     assembler_name(&tok, tok, var);
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);

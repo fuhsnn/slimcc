@@ -77,7 +77,7 @@ static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
   }
 }
 
-static HashEntry *get_or_insert_entry(HashMap *map, char *key, int keylen) {
+HashEntry *hashmap_get_or_insert(HashMap *map, char *key, int keylen) {
   if (!map->buckets) {
     map->buckets = calloc(INIT_SIZE, sizeof(HashEntry));
     map->capacity = INIT_SIZE;
@@ -121,7 +121,7 @@ void hashmap_put(HashMap *map, char *key, void *val) {
 }
 
 void hashmap_put2(HashMap *map, char *key, int keylen, void *val) {
-  HashEntry *ent = get_or_insert_entry(map, key, keylen);
+  HashEntry *ent = hashmap_get_or_insert(map, key, keylen);
   ent->val = val;
 }
 
