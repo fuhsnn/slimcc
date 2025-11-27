@@ -326,7 +326,7 @@ static bool is_qual_compat(Type *t1, Type *t2) {
   return t1->qual == t2->qual;
 }
 
-static bool is_record_compat(Type *t1, Type *t2) {
+bool is_record_compat(Type *t1, Type *t2) {
   if (t1->size < 0 || t2->size < 0 ||
     t1->align != t2->align ||
     t1->is_flexible != t2->is_flexible)

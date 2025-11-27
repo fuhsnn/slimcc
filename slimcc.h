@@ -767,6 +767,7 @@ struct Type {
   // Struct
   Member *members;
   bool is_flexible;
+  bool is_constructing;
 
   // Function parameter
   QualMask param_qual;
@@ -838,6 +839,7 @@ bool is_bitfield(Node *node);
 bool is_redundant_cast(Node *expr, Type *ty);
 bool is_compatible(Type *t1, Type *t2);
 bool is_compatible2(Type *t1, Type *t2);
+bool is_record_compat(Type *t1, Type *t2);
 bool is_const_expr(Node *node, int64_t *val);
 bool is_const_fp(Node *node, FPVal *fval);
 bool is_nullptr(Node *node);

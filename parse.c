@@ -4388,10 +4388,37 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   ty->members = head.next;
 }
 
-// struct-union-decl = attribute? ident? ("{" struct-members)?
-static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
-  Type *ty = new_type(kind, -1, 1);
+static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat_ty) {
+  Type *tag_ty;
+  if (equal(tok, "{") || equal(tok, ";"))
+    tag_ty = find_tag_in_scope(tag);
+  else
+    tag_ty = find_tag(tag);
 
+  if (!tag_ty) {
+    Type *ty = new_type(kind, -1, 1);
+    push_tag_scope(tag, ty);
+    return ty;
+  }
+
+  if (tag_ty->kind != kind)
+    error_tok(tag, "conflict of tag type");
+
+  if (equal(tok, "{")) {
+    if (tag_ty->is_constructing)
+      error_tok(tag, "nested redifinition");
+
+    if (tag_ty->size >= 0) {
+      if (opt_std < STD_C23)
+        error_tok(tag, "tag redeclaration");
+      *tag_compat_ty = tag_ty;
+      return new_type(kind, -1, 1);
+    }
+  }
+  return tag_ty;
+}
+
+static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   bool is_packed = false;
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   bool_attr(tok, TK_BATTR, "packed", &is_packed);
@@ -4407,21 +4434,21 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
     tok = tok->next;
   }
 
-  if (tag && !equal(tok, "{")) {
-    *rest = tok;
+  Type *tag_compat_ty = NULL;
+  Type *ty;
+  if (!tag) {
+    ty = new_type(kind, -1, 1);
+  } else {
+    ty = struct_tag(kind, tag, tok, &tag_compat_ty);
 
-    Type *ty2 = find_tag(tag);
-    if (ty2)
-      return ty2;
-
-    push_tag_scope(tag, ty);
-    return ty;
+    if (!equal(tok, "{")) {
+      *rest = tok;
+      return ty;
+    }
+    ty->is_constructing = true;
   }
 
-  tok = skip(tok, "{");
-
-  // Construct a struct object.
-  struct_members(&tok, tok, ty);
+  struct_members(&tok, skip(tok, "{"), ty);
 
   attr_aligned(tok, &alt_align, TK_ATTR);
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
@@ -4435,26 +4462,21 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   else
     ty = union_decl(ty, alt_align, pack_align);
 
-  if (!tag)
-    return ty;
+  if (tag) {
+    ty->is_constructing = false;
 
-  ty->tag = tag;
-  ty->tag->is_live = true;
-
-  Type *ty2 = find_tag_in_scope(tag);
-  if (ty2) {
-    if (ty2->size < 0) {
-      for (Type *t = ty2, *nxt; t; t = nxt) {
-        nxt = t->decl_next;
-        new_derived_type(t, t->qual, ty);
-      }
-      return ty2;
+    if (tag_compat_ty) {
+      if (!is_record_compat(ty, tag_compat_ty))
+        error_tok(tag, "tag redeclaration");
+      return tag_compat_ty;
     }
-    if (!(opt_std >= STD_C23 && is_compatible(ty, ty2)))
-      error_tok(tag, "tag redeclaration");
-    return ty2;
+
+    for (Type *t = ty->decl_next; t;) {
+      Type *nxt = t->decl_next;
+      new_derived_type(t, t->qual, ty);
+      t = nxt;
+    }
   }
-  push_tag_scope(tag, ty);
   return ty;
 }
 
