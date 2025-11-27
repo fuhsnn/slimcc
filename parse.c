@@ -322,13 +322,6 @@ static VarScope *find_var(Token *tok) {
   return NULL;
 }
 
-static Obj *find_var_in_scope(Token *tok) {
-  VarScope *sc = hashmap_get2(&scope->vars, tok->loc, tok->len);
-  if (sc)
-    return sc->var;
-  return NULL;
-}
-
 static Type *find_tag(Token *tok) {
   for (Scope *sc = scope; sc; sc = sc->parent) {
     Type *ty = hashmap_get2(&sc->tags, tok->loc, tok->len);
@@ -620,6 +613,16 @@ static VarScope *push_var_scope(char *key, int keylen, Obj *var) {
   vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
   vsc->var = var;
   return NULL;
+}
+
+static void push_var_name2(char *key, int keylen, Token *tok, Obj *var) {
+  VarScope *vsc = push_var_scope(key, keylen, var);
+  if (vsc)
+    error_tok(tok, "redeclaration of '%.*s'", keylen, key);
+}
+
+static void push_var_name(Token *name, Obj *var) {
+  push_var_name2(name->loc, name->len, name, var);
 }
 
 static void push_gvar_name(Token *name, Obj *var) {
@@ -1291,7 +1294,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
 
     cur = cur->param_next = new_param(NULL, param_ty);
     if (name)
-      push_scope(get_ident(name))->var = cur;
+      push_var_name(name, cur);
   }
   fn_ty->pre_calc = expr;
   fn_ty->param_list = head.param_next;
@@ -1718,9 +1721,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     if (ty->kind == TY_VLA)
       error_tok(tok, "variable length arrays cannot be 'static'");
 
-    // static local variable
     Obj *var = new_static_lvar(ty);
-    push_scope(get_ident(name))->var = var;
+    push_var_name(name, var);
 
     var->is_tls = attr->strg & SC_THREAD;
     assembler_name(&tok, tok, var);
@@ -1737,7 +1739,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
 
   Node *expr = NULL;
   Obj *var = new_lvar(ty);
-  push_scope(get_ident(name))->var = var;
+  push_var_name(name, var);
 
   if (ty->kind == TY_VLA) {
     fn_use_vla = true;
@@ -5324,7 +5326,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         if (!is_compatible(var->ty, ty))
           error_tok(name, "incompatible type");
         var->ty = ty;
-        push_scope(var->name)->var = var;
+        push_var_name(name, var);
         continue;
       }
 
@@ -5336,11 +5338,11 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
 
       if (!promoted) {
         var->ty = ptr_decay(ty);
-        push_scope(var->name)->var = var;
+        push_var_name(name, var);
       } else {
         var->ty = promoted;
         Node *lhs = new_var_node(new_lvar(ty), name);
-        push_scope(var->name)->var = lhs->m.var;
+        push_var_name(name, lhs->m.var);
 
         Node *rhs = new_var_node(var, name);
         if (ty->kind == TY_BOOL)
@@ -5355,7 +5357,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
       if (var->ty)
         continue;
       var->ty = ty_int;
-      push_scope(var->name)->var = var;
+      push_var_name2(var->name, strlen(var->name), tok, var);
     }
   }
   *rest = tok;
