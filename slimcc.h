@@ -863,7 +863,6 @@ void cvqual_type(Type **ty_p, Type *ty2);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
 Node *assign_cast(Type *to, Node *expr);
-bool match_enum_val(EnumVal **e, int64_t val, Token *name);
 
 //
 // codegen.c

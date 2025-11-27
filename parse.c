@@ -1577,22 +1577,27 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     is_ovf = !is_neg && val == 0;
     is_neg = (int64_t)val < 0;
 
-    if (opt_std >= STD_C23) {
-      if (tag_enum_cnt) {
-        if (!match_enum_val(&tag_enums, v, name))
+    HashEntry *ent = hashmap_get_or_insert(&decl_scope()->vars, name->loc, name->len);
+    VarScope *vsc = ent->val;
+    if (vsc) {
+      if (opt_std >= STD_C23 && tag_enum_cnt && vsc->enum_ty) {
+        if (vsc->enum_val != v)
           error_tok(tok, "enum redeclared with conflicting value");
         decl_enum_cnt++;
         continue;
       }
-      cur = cur->next = malloc(sizeof(EnumVal));
-      cur->val = v;
-      cur->name = name;
-      name->is_live = true;
+      error_tok(name, "enum redeclaration");
+    } else {
+      if (opt_std >= STD_C23) {
+        cur = cur->next = malloc(sizeof(EnumVal));
+        cur->val = v;
+        cur->name = name;
+        name->is_live = true;
+      }
+      vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
+      vsc->enum_ty = ty;
+      vsc->enum_val = v;
     }
-    VarScope *vsc = ast_arena_calloc(sizeof(VarScope));
-    hashmap_put2(&decl_scope()->vars, name->loc, name->len, vsc);
-    vsc->enum_ty = ty;
-    vsc->enum_val = v;
   }
   if (first)
     error_tok(tok, "empty enum specifier");

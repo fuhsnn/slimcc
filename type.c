@@ -268,7 +268,7 @@ static bool int_to_ptr(Node **node) {
   return true;
 }
 
-bool match_enum_val(EnumVal **e, int64_t val, Token *name) {
+static bool match_enum_val(EnumVal **e, int64_t val, Token *name) {
   for (EnumVal *ev = *e; ev; ev = ev->next) {
     if ((ev->val == val) && equal_tok(ev->name, name)) {
       if (ev == *e)
