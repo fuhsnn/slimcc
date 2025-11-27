@@ -546,12 +546,6 @@ static void apply_cv_qualifier(Node *node, Type *ty2) {
   cvqual_type(&node->ty, ty2);
 }
 
-static VarScope *push_scope(char *name) {
-  VarScope *sc = ast_arena_calloc(sizeof(VarScope));
-  hashmap_put(&scope->vars, name, sc);
-  return sc;
-}
-
 static void free_initializers(Initializer *init) {
   if (init->kind == INIT_LIST && init->list.cnt) {
     for (int i = 0; i < init->list.cnt; i++)
@@ -5198,10 +5192,23 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
     int align = 0;
     aligned_attr(name, tok, attr, &align);
 
-    VarScope *vsc = push_scope(get_ident(name));
-    vsc->type_def = ty;
-    vsc->type_def_align = align;
-    chain_expr(&node, calc_vla(ty, tok));
+    HashEntry *ent = hashmap_get_or_insert(&scope->vars, name->loc, name->len);
+    VarScope *vsc = ent->val;
+    if (vsc) {
+      if (!vsc->type_def)
+        error_tok(name, "redeclaration of '%.*s'", name->len, name->loc);
+      if (!is_compatible2(ty, vsc->type_def))
+        error_tok(name, "incompatible redeclaration");
+      if (is_vm_ty(ty) || is_vm_ty(vsc->type_def))
+        error_tok(name, "redefining typedef of variably-modified type");
+      if (vsc->type_def_align != align)
+        error_tok(name, "conflict of typedef alignment");
+    } else {
+      vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
+      vsc->type_def = ty;
+      vsc->type_def_align = align;
+      chain_expr(&node, calc_vla(ty, tok));
+    }
   }
   return node;
 }
