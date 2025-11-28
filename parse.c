@@ -1299,6 +1299,8 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     if (ty->param_qual)
       param_ty = qual_type(ty->param_qual, param_ty);
 
+    if (param_ty->kind == TY_VOID)
+      error_tok(tok, "parameter declared void");
     cur = cur->param_next = new_param(NULL, param_ty);
     if (name)
       push_var_name(name, cur);
@@ -5387,6 +5389,8 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         ty = ptr_decay(ty);
         if (!is_compatible(var->ty, ty))
           error_tok(name, "incompatible type");
+        if (ty->kind == TY_VOID || ty->size <= 0)
+          error_tok(name, "invalid parameter type");
         var->ty = ty;
         push_var_name(name, var);
         continue;
@@ -5399,7 +5403,10 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         promoted = ty_double;
 
       if (!promoted) {
-        var->ty = ptr_decay(ty);
+        ty = ptr_decay(ty);
+        if (ty->kind == TY_VOID || ty->size <= 0)
+          error_tok(name, "invalid parameter type");
+        var->ty = ty;
         push_var_name(name, var);
       } else {
         var->ty = promoted;
@@ -5446,10 +5453,15 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   if (ty->scopes) {
     scope = ty->scopes;
 
-    if (ty->is_oldstyle)
+    if (ty->is_oldstyle) {
       precalc = func_old_style_param(&tok, tok, prot_ty, ty);
-    else
+    } else {
       precalc = ty->pre_calc;
+
+      for (Obj *var = ty->param_list; var; var = var->param_next)
+        if (var->ty->size <= 0)
+          error_tok(tok, "incomplete parameter type");
+    }
   } else {
     enter_scope();
     ty->scopes = scope;
