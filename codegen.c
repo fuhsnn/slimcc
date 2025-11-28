@@ -1707,9 +1707,8 @@ static void copy_struct_reg(void) {
     return;
   }
   for (int ofs = 0; ofs < ty->size; ofs += 8) {
-    int chunk_sz = MIN(8, ty->size - ofs);
-
     if ((ofs == 0) ? is_fp_class_lo(ty) : is_fp_class_hi(ty)) {
+      int chunk_sz = MIN(8, ty->size - ofs);
       if (chunk_sz == 4)
         Printftn("movss %d(%s), %%xmm%d", ofs, sptr, fp);
       else
@@ -1718,14 +1717,12 @@ static void copy_struct_reg(void) {
       continue;
     }
     if (gp == 0) {
-      Printstn("mov %%rax, %%rcx");
       sptr = "%rcx";
+      Printstn("mov %%rax, %%rcx");
+      Printftn("mov %d(%%rcx), %%rax", ofs);
+    } else {
+      Printftn("mov %d(%%rcx), %%rdx", ofs);
     }
-    int regsz = (chunk_sz > 4) ? 8 : (chunk_sz > 2) ? 4 : (chunk_sz > 1) ? 2 : 1;
-    if (gp == 0)
-      Printftn("mov %d(%%rcx), %s", ofs, reg_ax(regsz));
-    else
-      Printftn("mov %d(%%rcx), %s", ofs, reg_dx(regsz));
     gp++;
   }
 }
@@ -1918,11 +1915,13 @@ static void gen_funcall_args(Node *node) {
         gp++;
         continue;
       }
-      if (is_memop(arg_expr, ofs, &ptr, true)) {
+      if ((is_gp_ty(arg_expr->ty) || is_flonum(arg_expr->ty)) &&
+        is_memop(arg_expr, ofs, &ptr, true)) {
         place_reg_arg(arg_expr->ty, ofs, ptr, &gp, &fp);
         continue;
       }
-      if (reg_arg_cnt == 1) {
+
+      if (reg_arg_cnt == 1 && is_scalar(arg_expr->ty)) {
         gen_expr(arg_expr);
         if (is_gp_ty(arg_expr->ty))
           Printftn("mov %%rax, %s", argreg64[gp++]);
@@ -1931,7 +1930,7 @@ static void gen_funcall_args(Node *node) {
         else if (arg_expr->ty->kind == TY_BITINT)
           place_reg_arg(arg_expr->ty, tmpbuf(arg_expr->ty->size), lvar_ptr, &gp, &fp);
         else
-          place_reg_arg(arg_expr->ty, "0", "%rax", &gp, &fp);
+          internal_error();
         continue;
       }
     }
@@ -2879,27 +2878,28 @@ static void gen_stmt(Node *node) {
     Type *ty = node->m.lhs->ty;
 
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION || ty->kind == TY_BITINT) {
-      if (ty->kind == TY_BITINT)
-        Printftn("lea %s(%s), %%rax", tmpbuf(ty->size), lvar_ptr);
-
-      if (!is_mem_class(ty)) {
+      if (is_mem_class(ty)) {
+        if (ty->kind == TY_BITINT)
+          Printftn("lea %s(%s), %%rax", tmpbuf(ty->size), lvar_ptr);
+        copy_struct_mem();
         if (has_defr(node)) {
-          if (ty->kind != TY_BITINT)
-            gen_mem_copy("0", "%rax", tmpbuf(ty->size), lvar_ptr, ty->size);
-          push_bitint(ty->size);
+          push();
           gen_defr(node);
-          Printftn("lea %d(%s), %%rax", pop_bitint(ty->size), lvar_ptr);
+          pop("%rax");
         }
-        copy_struct_reg();
         Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
         return;
       }
-      copy_struct_mem();
+
+      if (ty->kind != TY_BITINT)
+        gen_mem_copy("0", "%rax", tmpbuf(ty->size), lvar_ptr, ty->size);
+      Printftn("lea %s(%s), %%rax", tmpbuf(ty->size), lvar_ptr);
       if (has_defr(node)) {
-        push();
+        push_bitint(ty->size);
         gen_defr(node);
-        pop("%rax");
+        Printftn("lea %d(%s), %%rax", pop_bitint(ty->size), lvar_ptr);
       }
+      copy_struct_reg();
       Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
       return;
     }
@@ -5234,9 +5234,10 @@ void prepare_funcall(Node *node, Scope *scope) {
         continue;
       if (gen_load_opt_gp(arg_expr, REG_X64_NULL))
         continue;
-      if (has_memop(var->arg_expr))
-        continue;
-      if (reg_arg_cnt == 1)
+      if (is_gp_ty(arg_expr->ty) || is_flonum(arg_expr->ty))
+        if (has_memop(var->arg_expr))
+          continue;
+      if (reg_arg_cnt == 1 && is_scalar(arg_expr->ty))
         continue;
     }
     var->next = scope->locals;
