@@ -836,22 +836,19 @@ void convert_pp_number(Token *tok, Node *node) {
 
   // If it's not an integer, it must be a floating point constant.
   char *end;
-#ifdef NO_LONG_DOUBLE
-  double val = strtod(p, &end);
-#else
-  long double val = strtold(p, &end);
-#endif
-
+  long_double_t val = strtod(p, &end);
   Type *ty;
   if (*end == 'f' || *end == 'F') {
-    val = (float)val;
+    val = strtof(p, NULL);
     ty = ty_float;
     end++;
   } else if (*end == 'l' || *end == 'L') {
+#ifndef NO_LONG_DOUBLE
+    val = strtold(p, NULL);
+#endif
     ty = ty_ldouble;
     end++;
   } else {
-    val = (double)val;
     ty = ty_double;
   }
 
