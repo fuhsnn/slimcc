@@ -201,6 +201,7 @@ typedef enum {
   TK_false,
   TK_nullptr,
   TK_defer,
+  TK_FUNCTION,
 
   TK_TYPEKW,
   TK_void,

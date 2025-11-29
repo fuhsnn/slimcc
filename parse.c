@@ -188,6 +188,8 @@ static HashMap symbols;
 // Points to the function object the parser is currently parsing.
 static Obj *current_fn;
 
+static Obj *current_fnname;
+
 // Lists of all goto statements and labels in the curent function.
 static Node *gotos;
 static Node *labels;
@@ -5183,20 +5185,6 @@ static Node *primary(Token **rest, Token *tok) {
     if (equal(tok->next, "("))
       return builtin_functions(rest, tok);
 
-    // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
-    // automatically defined as a local variable containing the
-    // current function name.
-    // [GNU] __FUNCTION__ is yet another name of __func__.
-    if (current_fn && (equal(tok, "__func__") || equal(tok, "__FUNCTION__"))) {
-      char *name = current_fn->name;
-      VarScope *vsc = ast_arena_calloc(sizeof(VarScope));
-      vsc->var = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
-      vsc->var->init_data = name;
-      hashmap_put(&current_fn->ty->scopes->vars, "__func__", vsc);
-      hashmap_put(&current_fn->ty->scopes->vars, "__FUNCTION__", vsc);
-      return new_var_node(vsc->var, tok);
-    }
-
     error_tok(tok, "undefined variable");
   }
 
@@ -5228,6 +5216,18 @@ static Node *primary(Token **rest, Token *tok) {
     convert_pp_number(tok, node);
     *rest = tok->next;
     return node;
+  }
+
+  if (tok->kind == TK_FUNCTION) {
+    if (!current_fn)
+      error_tok(tok, "not in function");
+    if (!current_fnname) {
+      char *name = current_fn->name;
+      current_fnname = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
+      current_fnname->init_data = name;
+    }
+    *rest = tok->next;
+    return new_var_node(current_fnname, tok);
   }
 
   error_tok(tok, "expected an expression");
@@ -5484,6 +5484,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     resolve_gotos();
   labels = NULL;
   current_fn = NULL;
+  current_fnname = NULL;
 
   emit_text(fn);
   arena_off(&ast_arena);
