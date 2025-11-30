@@ -921,9 +921,10 @@ void add_dep_file(char *path, bool is_sys) {
       return;
 
     static HashMap map;
-    if (hashmap_get(&map, path))
+    HashEntry *ent = hashmap_get_or_insert(&map, path, strlen(path));
+    if (ent->val)
       return;
-    hashmap_put(&map, path, (void *)1);
+    ent->val = (void *)1;
     strarray_push(&dep_files, path);
   }
 }

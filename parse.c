@@ -5317,19 +5317,25 @@ static void resolve_goto_defer(Node *node, DeferStmt *dst_dfr) {
 static void resolve_gotos(void) {
   HashMap label_cache = {0};
   for (Node *x = gotos; x; x = x->lbl.next) {
-    Node *dest = hashmap_get2(&label_cache, x->tok->loc, x->tok->len);
+    HashEntry *ent = hashmap_get_or_insert(&label_cache, x->tok->loc, x->tok->len);
+    Node *dest = ent->val;
     if (!dest) {
+      Node head = {0};
+      Node *cur = &head;
       for (Node *lbl = labels; lbl; lbl = lbl->lbl.next) {
-        if (!equal_tok(lbl->tok, x->tok))
+        if (!equal_tok(lbl->tok, x->tok)) {
+          cur = cur->lbl.next = lbl;
           continue;
+        }
         if (dest)
           error_tok(x->tok, "duplicated label");
         dest = lbl;
       }
       if (!dest)
         error_tok(x->tok, "use of undeclared label");
-
-      hashmap_put2(&label_cache, x->tok->loc, x->tok->len, dest);
+      cur->lbl.next = NULL;
+      labels = head.lbl.next;
+      ent->val = dest;
     }
     x->lbl.unique_label = dest->lbl.unique_label;
     resolve_goto_defer(x, dest->dfr_from);

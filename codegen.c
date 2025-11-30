@@ -229,9 +229,10 @@ static bool is_valid_vis(char *vis) {
 }
 
 static void push_ref(Obj *var) {
-  if (hashmap_get(ext_refs, var->name))
+  HashEntry *ent = hashmap_get_or_insert(ext_refs, var->name, strlen(var->name));
+  if (ent->val)
     return;
-  hashmap_put(ext_refs, var->name, (void *)1);
+  ent->val = (void *)1;
 
   FuncObj *fn = codegen_fn->output;
   if (fn->ref_cnt == fn->ref_capacity) {
@@ -841,12 +842,12 @@ static void gen_cmp_setcc(NodeKind kind, bool is_unsigned) {
 
 static void gen_bitint_builtin_call2(char *fn) {
   static HashMap map;
-  Obj *var = hashmap_get(&map, fn);
+  HashEntry *ent = hashmap_get_or_insert(&map, fn, strlen(fn));
+  Obj *var = ent->val;
   if (!var) {
-    var = get_symbol_var(fn);
+    var = ent->val = get_symbol_var(fn);
     if (!var)
       error("missing builtin function %s", fn);
-    hashmap_put(&map, fn, var);
   }
   push_ref(var);
   Printftn("call %s", fn);

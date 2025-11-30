@@ -1131,15 +1131,15 @@ File *read_file(char *path, Token *tok, bool canon) {
 
 int add_display_file(char *path) {
   static HashMap map;
-  int *idx = hashmap_get(&map, path);
+  HashEntry *ent = hashmap_get_or_insert(&map, path, strlen(path));
+  int *idx = ent->val;
   if (idx)
     return *idx;
 
   strarray_push(&display_files, path);
 
-  idx = arena_malloc(&pp_arena, sizeof(*idx));
+  idx = ent->val = arena_malloc(&pp_arena, sizeof(*idx));
   *idx = display_files.len - 1;
-  hashmap_put(&map, path, idx);
   return *idx;
 }
 
