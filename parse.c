@@ -4334,11 +4334,31 @@ static Node *unary(Token **rest, Token *tok) {
   return postfix(node, rest, tok);
 }
 
+static void chk_mem_name2(HashMap *map, Token *name) {
+  HashEntry *ent = hashmap_get_or_insert(map, name->loc, name->len);
+  Token *prv = ent->val;
+  if (prv) {
+    notice_tok(name, "duplicated member name");
+    error_tok(prv, "previously declared here");
+  }
+  ent->val = name;
+}
+
+static void chk_mem_name(HashMap *map, Member *members) {
+  for (Member *mem = members; mem; mem = mem->next) {
+    if (mem->name)
+      chk_mem_name2(map, mem->name);
+    else if (mem->ty->kind == TY_STRUCT || mem->ty->kind == TY_UNION)
+      chk_mem_name(map, mem->ty->members);
+  }
+}
+
 // struct-members = (declspec declarator (","  declarator)* ";")*
 static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {0};
   Member *cur = &head;
   Token *flex_tok = NULL;
+  HashMap names = {0};
 
   while (!equal(tok, "}")) {
     if (consume(&tok, tok, ";"))
@@ -4360,6 +4380,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         error_tok(tok, "member has incomplete type");
       if (basety->tag && !opt_ms_anon_struct)
         error_tok(tok, "enable MSVC anonymous struct extension with `-fms-anon-struct`");
+      chk_mem_name(&names, basety->members);
+
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = basety;
 
@@ -4374,8 +4396,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       Member *mem = calloc(1, sizeof(Member));
       mem->is_packed = attr.is_packed;
       mem->ty = declarator(&tok, tok, basety, &mem->name);
-      if (mem->name)
+      if (mem->name) {
+        chk_mem_name2(&names, mem->name);
         mem->name->is_live = true;
+      }
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
 
       if (is_vm_ty(mem->ty) || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
@@ -4402,6 +4426,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       }
     }
   }
+  free(names.buckets);
   *rest = tok->next;
 
   if (flex_tok) {
