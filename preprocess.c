@@ -458,6 +458,14 @@ static Macro *new_macro(char *name, bool is_objlike) {
   return m;
 }
 
+void add_macro_param(Token **cur, Token *params, Token *tok) {
+  for (Token *t = params; t != (*cur)->next; t = t->next)
+    if (equal_tok(t, tok))
+      error_tok(tok, "duplicated macro parameter");
+
+  (*cur) = (*cur)->next = tok;
+}
+
 static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
   Token head = {0};
   Token *cur = &head;
@@ -470,17 +478,17 @@ static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
     if (tok->kind != TK_IDENT) {
       *rest = skip(skip(tok, "..."), ")");
       static Token va_args = {.loc = "__VA_ARGS__", .len = 11};
-      cur = cur->next = &va_args;
+      add_macro_param(&cur, head.next, &va_args);
       m->has_va_arg = true;
       break;
     }
     if (equal(tok->next, "...")) {
       *rest = skip(tok->next->next, ")");
-      cur = cur->next = tok;
+      add_macro_param(&cur, head.next, tok);
       m->has_va_arg = true;
       break;
     }
-    cur = cur->next = tok;
+    add_macro_param(&cur, head.next, tok);
     tok = tok->next;
   }
   cur->next = NULL;
