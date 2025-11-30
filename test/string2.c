@@ -65,5 +65,22 @@ int main(void){
 #endif
   }
 
+  {
+    char c1 = "foobar"[4];
+    char c2 = { "foobar"[4] };
+    char a1[] = { "foobar"[4] };
+    static char sc1 = "foobar"[4];
+    static char sc2 = { "foobar"[4] };
+    static char sa1[] = { "foobar"[4] };
+    ASSERT('a', c1);
+    ASSERT('a', c2);
+    ASSERT('a', sc1);
+    ASSERT('a', sc1);
+    ASSERT('a', a1[0]);
+    ASSERT('a', sa1[0]);
+    ASSERT(1, sizeof(a1));
+    ASSERT(1, sizeof(sa1));
+  }
+
   printf("OK\n");
 }

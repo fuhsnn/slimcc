@@ -1871,7 +1871,7 @@ static bool string_initializer(Token **rest, Token *tok, Initializer *init) {
   while (consume(&tok, tok, "("))
     paren++;
 
-  if (tok->kind != TK_STR)
+  if (tok->kind != TK_STR || equal(tok->next, "["))
     return false;
   if (tok->ty->base->size != init->ty->base->size)
     error_tok(tok, "array initialization with string of incompatible size");
