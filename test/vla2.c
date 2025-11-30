@@ -31,6 +31,9 @@ void fn(int32_t x){
 
   ASSERT(192, (&a[0] - &b[0]));
   ASSERT(192, (&b[0] - &c[0]));
+
+  int (*p[++x])[++x];
+  ASSERT(9, x);
 }
 
 int fn2(int32_t i) {
@@ -62,7 +65,9 @@ int vm_in_cast(int i) {
   ASSERT(11, sizeof *p2);
   ASSERT(12, tmp);
 
-  return i;
+  (int (*(*)(void))[++i])0;
+  ASSERT(13, i);
+  return 1;
 }
 
 int infer_inner_scope(int i, int j) {
@@ -95,6 +100,17 @@ int zinit(int cnt) {
  return 1;
 }
 
+int vm_in_va_arg(int i, ...) {
+  va_list ap;
+  va_start(ap, i);
+  auto p = va_arg(ap, char(*)[i++]);
+  va_end(ap);
+  ASSERT(6, i);
+  ASSERT(7, **p);
+  ASSERT(5, sizeof *p);
+  return 1;
+}
+
 int main(void){
   fn(5);
 
@@ -106,7 +122,9 @@ int main(void){
 
   ASSERT(14, fn4(7));
 
-  ASSERT(12, vm_in_cast(9));
+  ASSERT(1, vm_in_cast(9));
+
+  ASSERT(1, vm_in_va_arg(5, &(char){7}));
 
   ASSERT(85, infer_inner_scope(137, 222));
 

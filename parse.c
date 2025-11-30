@@ -1709,6 +1709,8 @@ static Node *calc_vla(Type *ty, Token *tok) {
 
   if (ty->base)
     chain_expr(&n, calc_vla(ty->base, tok));
+  else if (ty->kind == TY_FUNC)
+    chain_expr(&n, calc_vla(ty->return_ty, tok));
   return n;
 }
 
@@ -1755,6 +1757,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
 
   Node *expr = NULL;
+  chain_expr(&expr, calc_vla(ty, tok));
+
   Obj *var = new_lvar(ty);
   push_var_name(name, var);
 
@@ -1802,8 +1806,6 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     error_tok(name, "variable has incomplete type");
   if (var->ty->kind == TY_VOID)
     error_tok(name, "variable declared void");
-
-  chain_expr(&expr, calc_vla(ty, tok));
   *rest = tok;
   return expr;
 }
@@ -5084,12 +5086,18 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     tok = skip(tok, ",");
 
     Type *ty = typename(&tok, tok);
+    *rest = skip(tok, ")");
+
     if (va_arg_need_copy(ty))
       node->m.var = new_lvar(ty);
 
     node->ty = pointer_to(ty);
-    *rest = skip(tok, ")");
-    return new_unary(ND_DEREF, node, tok);
+    node = new_unary(ND_DEREF, node, tok);
+
+    Node *calc = calc_vla(ty, tok);
+    if (calc)
+      return new_binary(ND_COMMA, calc, node, tok);
+    return node;
   }
 
   if (equal(tok, "__builtin_compare_and_swap")) {
