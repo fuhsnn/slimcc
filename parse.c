@@ -1702,6 +1702,12 @@ static Node *vla_size(Type *ty, Token *tok) {
   return new_binary(ND_MUL, vla_count(ty, tok, false), base_sz, tok);
 }
 
+static Node *ptr_base_size(Type *ty, Token *tok) {
+  if (ty->kind == TY_VLA)
+    return vla_size(ty, tok);
+  return base_size(ty, tok);
+}
+
 static Node *calc_vla(Type *ty, Token *tok) {
   Node *n = NULL;
   if (ty->kind == TY_VLA)
@@ -4151,14 +4157,10 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   Node *ptr = lhs->ty->base ? lhs : rhs->ty->base ? rhs : NULL;
 
   if (ptr && ofs) {
-    if (ptr->ty->base->kind == TY_VLA)
-      *ofs = new_binary(ND_MUL, *ofs, vla_size(ptr->ty->base, tok), tok);
-    else
-      *ofs = new_binary(ND_MUL, *ofs, base_size(ptr->ty->base, tok), tok);
-
+    Node *sz = ptr_base_size(ptr->ty->base, tok);
+    *ofs = new_binary(ND_MUL, *ofs, sz, tok);
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
-
   error_tok(tok, "invalid operands");
 }
 
@@ -4176,20 +4178,16 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
 
   // ptr - num
   if (lhs->ty->base && is_integer(rhs->ty)) {
-    if (lhs->ty->base->kind == TY_VLA)
-      rhs = new_binary(ND_MUL, rhs, vla_size(lhs->ty->base, tok), tok);
-    else
-      rhs = new_binary(ND_MUL, rhs, base_size(lhs->ty->base, tok), tok);
-
-    return new_binary(ND_SUB, lhs, rhs, tok);
+    Node *sz = ptr_base_size(lhs->ty->base, tok);
+    return new_binary(ND_SUB, lhs, new_binary(ND_MUL, rhs, sz, tok), tok);
   }
 
-  // ptr - ptr, which returns how many elements are between the two.
+  // ptr - ptr
   if (lhs->ty->base && rhs->ty->base && is_compatible(lhs->ty->base, rhs->ty->base)) {
-    Node *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node = new_binary(ND_DIV, node, base_size(lhs->ty->base, tok), tok);
-    node->ty = node->m.lhs->ty = node->m.rhs->ty = ty_ptrdiff_t;
-    return node;
+    Node *sz = new_cast(ptr_base_size(lhs->ty->base, tok), ty_ptrdiff_t);
+    lhs = new_cast(lhs, ty_ptrdiff_t);
+    rhs = new_cast(rhs, ty_ptrdiff_t);
+    return new_binary(ND_DIV, new_binary(ND_SUB, lhs, rhs, tok), sz, tok);
   }
 
   error_tok(tok, "invalid operands");
