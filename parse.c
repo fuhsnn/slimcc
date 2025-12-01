@@ -5172,8 +5172,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     }
     return node;
   }
-
-  error_tok(tok, "implicit declaration of a function");
+  return NULL;
 }
 
 static Node *primary(Token **rest, Token *tok) {
@@ -5213,9 +5212,18 @@ static Node *primary(Token **rest, Token *tok) {
       }
     }
 
-    if (equal(tok->next, "("))
-      return builtin_functions(rest, tok);
+    if (equal(tok->next, "(")) {
+      Node *node = builtin_functions(rest, tok);
+      if (node)
+        return node;
 
+      if (opt_std == STD_C89) {
+        Type *ty = func_type(ty_int, tok);
+        ty->is_oldstyle = true;
+        return new_var_node(func_prototype(ty, &(VarAttr){0}, tok), tok);
+      }
+      error_tok(tok, "implicit declaration of a function");
+    }
     error_tok(tok, "undefined variable");
   }
 
