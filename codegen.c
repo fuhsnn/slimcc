@@ -693,7 +693,7 @@ static void load_extend_int64(Type *ty, char *ofs, char *ptr, char *reg) {
 
 // Round up `n` to the nearest multiple of `align`. For instance,
 // align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
-int align_to(int n, int align) {
+int64_t align_to(int64_t n, int64_t align) {
   return (n + align - 1) / align * align;
 }
 
@@ -1964,7 +1964,7 @@ static void gen_funcall(Node *node) {
       Printftn("sub $%d, %%rsp", arg_stk_size);
       Printftn("and $-%d, %%rsp", arg_stk_align);
     } else {
-      Printftn("sub $%d, %%rsp", align_to(arg_stk_size, 16));
+      Printftn("sub $%"PRIi64", %%rsp", align_to(arg_stk_size, 16));
     }
   }
 
@@ -1999,7 +1999,7 @@ static void gen_funcall(Node *node) {
     if (arg_stk_align > 16)
       pop("%rsp");
     else
-      Printftn("add $%d, %%rsp", align_to(arg_stk_size, 16));
+      Printftn("add $%"PRIi64", %%rsp", align_to(arg_stk_size, 16));
   }
 }
 
@@ -2697,11 +2697,11 @@ static void gen_expr2(Node *node, bool is_void) {
     }
     Printstn("movq 8(%%rax), %%rdx"); // overflow_arg_area
     if (ty->align <= 8) {
-      Printftn("addq $%d, 8(%%rax)", align_to(ty->size, 8));
+      Printftn("addq $%"PRIi64", 8(%%rax)", align_to(ty->size, 8));
     } else {
       Printftn("addq $%d, %%rdx", ty->align - 1);
       Printftn("andq $-%d, %%rdx", ty->align);
-      Printftn("lea %d(%%rdx), %%rcx", align_to(ty->size, 8));
+      Printftn("lea %"PRIi64"(%%rdx), %%rcx", align_to(ty->size, 8));
       Printstn("movq %%rcx, 8(%%rax)");
     }
     if (use_reg_save)

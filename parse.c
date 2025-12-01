@@ -4530,10 +4530,10 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
 }
 
 static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
-  int bits = 0;
+  int64_t bits = 0;
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    int mem_align = mem->is_packed ? 1 :
+    int64_t mem_align = mem->is_packed ? 1 :
       (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
 
     if (!mem->is_bitfield || mem->name) {
@@ -4551,11 +4551,11 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
         continue;
       }
       if (mem->is_packed || pack_align) {
-        int ceil = align_to(bits + mem->bit_width, 8);
-        for (int rsz = 8; rsz <= 64; rsz *= 2) {
+        int64_t ceil = align_to(bits + mem->bit_width, 8);
+        for (int64_t rsz = 8; rsz <= 64; rsz *= 2) {
           if (ceil % rsz != 0)
             break;
-          int mofs = (ceil - rsz) / 8;
+          int64_t mofs = (ceil - rsz) / 8;
           if (mofs * 8 > bits)
             continue;
           mem->offset = mofs;
@@ -4565,7 +4565,7 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
         if (!mem->is_aligned_bitfiled)
           mem->offset = bits / 8;
       } else {
-        int bsz = mem->ty->size * 8;
+        int64_t bsz = mem->ty->size * 8;
         if (bits / bsz != (bits + mem->bit_width - 1) / bsz)
           bits = align_to(bits, bsz);
         mem->offset = bits / bsz * mem->ty->size;
@@ -4599,14 +4599,14 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
 
 static Type *union_decl(Type *ty, int alt_align, int pack_align) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    int mem_align = mem->is_packed ? 1 :
+    int64_t mem_align = mem->is_packed ? 1 :
       (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
 
     if (!mem->is_bitfield || mem->name) {
       alt_align = MAX(alt_align, mem_align);
       alt_align = MAX(alt_align, mem->alt_align);
     }
-    int sz;
+    int64_t sz;
     if (mem->is_bitfield)
       sz = align_to(mem->bit_width, 8) / 8;
     else

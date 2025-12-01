@@ -787,8 +787,8 @@ struct Member {
   Member *next;
   Type *ty;
   Token *name;
+  int64_t offset;
   int idx;
-  int offset;
   int alt_align;
   bool is_packed;
 
@@ -874,7 +874,7 @@ Node *assign_cast(Type *to, Node *expr);
 int codegen(Obj *prog, FILE *out);
 void prepare_funcall(Node *node, Scope *scope);
 void prepare_inline_asm(Node *node);
-int align_to(int n, int align);
+int64_t align_to(int64_t n, int64_t align);
 bool va_arg_need_copy(Type *ty);
 bool bitint_rtn_need_copy(size_t width);
 void emit_text(Obj *fn);
