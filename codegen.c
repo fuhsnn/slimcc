@@ -1403,8 +1403,8 @@ static void gen_cast_from_f80(int to_ty) {
   switch (to_ty) {
   case I8: gen_cast_f80_to_int(buf, "fistps", "movsbl", "%eax"); return;
   case U8: gen_cast_f80_to_int(buf, "fistps", "movzbl", "%eax"); return;
-  case I16: gen_cast_f80_to_int(buf, "fistps", "movzbl", "%eax"); return;
-  case U16: gen_cast_f80_to_int(buf, "fistpl", "movswl", "%eax"); return;
+  case I16: gen_cast_f80_to_int(buf, "fistps", "movswl", "%eax"); return;
+  case U16: gen_cast_f80_to_int(buf, "fistpl", "movzwl", "%eax"); return;
   case I32: gen_cast_f80_to_int(buf, "fistpl", "movl", "%eax"); return;
   case U32: gen_cast_f80_to_int(buf, "fistpll", "movl", "%eax"); return;
   case I64: gen_cast_f80_to_int(buf, "fistpll", "movq", "%rax"); return;
