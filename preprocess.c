@@ -2093,6 +2093,8 @@ static Token *preprocess3(Token *tok) {
     } else if (tok->kind == TK_STR) {
       if (tok->next->kind == TK_STR)
         join_adjacent_string_literals(tok);
+    } else if (tok->kind == TK_UNICODE) {
+      error_tok(tok, "unallowed unicode character");
     }
 
     stash_attr(tok, &attr_head, &attr_cur);

@@ -179,6 +179,8 @@ typedef enum {
   TK_ATTR,    // GNU attribute
   TK_BATTR,   // C23 attribute
   TK_EOF,     // End-of-file markers
+  TK_UNICODE,
+
   TK_return,
   TK_if,
   TK_else,

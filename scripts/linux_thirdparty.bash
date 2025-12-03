@@ -962,7 +962,7 @@ build_dash() {
 }
 
 build_ellipsis() {
- git_fetch https://gitlab.inria.fr/gustedt/ellipsis 54d1629235883c86c372c49ae4300fd533ee91c8 ellipsis
+ git_fetch https://codeberg.org/gustedt/ellipsis b596e4f166c1db0320208498ae30b5cb4a51576b ellipsis
  cd sources
  sed -i 's|gnu2x|gnu23|g' Makefile-options
  make distclean && make

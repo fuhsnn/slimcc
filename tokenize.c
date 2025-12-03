@@ -162,6 +162,7 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
 static Token *read_ident(char *p) {
   char *start = p;
   bool has_ucn = false;
+  bool bad_unicode = false;
 
   for (;;) {
     if (*p == '$') {
@@ -182,16 +183,19 @@ static Token *read_ident(char *p) {
     if ((unsigned char)*p >= 128) {
       char *pos;
       uint32_t c = decode_utf8(&pos, p);
-      if (p == start ? is_ident1(c) : is_ident2(c)) {
-        p = pos;
-        continue;
-      }
+      if (!(p == start ? is_ident1(c) : is_ident2(c)))
+        bad_unicode = true;
+      p = pos;
+      continue;
     }
     break;
   }
 
   if (p == start)
     return NULL;
+
+  if (bad_unicode)
+    return new_token(TK_UNICODE, start, p);
 
   Token *tok = new_token(TK_IDENT, start, p);
   tok->has_ucn = has_ucn;
