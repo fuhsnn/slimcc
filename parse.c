@@ -5023,6 +5023,17 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     return node;
   }
 
+  if (equal(tok, "__builtin_expect_with_probability")) {
+    tok = skip(tok->next, "(");
+    Node *node = new_cast(assign(&tok, tok), ty_long);
+    tok = skip(tok, ",");
+    assign(&tok, tok);
+    tok = skip(tok, ",");
+    assign(&tok, tok);
+    *rest = skip(tok, ")");
+    return node;
+  }
+
   if (equal(tok, "__builtin_offsetof")) {
     tok = skip(tok->next, "(");
     Type *ty = typename(&tok, tok);
