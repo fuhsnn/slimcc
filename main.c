@@ -47,6 +47,7 @@ bool opt_short_enums;
 bool opt_gnu89_inline;
 bool opt_ms_anon_struct;
 bool opt_disable_visibility;
+bool opt_fake_always_inline;
 
 static StringArray opt_imacros;
 static StringArray opt_include;
@@ -629,6 +630,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         }
 
         if (set_true(arg, "disable-visibility", &opt_disable_visibility))
+          continue;
+        if (set_true(arg, "fake-always-inline", &opt_fake_always_inline))
           continue;
 
         if (startswith(arg, &opt_visibility, "visibility=") ||

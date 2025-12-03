@@ -379,6 +379,7 @@ struct Obj {
   bool export_fn;
   bool export_fn_gnu;
   bool is_gnu_inline;
+  bool is_always_inline;
   bool is_naked;
   bool is_noreturn;
   bool returns_twice;
@@ -953,6 +954,7 @@ extern bool opt_short_enums;
 extern bool opt_gnu89_inline;
 extern bool opt_ms_anon_struct;
 extern bool opt_disable_visibility;
+extern bool opt_fake_always_inline;
 
 extern bool opt_pie;
 extern bool opt_nopie;

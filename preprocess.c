@@ -1970,6 +1970,8 @@ static bool is_gnu_attr(Token *tok) {
 
     if (!opt_disable_visibility)
       PutAttr("visibility");
+    if (opt_fake_always_inline)
+      PutAttr("always_inline");
   }
   return hashmap_get2(&map, tok->loc, tok->len);
 }

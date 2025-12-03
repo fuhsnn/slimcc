@@ -246,7 +246,8 @@ static char *get_symbol(Obj *var) {
   if (codegen_fn && codegen_fn != var) {
     if (var->is_static_lvar)
       var->is_live = true;
-    else if (!var->is_definition || var->is_static)
+    else if (!var->is_definition || var->is_static ||
+      (var->is_always_inline && opt_fake_always_inline))
       push_ref(var);
   }
   return var->asm_name ? var->asm_name : var->name;
@@ -5304,6 +5305,13 @@ int codegen(Obj *prog, FILE *out) {
   for (Obj *var = prog; var; var = var->next) {
     if (var->is_definition && var->ty->kind == TY_FUNC &&
       !var->is_static && !export_fn(var)) {
+      if (var->is_always_inline && opt_fake_always_inline) {
+        var->is_static = true;
+        char *p = ((FuncObj *)var->output)->buf;
+        if ((p = strstr(p, ".globl ")))
+          memcpy(p, ".local", 6);
+        continue;
+      }
       var->is_definition = false;
       var->output = NULL;
     }
