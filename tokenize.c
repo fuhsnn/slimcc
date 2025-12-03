@@ -732,7 +732,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
   }
 
   char *digit_begin = p;
-  int64_t val = strtoull(p, &p, base);
+  uint64_t val = strtoull(p, &p, base);
   char *digit_end = p;
 
   bool u = false;
@@ -760,41 +760,26 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
   if (wb)
     return convert_pp_bitint(digit_begin, digit_end, node, base, u);
 
-  // Infer a type.
   Type *ty;
-  if (base == 10) {
-    if (ll && u)
-      ty = ty_ullong;
-    else if (l && u)
-      ty = ty_ulong;
-    else if (ll)
-      ty = ty_llong;
-    else if (l)
-      ty = ty_long;
-    else if (u)
-      ty = (val >> 32) ? ty_ulong : ty_uint;
-    else
-      ty = (val >> 31) ? ty_long : ty_int;
-  } else {
-    if (ll && u)
-      ty = ty_ullong;
-    else if (l && u)
-      ty = ty_ulong;
-    else if (ll)
-      ty = (val >> 63) ? ty_ullong : ty_llong;
-    else if (l)
-      ty = (val >> 63) ? ty_ulong : ty_long;
-    else if (u)
-      ty = (val >> 32) ? ty_ulong : ty_uint;
-    else if (val >> 63)
-      ty = ty_ulong;
-    else if (val >> 32)
-      ty = ty_long;
-    else if (val >> 31)
-      ty = ty_uint;
-    else
-      ty = ty_int;
-  }
+  Type *max_ty = (base == 10) ? ty_ullong : ty_ulong;
+  if (ll && u)
+    ty = ty_ullong;
+  else if (l && u)
+    ty = ty_ulong;
+  else if (u)
+    ty = (val > UINT32_MAX) ? ty_ulong : ty_uint;
+  else if (ll)
+    ty = (val > INT64_MAX) ? ty_ullong : ty_llong;
+  else if (l)
+    ty = (val > INT64_MAX) ? max_ty : ty_long;
+  else if (val > INT64_MAX)
+    ty = max_ty;
+  else if (val > UINT32_MAX)
+    ty = ty_long;
+  else if (val > INT32_MAX)
+    ty = (base == 10) ? ty_long : ty_uint;
+  else
+    ty = ty_int;
 
   node->num.val = val;
   node->ty = ty;

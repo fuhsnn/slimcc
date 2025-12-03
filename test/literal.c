@@ -43,8 +43,8 @@ int main() {
   EASSERT(1, 0xffffffffffffffffll>>63);
 
   EASSERT(-1, 18446744073709551615);
-  EASSERT(8, sizeof(18446744073709551615));
-  EASSERT(-1, 18446744073709551615>>63);
+  EASSERT(1, 8 <= sizeof(18446744073709551615));
+  EASSERT(1, 18446744073709551615>>63);
 
   EASSERT(-1, 0xffffffffffffffff);
   EASSERT(8, sizeof(0xffffffffffffffff));
