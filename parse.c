@@ -996,7 +996,7 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
   fn->is_gnu_inline |= attr->is_gnu_inline;
   DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
 
-  if (!fn->is_static) {
+  if (!fn->is_static && !scope->parent) {
     fn->export_fn |= !(attr->is_inline && !(attr->strg & SC_EXTERN));
     if (is_def)
       fn->export_fn_gnu |= !(attr->is_inline && (attr->strg & SC_EXTERN));
