@@ -12,7 +12,7 @@ int main() {
 #line 1
   ASSERT(1, __LINE__);
 
-# 200 "xyz" 2 3
+# 200 "xyz"
   ASSERT(200, __LINE__);
   ASSERT(0, strcmp(__FILE__, "xyz"));
 

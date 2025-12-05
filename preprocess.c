@@ -1278,6 +1278,9 @@ static void read_line_marker(Token **rest, Token *tok) {
     error_tok(tok, "filename expected");
 
   start->file->display_file_no = add_display_file(tok->str);
+
+  if (tok->next->kind != TK_EOF)
+    error_tok(tok->next, "unknown line directive form");
 }
 
 static void finalize_tok(Token *tok) {
