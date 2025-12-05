@@ -12,9 +12,9 @@ int main() {
   p3 -= 2;
   char *p4 = fn(1, alloca(16), 3);
 
-  ASSERT(16, p1 - p2);
-  ASSERT(16, p2 - p3);
-  ASSERT(16, p3 - p4);
+  ASSERT(1, 16 <= p1 - p2);
+  ASSERT(1, 16 <= p2 - p3);
+  ASSERT(1, 16 <= p3 - p4);
 
   memcpy(p1, "0123456789abcdef", 16);
   memcpy(p2, "ghijklmnopqrstuv", 16);

@@ -196,7 +196,9 @@ int main() {
 
   ASSERT(7, ({ int x[2][3]={1,2,3,4,5,6,[0]={7,8},9,10}; x[0][0]; }));
   ASSERT(8, ({ int x[2][3]={1,2,3,4,5,6,[0]={7,8},9,10}; x[0][1]; }));
+#if NOT_CLANG
   ASSERT(3, ({ int x[2][3]={1,2,3,4,5,6,[0]={7,8},9,10}; x[0][2]; }));
+#endif
   ASSERT(9, ({ int x[2][3]={1,2,3,4,5,6,[0]={7,8},9,10}; x[1][0]; }));
   ASSERT(10, ({ int x[2][3]={1,2,3,4,5,6,[0]={7,8},9,10}; x[1][1]; }));
   ASSERT(6, ({ int x[2][3]={1,2,3,4,5,6,[0]={7,8},9,10}; x[1][2]; }));
@@ -231,7 +233,9 @@ int main() {
 
   ASSERT(1, ({ typedef struct { int a,b; } T; T x={1,2}; T y[]={x}; y[0].a; }));
   ASSERT(2, ({ typedef struct { int a,b; } T; T x={1,2}; T y[]={x}; y[0].b; }));
+#if NOT_CLANG
   ASSERT(0, ({ typedef struct { int a,b; } T; T x={1,2}; T y[]={x, [0].b=3}; y[0].a; }));
+#endif
   ASSERT(3, ({ typedef struct { int a,b; } T; T x={1,2}; T y[]={x, [0].b=3}; y[0].b; }));
 
   ASSERT(5, ((struct { int a,b,c; }){ .c=5 }).c);

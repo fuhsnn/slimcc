@@ -2,9 +2,6 @@
 #include <stdio.h>
 #include <pthread.h>
 
-static _Thread_local int tentative_tls;
-static _Thread_local int tentative_tls = 3;
-
 void *thread_main(void *unused) {
 
   static _Thread_local int v1;
@@ -15,19 +12,13 @@ void *thread_main(void *unused) {
   ASSERT(5, v2);
   ASSERT(11, *p1);
 
-  ASSERT(3, tentative_tls);
-
   v1 = 1;
   v2 = 2;
   *p1 = 3;
 
-  tentative_tls = 9;
-
   ASSERT(1, v1);
   ASSERT(2, v2);
   ASSERT(3, *p1);
-
-  ASSERT(9, tentative_tls);
 
   return NULL;
 }

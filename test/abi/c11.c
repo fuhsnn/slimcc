@@ -3,12 +3,18 @@
 
 extern _Thread_local int extern_tls;
 
+static _Thread_local int tentative_tls;
+static _Thread_local int tentative_tls = 3;
+
 void *thread_main(void *unused) {
   ASSERT(0, extern_tls);
+  ASSERT(3, tentative_tls);
 
   extern_tls = 7;
+  tentative_tls = 9;
 
   ASSERT(7, extern_tls);
+  ASSERT(9, tentative_tls);
 
   return NULL;
 }
