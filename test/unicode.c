@@ -26,7 +26,6 @@ int main() {
   ASSERT(97, u'a');
   ASSERT(946, u'β');
   ASSERT(12354, u'あ');
-  ASSERT(62307, u'🍣');
 
   ASSERT(0, strcmp(STR(u'a'), "u'a'"));
 

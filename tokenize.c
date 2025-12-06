@@ -793,6 +793,8 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
 // Converts a pp-number token to a regular number token.
 void convert_pp_number(Token *tok, Node *node) {
   if (tok->kind == TK_INT_NUM) {
+    if ((uint64_t)tok->ival >> tok->ty->size * 8)
+      error_tok(tok, "character too large for literal type");
     node->num.val = eval_sign_extend(tok->ty, tok->ival);
     node->ty = tok->ty;
     return;
