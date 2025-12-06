@@ -1100,8 +1100,6 @@ static char *read_filename(Token **rest, Token *tok, char **dir) {
   bool is_expanded = false;
   if (tok->kind == TK_IDENT) {
     tok = expand_tok(tok);
-    for (Token *t = tok->next; t->kind != TK_EOF; t = t->next)
-      t->has_space = false;
     is_expanded = true;
   }
 
