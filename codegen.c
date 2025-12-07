@@ -1971,7 +1971,8 @@ static void gen_funcall(Node *node) {
 
   gen_funcall_args(node);
 
-  if (get_func_ty(node->call.expr->ty)->is_variadic) {
+  Type *fnty = get_func_ty(node->call.expr->ty);
+  if (fnty->is_variadic || fnty->is_oldstyle) {
     if (fp_count)
       Printftn("movb $%d, %%al", fp_count);
     else
