@@ -42,19 +42,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: interop, proj: test_box2d }
           - { vm: interop, proj: test_c3 }
+          - { vm: interop, proj: test_flatcc }
           - { vm: interop, proj: test_flex }
           - { vm: interop, proj: test_imagemagick }
+          - { vm: interop, proj: test_inih }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_libxo_chimerautils }
           - { vm: interop, proj: test_msgpack }
           - { vm: interop, proj: test_muon }
+          - { vm: interop, proj: test_nanopb }
           - { vm: interop, proj: test_nob }
           - { vm: interop, proj: test_redis }
+          - { vm: interop, proj: test_rpmalloc }
           - { vm: interop, proj: test_rvvm }
+          - { vm: interop, proj: test_sdl3 }
           - { vm: interop, proj: test_sokol }
+          - { vm: interop, proj: test_vlc }
           - { vm: interop, proj: test_wuffs }
+          - { vm: interop, proj: test_xterm }
           - { vm: interop, proj: build_cairo }
           - { vm: interop, proj: build_foot }
           - { vm: interop, proj: build_glfw }
@@ -64,7 +72,6 @@ jobs:
           - { vm: interop, proj: build_q2rtx }
           - { vm: interop, proj: build_quake3e }
           - { vm: interop, proj: build_raylib_raygui }
-          - { vm: interop, proj: build_sdl3 }
           - { vm: interop, proj: build_wayst }
           - { vm: interop, proj: build_wlroots_sway }
           - { vm: interop, proj: build_yquake2 }
@@ -78,30 +85,37 @@ jobs:
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_bzip2 }
           - { vm: main, proj: test_bzip3 }
+          - { vm: main, proj: test_c2 }
           - { vm: main, proj: test_c23doku }
           - { vm: main, proj: test_calc }
           - { vm: main, proj: test_cello }
+          - { vm: main, proj: test_cgit }
           - { vm: main, proj: test_cjson }
           - { vm: main, proj: test_cmocka }
           - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_cproc }
           - { vm: main, proj: test_curl }
+          - { vm: main, proj: test_darkhttpd }
           - { vm: main, proj: test_diffutils }
           - { vm: main, proj: test_doom }
           - { vm: main, proj: test_elk }
+          - { vm: main, proj: test_emacs }
           - { vm: main, proj: test_espruino }
+          - { vm: main, proj: test_fftw }
           - { vm: main, proj: test_file }
           - { vm: main, proj: test_findutils }
           - { vm: main, proj: test_fossil }
           - { vm: main, proj: test_gawk }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_gmake }
+          - { vm: main, proj: test_gnutls }
           - { vm: main, proj: test_go }
           - { vm: main, proj: test_got }
           - { vm: main, proj: test_gsed }
           - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
+          - { vm: main, proj: test_handmademath }
           - { vm: main, proj: test_hare }
           - { vm: main, proj: test_janet }
           - { vm: main, proj: test_jemalloc }
@@ -109,6 +123,7 @@ jobs:
           - { vm: main, proj: test_jq }
           - { vm: main, proj: test_ksh93 }
           - { vm: main, proj: test_lame }
+          - { vm: main, proj: test_lexbor }
           - { vm: main, proj: test_libarchive }
           - { vm: main, proj: test_libevent }
           - { vm: main, proj: test_libgc }
@@ -118,8 +133,10 @@ jobs:
           - { vm: main, proj: test_libjpeg }
           - { vm: main, proj: test_libjsonc }
           - { vm: main, proj: test_liblz4 }
+          - { vm: main, proj: test_libmicrohttpd }
           - { vm: main, proj: test_libmpc }
           - { vm: main, proj: test_libmpfr }
+          - { vm: main, proj: test_libopus }
           - { vm: main, proj: test_libpcre2 }
           - { vm: main, proj: test_libpng }
           - { vm: main, proj: test_libpsl }
@@ -128,8 +145,10 @@ jobs:
           - { vm: main, proj: test_libsodium }
           - { vm: main, proj: test_libuev }
           - { vm: main, proj: test_libuv }
+          - { vm: main, proj: test_libwebp }
           - { vm: main, proj: test_libxml }
           - { vm: main, proj: test_libyaml }
+          - { vm: main, proj: test_lighthttpd }
           - { vm: main, proj: test_lua }
           - { vm: main, proj: test_lwan }
           - { vm: main, proj: test_mawk }
@@ -138,15 +157,21 @@ jobs:
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_micropython }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_mquickjs }
           - { vm: main, proj: test_mruby }
+          - { vm: main, proj: test_neovim }
           - { vm: main, proj: test_nginx }
+          - { vm: main, proj: test_njs }
           - { vm: main, proj: test_noplate }
+          - { vm: main, proj: test_nqp }
           - { vm: main, proj: test_ocaml }
           - { vm: main, proj: test_oniguruma }
           - { vm: main, proj: test_openrc }
           - { vm: main, proj: test_openssh }
           - { vm: main, proj: test_openssl }
+          - { vm: main, proj: test_orangeduck_mpc }
           - { vm: main, proj: test_pacman }
+          - { vm: main, proj: test_parrot }
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_perl }
           - { vm: main, proj: test_pixman }
@@ -161,8 +186,12 @@ jobs:
           - { vm: main, proj: test_scrapscript }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }
+          - { vm: main, proj: test_tomlc17 }
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }
+          - { vm: main, proj: test_umka }
+          - { vm: main, proj: test_utf8h }
+          - { vm: main, proj: test_utillinux }
           - { vm: main, proj: test_valkey }
           - { vm: main, proj: test_vim }
           - { vm: main, proj: test_wasm3 }
@@ -171,6 +200,7 @@ jobs:
           - { vm: main, proj: test_xxhash }
           - { vm: main, proj: test_xz }
           - { vm: main, proj: test_yash }
+          - { vm: main, proj: test_yyjson }
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zlibng }
           - { vm: main, proj: test_zsh }
@@ -180,12 +210,15 @@ jobs:
           - { vm: main, proj: build_erlang }
           - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
+          - { vm: main, proj: build_htop }
           - { vm: main, proj: build_libev }
           - { vm: main, proj: build_luajit }
           - { vm: main, proj: build_lynx }
           - { vm: main, proj: build_mg }
+          - { vm: main, proj: build_mksh }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_oksh }
+          - { vm: main, proj: build_pcc }
           - { vm: main, proj: build_simplecc }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_tin }
@@ -195,6 +228,7 @@ jobs:
           - { vm: debian12, proj: test_glib }
           - { vm: debian12, proj: bootstrap_uclibcng }
           - { vm: cctest, proj: cctest_lcc }
+          - { vm: cctest, proj: cctest_pcctests }
           - { vm: cctest, proj: cctest_wacc }
           - { vm: cctest, proj: test_kefir }
           - { vm: cctest, proj: test_tinycc }

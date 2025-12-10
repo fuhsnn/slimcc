@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  gcc-14 \
  file binutils libc-dev libgcc-14-dev \
  make cmake pkg-config \
- zip lzip xz-utils bzip2 zlib1g-dev \
+ zip lzip xz-utils bzip2 zlib1g-dev unzip \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates wget locales \
  tcl-dev bison flex re2c libpcre2-dev \
@@ -41,7 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # binutils
  dejagnu libzstd-dev \
  # lwan
- python3-requests libsqlite3-dev liblua5.1-0-dev libmariadb-dev \
+ python3-requests libsqlite3-dev libmariadb-dev \
  # rsync
  python3-commonmark \
  # got
@@ -49,7 +49,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # openrc
  libcap-dev \
  # hare simple-cc
- qbe
+ qbe \
+ # neovim
+ luajit libluajit-5.1-dev lua-luv-dev libvterm-dev lua-lpeg libmsgpack-c-dev libtree-sitter-dev libunibilium-dev \
+ # njs
+ libxslt-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
