@@ -958,7 +958,7 @@ test_toybox() {
 }
 
 test_vim() {
- github_tar vim vim v9.1.1484
+ github_tar vim vim v9.1.1825
  ./configure
  make && make testtiny
 }
