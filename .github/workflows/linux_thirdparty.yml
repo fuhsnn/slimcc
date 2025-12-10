@@ -55,6 +55,7 @@ jobs:
           - { vm: interop, proj: test_rvvm }
           - { vm: interop, proj: test_sokol }
           - { vm: interop, proj: test_wuffs }
+          - { vm: interop, proj: test_xterm }
           - { vm: interop, proj: build_cairo }
           - { vm: interop, proj: build_foot }
           - { vm: interop, proj: build_glfw }
@@ -81,6 +82,7 @@ jobs:
           - { vm: main, proj: test_c23doku }
           - { vm: main, proj: test_calc }
           - { vm: main, proj: test_cello }
+          - { vm: main, proj: test_cgit }
           - { vm: main, proj: test_cjson }
           - { vm: main, proj: test_cmocka }
           - { vm: main, proj: test_coreutils }
@@ -120,6 +122,7 @@ jobs:
           - { vm: main, proj: test_liblz4 }
           - { vm: main, proj: test_libmpc }
           - { vm: main, proj: test_libmpfr }
+          - { vm: main, proj: test_libopus }
           - { vm: main, proj: test_libpcre2 }
           - { vm: main, proj: test_libpng }
           - { vm: main, proj: test_libpsl }
@@ -128,6 +131,7 @@ jobs:
           - { vm: main, proj: test_libsodium }
           - { vm: main, proj: test_libuev }
           - { vm: main, proj: test_libuv }
+          - { vm: main, proj: test_libwebp }
           - { vm: main, proj: test_libxml }
           - { vm: main, proj: test_libyaml }
           - { vm: main, proj: test_lua }
@@ -138,6 +142,7 @@ jobs:
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_micropython }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_mquickjs }
           - { vm: main, proj: test_mruby }
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_noplate }
@@ -146,6 +151,7 @@ jobs:
           - { vm: main, proj: test_openrc }
           - { vm: main, proj: test_openssh }
           - { vm: main, proj: test_openssl }
+          - { vm: main, proj: test_orangeduck_mpc }
           - { vm: main, proj: test_pacman }
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_perl }
@@ -163,6 +169,8 @@ jobs:
           - { vm: main, proj: test_tcl }
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }
+          - { vm: main, proj: test_umka }
+          - { vm: main, proj: test_utillinux }
           - { vm: main, proj: test_valkey }
           - { vm: main, proj: test_vim }
           - { vm: main, proj: test_wasm3 }

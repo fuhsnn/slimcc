@@ -27,7 +27,9 @@ RUN apt-get install -y --no-install-recommends \
  # libxo/chimerautils
  libedit-dev libacl1-dev liblzma-dev \
  # wayst
- libutf8proc-dev
+ libutf8proc-dev \
+ # xterm
+ libxaw7-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
