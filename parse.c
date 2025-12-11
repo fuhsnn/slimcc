@@ -179,6 +179,19 @@ struct {
   int cnt;
 } pack_stk;
 
+typedef struct FuncContext FuncContext;
+struct FuncContext {
+  Obj *fn;
+  Obj *fnname;
+  Node *gotos;
+  Node *labels;
+  DeferStmt *defr;
+  bool use_vla;
+  bool dont_dealloc_vla;
+  bool is_static_init_context;
+  Token *defr_ctx;
+};
+
 // Likewise, global variables are accumulated to this list.
 static Obj *globals = &(Obj){0};
 
@@ -186,22 +199,9 @@ static Scope *scope = &(Scope){0};
 
 static HashMap symbols;
 
-// Points to the function object the parser is currently parsing.
-static Obj *current_fn;
+static FuncContext *fnctx;
 
-static Obj *current_fnname;
-
-// Lists of all goto statements and labels in the curent function.
-static Node *gotos;
-static Node *labels;
-
-static DeferStmt *current_defr;
-
-static bool fn_use_vla;
-static bool dont_dealloc_vla;
-static bool is_global_init_context;
 static bool *eval_recover;
-static Token *defer_context;
 
 static bool is_typename(Token *tok);
 static Type *typename(Token **rest, Token *tok);
@@ -248,6 +248,10 @@ static Node *new_node(NodeKind kind, Token *tok);
 static Node *resolve_local_gotos(void);
 static void push_goto(Node *node);
 
+static bool is_const_context(void) {
+  return fnctx ? fnctx->is_static_init_context : !scope->parent;
+}
+
 static void enter_scope(void) {
   Scope *sc = ast_arena_calloc(sizeof(Scope));
   sc->parent = scope;
@@ -267,7 +271,7 @@ static void enter_tmp_scope(void) {
 }
 
 static bool leave_scope(void) {
-  if (current_fn) {
+  if (fnctx) {
     free(scope->vars.buckets);
     free(scope->tags.buckets);
   }
@@ -280,22 +284,22 @@ static bool leave_scope(void) {
 static DeferStmt *new_stmt_scope(void) {
   enter_scope();
   scope->is_stmt = true;
-  return current_defr;
+  return fnctx->defr;
 }
 
 static Node *leave_stmt_scope(DeferStmt *defr, Node *stmt_node) {
   bool no_label = leave_scope();
 
   if (stmt_node->kind == ND_RETURN || stmt_node->kind == ND_GOTO)
-    current_defr = defr;
+    fnctx->defr = defr;
 
-  if (defr == current_defr && !stmt_node->next) {
+  if (defr == fnctx->defr && !stmt_node->next) {
     stmt_node->no_label = no_label;
     return stmt_node;
   }
   Node *blk = new_node(ND_BLOCK, stmt_node->tok);
-  blk->dfr_from = current_defr;
-  blk->dfr_dest = current_defr = defr;
+  blk->dfr_from = fnctx->defr;
+  blk->dfr_dest = fnctx->defr = defr;
   blk->blk.body = stmt_node;
   blk->no_label = no_label;
   return blk;
@@ -446,7 +450,7 @@ static Node *new_var_node(Obj *var, Token *tok) {
 
 static Node *new_label(Token *tok) {
   Node *node = new_node(ND_LABEL, tok);
-  node->dfr_from = current_defr;
+  node->dfr_from = fnctx->defr;
   scope->has_label = true;
   return node;
 }
@@ -687,13 +691,13 @@ static Obj *new_static_lvar(Type *ty) {
   var->is_definition = true;
   var->is_static = true;
   var->is_static_lvar = true;
-  var->next = current_fn->static_lvars;
-  current_fn->static_lvars = var;
+  var->next = fnctx->fn->static_lvars;
+  fnctx->fn->static_lvars = var;
   return var;
 }
 
 static Obj *new_anon_gvar(Type *ty) {
-  if (current_fn)
+  if (fnctx)
     return new_static_lvar(ty);
   Obj *var = new_gvar(new_unique_name(), ty);
   var->is_definition = true;
@@ -704,11 +708,11 @@ static Obj *new_anon_gvar(Type *ty) {
 static DeferStmt *new_defr(DeferKind kind) {
   DeferStmt *defr = arena_calloc(&ast_arena, sizeof(DeferStmt));
   defr->kind = kind;
-  if (current_defr) {
-    defr->vla = current_defr->vla;
-    defr->next = current_defr;
+  if (fnctx->defr) {
+    defr->vla = fnctx->defr->vla;
+    defr->next = fnctx->defr;
   }
-  current_defr = defr;
+  fnctx->defr = defr;
   return defr;
 }
 
@@ -1353,7 +1357,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
       return vla_of(ty, NULL, array_len);
     return array_of(ty, array_len);
   }
-  if (is_global_init_context)
+  if (is_const_context())
     error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr, 0);
 }
@@ -1774,7 +1778,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   push_var_name(name, var);
 
   if (ty->kind == TY_VLA) {
-    fn_use_vla = true;
+    fnctx->use_vla = true;
 
     Node *node = vla_size(ty, name);
     add_type(node);
@@ -1967,7 +1971,7 @@ static void designation(Token **rest, Token *tok, Initializer *init,
     prepare_array_init(init, init->ty);
 
     Token *start = tok;
-    if (begin == end || is_global_init_context) {
+    if (begin == end || is_const_context()) {
       for (int i = begin; i <= end; i++)
         designation(&tok, start, &init->list.data[i], true, ctx);
     } else {
@@ -2475,9 +2479,11 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
 // objects to a flat byte array. It is a compile error if an
 // initializer list contains a non-constant expression.
 static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
-  bool ctx = is_global_init_context;
-  is_global_init_context = true;
-
+  bool ctx = false;
+  if (fnctx) {
+    ctx = fnctx->is_static_init_context;
+    fnctx->is_static_init_context = true;
+  }
   Initializer init = {0};
   initializer(rest, tok, &init, var);
 
@@ -2492,13 +2498,16 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   var->init_data = buf;
   var->rel = head.next;
 
-  is_global_init_context = ctx;
+  if (fnctx)
+    fnctx->is_static_init_context = ctx;
 }
 
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var) {
-  bool ctx = is_global_init_context;
-  is_global_init_context = true;
-
+  bool ctx = false;
+  if (fnctx) {
+    ctx = fnctx->is_static_init_context;
+    fnctx->is_static_init_context = true;
+  }
   Initializer init = {0};
   initializer(rest, tok, &init, init_var);
 
@@ -2511,7 +2520,8 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
   init_var->rel = head.next;
   var->ty = init_var->ty;
 
-  is_global_init_context = ctx;
+  if (fnctx)
+    fnctx->is_static_init_context = ctx;
 }
 
 // Returns true if a given token represents a type.
@@ -2645,8 +2655,8 @@ static void push_goto(Node *node) {
       return;
     }
   }
-  node->lbl.next = gotos;
-  gotos = node;
+  node->lbl.next = fnctx->gotos;
+  fnctx->gotos = node;
 }
 
 static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
@@ -2674,11 +2684,11 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
         continue;
       }
 
-      if (!defer_context) {
+      if (!fnctx->defr_ctx) {
         Node *node = new_label(start);
         node->lbl.unique_label = new_unique_name();
-        node->lbl.next = labels;
-        (*cur_node) = (*cur_node)->next = labels = node;
+        node->lbl.next = fnctx->labels;
+        (*cur_node) = (*cur_node)->next = fnctx->labels = node;
       }
       continue;
     }
@@ -2693,7 +2703,7 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
             break;
         if (!ctx)
           error_tok(tok, "stray case");
-        if (jump_ctx->dfr_lvl != current_defr || jump_ctx->dfr_ctx != defer_context)
+        if (jump_ctx->dfr_lvl != fnctx->defr || jump_ctx->dfr_ctx != fnctx->defr_ctx)
           error_tok(tok, "illegal jump");
         active_sw = ctx->node;
       }
@@ -2793,8 +2803,8 @@ static void loop_body(Token **rest, Token *tok, Node *node, Token *label_list) {
 
   ctx.labels = label_list;
   ctx.node = node;
-  ctx.dfr_lvl = current_defr;
-  ctx.dfr_ctx = defer_context;
+  ctx.dfr_lvl = fnctx->defr;
+  ctx.dfr_ctx = fnctx->defr_ctx;
 
   node->ctrl.then = secondary_block(rest, tok);
 
@@ -2821,17 +2831,17 @@ static JumpContext *resolve_labeled_jump(Token **rest, Token *tok, bool is_cont)
 
 static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   if (tok->kind == TK_return) {
-    if (defer_context)
+    if (fnctx->defr_ctx)
       error_tok(tok, "return in defer block");
 
     Node *node = new_node(ND_RETURN, tok);
-    node->dfr_from = current_defr;
+    node->dfr_from = fnctx->defr;
     if (consume(rest, tok->next, ";"))
       return node;
 
     Node *n = expr(&tok, tok->next);
-    if (current_fn->ty->return_ty->kind != TY_VOID)
-      n = assign_cast(current_fn->ty->return_ty, n);
+    if (fnctx->fn->ty->return_ty->kind != TY_VOID)
+      n = assign_cast(fnctx->fn->ty->return_ty, n);
     node->m.lhs = n;
     *rest = skip(tok, ";");
     return node;
@@ -2863,8 +2873,8 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     jump_ctx = &ctx;
 
     ctx.labels = label_list;
-    ctx.dfr_lvl = current_defr;
-    ctx.dfr_ctx = defer_context;
+    ctx.dfr_lvl = fnctx->defr;
+    ctx.dfr_ctx = fnctx->defr_ctx;
 
     node->ctrl.then = secondary_block(rest, tok);
 
@@ -2887,9 +2897,9 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     }
 
     if (!consume(&tok, tok, ";")) {
-      node->dfr_dest = current_defr;
+      node->dfr_dest = fnctx->defr;
       node->ctrl.cond = cond_cast(cond_declaration(&tok, tok, ";", 1));
-      node->dfr_from = current_defr;
+      node->dfr_from = fnctx->defr;
     }
 
     if (!equal(tok, ")"))
@@ -2905,9 +2915,9 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     DeferStmt *dfr = new_stmt_scope();
 
     Node *node = new_node(ND_FOR, tok);
-    node->dfr_dest = current_defr;
+    node->dfr_dest = fnctx->defr;
     node->ctrl.cond = cond_cast(cond_declaration(&tok, skip(tok->next, "("), ")", 1));
-    node->dfr_from = current_defr;
+    node->dfr_from = fnctx->defr;
 
     loop_body(rest, tok, node, label_list);
 
@@ -2949,7 +2959,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       return node;
     }
     Node *node = new_node(ND_GOTO, ident_tok(&tok, tok->next));
-    node->dfr_from = current_defr;
+    node->dfr_from = fnctx->defr;
 
     push_goto(node);
     *rest = skip(tok, ";");
@@ -2960,10 +2970,10 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     bool is_cont = tok->kind == TK_continue;
     Node *node = new_node(is_cont ? ND_CONT : ND_BREAK, tok);
     JumpContext *ctx = resolve_labeled_jump(rest, tok, is_cont);
-    if (ctx->dfr_ctx != defer_context)
+    if (ctx->dfr_ctx != fnctx->defr_ctx)
       error_tok(tok, "illegal jump");
     node->dfr_dest = ctx->dfr_lvl;
-    node->dfr_from = current_defr;
+    node->dfr_from = fnctx->defr;
 
     node->lbl.next = ctx->node->ctrl.breaks;
     ctx->node->ctrl.breaks = node;
@@ -2971,11 +2981,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_defer) {
-    Token *prev = defer_context;
-    defer_context = tok;
+    Token *prev = fnctx->defr_ctx;
+    fnctx->defr_ctx = tok;
     Node *node = secondary_block(rest, tok->next);
     add_type(node);
-    defer_context = prev;
+    fnctx->defr_ctx = prev;
     new_defr(DF_DEFER_STMT)->stmt = node;
     return new_node(ND_NULL_STMT, tok);
   }
@@ -3002,7 +3012,7 @@ static void local_labels(Token **rest, Token *tok) {
 // compound-stmt = (typedef | declaration | stmt)* "}"
 static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   Node *node = new_node(kind, tok);
-  node->dfr_dest = current_defr;
+  node->dfr_dest = fnctx->defr;
 
   local_labels(&tok, tok->next);
 
@@ -3033,10 +3043,10 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   }
 
   if (cur->kind == ND_RETURN || cur->kind == ND_GOTO)
-    current_defr = node->dfr_dest;
+    fnctx->defr = node->dfr_dest;
 
-  node->dfr_from = current_defr;
-  current_defr = node->dfr_dest;
+  node->dfr_from = fnctx->defr;
+  fnctx->defr = node->dfr_dest;
   node->blk.local_labels = resolve_local_gotos();
   node->no_label = leave_scope();
 
@@ -3590,7 +3600,7 @@ static long_double_t eval_double(Node *node) {
   case ND_DIV: {
     long_double_t lval = eval_double(lhs);
     long_double_t rval = eval_double(rhs);
-    if (rval == 0 && !is_global_init_context)
+    if (rval == 0 && !is_const_context())
       break;
     return eval_fp_cast(lval / rval, ty);
   }
@@ -4261,7 +4271,7 @@ static Node *unary(Token **rest, Token *tok) {
   if (equal(tok, "&&")) {
     Node *node = new_node(ND_LABEL_VAL, ident_tok(rest, tok->next));
     push_goto(node);
-    dont_dealloc_vla = true;
+    fnctx->dont_dealloc_vla = true;
     return node;
   }
 
@@ -4772,7 +4782,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
     error_tok(fn->tok, "not a function");
 
   if (fn->kind == ND_VAR && fn->m.var->returns_twice)
-    current_fn->dont_reuse_stk = true;
+    fnctx->fn->dont_reuse_stk = true;
 
   Obj *param = ty->is_oldstyle ? NULL : ty->param_list;
 
@@ -4906,7 +4916,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
     ty->kind == TY_VLA || (ty->size < 0 && ty->kind != TY_ARRAY))
     error_tok(tok, "invalid compound literal type");
 
-  if (is_global_init_context || (attr.strg & SC_STATIC)) {
+  if (is_const_context() || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
     var->is_compound_lit = true;
     var->is_tls = attr.strg & SC_THREAD;
@@ -4943,7 +4953,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node->m.lhs = assign(&tok, tok);
     *rest = skip(tok, ")");
     node->ty = pointer_to(ty_void);
-    dont_dealloc_vla = true;
+    fnctx->dont_dealloc_vla = true;
     return node;
   }
 
@@ -5197,8 +5207,8 @@ static Node *primary(Token **rest, Token *tok) {
       return compound_literal(rest, tok);
 
     if (equal(tok->next, "{")) {
-      if (is_global_init_context || !scope->parent)
-        error_tok(tok, "statement expresssion in constant context");
+      if (!fnctx)
+        error_tok(tok, "statement expresssion not in a function");
 
       Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
       *rest = skip(tok, ")");
@@ -5274,15 +5284,15 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_FUNCTION) {
-    if (!current_fn)
+    if (!fnctx)
       error_tok(tok, "not in function");
-    if (!current_fnname) {
-      char *name = current_fn->name;
-      current_fnname = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
-      current_fnname->init_data = name;
+    if (!fnctx->fnname) {
+      char *name = fnctx->fn->name;
+      fnctx->fnname = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
+      fnctx->fnname->init_data = name;
     }
     *rest = tok->next;
-    return new_var_node(current_fnname, tok);
+    return new_var_node(fnctx->fnname, tok);
   }
 
   error_tok(tok, "expected an expression");
@@ -5338,13 +5348,13 @@ static void resolve_goto_defer(Node *node, DeferStmt *dst_dfr) {
 
 static void resolve_gotos(void) {
   HashMap label_cache = {0};
-  for (Node *x = gotos; x; x = x->lbl.next) {
+  for (Node *x = fnctx->gotos; x; x = x->lbl.next) {
     HashEntry *ent = hashmap_get_or_insert(&label_cache, x->tok->loc, x->tok->len);
     Node *dest = ent->val;
     if (!dest) {
       Node head = {0};
       Node *cur = &head;
-      for (Node *lbl = labels; lbl; lbl = lbl->lbl.next) {
+      for (Node *lbl = fnctx->labels; lbl; lbl = lbl->lbl.next) {
         if (!equal_tok(lbl->tok, x->tok)) {
           cur = cur->lbl.next = lbl;
           continue;
@@ -5356,14 +5366,13 @@ static void resolve_gotos(void) {
       if (!dest)
         error_tok(x->tok, "use of undeclared label");
       cur->lbl.next = NULL;
-      labels = head.lbl.next;
+      fnctx->labels = head.lbl.next;
       ent->val = dest;
     }
     x->lbl.unique_label = dest->lbl.unique_label;
     resolve_goto_defer(x, dest->dfr_from);
   }
   free(label_cache.buckets);
-  gotos = NULL;
 }
 
 static Node *resolve_local_gotos(void) {
@@ -5506,9 +5515,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   arena_on(&ast_arena);
 
-  current_fn = fn;
-  current_defr = NULL;
-  fn_use_vla = dont_dealloc_vla = false;
+  fnctx = &(FuncContext){.fn = fn};
 
   Node *precalc = NULL;
   if (ty->scopes) {
@@ -5537,17 +5544,16 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->body->blk.body = precalc;
   }
 
-  if (fn_use_vla && !dont_dealloc_vla &&
-    (opt_reuse_stack && !current_fn->dont_reuse_stk))
+  if (fnctx->use_vla && !fnctx->dont_dealloc_vla &&
+    (opt_reuse_stack && !fnctx->fn->dont_reuse_stk))
     fn->dealloc_vla = true;
 
-  if (gotos)
+  if (fnctx->gotos)
     resolve_gotos();
-  labels = NULL;
-  current_fn = NULL;
-  current_fnname = NULL;
 
   emit_text(fn);
+
+  fnctx = NULL;
   arena_off(&ast_arena);
 }
 
