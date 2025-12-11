@@ -317,7 +317,7 @@ test_hare() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-9
+ github_tar ImageMagick ImageMagick 7.1.2-10
  fix_and_configure
  make check V=1
 }
@@ -418,7 +418,7 @@ test_libexpat() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc 741d3d78bc8c10f652a6e49f0a9cb1b12e4523a2 libgc
+ git_fetch https://github.com/bdwgc/bdwgc 5901d16bbc45e867408ab88e3383757e9cb88306 libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -564,7 +564,7 @@ test_libxml() {
 
 test_libxo_chimerautils() {
  local LIBXO=$PWD/libxo_install
- github_tar chimera-linux chimerautils v14.3.1
+ github_tar chimera-linux chimerautils v15.0.2
 
  github_tar Juniper libxo 1.7.5
  sed -i 's|__int128_t|_BitInt(128)|g' libxo/xo_humanize.h
@@ -684,7 +684,7 @@ test_muon() {
 }
 
 test_nginx() {
- github_tar nginx nginx release-1.29.3
+ github_tar nginx nginx release-1.29.4
  auto/configure
  make
  cd ../
@@ -842,7 +842,7 @@ test_redis() {
 }
 
 test_valkey() {
- github_tar valkey-io valkey 9.0.0
+ github_tar valkey-io valkey 9.0.1
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -866,7 +866,7 @@ test_rsync() {
 }
 
 test_ruby() {
- git_fetch https://github.com/ruby/ruby 588347a088625b5c16eedbc5f3a7a1189a427e25 ruby
+ git_fetch https://github.com/ruby/ruby 674ddf4b7dc2558afd5570105a9fd7e24f68230b ruby
  rm tool/test/test_commit_email.rb
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
@@ -874,7 +874,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 01a1b92a9c5f076847b8c8eb1848e04ed50bb2b3 rvvm
+ git_fetch https://github.com/LekKit/RVVM 1a99624d041ae411839262b51c7f5e19a123aef7 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1002,7 +1002,7 @@ test_wuffs() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash 7b2c67f3d1d940aca00a4df895b7f97062dd8cc4 xxhash
+ git_fetch https://github.com/Cyan4973/xxHash 781482a1e4d802a4c37fd052badd793c2c8fbed9 xxhash
  make CC=$CC DISPATCH=0 check
 }
 
@@ -1021,7 +1021,7 @@ test_yash() {
 }
 
 test_zlib() {
- github_tar madler zlib v1.3.1
+ github_tar madler zlib v1.3.1.2
  CFLAGS=-fPIC ./configure
  replace_line 'LDSHARED=cc -shared' 'LDSHARED=$(CC) -shared' Makefile
  make test
@@ -1075,7 +1075,7 @@ build_ellipsis() {
 }
 
 build_erlang() {
- github_tar erlang otp OTP-28.2
+ github_tar erlang otp OTP-28.3
  replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
  replace_line "#if defined(__GNUC__)" "#if 1" erts/include/internal/ethread_inline.h
  sed -i 's|-funroll-loops||g' lib/megaco/src/flex/Makefile.in
@@ -1159,7 +1159,7 @@ build_libev() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 45b771bb2c693a4cc7e34e79b7d30ab10bb7776a luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT 7152e15489d2077cd299ee23e3d51a4c599ab14f luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -1188,7 +1188,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_5_20251129
+ github_tar ThomasDickey ncurses-snapshots v6_5_20251206
  ./configure
  make V=1
 }
