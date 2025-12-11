@@ -188,7 +188,7 @@ struct FuncContext {
   DeferStmt *defr;
   bool use_vla;
   bool dont_dealloc_vla;
-  bool is_global_init_context;
+  bool is_static_init_context;
   Token *defr_ctx;
 };
 
@@ -248,8 +248,8 @@ static Node *new_node(NodeKind kind, Token *tok);
 static Node *resolve_local_gotos(void);
 static void push_goto(Node *node);
 
-static bool is_global_context(void) {
-  return (fnctx && fnctx->is_global_init_context) || !scope->parent;
+static bool is_const_context(void) {
+  return fnctx ? fnctx->is_static_init_context : !scope->parent;
 }
 
 static void enter_scope(void) {
@@ -1357,7 +1357,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
       return vla_of(ty, NULL, array_len);
     return array_of(ty, array_len);
   }
-  if (is_global_context())
+  if (is_const_context())
     error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr, 0);
 }
@@ -1971,7 +1971,7 @@ static void designation(Token **rest, Token *tok, Initializer *init,
     prepare_array_init(init, init->ty);
 
     Token *start = tok;
-    if (begin == end || fnctx->is_global_init_context) {
+    if (begin == end || is_const_context()) {
       for (int i = begin; i <= end; i++)
         designation(&tok, start, &init->list.data[i], true, ctx);
     } else {
@@ -2481,8 +2481,8 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
 static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   bool ctx = false;
   if (fnctx) {
-    ctx = fnctx->is_global_init_context;
-    fnctx->is_global_init_context = true;
+    ctx = fnctx->is_static_init_context;
+    fnctx->is_static_init_context = true;
   }
   Initializer init = {0};
   initializer(rest, tok, &init, var);
@@ -2499,14 +2499,14 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   var->rel = head.next;
 
   if (fnctx)
-    fnctx->is_global_init_context = ctx;
+    fnctx->is_static_init_context = ctx;
 }
 
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var) {
   bool ctx = false;
   if (fnctx) {
-    ctx = fnctx->is_global_init_context;
-    fnctx->is_global_init_context = true;
+    ctx = fnctx->is_static_init_context;
+    fnctx->is_static_init_context = true;
   }
   Initializer init = {0};
   initializer(rest, tok, &init, init_var);
@@ -2521,7 +2521,7 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
   var->ty = init_var->ty;
 
   if (fnctx)
-    fnctx->is_global_init_context = ctx;
+    fnctx->is_static_init_context = ctx;
 }
 
 // Returns true if a given token represents a type.
@@ -3600,7 +3600,7 @@ static long_double_t eval_double(Node *node) {
   case ND_DIV: {
     long_double_t lval = eval_double(lhs);
     long_double_t rval = eval_double(rhs);
-    if (rval == 0 && !is_global_context())
+    if (rval == 0 && !is_const_context())
       break;
     return eval_fp_cast(lval / rval, ty);
   }
@@ -4916,7 +4916,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
     ty->kind == TY_VLA || (ty->size < 0 && ty->kind != TY_ARRAY))
     error_tok(tok, "invalid compound literal type");
 
-  if (is_global_context() || (attr.strg & SC_STATIC)) {
+  if (is_const_context() || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
     var->is_compound_lit = true;
     var->is_tls = attr.strg & SC_THREAD;
@@ -5207,7 +5207,7 @@ static Node *primary(Token **rest, Token *tok) {
       return compound_literal(rest, tok);
 
     if (equal(tok->next, "{")) {
-      if (is_global_context())
+      if (is_const_context())
         error_tok(tok, "statement expresssion in constant context");
 
       Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
@@ -5550,10 +5550,10 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   if (fnctx->gotos)
     resolve_gotos();
-  fnctx = NULL;
 
   emit_text(fn);
 
+  fnctx = NULL;
   arena_off(&ast_arena);
 }
 
