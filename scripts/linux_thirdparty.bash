@@ -1115,6 +1115,15 @@ build_gcc() {
  mkdir buildonly && cd "$_"
  MAKEINFO=true ../configure --enable-languages=c,c++ --disable-multilib --disable-bootstrap
  make
+
+cat << EOF > hello.cpp
+#include <stdio.h>
+class H { public: H(){printf("hello");} ~H(){puts("_world");} };
+int main() { H h; }
+EOF
+
+ ./gcc/xgcc -B./gcc/ -fno-exceptions hello.cpp -o hello
+ ./hello | grep ^hello_world$
 }
 
 build_glfw() {
