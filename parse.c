@@ -643,14 +643,14 @@ static void push_gvar_name(Token *name, Obj *var) {
     error_tok(name, "invalid redefinition of '%.*s'", name->len, name->loc);
 }
 
-static Obj *alloc_lvar(Type *ty) {
+static Obj *alloc_ast_var(Type *ty) {
   Obj *var = ast_arena_calloc(sizeof(Obj));
   var->ty = ty;
   return var;
 }
 
 static Obj *new_lvar2(Type *ty, Scope *sc) {
-  Obj *var = alloc_lvar(ty);
+  Obj *var = alloc_ast_var(ty);
   var->is_local = true;
   var->next = sc->locals;
   sc->locals = var;
@@ -686,7 +686,7 @@ char *new_unique_name(void) {
 }
 
 static Obj *new_static_lvar(Type *ty) {
-  Obj *var = alloc_lvar(ty);
+  Obj *var = alloc_ast_var(ty);
   var->name = new_unique_name();
   var->is_definition = true;
   var->is_static = true;
@@ -1036,7 +1036,7 @@ static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
     Node *arg = new_unary(ND_ADDR, new_var_node(var, tok), tok);
     add_type(arg);
 
-    n->call.args = alloc_lvar(arg->ty);
+    n->call.args = alloc_ast_var(arg->ty);
     n->call.args->arg_expr = arg;
     prepare_funcall(n, scope);
 
@@ -4809,7 +4809,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
       else
         ptr_convert(&arg);
     }
-    cur = cur->param_next = alloc_lvar(arg->ty);
+    cur = cur->param_next = alloc_ast_var(arg->ty);
     cur->arg_expr = arg;
   }
   if (param)
