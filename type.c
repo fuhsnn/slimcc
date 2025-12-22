@@ -481,12 +481,14 @@ Type *func_type(Type *return_ty, Token *tok) {
   return ty;
 }
 
-Type *get_func_ty(Type *ty) {
+Type *get_func_ty(Node *node) {
+  add_type(node);
+  Type *ty = node->ty;
   if (ty->kind == TY_FUNC)
     return ty;
   if (ty->kind == TY_PTR && ty->base->kind == TY_FUNC)
     return ty->base;
-  return NULL;
+  error_tok(node->tok, "not a function");
 }
 
 Type *array_of(Type *base, int64_t len) {

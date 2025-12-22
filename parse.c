@@ -4781,11 +4781,7 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
 
 // funcall = (assign ("," assign)*)? ")"
 static Node *funcall(Token **rest, Token *tok, Node *fn) {
-  add_type(fn);
-
-  Type *ty = get_func_ty(fn->ty);
-  if (!ty)
-    error_tok(fn->tok, "not a function");
+  Type *ty = get_func_ty(fn);
 
   if (fn->kind == ND_VAR && fn->m.var->returns_twice)
     fnctx->fn->dont_reuse_stk = true;
