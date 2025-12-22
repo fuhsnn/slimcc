@@ -690,6 +690,12 @@ static Type *usual_arith_conv(Node **lhs, Node **rhs) {
   return ty;
 }
 
+void add_type_chk_const(Node *node) {
+  add_type(node);
+  if (node->ty->qual & Q_CONST)
+    error_tok(node->tok, "operand is const");
+}
+
 void add_type(Node *node) {
   if (!node || node->ty)
     return;

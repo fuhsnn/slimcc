@@ -4260,12 +4260,18 @@ static Node *unary(Token **rest, Token *tok) {
     return new_unary(ND_BITNOT, unary(rest, tok->next), tok);
 
   // Read ++i as i+=1
-  if (equal(tok, "++"))
-    return to_assign(new_add(unary(rest, tok->next), new_num(1, tok), tok));
+  if (equal(tok, "++")) {
+    Node *node = unary(rest, tok->next);
+    add_type_chk_const(node);
+    return to_assign(new_add(node, new_num(1, tok), tok));
+  }
 
   // Read --i as i-=1
-  if (equal(tok, "--"))
-    return to_assign(new_sub(unary(rest, tok->next), new_num(1, tok), tok));
+  if (equal(tok, "--")) {
+    Node *node = unary(rest, tok->next);
+    add_type_chk_const(node);
+    return to_assign(new_sub(node, new_num(1, tok), tok));
+  }
 
   // [GNU] labels-as-values
   if (equal(tok, "&&")) {
@@ -4687,7 +4693,7 @@ static Node *struct_ref(Node *node, Token *tok) {
 }
 
 static Node *new_inc_dec(Node *node, Token *tok, int addend) {
-  add_type(node);
+  add_type_chk_const(node);
 
   if (node->ty->qual & Q_ATOMIC)
     return atomic_op(new_add(node, new_num(addend, tok), tok), true);
