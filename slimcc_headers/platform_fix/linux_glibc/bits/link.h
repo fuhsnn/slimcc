@@ -1,0 +1,4 @@
+#ifndef _SLIMCC_PLAT_BITS_LINK_H
+#define _SLIMCC_PLAT_BITS_LINK_H
+
+#endif
