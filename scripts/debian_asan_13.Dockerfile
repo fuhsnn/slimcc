@@ -49,7 +49,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # openrc
  libcap-dev \
  # hare simple-cc
- qbe
+ qbe \
+ # neovim
+ luajit libluajit-5.1-dev lua-luv-dev libvterm-dev lua-lpeg libmsgpack-c-dev libtree-sitter-dev libunibilium-dev
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc

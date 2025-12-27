@@ -1,6 +1,12 @@
 set -eu
 set -o pipefail
 
+test_neovim() {
+ github_tar neovim neovim v0.10.4
+ cmake_init
+ make unittest
+}
+
 if [ "$CC" = /work/slimcc/slimcc ]; then
  is_CI=
  SRC_DIR=`dirname $CC`
