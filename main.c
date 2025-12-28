@@ -335,6 +335,12 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     if (*argv[i] == '\0')
       continue;
 
+    if (*argv[i] != '-' || argv[i][1] == '\0') {
+      strarray_push(&input_args, argv[i]);
+      input_cnt++;
+      continue;
+    }
+
     if (!strcmp(argv[i], "-###")) {
       opt_hash_hash_hash = true;
       continue;
@@ -701,8 +707,11 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
 
     // These options are ignored for now.
     if (startswith(argv[i], &arg, "-march=") ||
+        !strcmp(argv[i], "-fdollars-in-identifiers") ||
         !strcmp(argv[i], "-ffreestanding") ||
+        !strcmp(argv[i], "-ffp-contract=off") ||
         !strcmp(argv[i], "-fno-builtin") ||
+        !strcmp(argv[i], "-fno-fast-math") ||
         !strcmp(argv[i], "-fno-lto") ||
         !strcmp(argv[i], "-fno-asynchronous-unwind-tables") ||
         !strcmp(argv[i], "-fno-delete-null-pointer-checks") ||
@@ -713,6 +722,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         !strcmp(argv[i], "-fno-strict-overflow") ||
         !strcmp(argv[i], "-fwrapv") ||
         !strcmp(argv[i], "-m64") ||
+        !strcmp(argv[i], "-malign-double") ||
         !strcmp(argv[i], "-mfpmath=sse") ||
         !strcmp(argv[i], "-mno-red-zone") ||
         !strcmp(argv[i], "-pedantic") ||
@@ -720,11 +730,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         !strcmp(argv[i], "-w"))
       continue;
 
-    if (argv[i][0] == '-' && argv[i][1] != '\0')
-      error("unknown argument: %s", argv[i]);
-
-    strarray_push(&input_args, argv[i]);
-    input_cnt++;
+    error("unknown argument: %s", argv[i]);
   }
 
   if (!opt_E && opt_dM)
