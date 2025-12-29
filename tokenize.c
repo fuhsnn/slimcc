@@ -63,7 +63,7 @@ void verror_at_tok(Token *tok, char *fmt, va_list ap) {
     if (!tok)
       internal_error();
   }
-  if (tok->display_line_no)
+  if (!tok->origin && tok->display_line_no)
     if (tok->file->file_no != tok->display_file_no || tok->line_no != tok->display_line_no)
       fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no], tok->display_line_no);
 
@@ -868,14 +868,14 @@ static void add_line_numbers(Token *tok) {
   } while (*p++);
 }
 
-Token *tokenize_string_literal(Token *tok, Type *basety) {
-  Token *t;
+void tokenize_string_literal(Token *tok, Type *basety) {
+  Token *tok2;
   if (basety->size == 2)
-    t = read_utf16_string_literal(tok->loc, tok->loc);
+    tok2 = read_utf16_string_literal(tok->loc, tok->loc);
   else
-    t = read_utf32_string_literal(tok->loc, tok->loc, basety);
-  t->next = tok->next;
-  return t;
+    tok2 = read_utf32_string_literal(tok->loc, tok->loc, basety);
+  tok->ty = tok2->ty;
+  tok->str = tok2->str;
 }
 
 void convert_ucn_ident(Token *tok) {

@@ -1902,9 +1902,6 @@ static void join_adjacent_string_literals(Token *tok) {
   while (end->kind == TK_STR)
     end = end->next;
 
-  int fileno = tok->display_file_no;
-  int lineno = tok->display_line_no;
-
   // If regular string literals are adjacent to wide string literals,
   // regular string literals are converted to the wide type.
   StringKind kind = getStringKind(tok);
@@ -1923,7 +1920,7 @@ static void join_adjacent_string_literals(Token *tok) {
   if (basety->size > 1)
     for (Token *t = tok; t != end; t = t->next)
       if (t->ty->base->size == 1)
-        *t = *tokenize_string_literal(t, basety);
+        tokenize_string_literal(t, basety);
 
   // Concatenate adjacent string literals.
   int len = tok->ty->array_len;
@@ -1937,9 +1934,6 @@ static void join_adjacent_string_literals(Token *tok) {
     memcpy(buf + i, t->str, t->ty->size);
     i = i + t->ty->size - t->ty->base->size;
   }
-
-  tok->display_file_no = fileno;
-  tok->display_line_no = lineno;
 
   tok->ty = array_of(basety, len);
   tok->str = buf;

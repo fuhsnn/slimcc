@@ -303,7 +303,7 @@ bool consume(Token **rest, Token *tok, char *str);
 File *read_file(char *path, Token *tok, bool canon);
 File *new_file(char *name, char *contents);
 int add_display_file(char *path);
-Token *tokenize_string_literal(Token *tok, Type *basety);
+void tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, Token **end);
 void convert_pp_number(Token *tok, Node *node);
 TokenKind ident_keyword(Token *tok);
