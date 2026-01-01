@@ -4869,7 +4869,8 @@ static bool is_rodata_obj(Obj *var) {
     if (var->rel)
       return false;
     if (var->section_name)
-      return !strcmp(var->section_name, ".interp");
+      return !strcmp(var->section_name, ".interp") ||
+        !strcmp(var->section_name, ".note.dlopen");
   }
   return true;
 }
