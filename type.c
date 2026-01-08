@@ -118,8 +118,14 @@ Type *unqual(Type *ty) {
   return ty->origin ? ty->origin : ty;
 }
 
-Type *new_derived_type(Type *newty, QualMask qual, Type *ty) {
+Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
   ty = ty->origin ? ty->origin : ty;
+
+  if (tok && ty->kind != TY_AUTO)
+    if (qual & Q_RESTRICT)
+      if (ty->kind != TY_PTR || ty->base->kind == TY_FUNC)
+        error_tok(tok, "type cannot be restrict qualified");
+
   if (!newty)
     newty = malloc(sizeof(Type));
   *newty = *ty;
@@ -128,11 +134,11 @@ Type *new_derived_type(Type *newty, QualMask qual, Type *ty) {
   return newty;
 }
 
-Type *qual_type(QualMask msk, Type *ty) {
+Type *qual_type(QualMask msk, Type *ty, Token *tok) {
   if (msk == (msk & ty->qual))
     return ty;
 
-  Type *ret = new_derived_type(NULL, msk | ty->qual, ty);
+  Type *ret = new_derived_type(NULL, msk | ty->qual, ty, tok);
 
   if (ty->size < 0) {
     ret->decl_next = ty->decl_next;
@@ -144,7 +150,7 @@ Type *qual_type(QualMask msk, Type *ty) {
 void cvqual_type(Type **ty_p, Type *ty2) {
   QualMask msk = ty2->qual & (Q_CONST | Q_VOLATILE);
   if (msk)
-    *ty_p = qual_type(msk, *ty_p);
+    *ty_p = qual_type(msk, *ty_p, NULL);
 }
 
 bool mem_iter(Member **mem) {
@@ -606,7 +612,7 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, int msk, Node **cond, Obj **co
 
     return array_of(base, -1);
   }
-  return qual_type(msk, ty1);
+  return qual_type(msk, ty1, NULL);
 }
 
 static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
@@ -619,7 +625,7 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
     return ty2;
   if (ty1->kind == TY_PTR && ty2->kind == TY_PTR) {
     if (ty1->base->kind == TY_VOID || ty2->base->kind == TY_VOID)
-      return pointer_to(qual_type(ty1->base->qual | ty2->base->qual, ty_void));
+      return pointer_to(qual_type(ty1->base->qual | ty2->base->qual, ty_void, NULL));
 
     if (is_compatible(ty1->base, ty2->base))
       return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, 0, cond, &(Obj *){0}));

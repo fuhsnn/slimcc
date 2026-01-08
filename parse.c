@@ -1060,12 +1060,6 @@ static bool chk_storage_class(uint8_t msk, StorageClass allow) {
     (bool)(msk & SC_STATIC) + (bool)(msk & SC_TYPEDEF));
 }
 
-static void chk_restrict_qual(Type *ty, Token *tok) {
-  if (ty->qual & Q_RESTRICT)
-    if (ty->kind != TY_PTR || ty->base->kind == TY_FUNC)
-      error_tok(tok, "type cannot be restrict qualified");
-}
-
 static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx) {
   enum {
     VOID     = 1 << 0,
@@ -1228,9 +1222,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
   if (chk_storage_class(attr->strg, ctx))
     error_tok(tok, "invalid storage class");
 
-  if (ty) {
-    chk_restrict_qual(ty, tok);
-  } else {
+  if (!ty) {
     if (opt_std == STD_C89) {
       ty = ty_int;
     } else if (opt_std >= STD_C23 && (attr->strg & SC_AUTO)) {
@@ -1250,7 +1242,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     if (ty->bit_cnt < (1 + !ty->is_unsigned))
       error_tok(tok, "invalid bit width for _BitInt");
 
-  return qual_type(qual, ty);
+  return qual_type(qual, ty, tok);
 }
 
 static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
@@ -1316,7 +1308,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
 
     Type *param_ty = ptr_decay(ty);
     if (ty->param_qual)
-      param_ty = qual_type(ty->param_qual, param_ty);
+      param_ty = qual_type(ty->param_qual, param_ty, tok);
 
     if (param_ty->kind == TY_VOID)
       error_tok(tok, "parameter declared void");
@@ -1417,8 +1409,8 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
 // pointers = ("*" ("const" | "volatile" | "restrict")*)*
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
   while (consume(&tok, tok, "*")) {
-    ty = qual_type(pointer_qualifiers(&tok, tok), pointer_to(ty));
-    chk_restrict_qual(ty, tok);
+    QualMask q = pointer_qualifiers(&tok, tok);
+    ty = qual_type(q, pointer_to(ty), tok);
   }
   *rest = tok;
   return ty;
@@ -2156,12 +2148,10 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   Type *ty = var->ty;
 
   if (ty->kind == TY_AUTO) {
-    Token *start = tok;
     init->kind = INIT_EXPR;
     init->expr = assign(rest, tok);
     ptr_convert(&init->expr);
-    new_derived_type(ty, ty->qual, init->expr->ty);
-    chk_restrict_qual(ty, start);
+    new_derived_type(ty, ty->qual, init->expr->ty, tok);
     init->ty = ty;
     return;
   }
@@ -2176,7 +2166,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   var->ty = init->ty;
 
   if (ty->is_flexible && init->kind == INIT_LIST) {
-    ty = new_derived_type(NULL, ty->qual, ty);
+    ty = new_derived_type(NULL, ty->qual, ty, tok);
 
     Initializer *i = &init->list.data[init->list.cnt - 1];
     if (i->ty->size > 0)
@@ -4554,7 +4544,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
 
     for (Type *t = ty->decl_next; t;) {
       Type *nxt = t->decl_next;
-      new_derived_type(t, t->qual, ty);
+      new_derived_type(t, t->qual, ty, tok);
       t = nxt;
     }
   }
@@ -5012,7 +5002,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
       error_tok(tok, "expected pointer to non-void type");
     Type *base = node->ty->base;
     if (!(base->qual & Q_ATOMIC))
-      node->ty = pointer_to(qual_type(Q_ATOMIC, base));
+      node->ty = pointer_to(qual_type(Q_ATOMIC, base, node->tok));
     return node;
   }
 
