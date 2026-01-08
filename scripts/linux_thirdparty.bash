@@ -146,7 +146,7 @@ test_c3() {
 }
 
 test_calc() {
- github_tar lcn2 calc v2.16.1.1
+ github_tar lcn2 calc v2.16.1.2
  make CC=$CC LCC=$CC MAN=true check
 }
 
@@ -200,7 +200,7 @@ test_cproc() {
 }
 
 test_curl() {
- github_tar curl curl curl-8_17_0
+ github_tar curl curl curl-8_18_0
  libtoolize
  autoreconf -fi
  fix_and_configure --with-openssl
@@ -464,7 +464,7 @@ test_lexbor() {
 }
 
 test_liballegro5() {
- github_tar liballeg allegro5 5.2.11.1
+ github_tar liballeg allegro5 5.2.11.2
  cmake_init
  make VERBOSE=1
  make run_standalone_tests
@@ -474,7 +474,7 @@ test_liballegro5() {
 }
 
 test_libarchive() {
- github_tar libarchive libarchive v3.8.4
+ github_tar libarchive libarchive v3.8.5
  replace_line "#elif defined(__GNUC__)" "#elif 1" libarchive/archive_blake2.h
  replace_line "#if defined(__GNUC__)" "#if 1" libarchive/archive_write_set_format_cpio_binary.c
  libtoolize
@@ -499,7 +499,7 @@ test_libexpat() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc beffb57e89902d080eace96a576458a99d09f938 libgc
+ git_fetch https://github.com/bdwgc/bdwgc 370781b86b66f4c20f2a9af51d4409697c9f2057 libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -618,7 +618,7 @@ test_libsamplerate() {
 }
 
 test_libsodium() {
- url_tar https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz libsodium
+ url_tar https://github.com/jedisct1/libsodium/releases/download/1.0.21-RELEASE/libsodium-1.0.21.tar.gz libsodium
  fix_and_configure
  replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/private/common.h
  replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/export.h
@@ -978,7 +978,7 @@ test_python() {
 }
 
 test_qbe() {
- git_fetch git://c9x.me/qbe.git 120f316162879b6165deba77815cd4193fb2fb59 qbe
+ git_fetch git://c9x.me/qbe.git e0ded59639848a82878bbcf0b27fb3637f8d9353 qbe
  make CC="$CC" check
 }
 
@@ -1055,7 +1055,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 1a99624d041ae411839262b51c7f5e19a123aef7 rvvm
+ git_fetch https://github.com/LekKit/RVVM 9c6d056f5a9d1b8f74aecb25abaff607ba5471b0 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1118,7 +1118,7 @@ test_tcl() {
 test_tinycc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_tinycc.bash
 
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 9a7edb20d3920b73f06a856fa1c82262d165bc6d tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 1401967ce21311bea3039bfaad362d7ba32ea36c tinycc
  ./configure && make
  if gcc --version; then
   make CC=gcc test
@@ -1534,7 +1534,7 @@ build_raylib_raygui() {
 build_simplecc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_simplecc.bash
 
- git_fetch git://git.simple-cc.org/scc 84128eaf37e33fed023f271018b157b7398ad91c simplecc
+ git_fetch git://git.simple-cc.org/scc 52cf2e9986d52e8e812a30b94dc118dabb1aea1f simplecc
  make CC="$CC" HOSTCC="$CC" NOCARET=
  echo 'int puts(const char*); int main(){ puts("hello_world"); return 0; }' > hello.c
  ./bin/scc hello.c -o hello
@@ -1786,7 +1786,7 @@ url_xz() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 302626b33b897c0aeaab9129ed266016be0daf2f muon
+ git_fetch https://github.com/muon-build/muon 164d780029cfafd1880b5e694280a84fd37c7413 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
