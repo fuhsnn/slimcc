@@ -1510,6 +1510,9 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   Type *ty = NULL;
   if (consume(&tok, tok, ":")) {
     ty = typename(&tok, tok);
+
+    if (!is_integer(ty))
+      error_tok(tok, "underlying type not integer");
     if (!equal(tok, "{"))
       skip(tok, ";");
   }
