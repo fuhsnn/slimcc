@@ -5068,6 +5068,8 @@ void emit_text(Obj *fn) {
   int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
 
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
+  if (lvar_align > 16)
+    error_tok(fn->body->tok, "local stk align %d", lvar_align);
   lvar_ptr = (lvar_align > 16) ? rbx : rbp;
   codegen_fn = fn;
   ext_refs = &(HashMap){0};
