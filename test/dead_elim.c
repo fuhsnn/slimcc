@@ -112,6 +112,51 @@ int test_reach(int v) {
   return 0;
 }
 
+__attribute__((noreturn))
+void exit_w_1() {
+  exit(1);
+}
+
+#define A __attribute__((noreturn))
+#define B [[gnu::noreturn]]
+
+A void (*fnp1_g)(void) = &exit_w_1;
+void (*A fnp2_g)(void) = &exit_w_1;
+void (*fnp3_g)(void) A = &exit_w_1;
+
+B void (*fnp4_g)(void) = &exit_w_1;
+void (*fnp5_g B)(void) = &exit_w_1;
+
+int attr_noreturn(void) {
+  volatile bool f = false;
+
+  if (f) { fnp1_g(); not_to_be_called(); }
+  if (f) { fnp2_g(); not_to_be_called(); }
+  if (f) { fnp3_g(); not_to_be_called(); }
+  if (f) { fnp4_g(); not_to_be_called(); }
+  if (f) { fnp5_g(); not_to_be_called(); }
+
+  if (f) { A void (*p)(void) = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { void (*A p)(void) = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { void (*p)(void) A = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { B void (*p)(void) = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { void (*p B)(void) = &exit_w_1; p(); not_to_be_called(); }
+
+  if (f) { A static void (*p)(void) = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { static void (*A p)(void) = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { static void (*p)(void) A = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { B static void (*p)(void) = &exit_w_1; p(); not_to_be_called(); }
+  if (f) { static void (*p B)(void) = &exit_w_1; p(); not_to_be_called(); }
+
+  if (f) { struct { A void (*p)(void); } s = { &exit_w_1 }; s.p(); not_to_be_called(); }
+  if (f) { struct { void (*A p)(void); } s = { &exit_w_1 }; s.p(); not_to_be_called(); }
+  if (f) { struct { void (*p)(void) A; } s = { &exit_w_1 }; s.p(); not_to_be_called(); }
+  if (f) { struct { B void (*p)(void); } s = { &exit_w_1 }; s.p(); not_to_be_called(); }
+  if (f) { struct { void (*p B)(void); } s = { &exit_w_1 }; s.p(); not_to_be_called(); }
+
+  return 1;
+}
+
 int main(void) {
   ASSERT(1, test_unreach(1));
   ASSERT(2, test_unreach(2));
@@ -129,6 +174,8 @@ int main(void) {
   ASSERT(999, test_reach(-2));
   ASSERT(999, test_reach(-3));
   ASSERT(999, test_reach(-4));
+
+  ASSERT(1, attr_noreturn());
 
   printf("OK\n");
   exit_w_0();

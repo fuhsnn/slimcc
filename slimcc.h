@@ -793,6 +793,7 @@ struct Member {
   int64_t offset;
   int idx;
   int alt_align;
+  bool is_noreturn;
   bool is_packed;
 
   // Bitfield
