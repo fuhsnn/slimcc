@@ -59,6 +59,15 @@ void packed(void) {
 
   ASSERT(6, ({ typedef struct { short s; int i [[gnu::packed]] : 24; char c; } S; sizeof(S); }));
   ASSERT(6, ({ typedef struct { char c; int i : 24 __attribute__((packed)); short s; } S; sizeof(S); }));
+
+  EASSERT(1, offsetof(struct { char a; __attribute__((packed)) int(*b)(int); }, b));
+#ifdef NOTGCC
+  EASSERT(1, offsetof(struct { char a; int(*__attribute__((packed)) b)(int); }, b));
+#endif
+  EASSERT(1, offsetof(struct { char a; int(*b)(int) __attribute__((packed)); }, b));
+
+  EASSERT(1, offsetof(struct { char a; [[gnu::packed]] int(*b)(int); }, b));
+  EASSERT(1, offsetof(struct { char a; int(*b [[gnu::packed]])(int); }, b));
 }
 
 int main() {
