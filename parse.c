@@ -1016,6 +1016,11 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
   }
 }
 
+static void mem_attr(Token *name, Token *tok, VarAttr *attr, Member *mem) {
+  mem->is_packed |= attr->is_packed;
+  DeclAttr(bool_attr, "packed", &mem->is_packed);
+}
+
 static void aligned_attr(Token *name, Token *tok, VarAttr *attr, int *align) {
   DeclAttr(attr_aligned, align);
   *align = MAX(*align, attr->align);
@@ -4415,7 +4420,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
       Member *mem = calloc(1, sizeof(Member));
-      mem->is_packed = attr.is_packed;
       mem->ty = declarator(&tok, tok, basety, &mem->name);
       if (mem->name) {
         chk_mem_name2(&names, mem->name);
@@ -4423,8 +4427,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       }
       if (is_vm_ty(mem->ty) || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
         error_tok(tok, "invalid member type");
-
-      bool_attr(tok, TK_BATTR, "packed", &mem->is_packed);
 
       if (consume(&tok, tok, ":")) {
         if (!(is_integer(mem->ty) || mem->ty->kind == TY_BITINT))
@@ -4435,7 +4437,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           error_tok(tok, "bit-field with negative width");
       }
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
-      bool_attr(tok, TK_ATTR, "packed", &mem->is_packed);
+      mem_attr(mem->name, tok, &attr, mem);
+
       cur = cur->next = mem;
 
       if (mem->ty->size < 0) {

@@ -59,6 +59,18 @@ void packed(void) {
 
   ASSERT(6, ({ typedef struct { short s; int i [[gnu::packed]] : 24; char c; } S; sizeof(S); }));
   ASSERT(6, ({ typedef struct { char c; int i : 24 __attribute__((packed)); short s; } S; sizeof(S); }));
+
+#define A __attribute__((packed))
+#define B [[gnu::packed]]
+
+  SASSERT(1 == offsetof(struct { char a; A int(*b)(int); }, b));
+#ifdef NOTGCC
+  SASSERT(1 == offsetof(struct { char a; int(*A b)(int); }, b));
+#endif
+  SASSERT(1 == offsetof(struct { char a; int(*b)(int) A; }, b));
+
+  SASSERT(1 == offsetof(struct { char a; B int(*b)(int); }, b));
+  SASSERT(1 == offsetof(struct { char a; int(*b B)(int); }, b));
 }
 
 int main() {
