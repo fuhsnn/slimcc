@@ -838,7 +838,7 @@ static bool get_attr_val(Token *tok, int64_t *val) {
   return false;
 }
 
-static void attr_aligned(Token *loc, int *align, TokenKind kind) {
+static void attr_aligned(Token *loc, TokenKind kind, int *align) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind != kind)
       continue;
@@ -923,7 +923,7 @@ static void str_attr(Token *loc, TokenKind kind, char *name, char **str) {
 }
 
 static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
-  attr_aligned(tok, &attr->align, kind);
+  attr_aligned(tok, kind, &attr->align);
   attr_cleanup(tok, kind, &attr->cleanup_fn);
   bool_attr(tok, kind, "weak", &attr->is_weak);
   bool_attr(tok, kind, "packed", &attr->is_packed);
@@ -942,10 +942,12 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   str_attr(tok, kind, "visibility", &attr->visibility);
 }
 
-#define DeclAttr(Fn, ...) do {             \
-    Fn(name, TK_ATTR, __VA_ARGS__);        \
-    Fn(name->next, TK_BATTR, __VA_ARGS__); \
-    Fn(tok, TK_ATTR, __VA_ARGS__);         \
+#define DeclAttr(Fn, ...) do {               \
+    if (name) {                              \
+      Fn(name, TK_ATTR, __VA_ARGS__);        \
+      Fn(name->next, TK_BATTR, __VA_ARGS__); \
+    }                                        \
+    Fn(tok, TK_ATTR, __VA_ARGS__);           \
   } while(0)
 
 static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
@@ -1015,11 +1017,7 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
 }
 
 static void aligned_attr(Token *name, Token *tok, VarAttr *attr, int *align) {
-  if (name) {
-    attr_aligned(name, align, TK_ATTR);
-    attr_aligned(name->next, align, TK_BATTR);
-  }
-  attr_aligned(tok, align, TK_ATTR);
+  DeclAttr(attr_aligned, align);
   *align = MAX(*align, attr->align);
 }
 
@@ -4423,8 +4421,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         chk_mem_name2(&names, mem->name);
         mem->name->is_live = true;
       }
-      aligned_attr(mem->name, tok, &attr, &mem->alt_align);
-
       if (is_vm_ty(mem->ty) || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
         error_tok(tok, "invalid member type");
 
@@ -4437,8 +4433,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         mem->bit_width = const_expr(&tok, tok);
         if (mem->bit_width < 0)
           error_tok(tok, "bit-field with negative width");
-        attr_aligned(tok, &mem->alt_align, TK_ATTR);
       }
+      aligned_attr(mem->name, tok, &attr, &mem->alt_align);
       bool_attr(tok, TK_ATTR, "packed", &mem->is_packed);
       cur = cur->next = mem;
 
@@ -4498,8 +4494,8 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   bool_attr(tok, TK_BATTR, "packed", &is_packed);
 
   int alt_align = 0;
-  attr_aligned(tok, &alt_align, TK_ATTR);
-  attr_aligned(tok, &alt_align, TK_BATTR);
+  attr_aligned(tok, TK_ATTR, &alt_align);
+  attr_aligned(tok, TK_BATTR, &alt_align);
 
   // Read a tag.
   Token *tag = NULL;
@@ -4524,7 +4520,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
 
   struct_members(&tok, skip(tok, "{"), ty);
 
-  attr_aligned(tok, &alt_align, TK_ATTR);
+  attr_aligned(tok, TK_ATTR, &alt_align);
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   *rest = tok;
 
