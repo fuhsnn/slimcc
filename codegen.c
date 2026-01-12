@@ -422,6 +422,14 @@ static bool is_direct_fncall(Node *fn_expr) {
   return fn_expr->kind == ND_VAR && fn_expr->m.var->ty->kind == TY_FUNC;
 }
 
+static bool is_noreturn_fncall(Node *fn_expr) {
+  if (fn_expr->kind == ND_VAR)
+    return fn_expr->m.var->is_noreturn;
+  if (fn_expr->kind == ND_MEMBER)
+    return fn_expr->m.member->is_noreturn;
+  return false;
+}
+
 static RegSz bitwidth_to_regsz(int bits) {
   switch(bits) {
   case 64: return REGSZ_64;
@@ -3728,8 +3736,7 @@ static bool gen_reachable_stmt(Node *node) {
   case ND_EXPR_STMT:
     if (node->m.lhs->kind == ND_UNREACHABLE)
       return false;
-    if (node->m.lhs->kind == ND_FUNCALL && is_direct_fncall(node->m.lhs->call.expr) &&
-      node->m.lhs->call.expr->m.var->is_noreturn) {
+    if (node->m.lhs->kind == ND_FUNCALL && is_noreturn_fncall(node->m.lhs->call.expr)) {
       gen_stmt(node);
       return false;
     }

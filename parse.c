@@ -950,6 +950,11 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
     Fn(tok, TK_ATTR, __VA_ARGS__);           \
   } while(0)
 
+static void noreturn_attr(Token *name, Token *tok, VarAttr *attr, bool *is_noreturn) {
+  *is_noreturn |= attr->is_noreturn;
+  DeclAttr(bool_attr, "noreturn", is_noreturn);
+}
+
 static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
   if (var->asm_name && (attr->strg & SC_REGISTER))
     error_tok(tok, "global register variables not supported");
@@ -992,11 +997,10 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
   if (fn->is_ctor || fn->is_dtor)
     fn->is_used = true;
 
+  noreturn_attr(name, tok, attr, &fn->is_noreturn);
+
   fn->is_naked |= attr->is_naked;
   DeclAttr(bool_attr, "naked", &fn->is_naked);
-
-  fn->is_noreturn |= attr->is_noreturn;
-  DeclAttr(bool_attr, "noreturn", &fn->is_noreturn);
 
   fn->returns_twice |= attr->is_returns_twice;
   DeclAttr(bool_attr, "returns_twice", &fn->returns_twice);
@@ -1019,6 +1023,9 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
 static void mem_attr(Token *name, Token *tok, VarAttr *attr, Member *mem) {
   mem->is_packed |= attr->is_packed;
   DeclAttr(bool_attr, "packed", &mem->is_packed);
+
+  if (mem->ty->kind == TY_PTR && mem->ty->base->kind == TY_FUNC)
+    noreturn_attr(name, tok, attr, &mem->is_noreturn);
 }
 
 static void aligned_attr(Token *name, Token *tok, VarAttr *attr, int *align) {
@@ -1046,6 +1053,11 @@ static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
     DeferStmt *defr2 = new_defr(DF_CLEANUP_FN);
     defr2->cleanup_fn = n;
   }
+}
+
+static void fnptr_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
+  if (var->ty->kind == TY_PTR && var->ty->base->kind == TY_FUNC)
+    noreturn_attr(name, tok, attr, &var->is_noreturn);
 }
 
 static bool chk_storage_class(uint8_t msk, StorageClass allow) {
@@ -1768,6 +1780,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     var->is_tls = attr->strg & SC_THREAD;
     assembler_name(&tok, tok, var);
     aligned_attr(name, tok, attr, &var->alt_align);
+    fnptr_attr(name, tok, attr, var);
     symbol_attr(name, tok, attr, var);
 
     if (attr->strg & SC_CONSTEXPR)
@@ -1810,6 +1823,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   assembler_name(&tok, tok, var);
   aligned_attr(name, tok, attr, &var->alt_align);
   cleanup_attr(name, tok, attr, var);
+  fnptr_attr(name, tok, attr, var);
 
   if (attr->strg & SC_CONSTEXPR) {
     Obj *init_var = new_static_lvar(ty);
@@ -5318,6 +5332,10 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
     int align = 0;
     aligned_attr(name, tok, attr, &align);
 
+    bool is_noreturn = false;
+    if (ty->kind == TY_PTR && ty->base->kind == TY_FUNC)
+      noreturn_attr(name, tok, attr, &is_noreturn);
+
     HashEntry *ent = hashmap_get_or_insert(&scope->vars, name->loc, name->len);
     VarScope *vsc = ent->val;
     if (vsc) {
@@ -5618,6 +5636,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 
     assembler_name(&tok, tok, var);
     aligned_attr(name, tok, attr, &var->alt_align);
+    fnptr_attr(name, tok, attr, var);
     symbol_attr(name, tok, attr, var);
 
     if (!is_definition || var->init_data)
