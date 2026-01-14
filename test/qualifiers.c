@@ -60,6 +60,14 @@ void cv_qualified_member(int i) {
 
   SASSERT(!__builtin_types_compatible_p(typeof(&(*p4->s).i), int*));
   SASSERT(__builtin_types_compatible_p(typeof(&(*p4->s).i), int const*));
+
+  struct S5 {
+    struct {
+      int i;
+    };
+  };
+  struct S5 const *p5;
+  SASSERT(_Generic(&p5->i, int const*:1));
 }
 
 struct B {
@@ -74,6 +82,15 @@ int regress1(const A* a, int i) {
 }
 
 int main(int argc, char** argv) {
+  {
+    typedef _Atomic const int A1[2];
+    typedef volatile A1 A2[2];
+    typedef A2 A3[2];
+    A3 a1;
+    typeof_unqual(A3) a2;
+    static_assert(_Generic(&(***a1), const volatile _Atomic int*: 1));
+    static_assert(_Generic(&(***a2), _Atomic int*: 1));
+  }
 
   ASSERT(17, regress1(&(A){31,17}, 0));
   ASSERT(31, regress1(&(A){31,17}, 1));
