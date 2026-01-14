@@ -146,7 +146,7 @@ test_c3() {
 }
 
 test_calc() {
- github_tar lcn2 calc v2.16.1.2
+ github_tar lcn2 calc v3.0.0.0
  make CC=$CC LCC=$CC MAN=true check
 }
 
@@ -170,7 +170,7 @@ test_cjson() {
 }
 
 test_cmocka() {
- gitlab_tar gitlab.com/cmocka cmocka cmocka-2.0.1
+ gitlab_tar gitlab.com/cmocka cmocka cmocka-2.0.2
  sed -i 's|${DEFAULT_LINK_FLAGS}$|& -lm|g' example/CMakeLists.txt
  cmake_init
  make && ctest
@@ -192,7 +192,7 @@ test_cpio() {
 test_cproc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_cproc.bash
 
- git_fetch https://github.com/michaelforney/cproc 70511143110525030fb68aee4e60ed1581d1d2c9 cproc
+ git_fetch https://github.com/michaelforney/cproc e963ced5c2b0a102778b19906eaef1af92ed7862 cproc
  ./configure --host=x86_64-linux-gnu
  make CFLAGS=-std=c99 check
 
@@ -545,7 +545,7 @@ test_libjpeg() {
 }
 
 test_libjsonc() {
- git_fetch https://github.com/json-c/json-c 14c8e2e5eeafe91a4f499cd33cb93fb893594eb0 json-c
+ git_fetch https://github.com/json-c/json-c 26fcd8d569e227391b5d39ad559d09f18f79ef49 json-c
  cmake_init
  make && make test
 }
@@ -766,7 +766,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.1.5
+ github_tar microsoft mimalloc v3.2.6
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -822,12 +822,13 @@ test_nginx() {
  auto/configure
  make
  cd ../
- git_fetch https://github.com/nginx/nginx-tests 0fccfcef1278263416043e0bbb3e0116b84026e4 nginx-tests
+ git_fetch https://github.com/nginx/nginx-tests 51e17e709ede6d4a75737e98d12e775fb4fc424a nginx-tests
  prove .
 }
 
 test_njs() {
- github_tar nginx njs 0.9.4
+ github_tar nginx njs 0.9.5
+ use_stdbit '#include <stdint.h>' src/njs_cutils.h
  NJS_CC_NAME=$CC ./configure
  make test
 }
@@ -936,7 +937,7 @@ test_pixman() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.1
+ github_tar php php-src php-8.5.2
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C) || defined(__TINYC__)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
@@ -978,7 +979,7 @@ test_python() {
 }
 
 test_qbe() {
- git_fetch git://c9x.me/qbe.git e0ded59639848a82878bbcf0b27fb3637f8d9353 qbe
+ git_fetch git://c9x.me/qbe.git 640c78d0dadffdaf309bc148ef02075676200657 qbe
  make CC="$CC" check
 }
 
@@ -1047,7 +1048,7 @@ test_rsync() {
 }
 
 test_ruby() {
- github_tar ruby ruby v4.0.0
+ github_tar ruby ruby v4.0.1
  rm tool/test/test_commit_email.rb
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
@@ -1055,7 +1056,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 9c6d056f5a9d1b8f74aecb25abaff607ba5471b0 rvvm
+ git_fetch https://github.com/LekKit/RVVM 063d8dca6f1bab865bfba6d7c05fb2911994edf0 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1101,7 +1102,7 @@ test_sokol() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.51.1
+ github_tar sqlite sqlite version-3.51.2
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
@@ -1118,7 +1119,7 @@ test_tcl() {
 test_tinycc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_tinycc.bash
 
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 1401967ce21311bea3039bfaad362d7ba32ea36c tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 5ec0e6f84b47ebd8c269b581712666313f5edaef tinycc
  ./configure && make
  if gcc --version; then
   make CC=gcc test
@@ -1418,7 +1419,7 @@ build_libev() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 7152e15489d2077cd299ee23e3d51a4c599ab14f luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT 707c12bf00dafdfd3899b1a6c36435dbbf6c7022 luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -1442,7 +1443,7 @@ build_mg() {
 }
 
 build_mksh() {
- git_fetch https://github.com/MirBSD/mksh 1de4a45108a1a37a8317324ca28096f3f48d49fc mksh
+ git_fetch https://github.com/MirBSD/mksh 2e16be8e2fca3a61185539fbef1bd619b169359b mksh
  sh Build.sh
 
  echo 'echo hello_world' > hello.sh
@@ -1786,7 +1787,7 @@ url_xz() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 164d780029cfafd1880b5e694280a84fd37c7413 muon
+ git_fetch https://github.com/muon-build/muon a71636bcb7f5552d7805081f2b059a89854b7efa muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
