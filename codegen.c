@@ -695,6 +695,8 @@ static void load_extend_int64(Type *ty, char *ofs, char *ptr, char *reg) {
 // Round up `n` to the nearest multiple of `align`. For instance,
 // align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
 int64_t align_to(int64_t n, int64_t align) {
+  if (!align)
+    internal_error();
   return (n + align - 1) / align * align;
 }
 
