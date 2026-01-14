@@ -1029,6 +1029,7 @@ Type *new_bitint(int64_t width, Token *tok);
 void add_type_chk_const(Node *node);
 Type *unqual(Type *ty);
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok);
+Type *aligned_type(int align, Type *ty);
 Type *qual_type(QualMask msk, Type *ty, Token *tok);
 void cvqual_type(Type **ty_p, Type *ty2);
 bool mem_iter(Member **mem);

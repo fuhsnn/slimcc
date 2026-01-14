@@ -5,7 +5,6 @@ typedef struct {
   Type *type_def;
   Type *enum_ty;
   int64_t enum_val;
-  int32_t type_def_align;
 } VarScope;
 
 typedef enum {
@@ -750,11 +749,11 @@ static char *get_ident(Arena *arena, Token *tok) {
   return arena_copy_string(arena, tok->loc, tok->len);
 }
 
-static VarScope *find_typedef(Token *tok) {
+static Type *find_typedef(Token *tok) {
   if (tok->kind == TK_IDENT) {
     VarScope *sc = find_var(tok);
-    if (sc && sc->type_def)
-      return sc;
+    if (sc)
+      return sc->type_def;
   }
   return NULL;
 }
@@ -1133,10 +1132,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
     TokenKind tk_kind = tok->kind;
     if (!is_type_kw(tk_kind)) {
-      VarScope *vsc;
-      if (!ty && (vsc = find_typedef(tok))) {
-        ty = vsc->type_def;
-        attr->align = MAX(attr->align, vsc->type_def_align);
+      if (!ty && (ty = find_typedef(tok))) {
         tok = tok->next;
         counter |= OTHER;
         continue;
@@ -4665,6 +4661,8 @@ static Node *unary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
     }
+    if (ty->size < 0)
+      error_tok(tok, "alignof applied to incomplete type");
     while (is_array(ty))
       ty = ty->base;
     return new_size_t(MAX(ty->align, attr_align), tok);
@@ -4943,9 +4941,12 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
     }
 
     for (Type *t = ty->decl_next; t;) {
-      Type *nxt = t->decl_next;
-      new_derived_type(t, t->qual, ty, tok);
-      t = nxt;
+      Type *t2 = t;
+      t = t->decl_next;
+
+      int align = t2->align;
+      new_derived_type(t2, t2->qual, ty, tok);
+      t2->align = MAX(t2->align, align);
     }
   }
   return ty;
@@ -5694,12 +5695,14 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
         error_tok(name, "incompatible redeclaration");
       if (is_vm_ty(ty) || is_vm_ty(vsc->type_def))
         error_tok(name, "redefining typedef of variably-modified type");
-      if (vsc->type_def_align != align)
-        error_tok(name, "conflict of typedef alignment");
+      if (align > vsc->type_def->align)
+        vsc->type_def = aligned_type(align, vsc->type_def);
     } else {
       vsc = ent->val = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(VarScope));
-      vsc->type_def = ty;
-      vsc->type_def_align = align;
+      if (align)
+        vsc->type_def = aligned_type(align, ty);
+      else
+        vsc->type_def = ty;
       chain_expr(&node, calc_vla(ty, tok));
     }
   }
