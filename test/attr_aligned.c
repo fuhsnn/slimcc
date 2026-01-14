@@ -220,6 +220,25 @@ int main(int argc, char **argv) {
   ASSERT(2,    ({ typedef struct { struct { char c; } j, k; char m6; } A1 T; offsetof(T,m6); }));
   ASSERT(2,    ({ typedef struct { struct { char c; } j, k; char m6; } T A1; offsetof(T,m6); }));
 
+  ASSERT(1024, ({ A1 typedef struct s S; struct s { char c; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef A1 struct s S; struct s { char c; }; _Alignof(S); }));
+#ifdef NOTCLANG
+  ASSERT(1,    ({ typedef struct A1 s S; struct s { char c; }; _Alignof(S); })); // clang: 1024
+#endif
+  ASSERT(1024, ({ typedef struct s A1 S; struct s { char c; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef struct s S A1; struct s { char c; }; _Alignof(S); }));
+  ASSERT(1,    ({ typedef struct s S; A1 struct s { char c; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef struct s S; struct A1 s { char c; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef struct s S; struct s { A1 char c; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef struct s S; struct s { char A1 c; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef struct s S; struct s { char c A1; }; _Alignof(S); }));
+  ASSERT(1024, ({ typedef struct s S; struct s { char c; } A1; _Alignof(S); }));
+
+#ifdef NOTCLANT
+  ASSERT(4096, ({ typedef struct s S A1; struct s { char c; } A2; _Alignof(S); })); // clang: 1024
+#endif
+  ASSERT(4096, ({ typedef struct s S A2; struct s { char c; } A1; _Alignof(S); }));
+
 #ifdef NOTCLANG
   ASSERT(2, ({ _Alignas(__attribute__((aligned(2))) long) char v; _Alignof(v); }));
 #endif
