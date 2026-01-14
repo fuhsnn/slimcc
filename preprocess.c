@@ -339,6 +339,10 @@ static Token *make_token(char *str, Token *orig, Token *nxt) {
   return tok;
 }
 
+static Token *new_bool_int_token(bool b, Token *orig, Token *nxt) {
+  return make_token(b ? "1" : "0", orig, nxt);
+}
+
 static Token *new_num_token(int val, Token *orig, Token *nxt) {
   return make_token(format("%d\n", val), orig, nxt);
 }
@@ -1691,7 +1695,7 @@ static Token *has_include_macro(Token *start) {
   bool found = search_include_paths(filename, dir);
 
   pop_macro_lock_until(start, tok);
-  return new_num_token(found, start, tok);
+  return new_bool_int_token(found, start, tok);
 }
 
 static Token *has_include_next_macro(Token *start) {
@@ -1703,7 +1707,7 @@ static Token *has_include_next_macro(Token *start) {
   bool found = search_include_paths2(filename, dir, &idx);
 
   pop_macro_lock_until(start, end);
-  return new_num_token(found, start, end);
+  return new_bool_int_token(found, start, end);
 }
 
 static Token *has_embed_macro(Token *start) {
@@ -1727,7 +1731,7 @@ static Token *has_attribute_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  return new_num_token(val, start, tok);
+  return new_bool_int_token(val, start, tok);
 }
 
 static Token *has_c_attribute_macro(Token *start) {
@@ -1769,7 +1773,7 @@ static Token *has_builtin_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  return new_num_token(has_it, start, tok);
+  return new_bool_int_token(has_it, start, tok);
 }
 
 static Token *has_extension_macro(Token *start) {
@@ -1792,7 +1796,7 @@ static Token *has_extension_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  return new_num_token(has_it, start, tok);
+  return new_bool_int_token(has_it, start, tok);
 }
 
 void init_macros(void) {
