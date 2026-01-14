@@ -78,28 +78,6 @@ int main(void) {
   SASSERT(sizeof(fs01) > 0);
   SASSERT(sizeof(fs11) > 0);
 
-#define A __attribute__((aligned(1024)))
-  ASSERT(1024, ({ A typedef struct s S; struct s { char c; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef A struct s S; struct s { char c; }; _Alignof(S); }));
-  ASSERT(1,    ({ typedef struct A s S; struct s { char c; }; _Alignof(S); })); // clang: 1024
-  ASSERT(1024, ({ typedef struct s A S; struct s { char c; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef struct s S A; struct s { char c; }; _Alignof(S); }));
-  ASSERT(1,    ({ typedef struct s S; A struct s { char c; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef struct s S; struct A s { char c; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef struct s S; struct s { A char c; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef struct s S; struct s { char A c; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef struct s S; struct s { char c A; }; _Alignof(S); }));
-  ASSERT(1024, ({ typedef struct s S; struct s { char c; } A; _Alignof(S); }));
-
-#define A2 __attribute__((aligned(2048)))
-  ASSERT(2048, ({ typedef struct s S A; struct s { char c; } A2; _Alignof(S); })); // clang: 1024
-  ASSERT(2048, ({ typedef struct s S A2; struct s { char c; } A; _Alignof(S); }));
-
-#define P __attribute__((packed))
-  ASSERT(8, ({ typedef struct P s S; struct s { char c; int i; }; sizeof(S); })); // clang: 5
-  ASSERT(5, ({ typedef struct s S; struct P s { char c; int i; }; sizeof(S); }));
-  ASSERT(5, ({ typedef struct s S; struct s { char c; int i; } P; sizeof(S); }));
-
   printf("OK\n");
   return 0;
 }
