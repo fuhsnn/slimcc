@@ -84,7 +84,8 @@ static bool has_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
-static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok);
+static bool is_supported_attr(Token *tok);
+static char *supported_c_attr(Token *vendor, Token *tok);
 static void newline_to_space(Token *tok);
 static Token *pragma_macro(Token *start);
 
@@ -1727,7 +1728,7 @@ static Token *has_embed_macro(Token *start) {
 static Token *has_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  bool val = is_supported_attr(false, NULL, tok);
+  bool val = is_supported_attr(tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1742,11 +1743,11 @@ static Token *has_c_attribute_macro(Token *start) {
     vendor = tok;
     tok = skip(tok->next->next, ":");
   }
-  bool val = is_supported_attr(true, vendor, tok);
+  char *str = supported_c_attr(vendor, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  return new_num_token(val, start, tok);
+  return make_token(str ? str : "0", start, tok);
 }
 
 static Token *has_builtin_macro(Token *start) {
@@ -1961,6 +1962,7 @@ static bool is_gnu_attr(Token *tok) {
     PutAttr("destructor");
     PutAttr("gnu_inline");
     PutAttr("naked");
+    PutAttr("noreturn");
     PutAttr("packed");
     PutAttr("returns_twice");
     PutAttr("section");
@@ -1975,19 +1977,24 @@ static bool is_gnu_attr(Token *tok) {
   return hashmap_get2(&map, tok->loc, tok->len);
 }
 
-static bool is_supported_attr(bool is_bracket, Token *vendor, Token *tok) {
+static bool is_supported_attr(Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
-  bool gnu_if_battr = !is_bracket || (vendor && equal_ext(vendor, "gnu"));
+  return is_gnu_attr(tok);
+}
 
-  if (gnu_if_battr && is_gnu_attr(tok))
-    return true;
+static char *supported_c_attr(Token *vendor, Token *tok) {
+  if (tok->kind != TK_IDENT)
+    error_tok(tok, "expected attribute name");
 
-  if (equal_ext(tok, "noreturn"))
-    return true;
+  if (vendor && equal_ext(vendor, "gnu") && is_gnu_attr(tok))
+    return "1";
 
-  return false;
+  if (equal_ext(tok, "noreturn") || equal_ext(tok, "_Noreturn"))
+    return "202311L";
+
+  return NULL;
 }
 
 static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
@@ -2008,14 +2015,12 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
       tok = skip(tok->next->next, ":");
     }
     Token *start = tok;
-    bool is_sup_attr = is_supported_attr(is_bracket, vendor, tok);
-
     if (consume(&tok, tok->next, "("))
       tok = skip_paren(tok);
     else
       tok = tok->next;
 
-    if (is_sup_attr) {
+    if (is_bracket ? !!supported_c_attr(vendor, start) : is_supported_attr(start)) {
       Token head = {0};
       Token *cur = &head;
       for (Token *t = start; t != tok; t = t->next)
