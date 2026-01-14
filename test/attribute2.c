@@ -12,17 +12,28 @@
 #error
 #endif
 
+#define STRH(x) #x
+#define STR(x) STRH(x)
 #define CAT(x,y) x##y
 
-int has_attr(void) {
-  DASSERT(__has_attribute(packed) == 1);
-  DASSERT( CAT(__has,_attribute)(packed) == 1);
-  DASSERT(__has_c_attribute(gnu::packed) == 1);
-  DASSERT(__has_c_attribute(gnu::__packed__) == 1);
-  DASSERT(__has_c_attribute(__gnu__::packed) == 1);
-  DASSERT(__has_c_attribute(clang::packed) == 0);
-}
+void has_attr(void) {
+  ASSERT(0, strcmp("1", STR(__has_attribute(packed))));
+  ASSERT(0, strcmp("1", STR(CAT(__has,_attribute)(packed))));
 
+  ASSERT(0, strcmp("1", STR(__has_c_attribute(gnu::packed))));
+  ASSERT(0, strcmp("1", STR(__has_c_attribute(gnu::__packed__))));
+  ASSERT(0, strcmp("1", STR(__has_c_attribute(__gnu__::packed))));
+
+  ASSERT(0, strcmp("0", STR(__has_c_attribute(packed))));
+  ASSERT(0, strcmp("0", STR(__has_c_attribute(zzzzzz::packed))));
+
+#ifdef __slimcc__
+  ASSERT(0, strcmp("202311L", STR(__has_c_attribute(noreturn))));
+  ASSERT(0, strcmp("202311L", STR(__has_c_attribute(__noreturn__))));
+  ASSERT(0, strcmp("202311L", STR(__has_c_attribute(_Noreturn))));
+  ASSERT(0, strcmp("202311L", STR(__has_c_attribute(___Noreturn__))));
+#endif
+}
 
 [[_Noreturn]]
 int fallthrough(int i) {
