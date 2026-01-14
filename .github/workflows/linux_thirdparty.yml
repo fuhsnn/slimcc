@@ -230,6 +230,7 @@ jobs:
           - { vm: cctest, proj: cctest_lcc }
           - { vm: cctest, proj: cctest_pcctests }
           - { vm: cctest, proj: cctest_wacc }
+          - { vm: cctest, proj: test_binutils_gccverify }
           - { vm: cctest, proj: test_kefir }
           - { vm: cctest, proj: test_tinycc }
           - { vm: cctest, proj: build_lacc }
