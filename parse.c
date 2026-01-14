@@ -4483,7 +4483,7 @@ static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat
     tag_ty = find_tag(tag);
 
   if (!tag_ty) {
-    Type *ty = new_type(kind, -1, 1);
+    Type *ty = new_type(kind, -1, 0);
     push_tag_scope(tag, ty);
     return ty;
   }
@@ -4499,7 +4499,7 @@ static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat
       if (opt_std < STD_C23)
         error_tok(tag, "tag redeclaration");
       *tag_compat_ty = tag_ty;
-      return new_type(kind, -1, 1);
+      return new_type(kind, -1, 0);
     }
   }
   return tag_ty;
@@ -4524,7 +4524,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   Type *tag_compat_ty = NULL;
   Type *ty;
   if (!tag) {
-    ty = new_type(kind, -1, 1);
+    ty = new_type(kind, -1, 0);
   } else {
     ty = struct_tag(kind, tag, tok, &tag_compat_ty);
 
@@ -4567,7 +4567,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   return ty;
 }
 
-static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
+static Type *struct_decl(Type *ty, int align, int pack_align) {
   int64_t bits = 0;
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
@@ -4575,8 +4575,8 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
       (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
 
     if (!mem->is_bitfield || mem->name) {
-      alt_align = MAX(alt_align, mem_align);
-      alt_align = MAX(alt_align, mem->alt_align);
+      align = MAX(align, mem_align);
+      align = MAX(align, mem->alt_align);
     }
     if (mem->alt_align)
       if (mem->alt_align > mem->ty->align ||
@@ -4624,25 +4624,25 @@ static Type *struct_decl(Type *ty, int alt_align, int pack_align) {
     }
     bits += mem->ty->size * 8;
   }
-  ty->size = MAX(ty->size, 0);
 
-  if (alt_align)
-    ty->align = alt_align;
-  if (!alt_align && pack_align > 0)
+  if (!align && pack_align > 0) {
+    ty->align = 1;
     ty->size = align_to(bits, pack_align * 8) / 8;
-  else
+  } else {
+    ty->align = MAX(align, 1);
     ty->size = align_to(bits, ty->align * 8) / 8;
+  }
   return ty;
 }
 
-static Type *union_decl(Type *ty, int alt_align, int pack_align) {
+static Type *union_decl(Type *ty, int align, int pack_align) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
     int64_t mem_align = mem->is_packed ? 1 :
       (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
 
     if (!mem->is_bitfield || mem->name) {
-      alt_align = MAX(alt_align, mem_align);
-      alt_align = MAX(alt_align, mem->alt_align);
+      align = MAX(align, mem_align);
+      align = MAX(align, mem->alt_align);
     }
     int64_t sz;
     if (mem->is_bitfield)
@@ -4651,11 +4651,8 @@ static Type *union_decl(Type *ty, int alt_align, int pack_align) {
       sz = mem->ty->size;
     ty->size = MAX(ty->size, sz);
   }
-  ty->size = MAX(ty->size, 0);
-
-  if (alt_align)
-    ty->align = alt_align;
-  ty->size = align_to(ty->size, ty->align);
+  ty->align = MAX(align, 1);
+  ty->size = align_to(MAX(ty->size, 0), ty->align);
   return ty;
 }
 
