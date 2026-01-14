@@ -366,6 +366,8 @@ TokenKind ident_keyword(Token *tok) {
 
     if (opt_std >= STD_C23)
       hashmap_put(&map, "typeof_unqual", (void *)TK_typeof_unqual);
+    hashmap_put(&map, "__typeof_unqual", (void *)TK_typeof_unqual);
+    hashmap_put(&map, "__typeof_unqual__", (void *)TK_typeof_unqual);
 
     if (opt_std >= STD_C23)
       hashmap_put(&map, "thread_local", (void *)TK_thread_local);
