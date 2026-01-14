@@ -220,7 +220,9 @@ int main(int argc, char **argv) {
   ASSERT(2,    ({ typedef struct { struct { char c; } j, k; char m6; } A1 T; offsetof(T,m6); }));
   ASSERT(2,    ({ typedef struct { struct { char c; } j, k; char m6; } T A1; offsetof(T,m6); }));
 
+#ifdef NOTCLANG
   ASSERT(2, ({ _Alignas(__attribute__((aligned(2))) long) char v; _Alignof(v); }));
+#endif
 
   {
     typedef const int Ic;
@@ -239,6 +241,45 @@ int main(int argc, char **argv) {
     SASSERT(_Generic(&v2, int volatile*: 1));
     ASSERT(0, 1023 & (int)&v1);
     ASSERT(0, 1023 & (int)&v2);
+  }
+
+  {
+    typedef char T1;
+    typedef char T1 A2;
+
+    typedef char T2 A2;
+    typedef char T2;
+
+    typedef char T3 A1;
+    typedef char T3 A2;
+
+    typedef char T4 A2;
+    typedef char T4 A1;
+
+    SASSERT(alignof(T1) == 4096);
+    SASSERT(alignof(T2) == 4096);
+    SASSERT(alignof(T3) == 4096);
+    SASSERT(alignof(T4) == 4096);
+  }
+  {
+    typedef char T1 A1; T1 fn1(void);
+    typedef char T2; A1 T2 fn2(void);
+
+    SASSERT(alignof(fn1) == alignof(main));
+    SASSERT(alignof(fn2) == 1024);
+    SASSERT(alignof(fn1()) == 1024);
+    SASSERT(alignof(fn2()) == alignof(char));
+  }
+  {
+    typedef char T1 A1; A2 T1 i1;
+    typedef char T2 A2; A1 T2 i2;
+
+    SASSERT(alignof(i1) == 4096);
+    SASSERT(alignof(i2) == 1024);
+    SASSERT(alignof(typeof(i1)) == 1024);
+    SASSERT(alignof(typeof(i2)) == 4096);
+    ASSERT(0, 4095 & (int)&i1);
+    ASSERT(0, 1023 & (int)&i2);
   }
 
   printf("OK\n");

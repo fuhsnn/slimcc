@@ -738,7 +738,7 @@ typedef enum {
 struct Type {
   TypeKind kind;
   int64_t size;       // sizeof() value
-  int32_t align;      // alignment
+  int align;          // alignment
   bool is_unsigned;   // unsigned or signed
   bool is_int_enum;
   bool is_enum;
@@ -865,7 +865,9 @@ Type *new_bitint(int64_t width, Token *tok);
 void add_type_chk_const(Node *node);
 void add_type(Node *node);
 Type *unqual(Type *ty);
+Type *unqual_aligned(Type *ty);
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok);
+Type *aligned_type(int align, Type *ty);
 Type *qual_type(QualMask msk, Type *ty, Token *tok);
 void cvqual_type(Type **ty_p, Type *ty2);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);

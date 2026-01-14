@@ -118,7 +118,19 @@ Type *unqual(Type *ty) {
   return ty->origin ? ty->origin : ty;
 }
 
+Type *unqual_aligned(Type *ty) {
+  if (!ty->qual)
+    return ty;
+  if (ty->origin) {
+    if (ty->origin->align == ty->align)
+      return ty->origin;
+    return new_derived_type(NULL, 0, ty, NULL);
+  }
+  return ty;
+}
+
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
+  int align = ty->align;
   ty = ty->origin ? ty->origin : ty;
 
   if (tok && ty->kind != TY_AUTO)
@@ -131,7 +143,19 @@ Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
   *newty = *ty;
   newty->origin = ty;
   newty->qual = qual;
+  newty->align = align;
   return newty;
+}
+
+Type *aligned_type(int align, Type *ty) {
+  Type *ret = new_derived_type(NULL, ty->qual, ty, NULL);
+  ret->align = align;
+
+  if (ty->size < 0) {
+    ret->decl_next = ty->decl_next;
+    ty->decl_next = ret;
+  }
+  return ret;
 }
 
 Type *qual_type(QualMask msk, Type *ty, Token *tok) {
@@ -483,7 +507,7 @@ Type *func_type(Type *return_ty, Token *tok) {
   // The C spec disallows sizeof(<function type>), but
   // GCC allows that and the expression is evaluated to 1.
   Type *ty = new_type(TY_FUNC, 1, 1);
-  ty->return_ty = unqual(return_ty);
+  ty->return_ty = unqual_aligned(return_ty);
   return ty;
 }
 
