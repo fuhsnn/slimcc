@@ -281,6 +281,22 @@ int main(int argc, char **argv) {
     ASSERT(0, 4095 & (int)&i1);
     ASSERT(0, 1023 & (int)&i2);
   }
+  {
+#ifdef NOTGCC
+    typedef enum E T1 A2;
+    typedef enum E T2;
+    typedef enum E T3 A1;
+    enum E { _ };
+    T1 e1;
+    T2 e2;
+    T3 e3;
+    SASSERT(alignof(e1) == 4096);
+    SASSERT(alignof(e2) == alignof(int));
+    SASSERT(alignof(e3) == 1024);
+    ASSERT(0, 4095 & (int)&e1);
+    ASSERT(0, 1023 & (int)&e3);
+#endif
+  }
 
   printf("OK\n");
 }
