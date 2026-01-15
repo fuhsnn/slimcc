@@ -1489,7 +1489,7 @@ static void new_enum(Type **ty) {
   if (*ty) {
     (*ty) = copy_type(unqual(*ty));
   } else {
-    (*ty) = new_type(TY_ENUM, -1, 1);
+    (*ty) = new_type(TY_ENUM, -1, 0);
     (*ty)->is_int_enum = true;
   }
   (*ty)->is_enum = true;
@@ -1522,8 +1522,8 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   if (consume(&tok, tok, ":")) {
     ty = typename(&tok, tok);
 
-    if (!is_integer(ty))
-      error_tok(tok, "underlying type not integer");
+    if (!is_integer(ty) || ty->is_enum)
+      error_tok(tok, "invalid underlying type");
     if (!equal(tok, "{"))
       skip(tok, ";");
   }
@@ -1680,7 +1680,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     t->kind = base_ty->kind;
     t->is_unsigned = base_ty->is_unsigned;
     t->size = base_ty->size;
-    t->align = base_ty->align;
+    t->align = MAX(t->align, base_ty->align);
     t->is_int_enum = is_int;
   }
   return ty;
