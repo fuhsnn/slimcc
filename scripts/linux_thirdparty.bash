@@ -588,7 +588,7 @@ test_libpcre2() {
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.53
+ github_tar pnggroup libpng v1.6.54
  fix_and_configure
  make test
 }
@@ -1056,7 +1056,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 063d8dca6f1bab865bfba6d7c05fb2911994edf0 rvvm
+ git_fetch https://github.com/LekKit/RVVM 8d62e8a4644b71beed1285f0117954bd45114aa2 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1319,7 +1319,7 @@ build_dash() {
 }
 
 build_ellipsis() {
- git_fetch https://codeberg.org/gustedt/ellipsis b596e4f166c1db0320208498ae30b5cb4a51576b ellipsis
+ git_fetch https://codeberg.org/gustedt/ellipsis 8c23e932fb5b542537d99466d5b4652f9de54a7f ellipsis
  cd sources
  sed -i "s|'-std=gnu2x'|-std=gnu23 -ffake-always-inline|g" Makefile-options
  make distclean && make
@@ -1328,7 +1328,7 @@ build_ellipsis() {
 }
 
 build_erlang() {
- github_tar erlang otp OTP-28.3
+ github_tar erlang otp OTP-28.3.1
  replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
  replace_line "#if defined(__GNUC__)" "#if 1" erts/include/internal/ethread_inline.h
  sed -i 's|-funroll-loops||g' lib/megaco/src/flex/Makefile.in
@@ -1380,7 +1380,7 @@ EOF
 }
 
 build_glfw() {
- git_fetch https://github.com/glfw/glfw dbadda26835ec5089ef922e6c290bcf58cf12056 glfw
+ git_fetch https://github.com/glfw/glfw 9352d8fe93cd443be18157abe81f16500549aec0 glfw
  cmake_init -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
  make
 }
@@ -1621,7 +1621,7 @@ bootstrap_uclibcng() {
  make ARCH=x86_64 prefix= DESTDIR=$PWD/../linuxhdr/ install
  cd ../
 
- git_fetch https://github.com/wbx-github/uclibc-ng 3dcc84c74ece048b62c992edceab9cce54446f57 uclibcng
+ git_fetch https://github.com/wbx-github/uclibc-ng b0e151da1651f32391617183f9e9e7c62a640a43 uclibcng
  sed -i 's|dN|dM|g' extra/scripts/gen_bits_syscall_h.sh
  sed -i 's|:$(DEVEL_PREFIX)|:$(PREFIX)$(DEVEL_PREFIX)|g' Makefile.in
  sed -i 's|:$(RUNTIME_PREFIX)|:$(PREFIX)$(RUNTIME_PREFIX)|g' Makefile.in
@@ -1661,10 +1661,10 @@ bootstrap_uclibcng() {
  make test-all
  cd ../
 
- git_fetch https://git.uclibc-ng.org/git/uclibc-ng-test.git a0ccc413f3b5bcb0de429e4bfbedd9a1b32db24e uclibc-ng-test
+ git_fetch https://git.uclibc-ng.org/git/uclibc-ng-test.git 1df2706ab53db39f01a7e4dcbecdcdd083ee924c uclibc-ng-test
  sed -i 's| strdupa |strdup|g' test/string/tester.c
  cd test/
- rm -r dlopen nptl pthread tls math # pthread/tls/math not built
+ rm -r dlopen nptl pthread tls math unistd/tst-gettid.c # pthread/tls/math not built
  rm -r iconv regex/tst-regexloc.c # skipped in upstream https://downloads.uclibc-ng.org/reports/
  rm -r locale locale-mbwc # not in upstream test log?
  rm inet/tst-ethers*.c mmap/mmap2.c stat/stat-loop256.c # nonexistent /dev/*
