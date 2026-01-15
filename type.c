@@ -291,11 +291,11 @@ static void cast_if_not(Type *ty, Node **node) {
 }
 
 static bool int_to_ptr(Node **node) {
-  if (!is_integer((*node)->ty))
-    return false;
-  if ((*node)->ty->size != ty_nullptr->size)
+  if (is_integer((*node)->ty) || (*node)->ty->kind == TY_BITINT) {
     *node = new_cast(*node, pointer_to(ty_void));
-  return true;
+    return true;
+  }
+  return false;
 }
 
 static bool match_enum_val(EnumVal **e, int64_t val, Token *name) {
@@ -548,7 +548,7 @@ Node *assign_cast(Type *to_ty, Node *expr) {
     ptr_convert(&expr);
     if (is_ptr(expr->ty))
       return expr;
-    if (is_nullptr(expr))
+    if (is_null_ptr_constant(expr))
       return new_cast(expr, to_ty);
   } else if (is_compatible(to_ty, expr->ty)) {
     if (to_ty->kind != TY_VOID && to_ty->size >= 0)
@@ -576,13 +576,16 @@ static int int_rank(Type *t) {
   internal_error();
 }
 
-bool is_nullptr(Node *node) {
+bool is_null_ptr_constant(Node *node) {
   if (node->ty->kind == TY_NULLPTR)
     return true;
 
   if (node->kind == ND_CAST &&
     node->ty->kind == TY_PTR && is_compatible2(node->ty->base, ty_void))
     node = node->m.lhs;
+
+  if (node->ty->kind == TY_BITINT)
+    return is_const_zero_bitint(node);
 
   int64_t val;
   return is_integer(node->ty) && is_const_expr(node, &val) && val == 0;
@@ -643,11 +646,15 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
   Type *ty1 = (*lhs)->ty;
   Type *ty2 = (*rhs)->ty;
 
-  if (ty1->kind == TY_PTR && (int_to_ptr(rhs) || is_nullptr(*rhs)))
-    return ty1;
-  if (ty2->kind == TY_PTR && (int_to_ptr(lhs) || is_nullptr(*lhs)))
-    return ty2;
-  if (ty1->kind == TY_PTR && ty2->kind == TY_PTR) {
+  if (is_ptr(ty1) && is_ptr(ty2)) {
+    if (ty1->kind == TY_NULLPTR && ty2->kind == TY_NULLPTR)
+      return ty_nullptr;
+
+    if (ty1->kind == TY_PTR && is_null_ptr_constant(*rhs))
+      return ty1;
+    if (ty2->kind == TY_PTR && is_null_ptr_constant(*lhs))
+      return ty2;
+
     if (ty1->base->kind == TY_VOID || ty2->base->kind == TY_VOID)
       return pointer_to(qual_type(ty1->base->qual | ty2->base->qual, ty_void, NULL));
 
@@ -656,10 +663,13 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
 
     return pointer_to(ty_void);
   }
-  if (ty1->kind == TY_NULLPTR && ty2->kind == TY_NULLPTR)
-    return ty_nullptr;
 
-  internal_error();
+  if (ty1->kind == TY_PTR && int_to_ptr(rhs))
+    return ty1;
+  if (ty2->kind == TY_PTR && int_to_ptr(lhs))
+    return ty2;
+
+  error_tok((is_ptr(ty1) ? *rhs : *lhs)->tok, "invalid operand");
 }
 
 static void add_int_type(Node *node) {
@@ -785,8 +795,9 @@ void add_type(Node *node) {
     node->ty = ty_int;
     ptr_convert(&node->m.lhs);
     ptr_convert(&node->m.rhs);
-    if ((is_ptr(node->m.lhs->ty) && (is_ptr(node->m.rhs->ty) || int_to_ptr(&node->m.rhs))) ||
-      (is_ptr(node->m.rhs->ty) && (is_ptr(node->m.lhs->ty) || int_to_ptr(&node->m.lhs))))
+    if ((is_ptr(node->m.lhs->ty) && is_ptr(node->m.rhs->ty)) ||
+      (is_ptr(node->m.lhs->ty) && int_to_ptr(&node->m.rhs)) ||
+      (is_ptr(node->m.rhs->ty) && int_to_ptr(&node->m.lhs)))
       return;
     usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;

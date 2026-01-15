@@ -95,6 +95,7 @@ typedef struct Member Member;
 typedef struct Relocation Relocation;
 typedef struct LocalLabel LocalLabel;
 typedef struct EnumVal EnumVal;
+typedef union FPVal FPVal;
 typedef struct AsmContext AsmContext;
 typedef struct FuncObj FuncObj;
 
@@ -647,6 +648,10 @@ Obj *parse(Token *tok);
 Token *skip_paren(Token *tok);
 Obj *new_lvar(Type *ty);
 bool is_const_var(Obj *var);
+bool is_const_expr(Node *node, int64_t *val);
+bool is_const_fp(Node *node, FPVal *fval);
+bool is_const_zero_bitint(Node *node);
+Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool equal_tok(Token *a, Token *b);
 char *new_unique_name(void);
 Obj *get_symbol_var(char *);
@@ -695,13 +700,13 @@ struct EnumVal {
   int64_t val;
 };
 
-typedef union {
+union FPVal {
   uint64_t chunk[2];
   uint32_t chunk32[4];
   long_double_t ld;
   double d;
   float f;
-} FPVal;
+};
 
 typedef enum {
   TY_VOID,
@@ -845,9 +850,7 @@ bool is_redundant_cast(Node *expr, Type *ty);
 bool is_compatible(Type *t1, Type *t2);
 bool is_compatible2(Type *t1, Type *t2);
 bool is_record_compat(Type *t1, Type *t2);
-bool is_const_expr(Node *node, int64_t *val);
-bool is_const_fp(Node *node, FPVal *fval);
-bool is_nullptr(Node *node);
+bool is_null_ptr_constant(Node *node);
 bool is_ptr(Type *ty);
 int next_pow_of_two(int val);
 int32_t bitfield_footprint(Member *mem);
@@ -870,7 +873,6 @@ Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok);
 Type *aligned_type(int align, Type *ty);
 Type *qual_type(QualMask msk, Type *ty, Token *tok);
 void cvqual_type(Type **ty_p, Type *ty2);
-Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool mem_iter(Member **mem);
 Node *assign_cast(Type *to, Node *expr);
 

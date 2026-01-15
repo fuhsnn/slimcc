@@ -97,9 +97,25 @@ void bitint_bitfiled_var(int i1, int i2, int i3) {
   ASSERT(5, b_s.c);
 }
 
+void bitint_null_ptr_constant(int i) {
+  nullptr_t assign_npt = (_BitInt(222))-1 + 1;
+  void *cast_npt = (nullptr_t)((_BitInt(222))99 * 0);
+
+  ASSERT(1, 0 == cast_npt);
+  ASSERT(1, 0 == assign_npt);
+
+  ASSERT(1, &i == (i ? &i : ((_BitInt(111))-5 / -3 - 1)));
+  ASSERT(1, 0 == (i - 1 ? &i : ((_BitInt(111))5 % 3 - 2)));
+
+  ASSERT(1, (_BitInt(99))0 != (int *){&i});
+  ASSERT(1, (_BitInt(99))0 == (void*)0);
+  ASSERT(1, (_BitInt(99))0 == nullptr);
+}
+
 int main() {
   bitint_bitfiled();
   bitint_bitfiled_var(-3, 2, -1);
+  bitint_null_ptr_constant(1);
 
   printf("OK\n");
 }
