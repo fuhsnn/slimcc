@@ -776,7 +776,7 @@ test_mimalloc() {
 }
 
 test_mquickjs() {
- git_fetch https://github.com/bellard/mquickjs 767e5db54241f0b53193a04aea193c823a9e3121 mquickjs
+ git_fetch https://github.com/bellard/mquickjs ee50431eac9b14b99f722b537ec4cac0c8dd75ab mquickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  sed -i 's|-fno-math-errno -fno-trapping-math||g' Makefile
  make CC=$CC HOST_CC=$CC test
@@ -1056,7 +1056,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 8d62e8a4644b71beed1285f0117954bd45114aa2 rvvm
+ git_fetch https://github.com/LekKit/RVVM d033cf73229647cd56ba699f544f300924c98bd6 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1319,7 +1319,7 @@ build_dash() {
 }
 
 build_ellipsis() {
- git_fetch https://codeberg.org/gustedt/ellipsis 8c23e932fb5b542537d99466d5b4652f9de54a7f ellipsis
+ git_fetch https://codeberg.org/gustedt/ellipsis 972cef319bfba4fb4bc34cff4bf6c1f4b0e24baf ellipsis
  cd sources
  sed -i "s|'-std=gnu2x'|-std=gnu23 -ffake-always-inline|g" Makefile-options
  make distclean && make
