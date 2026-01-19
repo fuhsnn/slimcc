@@ -192,7 +192,6 @@ static char *arith_ins(NodeKind kind);
 static void imm_tmpl(char *ins, char *op, int64_t val);
 
 static bool is_asm_symbolic_arg(Node *node, char *punct);
-static void mark_live(Obj *var);
 
 #define Prints(str) fprintf(output_file, str)
 #define Printsts(str) fprintf(output_file, "\t" str)
@@ -221,11 +220,6 @@ static void insrtln(char *fmt, long loc, ...) {
   va_end(ap);
 
   fseek(output_file, cur_loc, SEEK_SET);
-}
-
-static bool is_valid_vis(char *vis) {
-  return vis &&
-    (!strcmp(vis, "hidden") || !strcmp(vis, "internal") || !strcmp(vis, "protected"));
 }
 
 static void push_ref(Obj *var) {
@@ -4846,7 +4840,7 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   return max_depth;
 }
 
-static void emit_symbol(Obj *var, char *name) {
+static void emit_symbol2(Obj *var, char *name, char *vis) {
   if (var->is_static)
     Printftn(".local \"%s\"", name);
   else if (var->is_weak)
@@ -4854,12 +4848,16 @@ static void emit_symbol(Obj *var, char *name) {
   else
     Printftn(".globl \"%s\"", name);
 
+  if (vis &&
+    (!strcmp(vis, "hidden") || !strcmp(vis, "internal") || !strcmp(vis, "protected")))
+    Printftn(".%s \"%s\"", vis, name);
+
   if (var->alias_name)
     Printftn(".set \"%s\", \"%s\"", asm_name(var), var->alias_name);
+}
 
-  char *vis = var->visibility ? var->visibility : opt_visibility;
-  if (is_valid_vis(vis))
-    Printftn(".%s \"%s\"", vis, name);
+static void emit_symbol(Obj *var, char *name) {
+  emit_symbol2(var, name, var->visibility ? var->visibility : opt_visibility);
 }
 
 static bool is_rodata_obj(Obj *var) {
@@ -5273,29 +5271,29 @@ static void peep_redunt_jmp(char *p) {
   }
 }
 
-static void mark_alias_live(char *name) {
-  Obj *alias = get_symbol_var(name);
-  if (alias)
-    mark_live(alias);
-}
-
-static void mark_live(Obj *var) {
+static void mark_live(Obj *var, bool is_ref) {
   if (var->is_live)
     return;
-  var->is_live = true;
 
   if (!var->is_definition) {
-    if (var->alias_name)
-      mark_alias_live(var->alias_name);
+    var->is_live = is_ref;
+
+    if (var->alias_name) {
+      Obj *alias = get_symbol_var(var->alias_name);
+      if (alias && alias->is_definition)
+        mark_live(alias, true);
+    }
     return;
   }
+  var->is_live = true;
+
   if (var->ty->kind == TY_FUNC) {
     for (int i = 0; i < var->output->ref_cnt; i++)
-      mark_live(var->output->refs[i]);
+      mark_live(var->output->refs[i], true);
   } else {
     for (Relocation *rel = var->rel; rel; rel = rel->next)
       if (rel->var)
-        mark_live(rel->var);
+        mark_live(rel->var, true);
   }
 }
 
@@ -5318,31 +5316,22 @@ int codegen(Obj *prog, FILE *out) {
       }
       var->is_definition = false;
       var->output = NULL;
+      continue;
     }
+    if (var->alias_name)
+      var->is_definition = false;
   }
 
-  for (Obj *var = prog; var; var = var->next) {
-    if (var->is_definition) {
-      if (!var->is_static || var->is_used)
-        mark_live(var);
-    } else if (!var->is_static && var->alias_name) {
-      mark_alias_live(var->alias_name);
-    }
-  }
+  for (Obj *var = prog; var; var = var->next)
+    if (!var->is_static || var->is_used)
+      mark_live(var, false);
+
   for (Obj *var = prog; var; var = var->next) {
     if (!var->is_definition) {
-      if ((!var->is_static && var->alias_name) ||
-        (var->is_live && (var->is_weak || var->visibility))) {
-        if (var->is_weak)
-          Printftn(".weak \"%s\"", asm_name(var));
-        else
-          Printftn(".globl \"%s\"", asm_name(var));
-
-        if (is_valid_vis(var->visibility))
-          Printftn(".%s \"%s\"", var->visibility, asm_name(var));
-        if (var->alias_name)
-          Printftn(".set \"%s\", \"%s\"", asm_name(var), var->alias_name);
-      }
+      if ((var->is_weak && var->is_live) ||
+        (var->visibility && var->is_live) ||
+        (var->alias_name && (var->is_live || !var->is_static || var->is_used)))
+        emit_symbol2(var, asm_name(var), var->visibility);
       continue;
     }
     if (var->ty->kind == TY_ASM) {
