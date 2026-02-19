@@ -2222,16 +2222,17 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
   }
   case INIT_STR_ARRAY: {
     Token *str = init->tok;
-    size_t base_sz = init->ty->base->size;
     Obj *var = new_anon_gvar(init->ty);
     var->is_string_lit = true;
-    if (str->ty->array_len < init->ty->array_len) {
-      var->init_data = calloc(1, base_sz * init->ty->array_len);
-      memcpy(var->init_data, str->str, base_sz * str->ty->array_len);
+    var->init_data = malloc(init->ty->size);
+
+    if (init->ty->size <= str->ty->size) {
+      memcpy(var->init_data, str->str, init->ty->size);
     } else {
-      var->init_data = malloc(base_sz * init->ty->array_len);
-      memcpy(var->init_data, str->str, base_sz * init->ty->array_len);
+      memcpy(var->init_data, str->str, str->ty->size);
+      memset(var->init_data + str->ty->size, 0, init->ty->size - str->ty->size);
     }
+
     Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), new_var_node(var, tok), tok);
     add_type(n->m.lhs);
     add_type(n->m.rhs);
