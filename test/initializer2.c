@@ -225,6 +225,11 @@ int main(void) {
     ASSERT(7, s[1].b.i);
     ASSERT(0, s[1].j);
   }
+  {
+    ASSERT(1, ({ struct { struct { int i; }; } s = { (enum { A })1 }; s.i; }));
+    ASSERT(2, ({ struct { struct { int i; }; } a[] = { (enum { B })2 }; a[0].i; }));
+    ASSERT(3, ({ static struct { int i[]; } f = { 1, (enum { C })3 }; f.i[1]; }));
+  }
   ASSERT(1, c23_zinit());
   ASSERT(1, flexible_structs());
   ASSERT(1, gnu_array_range());

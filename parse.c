@@ -272,6 +272,11 @@ static void enter_tmp_scope(void) {
   scope->is_temporary = true;
 }
 
+static void enter_isolated_scope(void) {
+  enter_scope();
+  scope->parent->children = scope->sibling_next;
+}
+
 static bool leave_scope(void) {
   if (fnctx) {
     free(scope->vars.buckets);
@@ -2029,6 +2034,8 @@ static void designation(Token **rest, Token *tok, Initializer *init,
 // (e.g. `int x[] = {1,2,3}`). If it's omitted, count the number
 // of initializer elements.
 static int count_array_init_elements(Token *tok, Type *ty, int i) {
+  enter_isolated_scope();
+
   Initializer dummy = {.ty = ty->base};
   int max = i;
   while (comma_list(&tok, &tok, "}", i)) {
@@ -2046,6 +2053,7 @@ static int count_array_init_elements(Token *tok, Type *ty, int i) {
     max = MAX(max, i);
   }
   free_initializers(&dummy);
+  leave_scope();
   return max;
 }
 
