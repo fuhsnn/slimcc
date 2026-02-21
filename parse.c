@@ -95,7 +95,8 @@ struct Initializer {
     INIT_LIST,
     INIT_STR_ARRAY,
     INIT_EXPR,
-    INIT_TOK
+    INIT_TOK,
+    INIT_NUM_SEQ
   } kind;
 
   bool is_root;
@@ -115,6 +116,11 @@ ANON_UNION_START
       Obj *var;
       Initializer *init;
     } cpy;
+
+    struct {
+      Token *start;
+      int32_t len;
+    } numseq;
 ANON_UNION_END
 };
 
@@ -204,6 +210,7 @@ static FuncContext *fnctx;
 static bool *eval_recover;
 
 static bool is_typename(Token *tok);
+static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma);
 static Type *typename(Token **rest, Token *tok);
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
@@ -215,6 +222,8 @@ static void initializer2(Token **rest, Token *tok, Initializer *init);
 static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
+static Relocation *write_gvar_data(
+  Relocation *cur, Initializer *init, char *buf, int offset, EvalKind ev_kind);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, Token *label_list);
@@ -589,6 +598,27 @@ static void set_init(Initializer *init, int kind) {
 static void prepare_array_init(Initializer *init, Type *ty) {
   if (init->kind == INIT_LIST)
     return;
+
+  if (init->kind == INIT_NUM_SEQ) {
+    Token *t = init->numseq.start;
+
+    init->kind = INIT_LIST;
+    init->list.cnt = ty->array_len;
+    init->list.data = calloc(init->list.cnt, sizeof(Initializer));
+
+    int32_t i = 0;
+    for (; comma_list(&t, &t, "}", i); i++) {
+      if (i >= init->list.cnt)
+        break;
+      init->list.data[i].kind = INIT_TOK;
+      init->list.data[i].tok = t;
+      init->list.data[i].ty = ty->base;
+      t = t->next;
+    }
+    for (; i < init->list.cnt; i++)
+      init->list.data[i].ty = ty->base;
+    return;
+  }
 
   init->kind = INIT_LIST;
   if (!(init->list.cnt = ty->array_len))
@@ -2104,6 +2134,26 @@ static void list_initializer(Token **rest, Token *tok, Initializer *init, int id
   *rest = tok;
 }
 
+static bool is_num_seq(Token **rest, Token *tok, int32_t *val) {
+  int32_t cnt = 0;
+  for (;;) {
+    if (tok->kind == TK_PP_NUM || tok->kind == TK_INT_NUM) {
+      cnt++;
+      tok = tok->next;
+
+      if (consume(rest, tok, "}") ||
+        (equal(tok, ",") && consume(rest, tok->next, "}"))) {
+        *val = cnt;
+        return true;
+      }
+
+      if (consume(&tok, tok, ","))
+        continue;
+    }
+    return false;
+  }
+}
+
 static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr) {
   bool has_brace = !expr && consume(&tok, tok, "{");
   if (has_brace && consume(rest, tok, "}")) {
@@ -2116,6 +2166,19 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
   if (init->ty->kind == TY_ARRAY) {
     if (init->kind == INIT_FLEX_NESTED)
       error_tok(tok, "nested initialization of flexible array member");
+
+    if (has_brace && is_numeric(init->ty->base)) {
+      int32_t len;
+      if (is_num_seq(rest, tok, &len)) {
+        if (init->kind == INIT_FLEX)
+          init->ty = array_of(init->ty->base, len);
+
+        init->kind = INIT_NUM_SEQ;
+        init->numseq.start = tok;
+        init->numseq.len = len;
+        return;
+      }
+    }
 
     if (is_integer(init->ty->base) && init->ty->base->kind != TY_BOOL &&
       (expr || !(equal(tok, "[") || equal(tok, ".")))) {
@@ -2259,6 +2322,24 @@ static Node *create_lvar_init(Node *expr, Initializer *init, InitDesg *desg, Tok
     // non-static struct with flexible array member, supported as extension
     if (n->m.lhs->ty->size < 0)
       n->m.lhs->ty = init->ty;
+    return expr->next = n;
+  }
+  case INIT_NUM_SEQ: {
+    Obj *var = new_anon_gvar(init->ty);
+    int64_t fill_sz = init->numseq.len * init->ty->base->size;
+    var->is_string_lit = true;
+    var->init_data = malloc(init->ty->size);
+
+    write_gvar_data(NULL, init, var->init_data, 0, EV_CONST);
+
+    if (init->ty->size > fill_sz)
+      memset(var->init_data + fill_sz, 0, init->ty->size - fill_sz);
+
+    Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), new_var_node(var, tok), tok);
+    add_type(n->m.lhs);
+    add_type(n->m.rhs);
+    n->ty = ty_void;
+
     return expr->next = n;
   }
   case INIT_LIST: {
@@ -2433,6 +2514,19 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
   case INIT_STR_ARRAY: {
     size_t len = MIN(init->ty->array_len, init->tok->ty->array_len);
     memcpy(buf + offset, init->tok->str, init->ty->base->size * len);
+    return cur;
+  }
+  case INIT_NUM_SEQ: {
+    Initializer tmp = {.kind = INIT_TOK, .ty = init->ty->base};
+    int sz = init->ty->base->size;
+    int64_t cnt = 0;
+    for (Token *t = init->numseq.start; comma_list(&t, &t, "}", cnt); t = t->next) {
+      if (cnt >= init->ty->array_len)
+        break;
+      tmp.tok = t;
+      write_gvar_data(cur, &tmp, buf, offset + sz * cnt, ev_kind);
+      cnt++;
+    }
     return cur;
   }
   case INIT_LIST:
