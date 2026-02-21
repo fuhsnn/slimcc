@@ -620,6 +620,32 @@ static void prepare_array_init(Initializer *init, Type *ty) {
     return;
   }
 
+  if (init->kind == INIT_STR_ARRAY) {
+    Token *tok = init->tok;
+
+    init->kind = INIT_LIST;
+    init->list.cnt = ty->array_len;
+    init->list.data = calloc(init->list.cnt, sizeof(Initializer));
+
+    int32_t len = MIN(init->ty->array_len, tok->ty->array_len);
+    int32_t i = 0;
+    for (; i < len; i++) {
+      int64_t val;
+      switch (init->ty->base->size) {
+      case 1: val = ((uint8_t *)tok->str)[i]; break;
+      case 2: val = ((uint16_t *)tok->str)[i]; break;
+      case 4: val = ((uint32_t *)tok->str)[i]; break;
+      default: internal_error();
+      }
+      init->list.data[i].kind = INIT_EXPR;
+      init->list.data[i].expr = new_num(val, tok);
+      init->list.data[i].ty = ty->base;
+    }
+    for (; i < init->list.cnt; i++)
+      init->list.data[i].ty = ty->base;
+    return;
+  }
+
   init->kind = INIT_LIST;
   if (!(init->list.cnt = ty->array_len))
     return;
