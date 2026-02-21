@@ -183,6 +183,15 @@ static int gnu_array_range(void) {
   return 1;
 }
 
+int brace_override() {
+  ASSERT(0, strcmp("z",   ({ struct { char str[9]; } s = { .str = "foo", .str = { [0] = 'z'} }; s.str; })));
+  ASSERT(0, strcmp("zoo", ({ struct { char str[9]; } s = { .str = "foo", .str[0] = 'z' }; s.str; })));
+  ASSERT(0, strcmp("z",   ({ struct { char str[9]; } s = { .str = {'f', 'o', 'o', '\0' }, .str = { [0] = 'z'} }; s.str; })));
+  ASSERT(0, strcmp("zoo", ({ struct { char str[9]; } s = { .str = {'f', 'o', 'o', '\0' }, .str[0] = 'z' }; s.str; })));
+
+  return 1;
+}
+
 int main(void) {
   ASSERT(3, *p1);
 
@@ -233,6 +242,7 @@ int main(void) {
   ASSERT(1, c23_zinit());
   ASSERT(1, flexible_structs());
   ASSERT(1, gnu_array_range());
+  ASSERT(1, brace_override());
 
   printf("OK\n");
 }

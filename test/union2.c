@@ -105,9 +105,10 @@ int main() {
 
   ASSERT(1, ({ union {int a,b,c;} x={1,2,3,}; x.a; }));
   ASSERT(1, ({ union {int a; char b;} x={1,}; x.a; }));
-
+#ifdef NOTCLANG
   ASSERT(4, ({ union { int a,b; } x={1,.a=4}; x.a; }));
   ASSERT(4, ({ union { int a,b; } x={1,2,.b=3,.a=4}; x.b; }));
+#endif
 
   ASSERT(1, ({ union { struct { int a,b; } c; } x={.c=1,2}; x.c.a; }));
   ASSERT(2, ({ union { struct { int a,b; } c; } x={.c=1,2}; x.c.b; }));
@@ -153,6 +154,21 @@ int main() {
 
   ASSERT(6, ({ union U { int16_t a; int64_t :47; }; sizeof(union U); }));
   ASSERT(2, ({ union U { int16_t a; int64_t :47; }; _Alignof(union U); }));
+
+  {
+    struct S {
+        union {
+            struct { int i, j; } s1;
+            struct { int i, j; } s2;
+        } u;
+    };
+    ASSERT(7373, ({ struct S s = { .u.s1.j = 3, .u.s1.i = 7 }; s.u.s1.i * 1000 + s.u.s1.j * 100 + s.u.s2.i * 10 + s.u.s2.j; }));
+    ASSERT(7373, ({ struct S s = { .u.s2.j = 3, .u.s2.i = 7 }; s.u.s1.i * 1000 + s.u.s1.j * 100 + s.u.s2.i * 10 + s.u.s2.j; }));
+    ASSERT(7070, ({ struct S s = { .u.s1.j = 3, .u.s2.i = 7 }; s.u.s1.i * 1000 + s.u.s1.j * 100 + s.u.s2.i * 10 + s.u.s2.j; }));
+    ASSERT( 303, ({ struct S s = { .u.s1.i = 7, .u.s2.j = 3 }; s.u.s1.i * 1000 + s.u.s1.j * 100 + s.u.s2.i * 10 + s.u.s2.j; }));
+    ASSERT(7070, ({ struct S s = { .u.s2.j = 3, .u.s1.i = 7 }; s.u.s1.i * 1000 + s.u.s1.j * 100 + s.u.s2.i * 10 + s.u.s2.j; }));
+    ASSERT( 303, ({ struct S s = { .u.s2.i = 7, .u.s1.j = 3 }; s.u.s1.i * 1000 + s.u.s1.j * 100 + s.u.s2.i * 10 + s.u.s2.j; }));
+  }
 
   printf("OK\n");
   return 0;

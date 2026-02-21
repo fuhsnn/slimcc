@@ -2193,6 +2193,9 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     if (init->kind == INIT_FLEX_NESTED)
       error_tok(tok, "nested initialization of flexible array member");
 
+    if (has_brace && init->kind != INIT_FLEX)
+      set_init(init, INIT_NONE);
+
     if (has_brace && is_numeric(init->ty->base)) {
       int32_t len;
       if (is_num_seq(rest, tok, &len)) {
@@ -2226,7 +2229,9 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
   }
 
   if (init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION) {
-    if (!has_brace) {
+    if (has_brace) {
+      set_init(init, INIT_NONE);
+    } else {
       if (!expr) {
         expr = assign(&tok, tok);
         add_type(expr);
