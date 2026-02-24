@@ -2008,10 +2008,10 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
 
     Token *vendor = NULL;
     if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      vendor = tok;
       Token *first_colon = tok->next;
       Token *second_colon = tok->next->next;
       
-      vendor = tok;
       tok = skip(tok->next->next, ":");
       
       if(first_colon->loc + 1 != second_colon->loc)
