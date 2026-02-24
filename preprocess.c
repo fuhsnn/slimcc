@@ -1736,7 +1736,15 @@ static Token *has_c_attribute_macro(Token *start) {
   Token *vendor = NULL;
   if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
     vendor = tok;
+    Token *first_colon = tok->next;
+    Token *second_colon = tok->next->next;
+    
     tok = skip(tok->next->next, ":");
+    
+    if(first_colon->loc + 1 != second_colon->loc)
+    {
+      error_tok(first_colon, "Expected ::");
+    }
   }
   bool val = is_supported_attr(true, vendor, tok);
 
@@ -2000,8 +2008,16 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
 
     Token *vendor = NULL;
     if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+      Token *first_colon = tok->next;
+      Token *second_colon = tok->next->next;
+      
       vendor = tok;
       tok = skip(tok->next->next, ":");
+      
+      if(first_colon->loc + 1 != second_colon->loc)
+      {
+        error_tok(first_colon, "Expected ::");
+      }
     }
     Token *start = tok;
     bool is_sup_attr = is_supported_attr(is_bracket, vendor, tok);
