@@ -235,6 +235,7 @@ static int read_punct(char *p) {
   case '^':
     return is_assign + 1;
   case '#':
+  case ':':
     return is_repeat + 1;
   case '.':
     return (is_repeat && p[2] == *p) ? 3 : 1;
@@ -243,7 +244,6 @@ static int read_punct(char *p) {
   case '(':
   case ')':
   case ',':
-  case ':':
   case ';':
   case '?':
   case '@':

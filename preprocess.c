@@ -1981,9 +1981,9 @@ static bool is_supported_attr(Token *tok) {
 
 static char *supported_c_attr(Token **rest, Token *tok) {
   Token *vendor = NULL;
-  if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+  if (tok->kind == TK_IDENT && equal(tok->next, "::")) {
     vendor = tok;
-    tok = skip(tok->next->next, ":");
+    tok = tok->next->next;
   }
   *rest = tok;
 
