@@ -85,7 +85,7 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root);
 static Token *directives(Token **cur, Token *start);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(Token *tok);
-static char *supported_c_attr(Token *vendor, Token *tok);
+static char *supported_c_attr(Token **rest, Token *tok);
 static void newline_to_space(Token *tok);
 static Token *pragma_macro(Token *start);
 
@@ -1738,12 +1738,7 @@ static Token *has_attribute_macro(Token *start) {
 static Token *has_c_attribute_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
-  Token *vendor = NULL;
-  if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-    vendor = tok;
-    tok = skip(tok->next->next, ":");
-  }
-  char *str = supported_c_attr(vendor, tok);
+  char *str = supported_c_attr(&tok, tok);
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1984,7 +1979,14 @@ static bool is_supported_attr(Token *tok) {
   return is_gnu_attr(tok);
 }
 
-static char *supported_c_attr(Token *vendor, Token *tok) {
+static char *supported_c_attr(Token **rest, Token *tok) {
+  Token *vendor = NULL;
+  if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+    vendor = tok;
+    tok = skip(tok->next->next, ":");
+  }
+  *rest = tok;
+
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected attribute name");
 
@@ -2009,18 +2011,19 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
     if (!first && !has_comma)
       error_tok(tok, "expected ','");
 
-    Token *vendor = NULL;
-    if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
-      vendor = tok;
-      tok = skip(tok->next->next, ":");
-    }
+    bool is_supported;
+    if (is_bracket)
+      is_supported = supported_c_attr(&tok, tok);
+    else
+      is_supported = is_supported_attr(tok);
+
     Token *start = tok;
     if (consume(&tok, tok->next, "("))
       tok = skip_paren(tok);
     else
       tok = tok->next;
 
-    if (is_bracket ? !!supported_c_attr(vendor, start) : is_supported_attr(start)) {
+    if (is_supported) {
       Token head = {0};
       Token *cur = &head;
       for (Token *t = start; t != tok; t = t->next)
