@@ -2709,9 +2709,11 @@ static void eval_static_assert(Token **rest, Token *tok) {
 static AsmParam *asm_params(Token **rest, Token *tok) {
   AsmParam head = {0};
   AsmParam *cur = &head;
-  while (!equal(tok, ":") && !equal(tok, ")")) {
+
+  while (!equal(tok, ":") && !equal(tok, "::") && !equal(tok, ")")) {
     if (cur != &head)
       tok = skip(tok, ",");
+
     cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
 
     if (consume(&tok, tok, "[")) {
@@ -2728,7 +2730,8 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
 
 static Token *asm_clobbers(Token **rest, Token *tok) {
   Token *first = NULL;
-  while (!equal(tok, ":") && !equal(tok, ")")) {
+
+  while (!equal(tok, ":") && !equal(tok, "::") && !equal(tok, ")")) {
     if (!first) {
       first = str_tok(&tok, tok);
       continue;
@@ -2743,16 +2746,20 @@ static Token *asm_clobbers(Token **rest, Token *tok) {
 static AsmParam *asm_labels(Token **rest, Token *tok) {
   AsmParam head = {0};
   AsmParam *cur = &head;
-  while (comma_list(rest, &tok, ")", cur != &head)) {
+
+  while (!equal(tok, ")")) {
+    if (cur != &head)
+      tok = skip(tok, ",");
+
     Node *node = new_node(ND_GOTO, ident_tok(&tok, tok));
     push_goto(node);
     cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
     cur->arg = node;
   }
+  *rest = tok;
   return head.next;
 }
 
-// asm-stmt = "__asm__" ("volatile" | "inline")* "(" string-literal ")"
 static Node *asm_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_ASM, tok);
   tok = tok->next;
@@ -2769,24 +2776,31 @@ static Node *asm_stmt(Token **rest, Token *tok) {
     break;
   }
   node->gasm.str_tok = str_tok(&tok, skip(tok, "("));
-  if (consume(rest, tok, ")"))
-    return node;
 
-  node->gasm.outputs = asm_params(&tok, skip(tok, ":"));
-  if (consume(rest, tok, ")"))
-    return node;
+  for (int progress = 0;;) {
+    Token *start = tok;
 
-  node->gasm.inputs = asm_params(&tok, skip(tok, ":"));
-  if (consume(rest, tok, ")"))
-    return node;
+    int inc = 0;
+    if (consume(&tok, tok, ":"))
+      inc = 1;
+    else if (consume(&tok, tok, "::"))
+      inc = 2;
 
-  node->gasm.clobbers = asm_clobbers(&tok, skip(tok, ":"));
-  if (!is_asm_goto) {
-    *rest = skip(tok, ")");
+    if (inc) {
+      switch (progress += inc) {
+      case 1: node->gasm.outputs = asm_params(&tok, tok); continue;
+      case 2: node->gasm.inputs = asm_params(&tok, tok); continue;
+      case 3: node->gasm.clobbers = asm_clobbers(&tok, tok); continue;
+      case 4:
+        if (is_asm_goto) {
+          node->gasm.labels = asm_labels(&tok, tok);
+          continue;
+        }
+      }
+    }
+    *rest = skip(start, ")");
     return node;
   }
-  node->gasm.labels = asm_labels(rest, skip(tok, ":"));
-  return node;
 }
 
 static LocalLabel *find_local_label(Scope *sc, Token *tok) {
