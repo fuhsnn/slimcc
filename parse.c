@@ -2756,14 +2756,13 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
 static Node *asm_stmt(Token **rest, Token *tok) {
   Node *node = new_node(ND_ASM, tok);
   tok = tok->next;
-
   bool is_asm_goto = false;
-  for (;;) {
-    if (tok->kind == TK_inline || tok->kind == TK_volatile) {
-      tok = tok->next;
+
+  for (;; tok = tok->next) {
+    if (tok->kind == TK_inline || tok->kind == TK_volatile)
       continue;
-    } else if (equal(tok, "goto")) {
-      tok = tok->next;
+
+    if (tok->kind == TK_goto) {
       is_asm_goto = true;
       continue;
     }
@@ -5025,7 +5024,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Node *def = NULL;
 
   while (comma_list(rest, &tok, ")", true)) {
-    if (equal(tok, "default")) {
+    if (tok->kind == TK_default) {
       tok = skip(tok->next, ":");
       def = assign(&tok, tok);
       continue;
