@@ -3,9 +3,6 @@ set -u
 skip_files=(
 # todo
 chapter_1/invalid_lex/backslash.c
-chapter_18/invalid_types/extra_credit/invalid_union_lvalues/assign_non_lvalue_union_member.c
-chapter_18/invalid_types/invalid_lvalues/assign_nested_non_lvalue.c
-chapter_18/invalid_types/invalid_lvalues/assign_to_non_lvalue.c
 
 # c++
 chapter_8/invalid_parse/invalid_for_declaration.c

@@ -1,9 +1,6 @@
 set -u
 
 skip_files=(
- # todo
- c99/func997.c
-
  # extra bracer in initializer for scalar member
  obsd/init003.c
 

@@ -13,6 +13,9 @@ err_skips=(
  error/0031-krtypes.c
  error/0032-krtypes.c
 
+ # warning only
+ error/0040-vararg.c
+
  # gcc allow
  error/0004-macroredef.c
  error/0016-arrayinitsize.c
@@ -26,16 +29,14 @@ err_skips=(
  error/0037-pointer.c
 )
 
-exec_skips=(
- # initializer override
- execute/0166-desig.c
+fix_up() {
+ sed -i 's|0 == s.d\[2\]|0 != s.d[2]|g' execute/0166-desig.c
 
  # (i % 0) shouldn't be folded
- execute/0140-int_fold.c
-)
+ sed -i 's|i % 0|i % 5|g' execute/0140-int_fold.c
 
-fix_up() {
- sed -i 's|dummy;|dummy{int i;};|g' execute/0180-incomplete.c
+ # gcc disallow
+ mv execute/0180-incomplete.c error/_0180-incomplete.c
 }
 
 match_skip() {
@@ -61,8 +62,6 @@ err_test() {
 
 exec_test() {
   for src in execute/0*.c; do
-    if match_skip $src exec_skips; then continue; fi
-
     local ARG
     if [ $src == 'execute/0026-implicitret.c' ] ||
        [ $src == 'execute/0121-localinit.c' ] ||

@@ -29,7 +29,7 @@ jobs:
           outputs: type=docker,dest=/tmp/${{ matrix.vm }}.tar
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.vm }}
           path: /tmp/${{ matrix.vm }}.tar
@@ -44,8 +44,11 @@ jobs:
         include:
           - { vm: interop, proj: test_box2d }
           - { vm: interop, proj: test_c3 }
+          - { vm: interop, proj: test_cmark }
+          - { vm: interop, proj: test_ffc }
           - { vm: interop, proj: test_flatcc }
           - { vm: interop, proj: test_flex }
+          - { vm: interop, proj: test_groff }
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_inih }
           - { vm: interop, proj: test_liballegro5 }
@@ -83,6 +86,9 @@ jobs:
           - { vm: main, proj: test_binutils }
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
+          - { vm: main, proj: test_blake3 }
+          - { vm: main, proj: test_bubblewrap }
+          - { vm: main, proj: test_byacc }
           - { vm: main, proj: test_bzip2 }
           - { vm: main, proj: test_bzip3 }
           - { vm: main, proj: test_c2 }
@@ -105,13 +111,15 @@ jobs:
           - { vm: main, proj: test_fftw }
           - { vm: main, proj: test_file }
           - { vm: main, proj: test_findutils }
-          - { vm: main, proj: test_fossil }
+          - { vm: main, proj: test_fribidi }
           - { vm: main, proj: test_gawk }
+          - { vm: main, proj: test_ggrep }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_gnutls }
           - { vm: main, proj: test_go }
           - { vm: main, proj: test_got }
+          - { vm: main, proj: test_gpatch }
           - { vm: main, proj: test_gsed }
           - { vm: main, proj: test_gtar }
           - { vm: main, proj: test_gzip }
@@ -205,9 +213,12 @@ jobs:
           - { vm: main, proj: test_zlibng }
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
+          - { vm: main, proj: test_zuo_chezscheme }
+          - { vm: main, proj: build_bc }
           - { vm: main, proj: build_dash }
           - { vm: main, proj: build_ellipsis }
           - { vm: main, proj: build_erlang }
+          - { vm: main, proj: build_fossil }
           - { vm: main, proj: build_freetype }
           - { vm: main, proj: build_gcc }
           - { vm: main, proj: build_htop }
@@ -219,6 +230,7 @@ jobs:
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_oksh }
           - { vm: main, proj: build_pcc }
+          - { vm: main, proj: build_racket }
           - { vm: main, proj: build_simplecc }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_tin }
@@ -236,7 +248,7 @@ jobs:
           - { vm: cctest, proj: build_lacc }
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.vm }}
           path: /tmp
