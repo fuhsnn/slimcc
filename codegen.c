@@ -1219,7 +1219,7 @@ static void load_f32_f64(Type *ty, FPVal *fval, int reg) {
     return;
   }
   if (ty->kind == TY_FLOAT) {
-    Printftn("movl $%"PRIi32", %%eax", (int32_t)fval->chunk[0]);
+    Printftn("movl $%"PRIi32", %%eax", fval->chunk32[0]);
     Printftn("movd %%eax, %%xmm%d", reg);
   } else {
     Printftn("movq $%"PRIu64", %%rax", fval->chunk[0]);
@@ -1239,9 +1239,8 @@ static void load_fval2(Type *ty, FPVal *fval) {
 }
 
 static void load_fval(Node *node) {
-  FPVal fval;
-  if (!is_const_fp(node, &fval))
-    internal_error();
+  FPVal fval = {0};
+  eval_fp(node, &fval);
   load_fval2(node->ty, &fval);
 }
 
@@ -1904,7 +1903,7 @@ static void gen_funcall_args(Node *node) {
         gp++;
         continue;
       }
-      FPVal fval;
+      FPVal fval = {0};
       if (is_flonum(arg_expr->ty) && is_const_fp(arg_expr, &fval)) {
         load_f32_f64(arg_expr->ty, &fval, fp++);
         continue;
@@ -3465,7 +3464,7 @@ static bool gen_arith_opt_fp2(NodeKind kind, Node *lhs, Node *rhs, int pass) {
 
   switch (pass) {
   case 0: {
-    FPVal fval;
+    FPVal fval = {0};
     if (is_const_fp(rhs, &fval)) {
       gen_expr(lhs);
       load_f32_f64(rhs->ty, &fval, 1);
@@ -3772,7 +3771,7 @@ static bool gen_expr_opt(Node *node) {
       load_val(ty, ival);
       return true;
     }
-    FPVal fval;
+    FPVal fval = {0};
     if (is_flonum(ty) && is_const_fp(node, &fval)) {
       load_fval2(ty, &fval);
       return true;

@@ -471,7 +471,7 @@ void add_macro_param(Token **cur, Token *params, Token *tok) {
   (*cur) = (*cur)->next = tok;
 }
 
-static Macro *read_macro_params(char *name, Token **rest, Token *tok) {
+static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
   Token head = {0};
   Token *cur = &head;
   Macro *m = new_macro(name, false);
@@ -509,7 +509,7 @@ static Macro *read_macro_name(Token **rest, Token *tok) {
 
   Macro *m;
   if (!tok->has_space && equal(tok, "("))
-    m = read_macro_params(name, &tok, tok->next);
+    m = new_funclike_macro(name, &tok, tok->next);
   else
     m = new_macro(name, true);
   *rest = tok;
@@ -1566,14 +1566,14 @@ void define_macro(char *name, char *buf) {
   new_macro(name, true)->body = tokenize(new_file("<built-in>", buf), NULL);
 }
 
+void undef_macro(char *name) {
+  hashmap_delete(&macros, name);
+}
+
 static void add_builtin(char *name, macro_handler_fn *fn, bool align) {
   Macro *m = new_macro(name, true);
   m->handler = fn;
   m->align = align;
-}
-
-void undef_macro(char *name) {
-  hashmap_delete(&macros, name);
 }
 
 static Token *file_macro(Token *start) {

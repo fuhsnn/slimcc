@@ -236,7 +236,6 @@ static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static Node *assign(Token **rest, Token *tok);
 static long_double_t eval_double(Node *node);
-static void eval_fp(Node *node, FPVal *fval);
 static uint64_t *eval_bitint(Node *node);
 static uint64_t *eval_bitint_clean(Node *node);
 static Node *conditional(Token **rest, Token *tok);
@@ -1144,7 +1143,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
   };
 
   Type *ty = NULL;
-  int counter = 0;
+  int32_t counter = 0;
   QualMask qual = 0;
 
   if (tok->attr_next)
@@ -1198,7 +1197,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_const: qual |= Q_CONST; continue;
     case TK_restrict: qual |= Q_RESTRICT; continue;
     case TK_volatile: qual |= Q_VOLATILE; continue;
-    case TK_Atomic: {
+    case TK_Atomic:
       qual |= Q_ATOMIC;
       if (consume(&tok, tok , "(")) {
         if (ty)
@@ -1208,7 +1207,6 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
         counter |= OTHER;
       }
       continue;
-    }
     }
 
     if (!ty) {
@@ -1227,7 +1225,6 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     }
 
     switch (tk_kind) {
-    default: error_tok(tok, "invalid type");
     case TK_void: counter += VOID; break;
     case TK_bool: counter += BOOL; break;
     case TK_char: counter += CHAR; break;
@@ -1238,16 +1235,16 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_double: counter += DOUBLE; break;
     case TK_signed: counter += SIGNED; break;
     case TK_unsigned: counter += UNSIGNED; break;
-    case TK_BitInt: {
+    case TK_BitInt:
       counter += BITINT;
       ty = new_bitint(const_expr(&tok, skip(tok, "(")), tok);
       tok = skip(tok, ")");
       break;
-    }
+    default:
+      error_tok(tok, "invalid type");
     }
 
     switch (counter) {
-    default: error_tok(tok, "invalid type");
     case VOID: ty = ty_void; break;
     case BOOL: ty = ty_bool; break;
     case CHAR: ty = ty_pchar; break;
@@ -1282,6 +1279,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case BITINT:
     case BITINT + SIGNED: break;
     case BITINT + UNSIGNED: ty->is_unsigned = true; break;
+    default:
+      error_tok(tok, "invalid type");
     }
   }
   *rest = tok;
@@ -2488,21 +2487,23 @@ write_gvar_data(Relocation *cur, Initializer *init, char *buf, int offset, EvalK
 
       if (var && var->init_data && !var->is_weak &&
         (is_const_var(var) || var->is_compound_lit)) {
-        Relocation *srel= var->rel;
+        Relocation *srel = var->rel;
         while (srel && srel->offset < sofs)
           srel = srel->next;
 
-        for (int pos = 0; pos < init->ty->size && (pos + sofs) < var->ty->size;) {
-          if (srel && srel->offset == (pos + sofs)) {
+        int end = MIN(init->ty->size, var->ty->size - sofs);
+
+        for (int pos = 0; pos < end;) {
+          if (srel && srel->offset == pos + sofs) {
             cur = cur->next = ast_arena_calloc(sizeof(Relocation));
-            cur->offset = (pos + offset);
+            cur->offset = pos + offset;
             cur->label = srel->label;
             cur->var = srel->var;
             cur->addend = srel->addend;
             srel = srel->next;
             pos += 8;
           } else {
-            buf[(pos + offset)] = var->init_data[(pos + sofs)];
+            buf[pos + offset] = var->init_data[pos + sofs];
             pos++;
           }
         }
@@ -3575,7 +3576,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval2(lhs, ctx);
     }
 
-    if (node->kind == ND_ADDR && ctx->deref_cnt) {
+    if (node->kind == ND_ADDR && ctx->deref_cnt > 0) {
       ctx->deref_cnt--;
       return eval2(lhs, ctx);
     }
@@ -3740,15 +3741,15 @@ static void build_math_constant(Node *node, FPVal *fval) {
   case MATH_CONSTANT_INFF: fval->chunk[0] = 0x7F800000; return;
   case MATH_CONSTANT_NANSF: fval->chunk[0] = 0x7FA00000; return;
   case MATH_CONSTANT_NANS: fval->chunk[0] = 0x7FF4000000000000; return;
-  case MATH_CONSTANT_NANSL: fval->chunk[1] = 0x7FFF;
-    fval->chunk[0] = 0xA000000000000000; return;
+  case MATH_CONSTANT_NANSL:
+    fval->chunk[0] = 0xA000000000000000;
+    fval->chunk[1] = 0x7FFF;
+    return;
   }
   internal_error();
 }
 
-static void eval_fp(Node *node, FPVal *fval) {
-  add_type(node);
-
+void eval_fp(Node *node, FPVal *fval) {
   while (node->kind == ND_CAST && node->ty->kind == node->m.lhs->ty->kind)
     node = node->m.lhs;
 
@@ -3761,10 +3762,11 @@ static void eval_fp(Node *node, FPVal *fval) {
   long_double_t v = eval_double(node);
   if (fval) {
     switch (node->ty->kind) {
-    case TY_FLOAT: fval->f = (float)v; break;
-    case TY_DOUBLE: fval->d = (double)v; break;
-    case TY_LDOUBLE: fval->ld = v; break;
+    case TY_FLOAT: fval->f = (float)v; return;
+    case TY_DOUBLE: fval->d = (double)v; return;
+    case TY_LDOUBLE: fval->ld = v; return;
     }
+    internal_error();
   }
 }
 
@@ -3806,7 +3808,7 @@ static long_double_t eval_double(Node *node) {
     error_tok(node->tok, "unimplemented cast");
   case ND_NUM:
     if (node->num.constant) {
-      FPVal fval;
+      FPVal fval = {0};
       build_math_constant(node, &fval);
 
       switch (node->ty->kind) {
@@ -4982,6 +4984,8 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
     Node *arg = assign(&tok, tok);
+    add_type(arg);
+
     if (param) {
       arg = assign_cast(param->ty, arg);
 
@@ -4990,7 +4994,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
       if (!ty->is_variadic && !ty->is_oldstyle)
         error_tok(tok, "too many arguments");
 
-      add_type(arg);
       if (is_integer(arg->ty) && arg->ty->size < 4)
         arg = new_cast(arg, ty_int);
       else if (arg->ty->kind == TY_FLOAT)

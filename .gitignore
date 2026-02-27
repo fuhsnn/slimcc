@@ -7,3 +7,5 @@
 /slimcc
 /slimcc-stage2
 /slimcc-asan
+/slimcc-filc
+/slimcc-lto*

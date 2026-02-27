@@ -644,6 +644,7 @@ struct Scope {
 Node *new_cast(Node *expr, Type *ty);
 int64_t const_expr(Token **rest, Token *tok);
 int64_t eval_sign_extend(Type *ty, int64_t val);
+void eval_fp(Node *node, FPVal *fval);
 Obj *parse(Token *tok);
 Token *skip_paren(Token *tok);
 Obj *new_lvar(Type *ty);

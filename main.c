@@ -675,7 +675,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       }
       if (!strcmp(arg, "pthread")) {
         opt_pthread = true;
-        define_macro_cli("_REENTRANT");
+        define_macro("_REENTRANT", "1");
         continue;
       }
     }
