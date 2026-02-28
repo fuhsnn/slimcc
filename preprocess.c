@@ -663,7 +663,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
   // Compute the length of the resulting token.
   int len = 1;
   for (Token *t = tok; t != end; t = t->next) {
-    if ((t->has_space || t->at_bol) && len != 1)
+    if (t->has_space && len != 1)
       len++;
 
     if (add_slash && (t->kind == TK_INT_NUM || t->kind == TK_STR || t->kind == TK_ASM_STR))
@@ -679,7 +679,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
   // Copy token texts.
   int pos = 0;
   for (Token *t = tok; t != end; t = t->next) {
-    if ((t->has_space || t->at_bol) && pos != 0)
+    if (t->has_space && pos != 0)
       buf[pos++] = ' ';
 
     if (add_slash && (t->kind == TK_INT_NUM || t->kind == TK_STR || t->kind == TK_ASM_STR)) {
