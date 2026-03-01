@@ -1851,9 +1851,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     fnctx->use_vla = true;
 
     Node *node = vla_size(ty, name);
-    add_type(node);
     node = new_unary(ND_ALLOCA, node, name);
-    node->ty = pointer_to(ty_void);
     node->m.var = var;
 
     new_defr(DF_VLA_DEALLOC)->vla = var;
@@ -5135,11 +5133,10 @@ static Node *compound_literal(Token **rest, Token *tok) {
 
 static Node *builtin_functions(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_alloca")) {
-    Node *node = new_node(ND_ALLOCA, tok);
-    tok = skip(tok->next, "(");
-    node->m.lhs = assign(&tok, tok);
+    Node *node = assign(&tok, skip(tok->next, "("));
+    node = new_unary(ND_ALLOCA, node, tok);
     *rest = skip(tok, ")");
-    node->ty = pointer_to(ty_void);
+
     fnctx->dont_dealloc_vla = true;
     return node;
   }
