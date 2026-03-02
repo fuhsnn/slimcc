@@ -270,7 +270,7 @@ static void enter_scope(void) {
   scope = scope->children = sc;
 }
 
-static void enter_param_scope(void) {
+static void enter_isolated_scope(void) {
   Scope *sc = ast_arena_calloc(sizeof(Scope));
   sc->parent = scope;
   scope = sc;
@@ -279,11 +279,6 @@ static void enter_param_scope(void) {
 static void enter_tmp_scope(void) {
   enter_scope();
   scope->is_temporary = true;
-}
-
-static void enter_isolated_scope(void) {
-  enter_scope();
-  scope->parent->children = scope->sibling_next;
 }
 
 static bool leave_scope(void) {
@@ -297,7 +292,7 @@ static bool leave_scope(void) {
   return !has_label;
 }
 
-static DeferStmt *new_stmt_scope(void) {
+static DeferStmt *enter_stmt_scope(void) {
   enter_scope();
   scope->is_stmt = true;
   return fnctx->defr;
@@ -1336,7 +1331,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
       while (comma_list(rest, &tok, ")", tok != start))
         ident_tok(&tok, tok);
     } else {
-      enter_param_scope();
+      enter_isolated_scope();
       fn_ty->scopes = scope;
 
       Obj head = {0};
@@ -1351,7 +1346,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     return fn_ty;
   }
 
-  enter_param_scope();
+  enter_isolated_scope();
   fn_ty->scopes = scope;
 
   Obj head = {0};
@@ -2955,7 +2950,7 @@ static Node *secondary_block(Token **rest, Token *tok) {
   if (equal(tok, "{"))
     return compound_stmt(rest, tok, ND_BLOCK);
 
-  DeferStmt *dfr = new_stmt_scope();
+  DeferStmt *dfr = enter_stmt_scope();
   Node head = {0};
   Node *cur = &head;
   Token *label_list = label_stmt(&cur, &tok, tok);
@@ -3014,7 +3009,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_if) {
-    DeferStmt *dfr = new_stmt_scope();
+    DeferStmt *dfr = enter_stmt_scope();
 
     Node *node = new_node(ND_IF, tok);
     node->ctrl.cond = cond_cast(cond_declaration(&tok, skip(tok->next, "("), ")", 0));
@@ -3027,7 +3022,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_switch) {
-    DeferStmt *dfr = new_stmt_scope();
+    DeferStmt *dfr = enter_stmt_scope();
 
     Node *node = new_node(ND_SWITCH, tok);
     node->ctrl.cond = cond_declaration(&tok, skip(tok->next, "("), ")", 0);
@@ -3049,7 +3044,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_for) {
-    DeferStmt *dfr = new_stmt_scope();
+    DeferStmt *dfr = enter_stmt_scope();
 
     Node *node = new_node(ND_FOR, tok);
     tok = skip(tok->next, "(");
@@ -3078,7 +3073,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_while) {
-    DeferStmt *dfr = new_stmt_scope();
+    DeferStmt *dfr = enter_stmt_scope();
 
     Node *node = new_node(ND_FOR, tok);
     node->dfr_dest = fnctx->defr;
@@ -3091,7 +3086,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_do) {
-    DeferStmt *dfr = new_stmt_scope();
+    DeferStmt *dfr = enter_stmt_scope();
 
     Node *node = new_node(ND_DO, tok);
 
