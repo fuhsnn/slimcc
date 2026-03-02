@@ -2820,7 +2820,70 @@ static void push_goto(Node *node) {
   fnctx->gotos = node;
 }
 
-static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
+static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
+  int64_t lo = const_expr(&tok, tok);
+  int64_t hi;
+  if (consume(&tok, tok, "..."))
+    hi = const_expr(&tok, tok);
+  else
+    hi = lo;
+
+  Type *ty = sw->ctrl.cond->ty;
+  if (ty->size <= 4) {
+    if (!ty->is_unsigned)
+      lo = (int32_t)lo, hi = (int32_t)hi;
+    else
+      lo = (uint32_t)lo, hi = (uint32_t)hi;
+  }
+  if (hi != lo && less_eq(ty, hi, lo))
+    error_tok(tok, "empty case range specified");
+
+  for (CaseRange *cr = sw->ctrl.sw_cases; cr; cr = cr->next)
+    if ((less_eq(ty, cr->lo, lo) && less_eq(ty, lo, cr->hi)) ||
+      (less_eq(ty, lo, cr->lo) && less_eq(ty, cr->lo, hi)))
+      error_tok(tok, "duplicated case");
+
+  *rest = skip(tok, ":");
+
+  // Merge adjacent ranges
+  if (opt_optimize) {
+    CaseRange *lo_adj = NULL;
+    CaseRange *hi_adj = NULL;
+    for (CaseRange *cr = sw->ctrl.sw_cases; cr; cr = cr->next) {
+      if (cr->label != case_node)
+        break;
+      if (less_eq(ty, cr->hi, lo) && (uint64_t)cr->hi + 1 == lo)
+        lo_adj = cr;
+      else if (less_eq(ty, hi, cr->lo) && (uint64_t)hi + 1 == cr->lo)
+        hi_adj = cr;
+    }
+
+    if (lo_adj && hi_adj) {
+      if (lo_adj->next)
+        hi_adj->lo = lo_adj->lo, *lo_adj = *lo_adj->next;
+      else
+        lo_adj->hi = hi_adj->hi, *hi_adj = *hi_adj->next;
+      return;
+    }
+    if (lo_adj) {
+      lo_adj->hi = hi;
+      return;
+    }
+    if (hi_adj) {
+      hi_adj->lo = lo;
+      return;
+    }
+  }
+
+  CaseRange *cr = ast_arena_malloc(sizeof(CaseRange));
+  cr->label = case_node;
+  cr->lo = lo;
+  cr->hi = hi;
+  cr->next = sw->ctrl.sw_cases;
+  sw->ctrl.sw_cases = cr;
+}
+
+static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
   Node *case_node = NULL;
   Node *active_sw = NULL;
 
@@ -2841,7 +2904,7 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
       if (ll) {
         if (ll->label)
           error_tok(tok, "duplicated label");
-        (*cur_node) = (*cur_node)->next = ll->label = new_label(tok);
+        (*stmt) = (*stmt)->next = ll->label = new_label(tok);
         continue;
       }
 
@@ -2849,14 +2912,14 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
         Node *node = new_label(start);
         node->lbl.unique_label = new_unique_name();
         node->lbl.next = fnctx->labels;
-        (*cur_node) = (*cur_node)->next = fnctx->labels = node;
+        (*stmt) = (*stmt)->next = fnctx->labels = node;
       }
       continue;
     }
 
     if (tok->kind == TK_case || tok->kind == TK_default) {
       if (!case_node) {
-        (*cur_node) = (*cur_node)->next = case_node = new_label(tok);
+        (*stmt) = (*stmt)->next = case_node = new_label(tok);
 
         JumpContext *ctx = jump_ctx;
         for (; ctx; ctx = ctx->next)
@@ -2878,72 +2941,16 @@ static Token *label_stmt(Node **cur_node, Token **rest, Token *tok) {
         continue;
       }
 
-      int64_t lo = const_expr(&tok, tok->next);
-      int64_t hi;
-      if (equal(tok, "..."))
-        hi = const_expr(&tok, tok->next);
-      else
-        hi = lo;
-
-      Type *ty = active_sw->ctrl.cond->ty;
-      if (ty->size <= 4) {
-        if (!ty->is_unsigned)
-          lo = (int32_t)lo, hi = (int32_t)hi;
-        else
-          lo = (uint32_t)lo, hi = (uint32_t)hi;
-      }
-      if (hi != lo && less_eq(ty, hi, lo))
-        error_tok(tok, "empty case range specified");
-
-      for (CaseRange *cr = active_sw->ctrl.sw_cases; cr; cr = cr->next)
-        if ((less_eq(ty, cr->lo, lo) && less_eq(ty, lo, cr->hi)) ||
-          (less_eq(ty, lo, cr->lo) && less_eq(ty, cr->lo, hi)))
-          error_tok(tok, "duplicated case");
-
-      tok = skip(tok, ":");
-
-      // Merge adjacent ranges
-      if (opt_optimize) {
-        CaseRange *lo_adj = NULL, *hi_adj = NULL;
-        for (CaseRange *cr = active_sw->ctrl.sw_cases; cr; cr = cr->next) {
-          if (cr->label != case_node)
-            break;
-          if (less_eq(ty, cr->hi, lo) && (uint64_t)cr->hi + 1 == lo)
-            lo_adj = cr;
-          else if (less_eq(ty, hi, cr->lo) && (uint64_t)hi + 1 == cr->lo)
-            hi_adj = cr;
-        }
-        if (lo_adj && hi_adj) {
-          if (lo_adj->next) {
-            hi_adj->lo = lo_adj->lo;
-            *lo_adj = *lo_adj->next;
-          } else {
-            lo_adj->hi = hi_adj->hi;
-            *hi_adj = *hi_adj->next;
-          }
-          continue;
-        } else if (lo_adj) {
-          lo_adj->hi = hi;
-          continue;
-        } else if (hi_adj) {
-          hi_adj->lo = lo;
-          continue;
-        }
-      }
-
-      CaseRange *cr = ast_arena_malloc(sizeof(CaseRange));
-      cr->label = case_node;
-      cr->lo = lo;
-      cr->hi = hi;
-      cr->next = active_sw->ctrl.sw_cases;
-      active_sw->ctrl.sw_cases = cr;
+      case_range(&tok, tok->next, active_sw, case_node);
       continue;
     }
-
-    cur->label_next = NULL;
-    *rest = tok;
-    return head.label_next;
+    break;
   }
+
+  *rest = tok;
+
+  cur->label_next = NULL;
+  return head.label_next;
 }
 
 static Node *secondary_block(Token **rest, Token *tok) {
@@ -2951,10 +2958,13 @@ static Node *secondary_block(Token **rest, Token *tok) {
     return compound_stmt(rest, tok, ND_BLOCK);
 
   DeferStmt *dfr = enter_stmt_scope();
+
   Node head = {0};
   Node *cur = &head;
-  Token *label_list = label_stmt(&cur, &tok, tok);
+
+  Token *label_list = label_stmt(&tok, tok, &cur);
   cur->next = stmt(rest, tok, label_list);
+
   return leave_stmt_scope(dfr, head.next);
 }
 
@@ -2972,7 +2982,9 @@ static void loop_body(Token **rest, Token *tok, Node *node, Token *label_list) {
   jump_ctx = ctx.next;
 }
 
-static JumpContext *resolve_labeled_jump(Token **rest, Token *tok, bool is_cont) {
+static JumpContext *resolve_labeled_jump(Token **rest, Token *tok) {
+  bool is_cont = tok->kind == TK_continue;
+
   Token *name = NULL;
   if (tok->next->kind == TK_IDENT)
     name = tok = tok->next;
@@ -3128,11 +3140,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_break || tok->kind == TK_continue) {
-    bool is_cont = tok->kind == TK_continue;
-    Node *node = new_node(is_cont ? ND_CONT : ND_BREAK, tok);
-    JumpContext *ctx = resolve_labeled_jump(rest, tok, is_cont);
+    JumpContext *ctx = resolve_labeled_jump(rest, tok);
     if (ctx->dfr_ctx != fnctx->defr_ctx)
       error_tok(tok, "illegal jump");
+
+    Node *node = new_node(tok->kind == TK_continue ? ND_CONT : ND_BREAK, tok);
     node->dfr_dest = ctx->dfr_lvl;
     node->dfr_from = fnctx->defr;
 
@@ -3181,7 +3193,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   Node *cur = &head;
 
   for (;;) {
-    Token *label_list = label_stmt(&cur, &tok, tok);
+    Token *label_list = label_stmt(&tok, tok, &cur);
 
     if (equal(tok, "}"))
       break;
