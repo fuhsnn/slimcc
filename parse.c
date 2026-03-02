@@ -209,6 +209,7 @@ static FuncContext *fnctx;
 
 static bool *eval_recover;
 
+static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
 static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma);
 static Type *typename(Token **rest, Token *tok);
@@ -1154,7 +1155,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
       tyspec_attr(tok, attr, TK_ATTR);
 
     TokenKind tk_kind = tok->kind;
-    if (!(tk_kind >= TK_TYPEKW && tk_kind < TK_TYPEKW_END)) {
+    if (!is_type_kw(tk_kind)) {
       VarScope *vsc;
       if (!ty && (vsc = find_typedef(tok))) {
         ty = vsc->type_def;
@@ -1453,7 +1454,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
 
     if (ctx->is_param) {
       has_static = consume(&tok, tok, "static");
-      if (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) {
+      if (is_type_kw(tok->kind)) {
         qual = pointer_qualifiers(&tok, tok);
         if (!has_static)
           has_static = consume(&tok, tok, "static");
@@ -2672,9 +2673,12 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
     fnctx->is_static_init_context = ctx;
 }
 
-// Returns true if a given token represents a type.
+static bool is_type_kw(TokenKind kind) {
+  return kind >= TK_TYPEKW && kind < TK_TYPEKW_END;
+}
+
 static bool is_typename(Token *tok) {
-  return (tok->kind >= TK_TYPEKW && tok->kind < TK_TYPEKW_END) || find_typedef(tok);
+  return is_type_kw(tok->kind) || find_typedef(tok);
 }
 
 static bool is_typename_paren2(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
