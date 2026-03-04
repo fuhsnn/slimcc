@@ -200,8 +200,8 @@ static __inline void __slimcc_bitint_bitfield_save(int bits, void *sp, void *dp,
   char *dst = dp, *src = (char *)sb, *msk = (char *)mb;
   int top = (width + ofs - 1) / 8;
 
-  for (int i = ofs / 8; i <= top; i++)
-    dst[i] = (dst[i] & msk[i]) | src[i];
+  for (int j = ofs / 8; j <= top; j++)
+    dst[j] = (dst[j] & msk[j]) | src[j];
 }
 
 static __inline void __slimcc_bitint_add(int bits, void *lp, void *rp) {
@@ -244,8 +244,8 @@ static __inline void __slimcc_bitint_mul(int bits, void *lp, void *rp) {
     buf[i] = (unsigned)accum;
     accum = ovf_cnt << 32 | accum >> 32;
   }
-  for (int i = 0; i < cnt; i++)
-    rh[i] = buf[i];
+  for (int j = 0; j < cnt; j++)
+    rh[j] = buf[j];
 }
 
 static __inline void __slimcc_bitint_div(int bits, void *lp, void *rp, _Bool is_unsigned, _Bool is_div) {
@@ -342,6 +342,6 @@ static __inline void __slimcc_bitint_div(int bits, void *lp, void *rp, _Bool is_
       __slimcc_bitint_neg(bits, r_buf);
     res = r_buf;
   }
-  for (int i = 0; i < cnt; i++)
-    rh[i] = res[i];
+  for (int j = 0; j < cnt; j++)
+    rh[j] = res[j];
 }

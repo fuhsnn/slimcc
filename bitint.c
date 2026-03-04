@@ -200,8 +200,8 @@ void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width, 
   char *dst = dp, *src = (char *)sb, *msk = (char *)mb;
   int32_t top = (width + ofs - 1) / 8;
 
-  for (int32_t i = ofs / 8; i <= top; i++)
-    dst[i] = (dst[i] & msk[i]) | src[i];
+  for (int32_t j = ofs / 8; j <= top; j++)
+    dst[j] = (dst[j] & msk[j]) | src[j];
 }
 
 void eval_bitint_add(int32_t bits, void *lp, void *rp) {
@@ -244,8 +244,8 @@ void eval_bitint_mul(int32_t bits, void *lp, void *rp) {
     buf[i] = (uint32_t)accum;
     accum = ovf_cnt << 32 | accum >> 32;
   }
-  for (int32_t i = 0; i < cnt; i++)
-    rh[i] = buf[i];
+  for (int32_t j = 0; j < cnt; j++)
+    rh[j] = buf[j];
 }
 
 void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is_div) {
@@ -342,6 +342,6 @@ void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is
       eval_bitint_neg(bits, r_buf);
     res = r_buf;
   }
-  for (int32_t i = 0; i < cnt; i++)
-    rh[i] = res[i];
+  for (int32_t j = 0; j < cnt; j++)
+    rh[j] = res[j];
 }

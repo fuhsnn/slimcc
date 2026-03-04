@@ -64,6 +64,15 @@ int decl_scope(int t) {
     ASSERT(7, sizeof(*p));
     ASSERT(6, A);
   }
+  {
+#ifdef NOTGCC
+    for (int i = 17;;) break;
+    ASSERT(17, i);
+#endif
+    if (int j = 42; j);
+    switch (int k = 600; k);
+    ASSERT(642, j + k);
+  }
   return 1;
 }
 

@@ -676,7 +676,7 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
 }
 
 static VarScope *push_var_scope(char *key, int keylen, Obj *var) {
-  HashEntry *ent = hashmap_get_or_insert(&scope->vars, key, keylen);
+  HashEntry *ent = hashmap_get_or_insert(&decl_scope()->vars, key, keylen);
   VarScope *vsc = ent->val;
   if (vsc)
     return vsc;
@@ -1839,7 +1839,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   Node *expr = NULL;
   chain_expr(&expr, calc_vla(ty, tok));
 
-  Obj *var = new_lvar(ty);
+  Obj *var = new_lvar2(ty, decl_scope());
   push_var_name(name, var);
 
   if (ty->kind == TY_VLA) {
@@ -5516,7 +5516,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
     int align = 0;
     aligned_attr(name, tok, attr, &align);
 
-    HashEntry *ent = hashmap_get_or_insert(&scope->vars, name->loc, name->len);
+    HashEntry *ent = hashmap_get_or_insert(&decl_scope()->vars, name->loc, name->len);
     VarScope *vsc = ent->val;
     if (vsc) {
       if (!vsc->type_def)
@@ -5685,7 +5685,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         push_var_name(name, var);
       } else {
         var->ty = promoted;
-        Node *lhs = new_var_node(new_lvar(ty), name);
+        Node *lhs = new_var_node(new_lvar2(ty, decl_scope()), name);
         push_var_name(name, lhs->m.var);
 
         Node *rhs = new_var_node(var, name);
