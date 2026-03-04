@@ -2203,7 +2203,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     }
 
     if (is_integer(init->ty->base) && init->ty->base->kind != TY_BOOL &&
-      (expr || !(equal(tok, "[") || equal(tok, ".")))) {
+      (expr || !(equal(tok, "[") || equal(tok, ".") || equal(tok, "{")))) {
       if (!expr)
         expr = assign(&tok, tok);
       if (expr->kind == ND_VAR && expr->m.var->is_string_lit) {
@@ -2247,8 +2247,15 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     init->tok = tok;
     tok = tok->next;
   } else {
+    int64_t cnt = 0;
+    while (consume(&tok, tok, "{"))
+      cnt++;
+
     init->kind = INIT_EXPR;
     init->expr = expr ? expr : assign(&tok, tok);
+
+    while (cnt--)
+      tok = skip(tok, "}");
   }
   *rest = has_brace ? (consume(&tok, tok, ","), skip(tok, "}")) : tok;
 }

@@ -244,6 +244,18 @@ int main(void) {
   ASSERT(1, gnu_array_range());
   ASSERT(1, brace_override());
 
+#if !(__GNUC__ >= 16)
+  {
+    int arr[][2] = {0, {1}, {{2}}, {{{3}}}};
+    ASSERT(0, arr[0][0]);
+    ASSERT(1, arr[0][1]);
+    ASSERT(2, arr[1][0]);
+    ASSERT(0, arr[1][1]);
+    ASSERT(3, arr[2][0]);
+    ASSERT(0, arr[2][1]);
+  }
+#endif
+
   printf("OK\n");
 }
 
