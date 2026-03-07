@@ -184,6 +184,13 @@ static bool set_true(char *p, char *str, bool *opt) {
 }
 
 static void set_std(bool is_iso, char *arg) {
+  if(strcmp(arg, "2y") == 0)
+  {
+    is_iso_std = true;
+    opt_std = STD_C23;
+    return;
+  }
+  
   char *end;
   int val = strtoul(arg, &end, 10);
 
