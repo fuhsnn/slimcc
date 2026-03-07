@@ -9,17 +9,19 @@ const char *__asan_default_options(void) {
 #endif
 
 #define FREE_THRESHOLD (100 * 1024)
-#define ARENA_PAGE_SIZE 4064
+#define ARENA_POOL_SIZE 8168
 
-struct Page {
-  char buf[ARENA_PAGE_SIZE];
-  Page *next;
+struct Pool {
+  char buf[ARENA_POOL_SIZE];
+  Pool *next;
 };
 
 Arena ast_arena;
 Arena node_arena;
 Arena pp_arena;
 bool free_alloc;
+
+static Pool *pool_freelist;
 
 bool check_mem_usage(void) {
 #if USE_ASAN || defined(__FILC__)
@@ -31,12 +33,19 @@ bool check_mem_usage(void) {
 #endif
 }
 
-static Page *new_page(void) {
-  Page *p = malloc(sizeof(Page));
-  p->next = NULL;
+static Pool *new_pool(void) {
+  Pool *p;
+  if (pool_freelist) {
+    p = pool_freelist;
+    pool_freelist = p->next;
+  } else {
+    p = malloc(sizeof(Pool));
+  }
+
 #if USE_ASAN
-  __asan_poison_memory_region(&p->buf, ARENA_PAGE_SIZE);
+  __asan_poison_memory_region(&p->buf, ARENA_POOL_SIZE);
 #endif
+  p->next = NULL;
   return p;
 }
 
@@ -44,15 +53,12 @@ static void *allocate(Arena *arena, size_t sz, bool clear) {
   size_t aligned_sz = (sz + 15) & -16LL;
 
   void *ptr;
-  if ((arena->used + aligned_sz) <= ARENA_PAGE_SIZE) {
-    ptr = &arena->page->buf[arena->used];
+  if ((arena->used + aligned_sz) <= ARENA_POOL_SIZE) {
+    ptr = &arena->cur->buf[arena->used];
     arena->used += aligned_sz;
   } else {
-    if (!arena->page->next)
-      arena->page->next = new_page();
-
-    arena->page = arena->page->next;
-    ptr = &arena->page->buf;
+    arena->cur = arena->cur->next = new_pool();
+    ptr = &arena->cur->buf;
     arena->used = aligned_sz;
   }
 
@@ -69,24 +75,22 @@ static void *allocate(Arena *arena, size_t sz, bool clear) {
 }
 
 void arena_on(Arena *arena) {
-  if (!arena->head_page)
-    arena->head_page = new_page();
-
-  arena->page = arena->head_page;
-  arena->on = true;
+  arena->head = arena->cur = new_pool();
   arena->used = 0;
 }
 
 void arena_off(Arena *arena) {
-  arena->on = false;
-
   if (free_alloc) {
-    while (arena->head_page) {
-      Page *nxt = arena->head_page->next;
-      free(arena->head_page);
-      arena->head_page = nxt;
+    for (Pool *p = arena->head; p;) {
+      Pool *nxt = p->next;
+      free(p);
+      p = nxt;
     }
+  } else {
+    arena->cur->next = pool_freelist;
+    pool_freelist = arena->head;
   }
+  arena->cur = NULL;
 }
 
 void *arena_malloc(Arena *a, size_t sz) {
@@ -98,13 +102,13 @@ void *arena_calloc(Arena *a, size_t sz) {
 }
 
 void *ast_arena_malloc(size_t sz) {
-  if (!ast_arena.on)
+  if (!ast_arena.cur)
     return malloc(sz);
   return allocate(&ast_arena, sz, false);
 }
 
 void *ast_arena_calloc(size_t sz) {
-  if (!ast_arena.on)
+  if (!ast_arena.cur)
     return calloc(1, sz);
   return allocate(&ast_arena, sz, true);
 }

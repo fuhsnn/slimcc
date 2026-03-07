@@ -763,7 +763,7 @@ static Obj *new_anon_gvar(Type *ty) {
 }
 
 static DeferStmt *new_defr(DeferKind kind) {
-  DeferStmt *defr = arena_calloc(&ast_arena, sizeof(DeferStmt));
+  DeferStmt *defr = ast_arena_calloc(sizeof(DeferStmt));
   defr->kind = kind;
   if (fnctx->defr) {
     defr->vla = fnctx->defr->vla;
@@ -2034,7 +2034,7 @@ static void designation(Token **rest, Token *tok, Initializer *init,
 
           if (ctx->init)
             continue;
-          ctx->init = arena_malloc(&ast_arena, sizeof(Initializer));
+          ctx->init = ast_arena_malloc(sizeof(Initializer));
           *ctx->init = init->list.data[i];
 
           ctx->var = new_lvar(init->list.data[i].ty);
@@ -2729,7 +2729,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
     if (cur != &head)
       tok = skip(tok, ",");
 
-    cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
+    cur = cur->next = ast_arena_calloc(sizeof(AsmParam));
 
     if (consume(&tok, tok, "[")) {
       cur->name = tok;
@@ -2768,7 +2768,7 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
 
     Node *node = new_node(ND_GOTO, ident_tok(&tok, tok));
     push_goto(node);
-    cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
+    cur = cur->next = ast_arena_calloc(sizeof(AsmParam));
     cur->arg = node;
   }
   *rest = tok;

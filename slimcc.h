@@ -103,12 +103,11 @@ typedef struct SlashDelta SlashDelta;
 //
 // alloc.c
 
-typedef struct Page Page;
+typedef struct Pool Pool;
 typedef struct {
+  Pool *cur;
+  Pool *head;
   int used;
-  bool on;
-  Page *head_page;
-  Page *page;
 } Arena;
 
 void arena_on(Arena *arena);
