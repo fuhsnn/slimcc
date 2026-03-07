@@ -29,6 +29,12 @@ int main() {
   });
   ASSERT(7, s1.a);
 
+  ASSERT(1, _Generic(({ }), void:1));
+  ASSERT(1, _Generic(({ int i = 42; }), void:1));
+  ASSERT(1, _Generic(({ 17; for(;;); }), void:1));
+  ASSERT(1, _Generic(({ 9.0; return 0; }), void:1));
+  ASSERT(1, _Generic(({ __label__ abc; 123; abc: }), void:1));
+
   printf("OK\n");
   return 0;
 }

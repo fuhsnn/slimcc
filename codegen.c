@@ -632,6 +632,7 @@ static int pop_bitint(int sz) {
 
 static void push_by_ty(Type *ty) {
   switch (ty->kind) {
+  case TY_VOID: return;
   case TY_LDOUBLE: push_x87(); return;
   case TY_DOUBLE:
   case TY_FLOAT: pushf(); return;
@@ -642,6 +643,7 @@ static void push_by_ty(Type *ty) {
 
 static void pop_by_ty(Type *ty) {
   switch (ty->kind) {
+  case TY_VOID: return;
   case TY_LDOUBLE: pop_x87(); return;
   case TY_DOUBLE:
   case TY_FLOAT: popf(0); return;
@@ -2491,12 +2493,10 @@ static void gen_expr2(Node *node, bool is_void) {
   }
   case ND_STMT_EXPR:
     name_labels(node->blk.local_labels);
-    for (Node *n = node->blk.body; n; n = n->next) {
-      if (!n->next && n->kind == ND_EXPR_STMT)
-        gen_expr(n->m.lhs);
-      else
-        gen_stmt(n);
-    }
+    for (Node *n = node->blk.body; n != node->blk.result; n = n->next)
+      gen_stmt(n);
+    if (node->blk.result)
+      gen_expr(node->blk.result->m.lhs);
     if (has_defr(node)) {
       push_by_ty(node->ty);
       gen_defr(node);

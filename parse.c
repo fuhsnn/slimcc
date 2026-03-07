@@ -3208,7 +3208,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
 
   Node head = {0};
   Node *cur = &head;
-
+  Node *result = NULL;
   for (;;) {
     Token *label_list = label_stmt(&tok, tok, &cur);
 
@@ -3226,7 +3226,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
         continue;
       node = new_unary(ND_EXPR_STMT, expr, tok);
     } else {
-      node = stmt(&tok, tok, label_list);
+      node = result = stmt(&tok, tok, label_list);
     }
     cur = cur->next = node;
     add_type(cur);
@@ -3240,14 +3240,19 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   node->blk.local_labels = resolve_local_gotos();
   node->no_label = leave_scope();
 
-  if (kind == ND_STMT_EXPR && cur->kind == ND_EXPR_STMT) {
-    add_type(cur->m.lhs);
-    Type *ty = cur->m.lhs->ty;
-    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
-      Obj *var = new_lvar(ty);
-      Node *expr = new_binary(ND_ASSIGN, new_var_node(var, tok), cur->m.lhs, tok);
-      chain_expr(&expr, new_var_node(var, tok));
-      cur->m.lhs = expr;
+  if (kind == ND_STMT_EXPR) {
+    if (result == cur && result->kind == ND_EXPR_STMT) {
+      node->blk.result = result;
+      node->ty = ptr_decay(result->m.lhs->ty);
+
+      if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION) {
+        Obj *var = new_lvar(node->ty);
+        Node *n = new_binary(ND_ASSIGN, new_var_node(var, tok), result->m.lhs, tok);
+        result->m.lhs = new_binary(ND_COMMA, n, new_var_node(var, tok), tok);
+        add_type(result->m.lhs);
+      }
+    } else {
+      node->ty = ty_void;
     }
   }
 
@@ -4030,12 +4035,17 @@ static Node *atomic_op(Node *binary, bool return_old) {
   cur = cur->next = loop;
 
   if (return_old)
-    cur->next = new_unary(ND_EXPR_STMT, new_var_node(old, tok), tok);
+    cur = cur->next = new_unary(ND_EXPR_STMT, new_var_node(old, tok), tok);
   else
-    cur->next = new_unary(ND_EXPR_STMT, new_var_node(new, tok), tok);
+    cur = cur->next = new_unary(ND_EXPR_STMT, new_var_node(new, tok), tok);
 
   Node *node = new_node(ND_STMT_EXPR, tok);
   node->blk.body = head.next;
+  node->blk.result = cur;
+  node->ty = binary->m.lhs->ty;
+
+  for (Node *n = head.next; n; n = n->next)
+    add_type(n);
   return node;
 }
 

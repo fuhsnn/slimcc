@@ -215,18 +215,13 @@ static bool is_bitfield2(Node *node, int *width) {
   case ND_CHAIN:
   case ND_COMMA:
     return is_bitfield2(node->m.rhs, width);
-  case ND_STMT_EXPR: {
-    Node *stmt = node->blk.body;
-    while (stmt->next)
-      stmt = stmt->next;
-    if (stmt->kind == ND_EXPR_STMT)
-      return is_bitfield2(stmt->m.lhs, width);
-  }
+  case ND_STMT_EXPR:
+    return is_bitfield2(node->blk.result->m.lhs, width);
   case ND_MEMBER:
-    if (!node->m.member->is_bitfield)
-      return false;
-    *width = node->m.member->bit_width;
-    return true;
+    if (node->m.member->is_bitfield) {
+      *width = node->m.member->bit_width;
+      return true;
+    }
   }
   return false;
 }
@@ -778,6 +773,7 @@ void add_type(Node *node) {
     usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   case ND_FUNCALL:
+  case ND_STMT_EXPR:
     assert(!!node->ty);
     return;
   case ND_NOT:
@@ -874,20 +870,6 @@ void add_type(Node *node) {
     for (Node *n = node->blk.body; n; n = n->next)
       add_type(n);
     break;
-  case ND_STMT_EXPR:
-    if (node->blk.body) {
-      for (Node *n = node->blk.body; n; n = n->next)
-        add_type(n);
-      Node *stmt = node->blk.body;
-      while (stmt->next)
-        stmt = stmt->next;
-      if (stmt->kind == ND_EXPR_STMT) {
-        node->ty = ptr_decay(stmt->m.lhs->ty);
-        return;
-      }
-    }
-    node->ty = ty_void;
-    return;
   case ND_ALLOCA:
   case ND_ALLOCA_ZINIT:
     add_type(node->m.lhs);

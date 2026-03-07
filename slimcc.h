@@ -570,6 +570,7 @@ ANON_UNION_START
   struct {
     Node *body;
     Node *local_labels;
+    Node *result;
   } blk;
 
   // if, ?:, for, do, while, switch
