@@ -664,18 +664,16 @@ static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
   uint32_t *buf = *data;
   size_t cnt = *limb_cnt;
 
-  uint64_t accum = 0;
+  uint64_t accum = digit;
   for (size_t i = 0; i < cnt; i++) {
     accum += (uint64_t)base * buf[i];
     buf[i] = (uint32_t)accum;
     accum >>= 32;
   }
   if (accum) {
-    buf = realloc(buf, (++cnt) * sizeof(uint32_t));
-    buf[cnt - 1] = (uint32_t)accum;
+    buf = realloc(buf, (cnt + 1) * sizeof(uint32_t));
+    buf[cnt++] = (uint32_t)accum;
   }
-  buf[0] += digit;
-
   *data = buf;
   *limb_cnt = cnt;
 }
@@ -754,7 +752,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
       ll = true, p += 2;
     else
       l = true, p += 1;
-  } else if ((*p == 'w' && p[1] == 'b') || (*p == 'W' && p[1] == 'B')) {
+  } else if (startswith2(p, 'w', 'b') || startswith2(p, 'W', 'B')) {
     wb = true, p += 2;
   }
 

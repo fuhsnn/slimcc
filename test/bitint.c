@@ -113,6 +113,14 @@ void bitint_null_ptr_constant(int i) {
 }
 
 int main() {
+  {
+    auto v = 79228162514264337593543950336wb;
+
+    ASSERT(1, 0 == (uint64_t)v);
+    ASSERT(1, 0 == (uint32_t)(v >> 64));
+    ASSERT(1, 1 == (v >> 96));
+  }
+
   bitint_bitfiled();
   bitint_bitfiled_var(-3, 2, -1);
   bitint_null_ptr_constant(1);
