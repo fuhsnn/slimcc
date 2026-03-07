@@ -4004,22 +4004,19 @@ static Node *atomic_op(Node *binary, bool return_old) {
               tok);
 
   Node *loop = new_node(ND_DO, tok);
-
-  Node *body = new_binary(ND_ASSIGN,
-                          new_var_node(new, tok),
-                          new_binary(binary->kind, new_var_node(old, tok),
-                                     new_var_node(val, tok), tok),
-                          tok);
-
-  loop->ctrl.then = new_node(ND_BLOCK, tok);
-  loop->ctrl.then->blk.body = new_unary(ND_EXPR_STMT, body, tok);
+  loop->ctrl.then =
+    new_unary(ND_EXPR_STMT,
+              new_binary(ND_ASSIGN, new_var_node(new, tok),
+                         new_binary(binary->kind, new_var_node(old, tok),
+                                    new_var_node(val, tok), tok), tok),
+              tok);
 
   Node *cas = new_node(ND_CAS, tok);
   cas->cas.addr = new_var_node(addr, tok);
   cas->cas.old_val = new_unary(ND_ADDR, new_var_node(old, tok), tok);
   cas->cas.new_val = new_var_node(new, tok);
-  loop->ctrl.cond = new_unary(ND_NOT, cas, tok);
 
+  loop->ctrl.cond = new_unary(ND_NOT, cas, tok);
   cur = cur->next = loop;
 
   if (return_old)
