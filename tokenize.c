@@ -1,5 +1,16 @@
 #include "slimcc.h"
 
+typedef struct {
+  int pos;
+  int cnt;
+} SlashPos;
+
+struct SlashDelta {
+  SlashPos *sp;
+  int capacity;
+  int len;
+};
+
 // Input file
 static File *current_file;
 
@@ -10,7 +21,7 @@ static bool at_bol;
 static bool has_space;
 
 static void canonicalize_newline(char *p);
-static void remove_backslash_newline(char *p);
+static void remove_backslash_newline(char *p, SlashDelta *dlt);
 
 #define startswith2(p, x, y) ((*(p) == x) && ((p)[1] == y))
 #define startswith3(p, x, y, z) ((*(p) == x) && ((p)[1] == y) && ((p)[2] == z))
@@ -854,18 +865,32 @@ void convert_pp_number(Token *tok, Node *node) {
 }
 
 // Initialize line info for all tokens.
-static void add_line_numbers(Token *tok) {
-  char *p = current_file->contents;
+static void add_line_numbers(Token *tok, File *file, SlashDelta *dlt) {
+  char *start = file->contents;
+  char *p = start;
   int n = 1;
 
+  char *delta_pos = (dlt && dlt->sp && !opt_cc1_asm_pp) ? (dlt->sp[0].pos + start) : NULL;
+  int delta_cnt = 0;
+  int idx = 0;
   do {
+    if (p == delta_pos) {
+      delta_cnt = dlt->sp[idx++].cnt;
+
+      if (idx < dlt->len)
+        delta_pos = dlt->sp[idx].pos + start;
+    }
     if (p == tok->loc) {
       tok->line_no = n;
+      tok->display_line_no = delta_cnt;
       tok = tok->next;
     }
     if (*p == '\n')
       n++;
   } while (*p++);
+
+  if (dlt)
+    free(dlt->sp);
 }
 
 void tokenize_string_literal(Token *tok, Type *basety) {
@@ -903,7 +928,7 @@ void convert_ucn_ident(Token *tok) {
 }
 
 // Tokenize a given string and returns new tokens.
-Token *tokenize(File *file, Token **end) {
+Token *tokenize(File *file, SlashDelta *delta, Token **end) {
   current_file = file;
 
   char *p = file->contents;
@@ -1065,12 +1090,12 @@ Token *tokenize(File *file, Token **end) {
     *end = cur;
   cur->next = new_token(TK_EOF, p, p);
   cur->next->at_bol = true;
-  add_line_numbers(head.next);
+  add_line_numbers(head.next, file, delta);
   return head.next;
 }
 
 // Returns the contents of a given file.
-File *read_file(char *path, Token *tok, bool canon) {
+Token *tokenize_file(char *path, Token *tok, Token **end) {
   FILE *fp;
 
   if (strcmp(path, "-") == 0) {
@@ -1108,16 +1133,16 @@ File *read_file(char *path, Token *tok, bool canon) {
   fputc('\0', out);
   fclose(out);
 
-  if (canon)
-    return new_file(path, buf);
-
   // Wipe BOM markers
   if (startswith3(buf, (char)0xef, (char)0xbb, (char)0xbf))
     buf[0] = buf[1] = buf[2] = ' ';
 
   canonicalize_newline(buf);
-  remove_backslash_newline(buf);
-  return new_file(path, buf);
+
+  SlashDelta dlt = {0};
+  remove_backslash_newline(buf, &dlt);
+
+  return tokenize(new_file(path, buf), &dlt, end);
 }
 
 int add_display_file(char *path) {
@@ -1162,25 +1187,44 @@ static void canonicalize_newline(char *p) {
   }
 }
 
-// Removes backslashes followed by a newline.
-static void remove_backslash_newline(char *p) {
-  char *first = strchr(p, '\\');
-  if (first) {
-    char *q = p = first;
+static void delta_push(SlashDelta *dlt, int pos, int cnt) {
+  if (!dlt->sp) {
+    dlt->sp = malloc(8 * sizeof(SlashPos));
+    dlt->capacity = 8;
+  } else {
+    if (dlt->sp[dlt->len - 1].pos == pos) {
+      dlt->sp[dlt->len - 1].cnt = cnt;
+      return;
+    }
+  }
+  if (dlt->capacity == dlt->len)
+    dlt->sp = realloc(dlt->sp, (dlt->capacity += 8) * sizeof(SlashPos));
+
+  dlt->sp[dlt->len].pos = pos;
+  dlt->sp[dlt->len].cnt = cnt;
+  dlt->len++;
+}
+
+static void remove_backslash_newline(char *start, SlashDelta *dlt) {
+  char *p = strstr(start, "\\\n");
+  if (p) {
+    char *q = p;
     int n = 0;
 
-    while (*p) {
-      if (*p == '\\' && p[1] == '\n') {
+    do {
+      if (startswith2(p, '\\', '\n')) {
         p += 2;
         n++;
+        delta_push(dlt, q - start, n);
         continue;
       }
-      if (*p == '\n') {
+      if (n && *p == '\n') {
         for (; n > 0; n--)
           *q++ = '\n';
+        delta_push(dlt, q - start, 0);
       }
       *q++ = *p++;
-    }
+    } while (*p);
 
     *q = '\0';
   }

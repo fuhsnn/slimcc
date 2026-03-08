@@ -44,5 +44,24 @@ int main(void) {
 #define Nested_Pragma _Pragma("foo") _Pragma(PRAG)
   ASSERT(0, strcmp("_Pragma(\"foo\") _Pragma(\"bar\")", STR(Nested_Pragma)));
 
+#line 1
+  int line1 = __LINE__;
+#line 2
+  int line23 = __\
+LINE__;
+#line 3
+  int line4 = \
+__LINE__;
+#line 4
+  int line\
+7\
+=\
+__LINE__;
+
+  ASSERT(1, line1);
+  ASSERT(1, line23 == 2 || line23 == 3);
+  ASSERT(4, line4);
+  ASSERT(7, line7);
+
   printf("OK\n");
 }

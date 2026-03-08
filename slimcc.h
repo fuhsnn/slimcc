@@ -98,6 +98,7 @@ typedef struct EnumVal EnumVal;
 typedef union FPVal FPVal;
 typedef struct AsmContext AsmContext;
 typedef struct FuncObj FuncObj;
+typedef struct SlashDelta SlashDelta;
 
 //
 // alloc.c
@@ -301,11 +302,11 @@ bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
 bool consume(Token **rest, Token *tok, char *str);
-File *read_file(char *path, Token *tok, bool canon);
+Token *tokenize_file(char *path, Token *tok, Token **end);
 File *new_file(char *name, char *contents);
 int add_display_file(char *path);
 void tokenize_string_literal(Token *tok, Type *basety);
-Token *tokenize(File *file, Token **end);
+Token *tokenize(File *file, SlashDelta *delta, Token **end);
 void convert_pp_number(Token *tok, Node *node);
 TokenKind ident_keyword(Token *tok);
 void convert_ucn_ident(Token *tok);

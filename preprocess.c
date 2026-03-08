@@ -324,7 +324,7 @@ static Token *tokenize_buf(char *buf, Token *orig, Token **end) {
 
   File file = *orig->file;
   file.contents = buf;
-  Token *tok = tokenize(&file, end);
+  Token *tok = tokenize(&file, NULL, end);
 
   for (Token *t = tok; t->kind != TK_EOF; t = t->next) {
     t->file = NULL;
@@ -1159,7 +1159,7 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, InclIdx 
     return tok;
 
   Token *end = NULL;
-  Token *start = tokenize(read_file(path, filename_tok, false), &end);
+  Token *start = tokenize_file(path, filename_tok, &end);
   start->file->incl_idx = idx;
   start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(idx);
   add_dep_file(path, start->file->is_syshdr);
@@ -1288,21 +1288,21 @@ static void read_line_marker(Token **rest, Token *tok) {
     error_tok(tok->next, "unknown line directive form");
 }
 
-static void finalize_tok(Token *tok) {
-  Token *orig = tok;
-  if (tok->origin) {
-    orig = tok->origin;
-    orig->is_root = true;
-  }
+static void finalize_tok2(Token *tok, Token *orig) {
   tok->display_file_no = orig->file->display_file_no;
-  tok->display_line_no = orig->line_no + orig->file->line_delta;
+  tok->display_line_no = orig->file->line_delta + orig->line_no + orig->display_line_no;
   tok->is_root = true;
 }
 
-static void finalize_tok2(Token *tok) {
-  tok->display_file_no = tok->file->display_file_no;
-  tok->display_line_no = tok->line_no + tok->file->line_delta;
-  tok->is_root = true;
+static void finalize_tok(Token *tok) {
+  Token *orig;
+  if (tok->origin) {
+    orig = tok->origin;
+    orig->is_root = true;
+  } else {
+    orig = tok;
+  }
+  finalize_tok2(tok, orig);
 }
 
 // Visit all tokens in `tok` while evaluating preprocessing
@@ -1539,7 +1539,7 @@ static Token *directives(Token **cur, Token *start) {
 }
 
 void define_macro_cli(char *str) {
-  Token *tok = tokenize(new_file("<command-line>", str), NULL);
+  Token *tok = tokenize(new_file("<command-line>", str), NULL, NULL);
   Macro *m = read_macro_name(&tok, tok);
 
   Token head = {0};
@@ -1563,7 +1563,7 @@ void define_macro_cli(char *str) {
 }
 
 void define_macro(char *name, char *buf) {
-  new_macro(name, true)->body = tokenize(new_file("<built-in>", buf), NULL);
+  new_macro(name, true)->body = tokenize(new_file("<built-in>", buf), NULL, NULL);
 }
 
 void undef_macro(char *name) {
@@ -1587,8 +1587,8 @@ static Token *line_macro(Token *start) {
   Token *tok = start;
   if (tok->origin)
     tok = tok->origin;
-  int i = tok->line_no + tok->file->line_delta;
-  return new_num_token(i, tok, start->next);
+  int val = tok->file->line_delta + tok->line_no + tok->display_line_no;
+  return new_num_token(val, tok, start->next);
 }
 
 // __COUNTER__ is expanded to serial values starting from 0.
@@ -2141,16 +2141,16 @@ Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
     "  unsigned int fp_offset;"
     "  void *overflow_arg_area;"
     "  void *reg_save_area;"
-    "} __builtin_va_list[1];"), &cur);
+    "} __builtin_va_list[1];"), NULL, &cur);
 
     char *path = search_include_paths("bitint_builtins", NULL);
     if (path) {
       Token *end;
-      cur->next = tokenize(read_file(path, NULL, true), &end);
+      cur->next = tokenize_file(path, NULL, &end);
       cur = end;
     }
     for (Token *t = head; t; t = t->next)
-      finalize_tok2(t);
+      finalize_tok2(t, t);
 
     cur->next = tok;
     tok = head;

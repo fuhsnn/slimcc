@@ -988,7 +988,7 @@ static void print_dependencies(char *input) {
       continue;
 
     Token *end = NULL;
-    (*cur)->next = tokenize(read_file(path, NULL, false), &end);
+    (*cur)->next = tokenize_file(path, NULL, &end);
     if (end)
       (*cur) = end;
     add_dep_file(path, false);
@@ -1001,7 +1001,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 
   build_macros(&macrodefs, is_asm_pp);
 
-  Token *in_tok = tokenize(read_file(input_file, NULL, false), NULL);
+  Token *in_tok = tokenize_file(input_file, NULL, NULL);
   add_dep_file(input_file, false); // input file must be first in dep_files
 
   Token imacros_head = {0};
