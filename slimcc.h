@@ -318,13 +318,13 @@ void convert_ucn_ident(Token *tok);
 // preprocess.c
 //
 
-char *search_include_paths(char *filename, char *dir);
 void init_macros(void);
 void define_macro(char *name, char *buf);
 void define_macro_cli(char *str);
 void undef_macro(char *name);
 void dump_defines(FILE *out);
-Token *preprocess(Token *tok, Token *imacros_tok, char *input_file);
+Token *preprocess(char *file, StringArray *incls, StringArray *macros);
+Token *prepare_parse(Token *tok);
 Token *skip_line(Token *tok);
 bool is_pragma(Token **rest, Token *tok);
 extern Token *last_alloc_tok;
@@ -939,7 +939,6 @@ extern StringArray iquote_paths;
 extern StringArray display_files;
 extern bool opt_E;
 extern bool opt_dM;
-extern bool opt_M;
 extern bool opt_fpic;
 extern bool opt_fpie;
 extern bool opt_femulated_tls;

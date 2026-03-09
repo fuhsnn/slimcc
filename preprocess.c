@@ -1094,7 +1094,7 @@ static char *search_include_paths2(char *filename, char *dir, InclIdx *idx) {
   return NULL;
 }
 
-char *search_include_paths(char *filename, char *dir) {
+static char *search_include_paths(char *filename, char *dir) {
   return search_include_paths2(filename, dir, &(InclIdx){INCL_REL});
 }
 
@@ -1307,9 +1307,7 @@ static void finalize_tok(Token *tok) {
 
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
-static Token *preprocess2(Token *tok, bool is_final) {
-  Token head = {0};
-  Token *cur = &head;
+void preprocess2(Token *tok, Token **cur) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
@@ -1318,17 +1316,16 @@ static Token *preprocess2(Token *tok, bool is_final) {
       continue;
 
     if (is_hash(tok) && !locked_macros) {
-      tok = directives(&cur, tok);
+      tok = directives(cur, tok);
       continue;
     }
-    if (is_final)
-      finalize_tok(tok);
 
-    cur = cur->next = tok;
+    finalize_tok(tok);
+
+    (*cur) = (*cur)->next = tok;
     tok = tok->next;
   }
-  tok->is_root = is_final;
-  cur->next = tok;
+  (*cur)->next = tok;
 
   CondIncl *cond;
   if (get_cond_incl(&cond))
@@ -1336,7 +1333,6 @@ static Token *preprocess2(Token *tok, bool is_final) {
 
   if (start_m != locked_macros)
     internal_error();
-  return head.next;
 }
 
 static Token *pass_line(Token **cur, Token *tok) {
@@ -2121,18 +2117,38 @@ static Token *preprocess3(Token *tok) {
   return head.next;
 }
 
-// Entry point function of the preprocessor.
-Token *preprocess(Token *tok, Token *imacros_tok, char *input_file) {
-  base_file = input_file;
+static void include_files_cli(StringArray *arr, Token **cur) {
+  for (int i = 0; i < arr->len; i++) {
+    char *path = search_include_paths(arr->data[i], ".");
+    if (ignore_missing_dep(path, arr->data[i], NULL))
+      continue;
 
-  if (imacros_tok)
-    preprocess2(imacros_tok, false);
+    add_dep_file(path, false);
+    preprocess2(tokenize_file(path, NULL, NULL), cur);
+  }
+}
 
-  tok = preprocess2(tok, true);
+Token *preprocess(char *file, StringArray *incls, StringArray *imacros) {
+  base_file = file;
+  add_dep_file(file, false);
 
-  if (opt_E || opt_M)
-    return tok;
+  Token head = {0};
+  Token *cur = &head;
 
+  include_files_cli(imacros, &cur);
+  cur = &head;
+
+  include_files_cli(incls, &cur);
+
+  preprocess2(tokenize_file(file, NULL, NULL), &cur);
+
+  cur = cur->next;
+  cur->is_root = true;
+
+  return head.next;
+}
+
+Token *prepare_parse(Token *tok) {
   {
     Token *cur;
     Token *head = tokenize(new_file("slimcc_builtins",

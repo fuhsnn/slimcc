@@ -54,7 +54,7 @@ static StringArray opt_include;
 bool opt_E;
 bool opt_dM;
 static bool opt_P;
-bool opt_M;
+static bool opt_M;
 static bool opt_MM;
 static bool opt_MD;
 static bool opt_MMD;
@@ -981,42 +981,14 @@ static void print_dependencies(char *input) {
     fclose(out);
 }
 
- static void include_files_cli(StringArray *arr, Token **cur) {
-   for (int i = 0; i < arr->len; i++) {
-    char *path = search_include_paths(arr->data[i], ".");
-    if (ignore_missing_dep(path, arr->data[i], NULL))
-      continue;
-
-    Token *end = NULL;
-    (*cur)->next = tokenize_file(path, NULL, &end);
-    if (end)
-      (*cur) = end;
-    add_dep_file(path, false);
-  }
-}
-
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
   build_macros(&macrodefs, is_asm_pp);
 
-  Token *in_tok = tokenize_file(input_file, NULL, NULL);
-  add_dep_file(input_file, false); // input file must be first in dep_files
+  Token *tok = preprocess(input_file, &opt_include, &opt_imacros);
 
-  Token imacros_head = {0};
-  Token *imacros_cur = &imacros_head;
-  include_files_cli(&opt_imacros, &imacros_cur);
-
-  Token head = {0};
-  Token *cur = &head;
-  include_files_cli(&opt_include, &cur);
-
-  cur->next = in_tok;
-
-  Token *tok = preprocess(head.next, imacros_head.next, input_file);
-
-  // If -M or -MD are given, print file dependencies.
   if (opt_M || opt_MD) {
     print_dependencies(input_file);
     if (opt_M)
@@ -1034,6 +1006,8 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
     close_file(out);
     return;
   }
+
+  tok = prepare_parse(tok);
 
   Obj *prog = parse(tok);
 
