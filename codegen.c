@@ -2869,6 +2869,8 @@ static void gen_stmt(Node *node) {
     if (!node->m.lhs) {
       if (has_defr(node))
         gen_defr(node);
+      if (is_x87_class(codegen_fn->ty->return_ty))
+        Printstn("fldz");
       Printftn("jmp .L.rtn.%"PRIi64, rtn_label);
       return;
     }
@@ -5166,8 +5168,12 @@ void emit_text(Obj *fn) {
   // Emit code
   bool is_reach = gen_reachable_stmt(fn->body);
 
-  if (is_reach && !strcmp(fn->name, "main"))
-    Printstn("xor %%eax, %%eax");
+  if (is_reach) {
+    if (!strcmp(fn->name, "main"))
+      Printstn("xor %%eax, %%eax");
+    else if (is_x87_class(fn->ty->return_ty))
+      Printstn("fldz");
+  }
 
   // Epilogue
   if (!(!is_reach && fn->is_noreturn)) {
