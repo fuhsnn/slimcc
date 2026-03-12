@@ -198,6 +198,10 @@ bool is_array(Type *ty) {
   return ty->kind == TY_ARRAY || ty->kind == TY_VLA;
 }
 
+bool is_decay_ty(Type *ty) {
+  return is_array(ty) || ty->kind == TY_FUNC;
+}
+
 bool is_bitfield(Node *node) {
   return node->kind == ND_MEMBER && node->m.member->is_bitfield;
 }
@@ -472,7 +476,7 @@ void ptr_convert(Node **node) {
 }
 
 Type *func_type(Type *return_ty, Token *tok) {
-  if (is_array(return_ty) || return_ty->kind == TY_FUNC)
+  if (is_decay_ty(return_ty))
     error_tok(tok, "invalid function return type");
 
   // The C spec disallows sizeof(<function type>), but

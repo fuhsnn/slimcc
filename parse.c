@@ -472,7 +472,7 @@ static Node *new_unknown(Type *ty, Token *tok) {
 }
 
 static bool invalid_cast(Node *node, Type *to) {
-  if (is_array(to) || to->kind == TY_FUNC)
+  if (is_decay_ty(to))
     return true;
   if (node->ty->size < 0 && node->ty->kind != TY_ARRAY)
     return true;
@@ -521,7 +521,7 @@ Node *new_cast(Node *expr, Type *ty) {
     Obj *var = NULL;
     if (n->kind == ND_ADDR && n->m.lhs->kind == ND_VAR)
       var = n->m.lhs->m.var;
-    else if (n->kind == ND_VAR && (is_array(n->ty) || n->ty->kind == TY_FUNC))
+    else if (n->kind == ND_VAR && is_decay_ty(n->ty))
       var = n->m.var;
 
     if (var && !var->is_weak) {
