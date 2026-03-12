@@ -533,8 +533,9 @@ struct CaseRange {
 struct Node {
   Node *next;    // Next node
   NodeKind kind; // Node kind
-  NodeKind arith_kind : 31; // Arithmetic Assignment
+  NodeKind arith_kind : 30; // Arithmetic Assignment
   bool no_label : 1;
+  bool is_nonlval : 1;
   Type *ty;      // Type, e.g. int or pointer to int
   Token *tok;    // Representative token
 

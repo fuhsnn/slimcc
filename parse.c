@@ -3286,9 +3286,10 @@ static Node *expr_stmt(Token **rest, Token *tok) {
 static Node *expr(Token **rest, Token *tok) {
   Node *node = assign(&tok, tok);
 
-  if (equal(tok, ","))
-    return new_binary(ND_COMMA, node, expr(rest, tok->next), tok);
-
+  if (equal(tok, ",")) {
+    node = new_binary(ND_COMMA, node, expr(&tok, tok->next), tok);
+    node->is_nonlval = true;
+  }
   *rest = tok;
   return node;
 }
@@ -4096,15 +4097,7 @@ static Node *to_assign(Node *binary) {
 // assign    = conditional (assign-op assign)?
 // assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
 //           | "<<=" | ">>="
-static Node *assign(Token **rest, Token *tok) {
-  Node *node = conditional(&tok, tok);
-  add_type(node);
-
-  if ((node->ty->qual & Q_CONST) || is_array(node->ty)) {
-    *rest = tok;
-    return node;
-  }
-
+static Node *assign2(Token **rest, Token *tok, Node *node) {
   // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
   if (equal(tok, "=") && (node->ty->qual & Q_ATOMIC)) {
     Node *rhs = assign(rest, tok->next);
@@ -4155,6 +4148,20 @@ static Node *assign(Token **rest, Token *tok) {
       return to_assign(new_binary(ND_SAR, node, assign(rest, tok->next), tok));
   }
 
+  return NULL;
+}
+
+static Node *assign(Token **rest, Token *tok) {
+  Node *node = conditional(&tok, tok);
+  add_type(node);
+
+  if (!node->is_nonlval && !(node->ty->qual & Q_CONST) && !is_decay_ty(node->ty)) {
+    Node *n = assign2(&tok, tok, node);
+    if (n) {
+      n->is_nonlval = true;
+      node = n;
+    }
+  }
   *rest = tok;
   return node;
 }
@@ -4199,6 +4206,8 @@ static Node *conditional(Token **rest, Token *tok) {
     return cond;
   }
   Node *node = new_node(ND_COND, tok);
+  node->is_nonlval = true;
+
   if (!consume(&tok, tok->next, ":")) {
     node->ctrl.then = expr(&tok, tok->next);
     tok = skip(tok, ":");
@@ -4440,6 +4449,7 @@ static Node *unary(Token **rest, Token *tok) {
     if (is_typename_paren(&tok, tok, &ty)) {
       Node *calc = calc_vla(ty, tok);
       Node *node = new_cast(unary(rest, tok), ty);
+      node->is_nonlval = true;
       if (calc)
         return new_binary(ND_COMMA, calc, node, tok);
       return node;
@@ -4896,6 +4906,7 @@ static Node *struct_ref(Node *node, Token *tok) {
     error_tok(node->tok, "not a struct nor a union");
 
   Type *ty = node->ty;
+  bool is_nonlval = node->is_nonlval;
 
   for (;;) {
     Member *mem = get_struct_member(ty, tok);
@@ -4909,6 +4920,7 @@ static Node *struct_ref(Node *node, Token *tok) {
       break;
     ty = mem->ty;
   }
+  node->is_nonlval = is_nonlval;
   return node;
 }
 
@@ -5042,6 +5054,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   node->call.expr = fn;
   node->ty = ty->return_ty;
   node->call.args = head.param_next;
+  node->is_nonlval = true;
 
   prepare_funcall(node, scope);
   leave_scope();
