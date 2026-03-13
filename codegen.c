@@ -3987,7 +3987,7 @@ static void asm_prepare_clobbers(Token *tok, int *x87_clobber) {
     if (tok != start)
       tok = skip(tok, ",");
 
-    if (equal(tok, "\"cc\""))
+    if (equal(tok, "\"cc\"") || equal(tok, "\"flags\""))
       continue;
     if (equal(tok, "\"memory\""))
       continue;
