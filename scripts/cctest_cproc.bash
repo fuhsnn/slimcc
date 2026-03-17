@@ -7,9 +7,6 @@ skip_files=(
  # unimplemented
  builtin-inff.c
  builtin-nanf.c
-
- # VM in typeof
- typeof-vm.c
 )
 
 fix_up() {

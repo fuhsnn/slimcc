@@ -14,8 +14,9 @@ test_ag() {
 }
 
 test_apk() {
- github_tar alpinelinux apk-tools v3.0.0_rc8
- muon_init -Dpython=disabled
+ github_tar alpinelinux apk-tools v3.0.5
+ rm test/user/mkpkg.sh # permission
+ muon_init -Dpython=disabled -Dhelp=enabled -Dlua_bin=luajit
  muon_test
 }
 
@@ -118,7 +119,7 @@ test_box2d() {
 }
 
 test_bubblewrap() {
- github_tar containers bubblewrap v0.11.0
+ github_tar containers bubblewrap v0.11.1
  muon_init -Dbash_completion=disabled
  muon_test
 }
@@ -158,7 +159,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 67f32b6a52a083ec92424858911c1e790e51f4ee c2compiler
+ git_fetch https://github.com/c2lang/c2compiler e6d486a280a7774c94aa667f1a2d455de2d4c647 c2compiler
  sed -i 's|-pipe ||g' bootstrap/Makefile
  sed -i 's|-pipe ||g' bootstrap/bootstrap.c
  sed -i 's|-pipe ||g' generator/c/c_generator_special.c2
@@ -273,7 +274,7 @@ test_doom() {
 }
 
 test_elk() {
- git_fetch https://github.com/cesanta/elk a9bb85619c5cddf49dfa8bdf529770fc9943a7fd elk
+ git_fetch https://github.com/cesanta/elk 71a86fa2fef146696be9ae66715bf3f91d0a5f2c elk
  CFLAGS='-O -ffunction-sections -fdata-sections' make -C test test elk
 }
 
@@ -418,8 +419,10 @@ test_gpatch() {
 }
 
 test_groff() {
- url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.0.tar.gz groff
+ url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.1.tar.gz groff
  ./configure
+ make
+ sed -i 's|exec eqn|exec ./eqn|g' neqn
  make check
 }
 
@@ -442,7 +445,7 @@ test_gzip() {
 }
 
 test_handmademath() {
- git_fetch https://github.com/HandmadeMath/HandmadeMath 142ba3cd9da700e3e599d301bbd27d415ad14626 HandmadeMath
+ git_fetch https://github.com/HandmadeMath/HandmadeMath 661fef0893bccfe30342049e848b8d54e7430234 HandmadeMath
  make -C test CC=$CC c99 c11
 }
 
@@ -453,7 +456,7 @@ test_hare() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-16
+ github_tar ImageMagick ImageMagick 7.1.2-17
  fix_and_configure
  make check V=1
 }
@@ -510,7 +513,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 77ed199c0d223a98c36c9c4882af762c71ccb722 ksh93
+ git_fetch https://github.com/ksh93/ksh 4c391d08dbc86824a94e8a4c3a388da55cb75c63 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -553,7 +556,7 @@ test_libarchive() {
 }
 
 test_libevent() {
- git_fetch https://github.com/libevent/libevent a994a52d5373d6284b27576efa617aff2baa7bd3 libevent
+ git_fetch https://github.com/libevent/libevent 7cfffeaa5ce369b9cca9bdaffe6a4f097218519d libevent
  libtoolize
  sh autogen.sh
  fix_and_configure
@@ -561,14 +564,14 @@ test_libevent() {
 }
 
 test_libexpat() {
- github_tar libexpat libexpat R_2_7_4
+ github_tar libexpat libexpat R_2_7_5
  cd expat
  cmake_init
  make && ctest
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc b93c608953e130aa31e750f653518aa1de930518 libgc
+ git_fetch https://github.com/bdwgc/bdwgc 946696b9b16580fcece3bc4d640f35afc139426d libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -632,7 +635,7 @@ test_libmicrohttpd() {
 }
 
 test_libmpc() {
- url_tar https://ftpmirror.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz mpc
+ url_xz https://ftpmirror.gnu.org/gnu/mpc/mpc-1.4.0.tar.xz mpc
  fix_and_configure
  make check
 }
@@ -777,7 +780,7 @@ test_lua() {
 }
 
 test_lwan(){
- git_fetch https://github.com/lpereira/lwan 2117e9426bb5e442756f909adce5e24fe26eb47a lwan
+ git_fetch https://github.com/lpereira/lwan ebb2254b1c96e34f8a1f9f7532160656069038a3 lwan
  use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
  use_stdbit '#include <assert.h>' src/lib/timeout.c
  use_stdbit '#include <assert.h>' src/samples/techempower/json.c
@@ -889,7 +892,7 @@ test_nginx() {
  auto/configure
  make
  cd ../
- git_fetch https://github.com/nginx/nginx-tests a7878c072022b3be4e49638618d3ffbf43220760 nginx-tests
+ git_fetch https://github.com/nginx/nginx-tests 7a508f16baff2a38b8223f85b4a17fd9566c77a0 nginx-tests
  prove .
 }
 
@@ -1053,7 +1056,7 @@ test_qbe() {
 }
 
 test_quickjs() {
- git_fetch https://github.com/bellard/quickjs f1139494d18a2053630c5ed3384a42bb70db3c53 quickjs
+ git_fetch https://github.com/bellard/quickjs a31dcef98c7d1d8927871ac169a1c24ad8875046 quickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  make CC=$CC test
 }
@@ -1124,7 +1127,7 @@ test_rsync() {
 }
 
 test_ruby() {
- github_tar ruby ruby v4.0.1
+ github_tar ruby ruby v4.0.2
  rm tool/test/test_commit_email.rb
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
@@ -1132,13 +1135,13 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 34bf55401674bd9c66f207e4b6e1bee97299dd99 rvvm
+ git_fetch https://github.com/LekKit/RVVM 9c8999e3bd6b3c8351a8796adbe8109ebe49b01e rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.23.6
+ github_tar samba-team samba samba-4.24.0
  sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
  sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
@@ -1297,7 +1300,7 @@ test_wget() {
 }
 
 test_wolfssl() {
- github_tar wolfSSL wolfssl v5.8.4-stable
+ github_tar wolfSSL wolfssl v5.9.0-stable
  cmake_init
  make && ctest
 }
@@ -1409,7 +1412,7 @@ build_cairo() {
 }
 
 build_dash() {
- git_fetch https://kernel.googlesource.com/pub/scm/utils/dash/dash 079059a9eca0610cb495a1a8fe85acc2c38111d6 dash
+ git_fetch https://kernel.googlesource.com/pub/scm/utils/dash/dash b308564a1ff6530f9fd3e7dd7b19aabae32ed375 dash
  sh autogen.sh
  ./configure
  make
@@ -1567,15 +1570,42 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260314
+ github_tar ThomasDickey ncurses-snapshots v6_6_20260321
  ./configure
  make V=1
 }
 
+build_nolibc() {
+ local LINUX_SRC=$PWD/linux
+
+ git clone --filter=blob:none --no-checkout --depth 1 --sparse https://github.com/torvalds/linux --branch v7.0-rc4
+ cd linux
+ git sparse-checkout set arch/x86/ include/uapi/ include/linux/ scripts/ tools/include/nolibc/
+ git checkout
+ make headers ARCH=x86_64 HOSTCC=$CC KBUILD_USERHOSTCFLAGS= >/dev/null
+ cd ../
+
+ git clone $SRC_DIR slimcc-nolibc && cd slimcc-nolibc
+ mkdir -p $LINUX_SRC/usr/lib/slimcc
+ cp -r ./slimcc_headers/include $LINUX_SRC/usr/lib/slimcc/
+ sed 's|LINUX_SRC|'\"$LINUX_SRC\"'|g' ./platform/linux-nolibc.c > platform.c
+ make
+
+cat << EOF > tmp.c
+#include <stdio.h>
+int main(int argc, char **argv) {
+  char buf[16];
+  if (argc == 2 && fgets(buf, sizeof(buf), stdin))
+    printf("%s_%s", argv[1], buf);
+}
+EOF
+ ./slimcc tmp.c && echo world | ./a.out hello | grep ^hello_world$
+}
+
 build_nuklear() {
- github_tar Immediate-Mode-UI Nuklear 4.12.8
+ github_tar Immediate-Mode-UI Nuklear 4.13.2
  rm -r demo/sfml_opengl*
- find demo/sdl_*/Makefile -exec sed -i 's|std=c89 |std=c89 -DSDL_INLINE=__inline |g' {} +
+ find demo/sdl*/Makefile -exec sed -i 's|std=c89 |std=c89 -DSDL_INLINE=__inline |g' {} +
  find demo/*/sdl/Makefile -exec sed -i 's|std=c89 |std=c89 -DSDL_INLINE=__inline |g' {} +
  sed -i 's|CFLAGS+=|CFLAGS+=-DSDL_DISABLE_IMMINTRIN_H |g' demo/rawfb/sdl/Makefile
  use_stdbit "#include <X11/Xlib.h>" demo/rawfb/x11/nuklear_xlib.h
@@ -1669,7 +1699,7 @@ build_simplecc() {
 }
 
 build_stb() {
- git_fetch https://github.com/nothings/stb 904aa67e1e2d1dec92959df63e700b166d5c1022 stb
+ git_fetch https://github.com/nothings/stb 28d546d5eb77d4585506a20480f4de2e706dff4c stb
  sed -i 's|-DSTB_DIVIDE_TEST|-DSTB_DIVIDE_TEST -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' tests/Makefile
  sed -i 's|$(CC) $(INCLUDES) $(CPPFLAGS) -std=c++0x test_cpp_compilation.cpp -lm -lstdc++||g' tests/Makefile
  make -C tests
@@ -1692,7 +1722,7 @@ build_wlroots_sway() {
  sed -i 's|__PRETTY_FUNCTION__|__FUNCTION__|g' include/log.h
 
  mkdir subprojects && cd "$_"
- gitlab_tar gitlab.freedesktop.org/wlroots wlroots 0.19.2
+ gitlab_tar gitlab.freedesktop.org/wlroots wlroots 0.19.3
  use_stdbit '#include <assert.h>' types/data_device/wlr_data_offer.c
  cd ../../
 
@@ -1719,7 +1749,7 @@ build_zig() {
 bootstrap_musl() {
  local ROOT_DIR=$PWD/musl_build
 
- git_fetch https://git.musl-libc.org/git/musl 1b76ff0767d01df72f692806ee5adee13c67ef88 musl
+ git_fetch https://git.musl-libc.org/git/musl 9fa28ece75d8a2191de7c5bb53bed224c5947417 musl
  rm -r src/complex/ include/complex.h
  AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
  make install
@@ -1741,7 +1771,7 @@ bootstrap_musl() {
 bootstrap_uclibcng() {
  local ROOT_DIR=$PWD/uclibcng_build
 
- github_tar sabotage-linux kernel-headers v4.19.88-2
+ github_tar sabotage-linux kernel-headers v6.12.77
  make ARCH=x86_64 prefix= DESTDIR=$PWD/../linuxhdr/ install
  cd ../
 

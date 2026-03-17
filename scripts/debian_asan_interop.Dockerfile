@@ -9,7 +9,7 @@ RUN apt-get install -y --no-install-recommends \
  clang libclang-rt-19-dev \
  # Nuklear (sync with ccpp.yml)
  glslc liballegro5-dev liballegro-image5-dev liballegro-ttf5-dev libcairo2-dev libglfw3 libglfw3-dev \
- libglew-dev libsdl2-dev libvulkan-dev libwayland-dev libx11-dev libxcb1-dev libxcb-*-dev libxft-dev libxkbcommon-x11-dev wayland-protocols \
+ libglew-dev libsdl2-dev libsdl3-dev libvulkan-dev libwayland-dev libx11-dev libxcb1-dev libxcb-*-dev libxft-dev libxkbcommon-x11-dev wayland-protocols \
  # game builds
  libopenal-dev glslang-tools libcurl4-openssl-dev \
  # C3

@@ -228,6 +228,7 @@ jobs:
           - { vm: main, proj: build_mg }
           - { vm: main, proj: build_mksh }
           - { vm: main, proj: build_nano }
+          - { vm: main, proj: build_nolibc }
           - { vm: main, proj: build_oksh }
           - { vm: main, proj: build_pcc }
           - { vm: main, proj: build_racket }
