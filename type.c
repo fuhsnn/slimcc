@@ -59,6 +59,9 @@ void init_ty_lp64(void) {
   define_macro("__PTRDIFF_TYPE__", "long int");
   define_macro("__WCHAR_TYPE__", "int");
 
+  define_macro("__INTMAX_TYPE__", "long int");
+  define_macro("__UINTMAX_TYPE__", "long unsigned int");
+
   ty_size_t = ty_ulong;
   ty_ptrdiff_t = ty_long;
   ty_wchar_t = ty_int;

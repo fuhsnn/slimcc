@@ -1819,6 +1819,7 @@ void init_macros(void) {
   define_macro("__ORDER_BIG_ENDIAN__", "4321");
   define_macro("__ORDER_LITTLE_ENDIAN__", "1234");
 
+  define_macro("__CHAR_BIT__", "8");
   define_macro("__BITINT_MAXWIDTH__", "65535");
 
   define_macro("__amd64", "1");

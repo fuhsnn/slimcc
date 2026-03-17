@@ -1104,11 +1104,13 @@ static LinkType link_type(StringArray *arr, char *ldso_path) {
   case LT_DYNAMIC:
   case LT_SHARED:
   case LT_PIE:
-    if (opt_rdynamic)
-      strarray_push(arr, "--export-dynamic");
+    if (ldso_path) {
+      if (opt_rdynamic)
+        strarray_push(arr, "--export-dynamic");
 
-    strarray_push(arr, "-dynamic-linker");
-    strarray_push(arr, ldso_path);
+      strarray_push(arr, "-dynamic-linker");
+      strarray_push(arr, ldso_path);
+    }
   }
   return type;
 }
