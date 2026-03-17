@@ -1,4 +1,4 @@
-FROM debian:12-slim
+FROM debian:12-slim AS install-deps
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
  gcc-12 \
@@ -10,14 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # glib
  libffi-dev \
  libpcre3-dev libmount-dev desktop-file-utils shared-mime-info \
- python3.11-minimal python3-distutils
+ python3.11-minimal python3-distutils \
+ && apt-get clean
+
+FROM install-deps AS setup-toolchain
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci.c platform.c
-RUN gcc-12 scripts/amalgamation.c -O2 -flto=auto -march=x86-64-v3 -mtune=znver3 -fsanitize=address -o slimcc
-RUN apt-get -y autoremove gcc-12 && apt-get clean
+RUN ln -s platform/linux-ci.c platform.c \
+ && gcc-12 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address scripts/amalgamation.c -o slimcc
+RUN apt-get -y autoremove gcc-12 && rm -rf /var/cache/apt/*
 
 RUN ! command -v cc
 RUN ! command -v cpp

@@ -1,15 +1,14 @@
-FROM debian:trixie-slim
+FROM debian:13-slim AS install-deps
 
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+ clang libclang-rt-19-dev \
  make cmake pkg-config \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates wget unzip lzip \
  bison flex \
- clang libclang-rt-19-dev \
  # Nuklear (sync with ccpp.yml)
  glslc liballegro5-dev liballegro-image5-dev liballegro-ttf5-dev libcairo2-dev libglfw3 libglfw3-dev \
- libglew-dev libsdl2-dev libvulkan-dev libwayland-dev libx11-dev libxcb1-dev libxcb-*-dev libxft-dev libxkbcommon-x11-dev wayland-protocols \
+ libglew-dev libsdl2-dev libsdl3-dev libvulkan-dev libwayland-dev libx11-dev libxcb1-dev libxcb-*-dev libxft-dev libxkbcommon-x11-dev wayland-protocols \
  # game builds
  libopenal-dev glslang-tools libcurl4-openssl-dev \
  # C3
@@ -33,18 +32,20 @@ RUN apt-get install -y --no-install-recommends \
  # nanopb
  protobuf-compiler scons python3-grpcio \
  # sdl3
- libxtst-dev
+ libxtst-dev \
+ && apt-get clean && rm -rf /var/cache/apt/*
+
+FROM install-deps AS setup-toolchain
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci-debian13.c platform.c
-RUN clang scripts/amalgamation.c -O2 -flto=auto -march=x86-64-v3 -mtune=znver3 -fsanitize=address -o slimcc
+RUN ln -s platform/linux-ci-debian13.c platform.c \
+ && clang -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address scripts/amalgamation.c -o slimcc
 
 ENV CC=/work/slimcc/slimcc
 
-RUN bash scripts/linux_thirdparty.bash ci_libtool
-RUN bash scripts/linux_thirdparty.bash ci_muon
+RUN bash scripts/linux_thirdparty.bash ci_libtool_muon
 
 RUN useradd -m non-root -s /bin/bash && \
  su non-root -c "git config --global advice.detachedHead false" && \

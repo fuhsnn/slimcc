@@ -1,9 +1,6 @@
 set -u
 
 skip_files=(
- # extra bracer in initializer for scalar member
- obsd/init003.c
-
  # math builtins
  c99/arith003.c
  jira/PCC-185.c

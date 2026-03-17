@@ -17,16 +17,19 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           platforms: linux/amd64
           context: .
           file: scripts/${{ matrix.file }}.Dockerfile
-          tags: ${{ matrix.vm }}
+          tags: ${{ matrix.vm }}:latest
           outputs: type=docker,dest=/tmp/${{ matrix.vm }}.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache-filters: setup-toolchain
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -42,30 +45,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { vm: interop, proj: test_box2d }
-          - { vm: interop, proj: test_c3 }
-          - { vm: interop, proj: test_cmark }
-          - { vm: interop, proj: test_ffc }
-          - { vm: interop, proj: test_flatcc }
-          - { vm: interop, proj: test_flex }
-          - { vm: interop, proj: test_groff }
-          - { vm: interop, proj: test_imagemagick }
-          - { vm: interop, proj: test_inih }
-          - { vm: interop, proj: test_liballegro5 }
-          - { vm: interop, proj: test_libexpat }
-          - { vm: interop, proj: test_libxo_chimerautils }
-          - { vm: interop, proj: test_msgpack }
-          - { vm: interop, proj: test_muon }
-          - { vm: interop, proj: test_nanopb }
-          - { vm: interop, proj: test_nob }
-          - { vm: interop, proj: test_redis }
-          - { vm: interop, proj: test_rpmalloc }
-          - { vm: interop, proj: test_rvvm }
-          - { vm: interop, proj: test_sdl3 }
-          - { vm: interop, proj: test_sokol }
-          - { vm: interop, proj: test_vlc }
-          - { vm: interop, proj: test_wuffs }
-          - { vm: interop, proj: test_xterm }
+          - { vm: cctest, proj: build_lacc }
+          - { vm: cctest, proj: cctest_lcc }
+          - { vm: cctest, proj: cctest_pcctests }
+          - { vm: cctest, proj: cctest_wacc }
+          - { vm: cctest, proj: test_binutils_gccverify }
+          - { vm: cctest, proj: test_kefir }
+          - { vm: cctest, proj: test_tinycc }
+          - { vm: debian12, proj: bootstrap_uclibcng }
+          - { vm: debian12, proj: test_busybox }
+          - { vm: debian12, proj: test_glib }
           - { vm: interop, proj: build_cairo }
           - { vm: interop, proj: build_foot }
           - { vm: interop, proj: build_glfw }
@@ -78,6 +67,59 @@ jobs:
           - { vm: interop, proj: build_wayst }
           - { vm: interop, proj: build_wlroots_sway }
           - { vm: interop, proj: build_yquake2 }
+          - { vm: interop, proj: test_box2d }
+          - { vm: interop, proj: test_c3 }
+          - { vm: interop, proj: test_cmark }
+          - { vm: interop, proj: test_ffc }
+          - { vm: interop, proj: test_flatcc }
+          - { vm: interop, proj: test_flex }
+          - { vm: interop, proj: test_groff }
+          - { vm: interop, proj: test_gumbo }
+          - { vm: interop, proj: test_imagemagick }
+          - { vm: interop, proj: test_inih }
+          - { vm: interop, proj: test_liballegro5 }
+          - { vm: interop, proj: test_libexpat }
+          - { vm: interop, proj: test_libxo_chimerautils }
+          - { vm: interop, proj: test_miniz }
+          - { vm: interop, proj: test_msgpack }
+          - { vm: interop, proj: test_muon }
+          - { vm: interop, proj: test_nanomsg }
+          - { vm: interop, proj: test_nanopb }
+          - { vm: interop, proj: test_nob }
+          - { vm: interop, proj: test_redis }
+          - { vm: interop, proj: test_rpmalloc }
+          - { vm: interop, proj: test_rvvm }
+          - { vm: interop, proj: test_sdl3 }
+          - { vm: interop, proj: test_sokol }
+          - { vm: interop, proj: test_vlc }
+          - { vm: interop, proj: test_wuffs }
+          - { vm: interop, proj: test_xterm }
+          - { vm: main, proj: bootstrap_musl }
+          - { vm: main, proj: build_bc }
+          - { vm: main, proj: build_dash }
+          - { vm: main, proj: build_duktape }
+          - { vm: main, proj: build_ellipsis }
+          - { vm: main, proj: build_erlang }
+          - { vm: main, proj: build_fossil }
+          - { vm: main, proj: build_freetype }
+          - { vm: main, proj: build_gcc }
+          - { vm: main, proj: build_htop }
+          - { vm: main, proj: build_libev }
+          - { vm: main, proj: build_libsoldout }
+          - { vm: main, proj: build_luajit }
+          - { vm: main, proj: build_lynx }
+          - { vm: main, proj: build_mg }
+          - { vm: main, proj: build_mksh }
+          - { vm: main, proj: build_nano }
+          - { vm: main, proj: build_nolibc }
+          - { vm: main, proj: build_oksh }
+          - { vm: main, proj: build_pcc }
+          - { vm: main, proj: build_racket }
+          - { vm: main, proj: build_simplecc }
+          - { vm: main, proj: build_stb }
+          - { vm: main, proj: build_tin }
+          - { vm: main, proj: build_vedis }
+          - { vm: main, proj: build_zig }
           - { vm: main, proj: test_ag }
           - { vm: main, proj: test_apk }
           - { vm: main, proj: test_bash }
@@ -87,6 +129,7 @@ jobs:
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_blake3 }
+          - { vm: main, proj: test_blosc2 }
           - { vm: main, proj: test_bubblewrap }
           - { vm: main, proj: test_byacc }
           - { vm: main, proj: test_bzip2 }
@@ -104,6 +147,7 @@ jobs:
           - { vm: main, proj: test_curl }
           - { vm: main, proj: test_darkhttpd }
           - { vm: main, proj: test_diffutils }
+          - { vm: main, proj: test_discount }
           - { vm: main, proj: test_doom }
           - { vm: main, proj: test_elk }
           - { vm: main, proj: test_emacs }
@@ -113,7 +157,9 @@ jobs:
           - { vm: main, proj: test_findutils }
           - { vm: main, proj: test_fribidi }
           - { vm: main, proj: test_gawk }
+          - { vm: main, proj: test_genann }
           - { vm: main, proj: test_ggrep }
+          - { vm: main, proj: test_giflib }
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_gnutls }
@@ -125,10 +171,14 @@ jobs:
           - { vm: main, proj: test_gzip }
           - { vm: main, proj: test_handmademath }
           - { vm: main, proj: test_hare }
+          - { vm: main, proj: test_heatshrink }
+          - { vm: main, proj: test_hoedown }
+          - { vm: main, proj: test_httpparser }
           - { vm: main, proj: test_janet }
           - { vm: main, proj: test_jemalloc }
           - { vm: main, proj: test_jerryscript }
           - { vm: main, proj: test_jq }
+          - { vm: main, proj: test_jsmn }
           - { vm: main, proj: test_ksh93 }
           - { vm: main, proj: test_lame }
           - { vm: main, proj: test_lexbor }
@@ -151,22 +201,30 @@ jobs:
           - { vm: main, proj: test_libressl }
           - { vm: main, proj: test_libsamplerate }
           - { vm: main, proj: test_libsodium }
+          - { vm: main, proj: test_libtommath }
+          - { vm: main, proj: test_libucl }
           - { vm: main, proj: test_libuev }
           - { vm: main, proj: test_libuv }
           - { vm: main, proj: test_libwebp }
           - { vm: main, proj: test_libxml }
           - { vm: main, proj: test_libyaml }
           - { vm: main, proj: test_lighthttpd }
+          - { vm: main, proj: test_lmdb }
           - { vm: main, proj: test_lua }
           - { vm: main, proj: test_lwan }
           - { vm: main, proj: test_mawk }
           - { vm: main, proj: test_mbedtls }
+          - { vm: main, proj: test_md4c }
           - { vm: main, proj: test_memcached }
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_micropython }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_mongoose }
+          - { vm: main, proj: test_monocypher }
+          - { vm: main, proj: test_mpack }
           - { vm: main, proj: test_mquickjs }
           - { vm: main, proj: test_mruby }
+          - { vm: main, proj: test_munit }
           - { vm: main, proj: test_neovim }
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_njs }
@@ -180,10 +238,11 @@ jobs:
           - { vm: main, proj: test_orangeduck_mpc }
           - { vm: main, proj: test_pacman }
           - { vm: main, proj: test_parrot }
+          - { vm: main, proj: test_parson }
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_perl }
-          - { vm: main, proj: test_pixman }
           - { vm: main, proj: test_php }
+          - { vm: main, proj: test_pixman }
           - { vm: main, proj: test_postgres }
           - { vm: main, proj: test_python }
           - { vm: main, proj: test_qbe }
@@ -192,19 +251,27 @@ jobs:
           - { vm: main, proj: test_ruby }
           - { vm: main, proj: test_samba }
           - { vm: main, proj: test_scrapscript }
+          - { vm: main, proj: test_sds }
+          - { vm: main, proj: test_smaz }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }
+          - { vm: main, proj: test_tcpdump }
+          - { vm: main, proj: test_tinyexpr }
           - { vm: main, proj: test_tomlc17 }
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }
+          - { vm: main, proj: test_tweetnacl }
           - { vm: main, proj: test_umka }
+          - { vm: main, proj: test_unqlite }
           - { vm: main, proj: test_utf8h }
+          - { vm: main, proj: test_utf8proc }
           - { vm: main, proj: test_utillinux }
           - { vm: main, proj: test_valkey }
           - { vm: main, proj: test_vim }
           - { vm: main, proj: test_wasm3 }
           - { vm: main, proj: test_wget }
           - { vm: main, proj: test_wolfssl }
+          - { vm: main, proj: test_wren }
           - { vm: main, proj: test_xxhash }
           - { vm: main, proj: test_xz }
           - { vm: main, proj: test_yash }
@@ -214,38 +281,6 @@ jobs:
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: test_zuo_chezscheme }
-          - { vm: main, proj: build_bc }
-          - { vm: main, proj: build_dash }
-          - { vm: main, proj: build_ellipsis }
-          - { vm: main, proj: build_erlang }
-          - { vm: main, proj: build_fossil }
-          - { vm: main, proj: build_freetype }
-          - { vm: main, proj: build_gcc }
-          - { vm: main, proj: build_htop }
-          - { vm: main, proj: build_libev }
-          - { vm: main, proj: build_luajit }
-          - { vm: main, proj: build_lynx }
-          - { vm: main, proj: build_mg }
-          - { vm: main, proj: build_mksh }
-          - { vm: main, proj: build_nano }
-          - { vm: main, proj: build_oksh }
-          - { vm: main, proj: build_pcc }
-          - { vm: main, proj: build_racket }
-          - { vm: main, proj: build_simplecc }
-          - { vm: main, proj: build_stb }
-          - { vm: main, proj: build_tin }
-          - { vm: main, proj: build_zig }
-          - { vm: main, proj: bootstrap_musl }
-          - { vm: debian12, proj: test_busybox }
-          - { vm: debian12, proj: test_glib }
-          - { vm: debian12, proj: bootstrap_uclibcng }
-          - { vm: cctest, proj: cctest_lcc }
-          - { vm: cctest, proj: cctest_pcctests }
-          - { vm: cctest, proj: cctest_wacc }
-          - { vm: cctest, proj: test_binutils_gccverify }
-          - { vm: cctest, proj: test_kefir }
-          - { vm: cctest, proj: test_tinycc }
-          - { vm: cctest, proj: build_lacc }
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v8
@@ -254,7 +289,9 @@ jobs:
           path: /tmp
 
       - name: Load image
-        run: docker load --input /tmp/${{ matrix.vm }}.tar
+        run: |
+          docker load --input /tmp/${{ matrix.vm }}.tar
+          rm /tmp/${{ matrix.vm }}.tar
 
       - name: Run test
         run: >
@@ -269,10 +306,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           platforms: linux/amd64
           context: .

@@ -1,9 +1,9 @@
-FROM debian:13-slim
+FROM debian:13-slim AS install-deps
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
  gcc-14 \
  file binutils libc-dev libgcc-14-dev \
- make cmake pkg-config \
+ make cmake pkg-config ninja-build \
  zip lzip xz-utils bzip2 zlib1g-dev unzip \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates wget locales \
@@ -53,14 +53,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  # neovim
  luajit libluajit-5.1-dev lua-luv-dev libvterm-dev lua-lpeg libmsgpack-c-dev libtree-sitter-dev libunibilium-dev \
  # njs
- libxslt-dev
+ libxslt-dev \
+ # tcpdump
+ libpcap-dev \
+ # hoedown
+ tidy \
+ && apt-get clean
+
+FROM install-deps AS setup-toolchain
 
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci-debian13.c platform.c
-RUN gcc-14 scripts/amalgamation.c -O2 -flto=auto -march=x86-64-v3 -mtune=znver3 -fsanitize=address -o slimcc
-RUN apt-get -y autoremove gcc-14 && apt-get clean
+RUN ln -s platform/linux-ci-debian13.c platform.c \
+ && gcc-14 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address scripts/amalgamation.c -o slimcc
+RUN apt-get -y autoremove gcc-14 && rm -rf /var/cache/apt/*
 
 RUN ! command -v cc
 RUN ! command -v cpp
@@ -72,8 +79,7 @@ ENV CC=/work/slimcc/slimcc
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 ENV LANG=en_US.UTF-8
 
-RUN bash scripts/linux_thirdparty.bash ci_libtool
-RUN bash scripts/linux_thirdparty.bash ci_muon
+RUN bash scripts/linux_thirdparty.bash ci_libtool_muon
 
 RUN useradd -m non-root -s /bin/bash && \
  su non-root -c "git config --global advice.detachedHead false" && \
