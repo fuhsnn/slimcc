@@ -278,12 +278,75 @@ int cond_result_type(bool t, bool f, int m, int n) {
     return 1;
 }
 
+int typeof_expr(int i, char(*p)[i+=1], typeof(i+=10, p)q) {
+  ASSERT(11, i);
+  ASSERT(1, _Countof *p);
+  ASSERT(1, _Countof *q);
+
+  ASSERT(  1, ({ i = 0;               typeof(i+=1, p)                 ; i; }));
+  ASSERT( 11, ({ i = 0;        typeof(typeof(i+=1, p)[i+=10])         ; i; }));
+  ASSERT(111, ({ i = 0; typeof(typeof(typeof(i+=1, p)[i+=10])[i+=100]); i; }));
+
+  ASSERT(  1, ({ i = 0;               typeof(i+=1, p)                  *p; i; }));
+  ASSERT( 11, ({ i = 0;        typeof(typeof(i+=1, p)[i+=10])          *p; i; }));
+  ASSERT(111, ({ i = 0; typeof(typeof(typeof(i+=1, p)[i+=10])[i+=100]) *p; i; }));
+
+  ASSERT(  1, ({ i = 0;               typeof(i+=1, p)                  *p, *q; i; }));
+  ASSERT( 11, ({ i = 0;        typeof(typeof(i+=1, p)[i+=10])          *p, *q; i; }));
+  ASSERT(111, ({ i = 0; typeof(typeof(typeof(i+=1, p)[i+=10])[i+=100]) *p, *q; i; }));
+
+  ASSERT(  1, ({ i = 0; (              typeof(i+=1, p)                 *){0}; i; }));
+  ASSERT( 11, ({ i = 0; (       typeof(typeof(i+=1, p)[i+=10])         *){0}; i; }));
+  ASSERT(111, ({ i = 0; (typeof(typeof(typeof(i+=1, p)[i+=10])[i+=100])*){0}; i; }));
+
+  ASSERT(1, ({ i = 0;         (char(*)[i+=1])   0; i; }));
+  ASSERT(1, ({ i = 0; (typeof (char(*)[i+=1])  )0; i; }));
+  ASSERT(1, ({ i = 0; (typeof((char(*)[i+=1])0))0; i; }));
+
+  ASSERT(1, ({ i = 0; (        char(*)[i+=1]   ){0}; i; }));
+  ASSERT(1, ({ i = 0; (typeof (char(*)[i+=1])  ){0}; i; }));
+  ASSERT(1, ({ i = 0; (typeof((char(*)[i+=1])0)){0}; i; }));
+
+  ASSERT(1, ({ i = 0; (static         char(*)[i+=1]   ){0}; i; }));
+  ASSERT(1, ({ i = 0; (static typeof (char(*)[i+=1])  ){0}; i; }));
+  ASSERT(1, ({ i = 0; (static typeof((char(*)[i+=1])0)){0}; i; }));
+
+  ASSERT(1, ({ i = 0;         (char(*(*)[1])[i+=1])   0; i; }));
+  ASSERT(1, ({ i = 0; (typeof (char(*(*)[1])[i+=1])  )0; i; }));
+  ASSERT(1, ({ i = 0; (typeof((char(*(*)[1])[i+=1])0))0; i; }));
+
+  ASSERT(1111, ({ i = 0;         typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; i; }));
+  ASSERT(1111, ({ i = 0; typedef typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; i; }));
+  ASSERT(1111, ({ i = 0;  static typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; i; }));
+
+  ASSERT(1111, ({ i = 0; for (        typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; 0;); i; }));
+  ASSERT(1111, ({ i = 0; for (typedef typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; 0;); i; }));
+  ASSERT(1111, ({ i = 0; for ( static typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; 0;); i; }));
+
+  ASSERT(1111, ({ i = 0; if (        typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; 0); i; }));
+  ASSERT(1111, ({ i = 0; if (typedef typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; 0); i; }));
+  ASSERT(1111, ({ i = 0; if ( static typeof(i+=1, p) (*a)[i+=10],(*b)[i+=100][i+=1000]; 0); i; }));
+  return 1;
+}
+
+int typeof_expr_vaarg(...) {
+  int i = 0;
+  va_list ap;
+  ASSERT(1, ({ i = 0; va_start(ap); va_arg(ap,         char(*)[i+=1]   ); i; }));
+  ASSERT(1, ({ i = 0; va_start(ap); va_arg(ap, typeof( char(*)[i+=1]  )); i; }));
+  ASSERT(1, ({ i = 0; va_start(ap); va_arg(ap, typeof((char(*)[i+=1])0)); i; }));
+  return 1;
+}
+
 int main(void) {
   ASSERT(3, side_effect(3));
 
   ASSERT(3, with_cast(3));
 
   ASSERT(1, cond_result_type(1, 0, 5, 7));
+
+  ASSERT(1, typeof_expr(0, 0, 0));
+  ASSERT(1, typeof_expr_vaarg(0));
 
   printf("OK\n");
 }

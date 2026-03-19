@@ -57,6 +57,7 @@ typedef uint8_t StorageClass;
 
 // Variable attributes such as typedef or extern.
 typedef struct {
+  Node *typeof_vm_expr;
   StorageClass strg;
   bool is_inline;
   bool is_weak;
@@ -215,7 +216,7 @@ static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comm
 static Type *typename(Token **rest, Token *tok);
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
-static Type *typeof_specifier(Token **rest, Token *tok);
+static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
 static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, DeclContext *ctx);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
@@ -254,6 +255,7 @@ static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name);
 static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr);
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Node *calc_vla(Type *ty, Token *tok);
+static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 static Node *new_node(NodeKind kind, Token *tok);
 static Node *resolve_local_gotos(void);
@@ -390,10 +392,10 @@ static bool is_int_class(Type *ty) {
 }
 
 static bool is_vm_ty(Type *ty) {
-  Type *t = ty;
-  while (t->kind == TY_PTR)
-    t = t->base;
-  return t->kind == TY_VLA;
+  for (; ty->base; ty = ty->base)
+    if (ty->kind == TY_VLA)
+      return true;
+  return false;
 }
 
 static bool is_func_def(Token *end_tok) {
@@ -406,13 +408,6 @@ bool equal_tok(Token *a, Token *b) {
 
 static bool equal_substr(char *loc, size_t len, char *op) {
   return strlen(op) == len && !memcmp(loc, op, len);
-}
-
-static void chk_vla_expr_side_effect(Node *expr) {
-  while (expr->kind == ND_DEREF || expr->kind == ND_ADDR)
-    expr = expr->m.lhs;
-  if (expr->kind != ND_VAR)
-    error_tok(expr->tok, "execution of VLA expression not supported");
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
@@ -1209,8 +1204,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
       case TK_struct: ty = struct_union_decl(&tok, tok, TY_STRUCT); break;
       case TK_union: ty = struct_union_decl(&tok, tok, TY_UNION); break;
       case TK_enum: ty = enum_specifier(&tok, tok); break;
-      case TK_typeof: ty = typeof_specifier(&tok, tok); break;
-      case TK_typeof_unqual: ty = unqual(typeof_specifier(&tok, tok)); break;
+      case TK_typeof: ty = typeof_specifier(&tok, tok, attr); break;
+      case TK_typeof_unqual: ty = unqual(typeof_specifier(&tok, tok, attr)); break;
       case TK_auto_type: ty = new_type(TY_AUTO, -1, 0); break;
       }
       if (ty) {
@@ -1357,13 +1352,14 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
       *rest = skip(tok->next, ")");
       break;
     }
+    VarAttr attr = {0};
     Token *name = NULL;
-    Type *ty = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
+    Type *ty = declspec(&tok, tok, &attr, SC_REGISTER);
     ty = declarator2(&tok, tok, ty, &name,
       &(DeclContext){.let_star = !is_def, .is_param = true});
 
     if (is_def)
-      chain_expr(&expr, calc_vla(ty, tok));
+      chain_expr(&expr, calc_vla2(ty, tok, &attr));
 
     Type *param_ty = ptr_decay(ty);
     if (ty->param_qual)
@@ -1735,19 +1731,20 @@ static Type *enum_specifier(Token **rest, Token *tok) {
 }
 
 // typeof-specifier = "(" (expr | typename) ")"
-static Type *typeof_specifier(Token **rest, Token *tok) {
+static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr) {
   tok = skip(tok, "(");
 
   Type *ty;
   if (is_typename(tok)) {
-    ty = typename(&tok, tok);
+    ty = declspec(&tok, tok, attr, SC_ALL);
+    ty = declarator(&tok, tok, ty, NULL);
   } else {
     Node *node = expression(&tok, tok);
     add_type(node);
     ty = node->ty;
 
     if (is_vm_ty(ty))
-      chk_vla_expr_side_effect(node);
+      attr->typeof_vm_expr = node;
   }
   *rest = skip(tok, ")");
   return ty;
@@ -1792,6 +1789,12 @@ static Node *calc_vla(Type *ty, Token *tok) {
   return n;
 }
 
+static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr) {
+  Node *n = attr->typeof_vm_expr;
+  chain_expr(&n, calc_vla(ty, tok));
+  return n;
+}
+
 static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr, Obj **cond_var) {
   Token *name = NULL;
   Type *ty = declarator(&tok, tok, basety, &name);
@@ -1805,6 +1808,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     error_tok(tok, "variable declared void");
   if (!name)
     error_tok(tok, "variable name omitted");
+
+  Node *expr = calc_vla(ty, tok);
 
   if (attr->strg & SC_STATIC) {
     if (ty->kind == TY_VLA)
@@ -1826,11 +1831,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
       *cond_var = var;
     }
     *rest = tok;
-    return NULL;
+    return expr;
   }
-
-  Node *expr = NULL;
-  chain_expr(&expr, calc_vla(ty, tok));
 
   Obj *var = new_lvar2(ty, decl_scope());
   push_var_name(name, var);
@@ -1900,6 +1902,9 @@ static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int claus
       global_declaration(&tok, tok, basety, &attr);
       continue;
     }
+
+    chain_expr(&n, calc_vla2(basety, tok, &attr));
+
     if (attr.strg & SC_TYPEDEF) {
       chain_expr(&n, parse_typedef(&tok, tok, basety, &attr));
       continue;
@@ -1933,12 +1938,17 @@ static Node *declaration(Token **rest, Token *tok) {
     global_declaration(rest, tok, basety, &attr);
     return NULL;
   }
-  if (attr.strg & SC_TYPEDEF)
-    return parse_typedef(rest, tok, basety, &attr);
 
-  Node *expr = NULL;
+  Node *expr = calc_vla2(basety, tok, &attr);
+
+  if (attr.strg & SC_TYPEDEF) {
+    chain_expr(&expr, parse_typedef(rest, tok, basety, &attr));
+    return expr;
+  }
+
   for (bool first = true; comma_list(rest, &tok, ";", !first); first = false)
     chain_expr(&expr, declaration2(&tok, tok, basety, &attr, &(Obj *){0}));
+
   return expr;
 }
 
@@ -2703,7 +2713,7 @@ static bool is_typename(Token *tok) {
   return is_type_kw(tok->kind) || find_typedef(tok);
 }
 
-static bool is_typename_paren2(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
+static bool is_typename_paren(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
   if (equal(tok, "(") && is_typename(tok->next) &&
     !equal(skip_paren(tok->next->next), "{")) {
     *ty = typename2(&tok, tok->next, attr);
@@ -2711,10 +2721,6 @@ static bool is_typename_paren2(Token **rest, Token *tok, Type **ty, VarAttr *att
     return true;
   }
   return false;
-}
-
-static bool is_typename_paren(Token **rest, Token *tok, Type **ty) {
-  return is_typename_paren2(rest, tok, ty, &(VarAttr){0});
 }
 
 static void eval_static_assert(Token **rest, Token *tok) {
@@ -4451,12 +4457,26 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   error_tok(tok, "invalid operands");
 }
 
+static Type *sizeof_arg(Token **rest, Token *tok, Node **expr) {
+  Type *ty;
+  VarAttr attr = {0};
+  if (is_typename_paren(rest, tok, &ty, &attr)) {
+    *expr = attr.typeof_vm_expr;
+    return ty;
+  }
+  *expr = unary(rest, tok);
+  add_type(*expr);
+  return (*expr)->ty;
+}
+
 static Node *unary(Token **rest, Token *tok) {
   // Casts
   {
     Type *ty;
-    if (is_typename_paren(&tok, tok, &ty)) {
-      Node *calc = calc_vla(ty, tok);
+    VarAttr attr = {0};
+    if (is_typename_paren(&tok, tok, &ty, &attr)) {
+      Node *calc = calc_vla2(ty, tok, &attr);
+
       Node *node = new_cast(unary(rest, tok), ty);
       node->is_nonlval = true;
       if (calc)
@@ -4529,7 +4549,7 @@ static Node *unary(Token **rest, Token *tok) {
     Type *ty;
     VarAttr attr = {0};
     int attr_align = 0;
-    if (is_typename_paren2(rest, tok->next, &ty, &attr)) {
+    if (is_typename_paren(rest, tok->next, &ty, &attr)) {
       attr_align = attr.align;
     } else {
       Node *node = unary(rest, tok->next);
@@ -4548,18 +4568,15 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_Countof) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      add_type(node);
-      ty = node->ty;
+    Node *expr = NULL;    
+    Type *ty = sizeof_arg(rest, tok->next, &expr);
 
-      if (ty->kind == TY_VLA && ty->vla_len_expr)
-        return new_binary(ND_COMMA, node, vla_count(ty, tok, false), tok);
+    if (ty->kind == TY_VLA) {
+      if (!ty->vla_len_expr)
+        expr = NULL;
+      chain_expr(&expr, vla_count(ty, tok, false));
+      return expr;
     }
-    if (ty->kind == TY_VLA)
-      return vla_count(ty, tok, false);
-
     if (ty->kind == TY_ARRAY) {
       if (ty->size < 0)
         error_tok(tok, "countof applied to incomplete array");
@@ -4569,18 +4586,13 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_sizeof) {
-    Type *ty;
-    if (!is_typename_paren(rest, tok->next, &ty)) {
-      Node *node = unary(rest, tok->next);
-      add_type(node);
-      ty = node->ty;
+    Node *expr = NULL;
+    Type *ty = sizeof_arg(rest, tok->next, &expr);
 
-      if (ty->kind == TY_VLA)
-        return new_binary(ND_COMMA, node, vla_size(ty, tok), tok);
+    if (ty->kind == TY_VLA) {
+      chain_expr(&expr, vla_size(ty, tok));
+      return expr;
     }
-    if (ty->kind == TY_VLA)
-      return vla_size(ty, tok);
-
     if (ty->is_flexible && ty->origin)
       ty = ty->origin;
     if (ty->size < 0)
@@ -5161,6 +5173,10 @@ static Node *compound_literal(Token **rest, Token *tok) {
     ty->kind == TY_VLA || (ty->size < 0 && ty->kind != TY_ARRAY))
     error_tok(tok, "invalid compound literal type");
 
+  Node *expr = NULL;
+  if (!is_const_context())
+    chain_expr(&expr, calc_vla2(ty, tok, &attr));
+
   if (is_const_context() || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
     var->is_compound_lit = true;
@@ -5172,23 +5188,25 @@ static Node *compound_literal(Token **rest, Token *tok) {
     else
       gvar_initializer(rest, tok, var);
 
-    return new_var_node(var, start);
+    chain_expr(&expr, new_var_node(var, start));
+    return expr;
   }
 
   Obj *var = new_lvar2(ty, decl_scope());
   var->is_compound_lit = true;
   var->alt_align = attr.align;
 
-  Node *init;
   if (attr.strg & SC_CONSTEXPR) {
     Obj *init_var = new_anon_gvar(ty);
     constexpr_initializer(&tok, tok, init_var, var);
-    init = new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok);
+    chain_expr(&expr,
+      new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok));
   } else {
-    init = lvar_initializer(&tok, tok, var);
+    chain_expr(&expr, lvar_initializer(&tok, tok, var));
   }
+  chain_expr(&expr, new_var_node(var, start));
   *rest = tok;
-  return new_binary(ND_CHAIN, init, new_var_node(var, tok), start);
+  return expr;
 }
 
 static Node *builtin_functions(Token **rest, Token *tok) {
@@ -5378,7 +5396,8 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node->m.lhs = ap_arg;
     tok = skip(tok, ",");
 
-    Type *ty = typename(&tok, tok);
+    VarAttr attr = {0};
+    Type *ty = typename2(&tok, tok, &attr);
     *rest = skip(tok, ")");
 
     if (va_arg_need_copy(ty))
@@ -5387,7 +5406,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node->ty = pointer_to(ty);
     node = new_unary(ND_DEREF, node, tok);
 
-    Node *calc = calc_vla(ty, tok);
+    Node *calc = calc_vla2(ty, tok, &attr);
     if (calc)
       return new_binary(ND_COMMA, calc, node, tok);
     return node;
@@ -5685,7 +5704,10 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
 
   Node *expr = NULL;
   while (is_typename(tok)) {
-    Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_REGISTER);
+    VarAttr attr = {0};
+    Type *basety = declspec(&tok, tok, &attr, SC_REGISTER);
+
+    chain_expr(&expr, calc_vla2(basety, tok, &attr));
 
     do {
       Token *name = NULL;
@@ -5804,6 +5826,8 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr) {
   if (!name)
     error_tok(tok, "function name omitted");
+  if (is_vm_ty(ty->return_ty))
+    error_tok(tok, "cannot return variably-modified type");
 
   Obj *fn = func_prototype2(ty, attr, name);
   assembler_name(&tok, tok, fn);
@@ -5847,10 +5871,15 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       error_tok(tok, "variable name omitted");
 
     bool is_definition = !(attr->strg & SC_EXTERN);
-    if (!is_definition && equal(tok, "=")) {
-      if (scope->parent)
-        error_tok(tok, "extern variable cannot be initialized");
-      is_definition = true;
+    if (!is_definition) {
+      if (is_vm_ty(ty))
+        error_tok(tok, "variably-modified type cannot be 'extern'");
+
+      if (equal(tok, "=")) {
+        if (scope->parent)
+          error_tok(tok, "extern variable cannot be initialized");
+        is_definition = true;
+      }
     }
 
     HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
