@@ -79,6 +79,17 @@ int16_t (*a)[++b][(__typeof__(b))c][d++];
   ASSERT(777, z);
 }
 
+void
+fn_oldstyle_typeof(p, q, i)
+  int i;
+  char (*p)[i+=1];
+  __typeof(i+=10,p) q;
+{
+  ASSERT(11, i);
+  ASSERT(1, sizeof *p);
+  ASSERT(1, sizeof *q);
+}
+
 int main(void){
   fn1(7,0,0,0);
   fn2(7,0,0,0);
@@ -97,6 +108,7 @@ int main(void){
 
   double f = 777.0;
   fn_oldstyle(0,260,f,264);
+  fn_oldstyle_typeof(0,0,0);
 
   printf("OK\n");
   return 0;
