@@ -635,6 +635,7 @@ struct Scope {
   Node *gotos;
   bool is_temporary;
   bool is_stmt;
+  bool is_fn_base;
   bool has_label;
 
   // C has two block scopes; one is for variables/typedefs and

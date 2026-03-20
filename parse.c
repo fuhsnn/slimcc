@@ -275,6 +275,12 @@ static void enter_isolated_scope(void) {
   scope = sc;
 }
 
+static void enter_fn_scope(Type *fn_ty) {
+  enter_isolated_scope();
+  scope->is_fn_base = true;
+  fn_ty->scopes = scope;
+}
+
 static void enter_tmp_scope(void) {
   enter_scope();
   scope->is_temporary = true;
@@ -317,8 +323,10 @@ static Node *leave_stmt_scope(DeferStmt *defr, Node *stmt_node) {
 
 static Scope *base_scope(void) {
   Scope *sc = scope;
-  while (sc->parent && sc->parent->parent)
+  while (sc->parent && !sc->is_fn_base)
     sc = sc->parent;
+  if (!sc->is_fn_base)
+    internal_error();
   return sc;
 }
 
@@ -1329,24 +1337,22 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     if (!is_def) {
       while (comma_list(rest, &tok, ")", tok != start))
         ident_tok(&tok, tok);
-    } else {
-      enter_isolated_scope();
-      fn_ty->scopes = scope;
-
-      Obj head = {0};
-      Obj *cur = &head;
-      while (comma_list(rest, &tok, ")", tok != start)) {
-        Token *name = ident_tok(&tok, tok);
-        cur = cur->param_next = new_param(get_ident(name), NULL);
-      }
-      fn_ty->param_list = head.param_next;
-      leave_scope();
+      return fn_ty;
     }
+    enter_fn_scope(fn_ty);
+
+    Obj head = {0};
+    Obj *cur = &head;
+    while (comma_list(rest, &tok, ")", tok != start)) {
+      Token *name = ident_tok(&tok, tok);
+      cur = cur->param_next = new_param(get_ident(name), NULL);
+    }
+    fn_ty->param_list = head.param_next;
+    leave_scope();
     return fn_ty;
   }
 
-  enter_isolated_scope();
-  fn_ty->scopes = scope;
+  enter_fn_scope(fn_ty);
 
   Obj head = {0};
   Obj *cur = &head;
@@ -5753,7 +5759,10 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fnctx = &(FuncContext){.fn = fn};
 
   Node *precalc = NULL;
-  if (ty->scopes) {
+
+  if (!ty->scopes) {
+    enter_fn_scope(ty);
+  } else {
     scope = ty->scopes;
 
     if (ty->is_oldstyle) {
@@ -5765,9 +5774,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
         if (var->ty->size <= 0)
           error_tok(tok, "incomplete parameter type");
     }
-  } else {
-    enter_scope();
-    ty->scopes = scope;
   }
 
   fn->body = compound_stmt2(rest, tok, ND_BLOCK);
