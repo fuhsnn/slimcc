@@ -1833,10 +1833,13 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);
 
-    if (attr->strg & SC_CONSTEXPR)
-      constexpr_initializer(&tok, skip(tok, "="), var, var);
-    else if (equal(tok, "="))
-      gvar_initializer(&tok, tok->next, var);
+    if (consume(&tok, tok, "=")) {
+      if (attr->strg & SC_CONSTEXPR)
+        constexpr_initializer(&tok, tok, var, var);
+      else
+        gvar_initializer(&tok, tok, var);
+      *cond_var = var;
+    }
     *rest = tok;
     return NULL;
   }
@@ -1862,6 +1865,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     if (equal(tok, "=")) {
       tok = skip(skip(tok->next, "{"), "}");
       node->kind = ND_ALLOCA_ZINIT;
+      *cond_var = var;
     }
     *rest = tok;
     chain_expr(&expr, node);
@@ -1895,31 +1899,45 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
 
 static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int clause) {
   Node *n = NULL;
-  Obj *var = NULL;
 
-  for (; is_typename(tok); var = NULL) {
-    clause++;
+  for (;; clause++) {
+    if (!is_typename(tok)) {
+      chain_expr(&n, expression(&tok, tok));
+      *rest = skip(tok, stopper);
+      return n;
+    }
 
     VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr, SC_AUTO | SC_CONSTEXPR | SC_REGISTER);
+    StorageClass msk = (clause == 0) ? SC_ALL : (SC_AUTO | SC_CONSTEXPR | SC_REGISTER);
+    Type *basety = declspec(&tok, tok, &attr, msk);
 
+    if (attr.strg & SC_EXTERN) {
+      global_declaration(&tok, tok, basety, &attr);
+      continue;
+    }
+    if (attr.strg & SC_TYPEDEF) {
+      chain_expr(&n, parse_typedef(&tok, tok, basety, &attr));
+      continue;
+    }
+
+    Obj *var = NULL;
     chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
-    for (; consume(&tok, tok, ","); var = NULL)
-      chain_expr(&n, declaration2(&tok, tok, basety, &attr, &(Obj *){0}));
 
-    if (!(clause == 1 && consume(&tok, tok, ";")))
-      break;
-  }
+    while (consume(&tok, tok, ",")) {
+      chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
+      var = NULL;
+    }
 
-  if (clause < 2 && !equal(tok, stopper)) {
-    chain_expr(&n, expression(&tok, tok));
-  } else {
+    if (clause == 0 && consume(&tok, tok, ";"))
+      continue;
+
     if (!var)
       error_tok(tok, "invalid condition");
+
     chain_expr(&n, new_var_node(var, tok));
+    *rest = skip(tok, stopper);
+    return n;
   }
-  *rest = skip(tok, stopper);
-  return n;
 }
 
 static Node *declaration(Token **rest, Token *tok) {
