@@ -774,8 +774,8 @@ struct Type {
   int64_t array_len;
 
   // Variable-length array
-  Node *vla_len; // # of elements
-  Obj *vla_cnt;  // _Countof() value
+  Node *vla_len_expr;
+  Obj *vla_len_val;
 
   // Struct
   Member *members;

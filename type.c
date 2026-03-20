@@ -302,7 +302,7 @@ static bool is_enum_compat(EnumVal *ev1, EnumVal *ev2) {
 
 static int64_t *get_arr_len(Type *ty) {
   if ((ty->kind == TY_ARRAY && ty->array_len >= 0) ||
-    (ty->kind == TY_VLA && !ty->vla_len))
+    (ty->kind == TY_VLA && !ty->vla_len_expr))
     return &ty->array_len;
   return NULL;
 }
@@ -512,7 +512,7 @@ Type *vla_of(Type *base, Node *len, int64_t arr_len) {
   if (len) {
     add_type(len);
     cast_if_not(ty_size_t, &len);
-    ty->vla_len = len;
+    ty->vla_len_expr = len;
   } else {
     ty->array_len = arr_len;
   }
@@ -612,7 +612,7 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, int msk, Node **cond, Obj **co
         return vla_of(base, NULL, *len);
       return array_of(base, *len);
     }
-    if (ty1->vla_len || ty2->vla_len)
+    if (ty1->vla_len_expr || ty2->vla_len_expr)
       return vla_cond_result_len(ty1, ty2, base, cond, cond_var);
 
     return array_of(base, -1);

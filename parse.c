@@ -228,7 +228,7 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, Token *label_list);
 static Node *expr_stmt(Token **rest, Token *tok);
-static Node *expr(Token **rest, Token *tok);
+static Node *expression(Token **rest, Token *tok);
 static int64_t align_expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
@@ -1749,7 +1749,7 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
   if (is_typename(tok)) {
     ty = typename(&tok, tok);
   } else {
-    Node *node = expr(&tok, tok);
+    Node *node = expression(&tok, tok);
     add_type(node);
     ty = node->ty;
 
@@ -1761,14 +1761,14 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
 }
 
 static Node *vla_count(Type *ty, Token *tok, bool is_void) {
-  if (!ty->vla_len)
+  if (!ty->vla_len_expr)
     return is_void ? NULL : new_size_t(ty->array_len, tok);
 
-  if (ty->vla_cnt)
-    return is_void ? NULL : new_var_node(ty->vla_cnt, tok);
+  if (ty->vla_len_val)
+    return is_void ? NULL : new_var_node(ty->vla_len_val, tok);
 
-  ty->vla_cnt = new_lvar2(ty_size_t, base_scope());
-  return new_binary(ND_ASSIGN, new_var_node(ty->vla_cnt, tok), ty->vla_len, tok);
+  ty->vla_len_val = new_lvar2(ty_size_t, base_scope());
+  return new_binary(ND_ASSIGN, new_var_node(ty->vla_len_val, tok), ty->vla_len_expr, tok);
 }
 
 static Node *vla_size(Type *ty, Token *tok) {
@@ -1912,7 +1912,7 @@ static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int claus
   }
 
   if (clause < 2 && !equal(tok, stopper)) {
-    chain_expr(&n, expr(&tok, tok));
+    chain_expr(&n, expression(&tok, tok));
   } else {
     if (!var)
       error_tok(tok, "invalid condition");
@@ -2742,7 +2742,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
       tok = skip(tok->next, "]");
     }
     cur->constraint = str_tok(&tok, tok);
-    cur->arg = expr(&tok, skip(tok, "("));
+    cur->arg = expression(&tok, skip(tok, "("));
     tok = skip(tok, ")");
   }
   *rest = tok;
@@ -3035,7 +3035,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     if (consume(rest, tok->next, ";"))
       return node;
 
-    Node *n = expr(&tok, tok->next);
+    Node *n = expression(&tok, tok->next);
     if (fnctx->fn->ty->return_ty->kind != TY_VOID)
       n = assign_cast(fnctx->fn->ty->return_ty, n);
     node->m.lhs = n;
@@ -3099,7 +3099,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     }
 
     if (!equal(tok, ")"))
-      node->ctrl.for_inc = expr(&tok, tok);
+      node->ctrl.for_inc = expression(&tok, tok);
     tok = skip(tok, ")");
 
     loop_body(rest, tok, node, label_list);
@@ -3129,7 +3129,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     tok = skip(tok, "while");
     tok = skip(tok, "(");
-    node->ctrl.cond = cond_cast(expr(&tok, tok));
+    node->ctrl.cond = cond_cast(expression(&tok, tok));
     tok = skip(tok, ")");
     *rest = skip(tok, ";");
     return leave_stmt_scope(dfr, node);
@@ -3150,7 +3150,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     if (equal(tok->next, "*")) {
       // [GNU] `goto *ptr` jumps to the address specified by `ptr`.
       Node *node = new_node(ND_GOTO_EXPR, tok);
-      node->m.lhs = expr(&tok, tok->next->next);
+      node->m.lhs = expression(&tok, tok->next->next);
       *rest = skip(tok, ";");
       return node;
     }
@@ -3277,7 +3277,7 @@ static Node *expr_stmt(Token **rest, Token *tok) {
   if (consume(rest, tok, ";"))
     return new_node(ND_NULL_STMT, tok);
 
-  Node *n = expr(&tok, tok);
+  Node *n = expression(&tok, tok);
   add_type(n);
   if (n->ty->size < 0 && n->ty->kind != TY_ARRAY)
     error_tok(n->tok, "expression has incomplete type");
@@ -3288,12 +3288,12 @@ static Node *expr_stmt(Token **rest, Token *tok) {
   return node;
 }
 
-// expr = assign ("," expr)?
-static Node *expr(Token **rest, Token *tok) {
+// expression = assign ("," expression)?
+static Node *expression(Token **rest, Token *tok) {
   Node *node = assign(&tok, tok);
 
   if (equal(tok, ",")) {
-    node = new_binary(ND_COMMA, node, expr(&tok, tok->next), tok);
+    node = new_binary(ND_COMMA, node, expression(&tok, tok->next), tok);
     node->is_nonlval = true;
   }
   *rest = tok;
@@ -4173,11 +4173,11 @@ static Node *assign(Token **rest, Token *tok) {
 }
 
 static Node *vla_cond_result_len2(Type *ty) {
-  if (!ty->vla_len)
+  if (!ty->vla_len_expr)
     return NULL;
-  if (!ty->vla_cnt)
+  if (!ty->vla_len_val)
     internal_error();
-  return new_var_node(ty->vla_cnt, ty->vla_len->tok);
+  return new_var_node(ty->vla_len_val, ty->vla_len_expr->tok);
 }
 
 Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **cond_var) {
@@ -4203,7 +4203,7 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
   return vla_of(base, node, 0);
 }
 
-// conditional = logor ("?" expr? ":" conditional)?
+// conditional = logor ("?" expression? ":" conditional)?
 static Node *conditional(Token **rest, Token *tok) {
   Node *cond = binary(&tok, tok, PCD_LOGOR);
 
@@ -4215,7 +4215,7 @@ static Node *conditional(Token **rest, Token *tok) {
   node->is_nonlval = true;
 
   if (!consume(&tok, tok->next, ":")) {
-    node->ctrl.then = expr(&tok, tok->next);
+    node->ctrl.then = expression(&tok, tok->next);
     tok = skip(tok, ":");
   }
   node->ctrl.els = conditional(rest, tok);
@@ -4551,7 +4551,7 @@ static Node *unary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
 
-      if (ty->kind == TY_VLA && ty->vla_len)
+      if (ty->kind == TY_VLA && ty->vla_len_expr)
         return new_binary(ND_COMMA, node, vla_count(ty, tok, false), tok);
     }
     if (ty->kind == TY_VLA)
@@ -4969,7 +4969,7 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
     if (equal(tok, "[")) {
       // x[y] is short for *(x+y)
       Token *start = tok;
-      Node *idx = expr(&tok, tok->next);
+      Node *idx = expression(&tok, tok->next);
       tok = skip(tok, "]");
 
       add_type(node);
@@ -5203,7 +5203,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node->ty = pointer_to(ty_void);
     tok = skip(tok->next, "(");
     int64_t val;
-    if (!is_const_expr(expr(&tok, tok), &val))
+    if (!is_const_expr(expression(&tok, tok), &val))
       error_tok(tok, "expected integer constant expression");
     node->num.val = val;
     *rest = skip(tok, ")");
@@ -5215,7 +5215,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node->ty = pointer_to(ty_void);
     tok = skip(tok->next, "(");
     int64_t val;
-    if (!is_const_expr(expr(&tok, tok), &val))
+    if (!is_const_expr(expression(&tok, tok), &val))
       error_tok(tok, "expected integer constant expression");
     node->num.val = val;
     *rest = skip(tok, ")");
@@ -5456,7 +5456,7 @@ static Node *primary(Token **rest, Token *tok) {
       return node;
     }
 
-    Node *node = expr(&tok, tok->next);
+    Node *node = expression(&tok, tok->next);
     *rest = skip(tok, ")");
     return node;
   }
