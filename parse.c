@@ -250,7 +250,8 @@ static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
-static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name);
+static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name);
+static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr);
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Node *calc_vla(Type *ty, Token *tok);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
@@ -1047,7 +1048,7 @@ static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
     error_tok(name, "conflict of attribute common/nocommon");
 }
 
-static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_def) {
+static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn) {
   apply_cdtor_attr("constructor", name, &fn->is_ctor, &fn->ctor_prior, attr->ctor_prior, attr->is_ctor);
   DeclAttr(cdtor_attr, "constructor", &fn->is_ctor, &fn->ctor_prior);
 
@@ -1071,14 +1072,6 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn, bool is_d
 
   fn->is_gnu_inline |= attr->is_gnu_inline;
   DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
-
-  if (!fn->is_static && !scope->parent) {
-    fn->export_fn |= !(attr->is_inline && !(attr->strg & SC_EXTERN));
-    if (is_def)
-      fn->export_fn_gnu |= !(attr->is_inline && (attr->strg & SC_EXTERN));
-    else
-      fn->export_fn_gnu |= (attr->is_inline && !(attr->strg & SC_EXTERN));
-  }
 }
 
 static void mem_attr(Token *name, Token *tok, VarAttr *attr, Member *mem) {
@@ -1804,18 +1797,10 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   Type *ty = declarator(&tok, tok, basety, &name);
 
   if (ty->kind == TY_FUNC) {
-    if (!name)
-      error_tok(tok, "function name omitted");
-
-    Obj *fn = func_prototype(ty, attr, name);
-    assembler_name(&tok, tok, fn);
-    aligned_attr(name, tok, attr, &fn->alt_align);
-    symbol_attr(name, tok, attr, fn);
-    func_attr(name, tok, attr, fn, false);
-
-    *rest = tok;
+    func_prototype(rest, tok, name, ty, attr);
     return NULL;
   }
+
   if (ty->kind == TY_VOID)
     error_tok(tok, "variable declared void");
   if (!name)
@@ -5505,7 +5490,7 @@ static Node *primary(Token **rest, Token *tok) {
       if (opt_std == STD_C89) {
         Type *ty = func_type(ty_int, tok);
         ty->is_oldstyle = true;
-        return new_var_node(func_prototype(ty, &(VarAttr){0}, tok), tok);
+        return new_var_node(func_prototype2(ty, &(VarAttr){0}, tok), tok);
       }
       error_tok(tok, "implicit declaration of a function");
     }
@@ -5652,7 +5637,7 @@ static Node *resolve_local_gotos(void) {
   return head.lbl.next;
 }
 
-static Obj *func_prototype(Type *ty, VarAttr *attr, Token *name) {
+static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name) {
   if (scope->parent && (attr->strg & SC_STATIC))
     error_tok(name, "static function not in file scope");
 
@@ -5816,6 +5801,29 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   arena_off(&ast_arena);
 }
 
+static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr) {
+  if (!name)
+    error_tok(tok, "function name omitted");
+
+  Obj *fn = func_prototype2(ty, attr, name);
+  assembler_name(&tok, tok, fn);
+  aligned_attr(name, tok, attr, &fn->alt_align);
+  symbol_attr(name, tok, attr, fn);
+  func_attr(name, tok, attr, fn);
+  *rest = tok;
+  return fn;
+}
+
+static void func_exportness(Obj *fn, VarAttr *attr, bool is_def) {
+  if (!fn->is_static && !scope->parent) {
+    fn->export_fn |= !(attr->is_inline && !(attr->strg & SC_EXTERN));
+    if (is_def)
+      fn->export_fn_gnu |= !(attr->is_inline && (attr->strg & SC_EXTERN));
+    else
+      fn->export_fn_gnu |= (attr->is_inline && !(attr->strg & SC_EXTERN));
+  }
+}
+
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
@@ -5824,20 +5832,14 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       &(DeclContext){.is_glob = !scope->parent});
 
     if (ty->kind == TY_FUNC) {
-      if (!name)
-        error_tok(tok, "function name omitted");
-
-      Obj *fn = func_prototype(ty, attr, name);
-      assembler_name(&tok, tok, fn);
-      aligned_attr(name, tok, attr, &fn->alt_align);
-      symbol_attr(name, tok, attr, fn);
+      Obj *fn = func_prototype(&tok, tok, name, ty, attr);
 
       if (first && !scope->parent && is_func_def(tok)) {
-        func_attr(name, tok, attr, fn, true);
+        func_exportness(fn, attr, true);
         func_definition(rest, tok, fn, ty);
         return;
       }
-      func_attr(name, tok, attr, fn, false);
+      func_exportness(fn, attr, false);
       continue;
     }
 
