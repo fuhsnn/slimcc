@@ -263,7 +263,7 @@ bool is_redundant_cast(Node *expr, Type *ty) {
   return false;
 }
 
-static void cast_if_not(Type *ty, Node **node) {
+void cast_if_not(Type *ty, Node **node) {
   if ((*node)->ty != ty)
     *node = new_cast(*node, ty);
 }

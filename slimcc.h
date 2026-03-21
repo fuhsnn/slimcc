@@ -519,6 +519,7 @@ typedef enum {
   ND_THREAD_FENCE,
   ND_UNREACHABLE,
   ND_UNKNOWN,
+  ND_DEP_NAME,
 } NodeKind;
 
 typedef struct CaseRange CaseRange;
@@ -863,6 +864,7 @@ Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *ptr_decay(Type *ty);
 void ptr_convert(Node **node);
+void cast_if_not(Type *ty, Node **node);
 Type *func_type(Type *return_ty, Token *tok);
 Type *get_func_ty(Node *node);
 Type *array_of(Type *base, int64_t size);

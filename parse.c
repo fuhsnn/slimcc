@@ -210,6 +210,8 @@ static FuncContext *fnctx;
 
 static bool *eval_recover;
 
+static bool is_member_list_context;
+
 static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
 static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma);
@@ -246,6 +248,7 @@ static Member *get_struct_member(Type *ty, Token *tok);
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind);
 static Type *struct_decl(Type *ty, int alt_align, int pack_align);
 static Type *union_decl(Type *ty, int alt_align, int pack_align);
+static Node *struct_ref(Node *node, Token *tok);
 static Node *postfix(Node *node, Token **rest, Token *tok);
 static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
@@ -1386,6 +1389,13 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
       error_tok(tok, "`[*]` not allowed here");
     expr = new_unknown(ty_size_t, tok);
     tok = tok->next->next;
+  } else if (equal(tok, ".") && is_member_list_context) {
+    expr = calloc(1, sizeof(Node));
+    expr->kind = ND_DEP_NAME;
+    expr->tok = ident_tok(&tok, tok->next);
+    expr->tok->is_live = true;
+    expr->ty = ty_size_t;
+    tok = skip(tok, "]");
   } else {
     expr = assign(&tok, tok);
     add_type(expr);
@@ -1412,8 +1422,12 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
       return vla_of(ty, NULL, array_len);
     return array_of(ty, array_len);
   }
-  if (is_const_context())
+  if (is_member_list_context) {
+    if (expr->kind != ND_DEP_NAME)
+      error_tok(tok, "variably-modified type in member list");
+  } else if (is_const_context()) {
     error_tok(tok, "variably-modified type in constant context");
+  }
   return vla_of(ty, expr, 0);
 }
 
@@ -4634,6 +4648,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
   Token *flex_tok = NULL;
   HashMap names = {0};
+  bool prv_ctx = is_member_list_context;
+  is_member_list_context = true;
 
   while (!equal(tok, "}")) {
     if (consume(&tok, tok, ";"))
@@ -4674,7 +4690,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         chk_mem_name2(&names, mem->name);
         mem->name->is_live = true;
       }
-      if (is_vm_ty(mem->ty) || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
+      if (mem->ty->kind == TY_VLA || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
         error_tok(tok, "invalid member type");
 
       if (consume(&tok, tok, ":")) {
@@ -4699,6 +4715,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       }
     }
   }
+  is_member_list_context = prv_ctx;
   free(names.buckets);
   *rest = tok->next;
 
@@ -4908,6 +4925,40 @@ static Member *get_struct_member(Type *ty, Token *tok) {
   return NULL;
 }
 
+static Type *dependent_len_ty(Node *parent, Type *ty) {
+  if (ty->kind == TY_VLA && ty->vla_len_expr &&
+    ty->vla_len_expr->kind == ND_DEP_NAME) {
+    Node *len_mem = struct_ref(parent, ty->vla_len_expr->tok);
+    cast_if_not(ty_size_t, &len_mem);
+    return vla_of(dependent_len_ty(parent, ty->base), len_mem, 0);
+  }
+  if (ty->base)  {
+    Type *nty = copy_type(ty);
+    nty->base = dependent_len_ty(parent, ty->base);
+    return nty;
+  }
+  return ty;
+}
+
+static Node *dependent_member_ref(Node *node, Member *mem, Token *tok) {
+  enter_tmp_scope();
+  Node *ptr = new_var_node(new_lvar(pointer_to(node->ty)), tok);
+  node = new_binary(ND_ASSIGN, ptr, new_unary(ND_ADDR, node, tok), tok);
+
+  Node *parent = new_unary(ND_DEREF, node, tok);
+  Type *nty = dependent_len_ty(parent, mem->ty);
+  chain_expr(&node, calc_vla(nty, tok));
+
+  Node *mem_node = new_unary(ND_MEMBER, parent, tok);
+  mem_node->m.member = mem;
+  add_type(mem_node);
+  mem_node->ty = nty;
+
+  chain_expr(&node, mem_node);
+  leave_scope();
+  return node;
+}
+
 // Create a node representing a struct member access, such as foo.bar
 // where foo is a struct and bar is a member name.
 //
@@ -4933,8 +4984,12 @@ static Node *struct_ref(Node *node, Token *tok) {
     Member *mem = get_struct_member(ty, tok);
     if (!mem)
       error_tok(tok, "no such member");
-    node = new_unary(ND_MEMBER, node, tok);
-    node->m.member = mem;
+    if (is_vm_ty(mem->ty) && !is_const_context()) {
+      node = dependent_member_ref(node, mem, tok);
+    } else {
+      node = new_unary(ND_MEMBER, node, tok);
+      node->m.member = mem;
+    }
     apply_cv_qualifier(node, ty);
 
     if (mem->name)
