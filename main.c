@@ -1133,8 +1133,13 @@ static void link_libgcc(StringArray *arr, bool link_libgcc, bool is_static) {
 static void link_libc(StringArray *arr) {
   if (opt_pthread)
     strarray_push(arr, "-lpthread");
-  if (!opt_nolibc)
+  if (!opt_nolibc) {
     strarray_push(arr, "-lc");
+    strarray_push(arr, "--push-state");
+    strarray_push(arr, "--as-needed");
+    strarray_push(arr, "-lm");
+    strarray_push(arr, "--pop-state");
+  }
 }
 
 void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
