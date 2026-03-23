@@ -403,6 +403,10 @@ static bool read_ucn(uint32_t *val, char **new_pos, char *p) {
       return false;
     c = (c << 4) | from_hex(p[i]);
   }
+  if (c >= 0xD800 && c <= 0xDFFF)
+    return false;
+  if (c > 0x10FFFF)
+    return false;
   *val = c;
   *new_pos = p + len;
   return true;
@@ -437,7 +441,7 @@ static uint32_t read_escape_seq(char **new_pos, char *p) {
   if (Casecmp(*p, 'u')) {
     uint32_t c;
     if (!read_ucn(&c, new_pos, p))
-      error_at(p, "incomplete universal character name");
+      error_at(p, "invalid universal character name");
     return c;
   }
 
@@ -915,7 +919,7 @@ void convert_ucn_ident(Token *tok) {
         continue;
       }
       uint32_t c;
-      if (Casecmp(p[1], 'u') && read_ucn(&c, &p, p + 1) &&
+      if (Casecmp(p[1], 'u') && read_ucn(&c, &p, p + 1) && (c > 0x7F) &&
         (p == tok->loc ? is_ident1(c) : is_ident2(c))) {
         q += encode_utf8(q, c);
         continue;
@@ -925,6 +929,9 @@ void convert_ucn_ident(Token *tok) {
   }
 
   tok->len = q - tok->loc;
+
+  while (q != end)
+    *q++ = ' ';
 }
 
 // Tokenize a given string and returns new tokens.

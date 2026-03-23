@@ -2092,16 +2092,18 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (tok->kind == TK_IDENT) {
-      tok->kind = ident_keyword(tok);
-
-      if (tok->kind == TK_IDENT && tok->has_ucn)
+    switch (tok->kind) {
+    case TK_IDENT:
+      if (tok->has_ucn)
         convert_ucn_ident(tok);
-    } else if (tok->kind == TK_STR) {
+      else
+        tok->kind = ident_keyword(tok);
+      break;
+    case TK_UNICODE:
+      error_tok(tok, "unallowed unicode character");
+    case TK_STR:
       if (tok->next->kind == TK_STR)
         join_adjacent_string_literals(tok);
-    } else if (tok->kind == TK_UNICODE) {
-      error_tok(tok, "unallowed unicode character");
     }
 
     stash_attr(tok, &attr_head, &attr_cur);
