@@ -288,6 +288,23 @@ static Token *split_paren(Token **rest, Token *tok) {
   return split_paren2(rest, tok, NULL);
 }
 
+static Token *split_comma(Token **rest, Token *tok, Token *next) {
+  Token head = {0};
+  Token *cur = &head;
+  while (!equal(tok, ","))
+  {
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
+  
+  if(next)
+    cur->next = next;
+  else
+    cur->next = new_eof(tok);
+  
+  return head.next;
+}
+
 static Token *split_bracket(Token **rest, Token *tok) {
   Token *start = tok;
   Token head = {0};
@@ -824,6 +841,24 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       continue;
     }
 
+    if (equal(tok, "__VA_SLICE_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      Token *start_tok = read_const_expr(tok);
+      int64_t start = eval_const_expr(start_tok);
+      tok = find_last_tok(start_tok)->next->next;
+      tok = skip(tok, ",");
+      Token *len_tok = read_const_expr(tok);
+      int64_t len = eval_const_expr(len_tok);
+      tok = find_last_tok(len_tok)->next->next;
+      
+      tok = skip(tok, ")");
+      
+      if (start < 0)
+      {
+        error_tok(start_tok, "Negative start");
+      }
+      assert(0);
+    }
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
       Token *rparen = NULL;
@@ -1826,6 +1861,8 @@ void init_macros(void) {
   define_macro("__x86_64", "1");
   define_macro("__x86_64__", "1");
 
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_SLICE__(s,l,...) __VA_SLICE_INTERNAL__(s,l)\n"), NULL, NULL));
+  
   add_builtin("__DATE__", date_macro, true);
   add_builtin("__TIME__", time_macro, true);
   add_builtin("__FILE__", file_macro, true);
