@@ -302,6 +302,7 @@ static Token *split_comma(Token **rest, Token *tok, Token *next) {
   else
     cur->next = new_eof(tok);
   
+  *rest = tok;
   return head.next;
 }
 
@@ -843,21 +844,19 @@ static Token *subst(Token *tok, MacroContext *ctx) {
 
     if (equal(tok, "__VA_SLICE_INTERNAL__") && consume(&tok, tok->next, "("))
     {
-      Token *start_tok = read_const_expr(tok);
+      Token *start_tok = read_const_expr(split_comma(&tok, tok, NULL));
       int64_t start = eval_const_expr(start_tok);
-      tok = find_last_tok(start_tok)->next->next;
       tok = skip(tok, ",");
-      Token *len_tok = read_const_expr(tok);
+      Token *len_tok = read_const_expr(split_paren2(&tok, tok, NULL));
       int64_t len = eval_const_expr(len_tok);
-      tok = find_last_tok(len_tok)->next->next;
-      
-      tok = skip(tok, ")");
       
       if (start < 0)
       {
         error_tok(start_tok, "Negative start");
       }
-      assert(0);
+      // assert(0);
+      
+      ctx->args[
     }
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
