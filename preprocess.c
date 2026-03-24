@@ -870,10 +870,21 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       }
       
       Token *arg_iter = vaarg->tok;
+      int level = 0;
       for(int64_t i = 1 ; i < start && arg_iter->kind != TK_EOF ; i++)
       {
-        while(!equal(arg_iter, ",") && arg_iter->kind != TK_EOF)
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
           arg_iter = arg_iter->next;
+        }
         
         if(arg_iter->kind != TK_EOF)
         {
@@ -882,10 +893,20 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       }
       
       int64_t len_it = 0;
+      level = 0;
       while(arg_iter->kind != TK_EOF && len_it < len)
       {
-        while(!equal(arg_iter, ",") && arg_iter->kind != TK_EOF)
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
         {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          
           cur = cur->next = copy_token(arg_iter);
           arg_iter = arg_iter->next;
         }
@@ -910,9 +931,21 @@ static Token *subst(Token *tok, MacroContext *ctx) {
         continue;
       }
       Token *va_it = vaarg->tok;
+      int64_t count = 0;
       while(va_it->kind != TK_EOF)
       {
+        while(!equal(va_it, ",") && va_it->kind != TK_EOF)
+        {
+          va_it = va_it->next;
+        }
+        if(va_it->kind != TK_EOF)
+          va_it = va_it->next; // skip comma
+        
+        count += 1;
       }
+      
+      cur = cur->next = new_num_token(count, tok, tok->next);
+      
       continue;
     }
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
@@ -1918,6 +1951,7 @@ void init_macros(void) {
   define_macro("__x86_64__", "1");
 
   read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_SLICE__(s,l,...) __VA_SLICE_INTERNAL__(s,l)\n"), NULL, NULL));
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_COUNT__(...) __VA_COUNT_INTERNAL__()\n"), NULL, NULL));
   
   add_builtin("__DATE__", date_macro, true);
   add_builtin("__TIME__", time_macro, true);
