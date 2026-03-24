@@ -928,6 +928,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       MacroArg *vaarg;
       if (!has_non_empty_va_arg(ctx, &vaarg))
       {
+        cur = cur->next = new_num_token(0, tok, tok->next);
         continue;
       }
       Token *arg_iter = vaarg->tok;
