@@ -930,16 +930,25 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       {
         continue;
       }
-      Token *va_it = vaarg->tok;
+      Token *arg_iter = vaarg->tok;
       int64_t count = 0;
-      while(va_it->kind != TK_EOF)
+      int level = 0;
+      while(arg_iter->kind != TK_EOF)
       {
-        while(!equal(va_it, ",") && va_it->kind != TK_EOF)
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
         {
-          va_it = va_it->next;
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          arg_iter = arg_iter->next;
         }
-        if(va_it->kind != TK_EOF)
-          va_it = va_it->next; // skip comma
+        if(arg_iter->kind != TK_EOF)
+          arg_iter = arg_iter->next; // skip comma
         
         count += 1;
       }
