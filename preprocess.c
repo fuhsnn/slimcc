@@ -844,34 +844,75 @@ static Token *subst(Token *tok, MacroContext *ctx) {
 
     if (equal(tok, "__VA_SLICE_INTERNAL__") && consume(&tok, tok->next, "("))
     {
-      Token *start_tok = read_const_expr(split_comma(&tok, tok, NULL));
+      MacroArg *start_arg = find_arg(&tok, tok, ctx);
+      Token *start_tok = read_const_expr(start_arg->tok);
       int64_t start = eval_const_expr(start_tok);
+      
       tok = skip(tok, ",");
-      Token *len_tok = read_const_expr(split_paren2(&tok, tok, NULL));
+      
+      MacroArg *len_arg = find_arg(&tok, tok, ctx);
+      Token *len_tok = read_const_expr(len_arg->tok);
       int64_t len = eval_const_expr(len_tok);
       
-      if (start < 0)
+      if (start <= 0)
       {
-        error_tok(start_tok, "Negative start");
+        error_tok(start_tok, "__VA_SLICE__ Non-positive start");
       }
-      // assert(0);
+      if(len < 0)
+      {
+        error_tok(start_tok, "__VA_SLICE__ Negative length");
+      }
       
-      printf("%.*s\n", ctx->args[2].tok->len, ctx->args[2].tok->loc);
       MacroArg *vaarg;
       if (!has_non_empty_va_arg(ctx, &vaarg))
       {
-        if(start != 0)
-          error_tok(len_tok, "__VA_SLICE__ start greater than available args");
-        if(len != 0)
-          error_tok(len_tok, "__VA_SLICE__ length greater than available args");
+        continue;
       }
       
       Token *arg_iter = vaarg->tok;
-      while(arg_iter->kind != TK_EOF)
+      for(int64_t i = 1 ; i < start && arg_iter->kind != TK_EOF ; i++)
       {
-        ;//cur = copy_token(vaarg->);
+        while(!equal(arg_iter, ",") && arg_iter->kind != TK_EOF)
+          arg_iter = arg_iter->next;
+        
+        if(arg_iter->kind != TK_EOF)
+        {
+          arg_iter = arg_iter->next; // skip comma
+        }
       }
       
+      int64_t len_it = 0;
+      while(arg_iter->kind != TK_EOF && len_it < len)
+      {
+        while(!equal(arg_iter, ",") && arg_iter->kind != TK_EOF)
+        {
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next;
+        }
+        len_it += 1;
+        if(arg_iter->kind != TK_EOF && len_it < len)
+        {
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next; // comma
+        }
+      }
+      
+      tok = tok->next; // skip final )
+      continue;
+    }
+    if(equal(tok, "__VA_COUNT_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      tok = skip(tok, ")");
+      
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg))
+      {
+        continue;
+      }
+      Token *va_it = vaarg->tok;
+      while(va_it->kind != TK_EOF)
+      {
+      }
       continue;
     }
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
