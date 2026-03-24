@@ -856,7 +856,23 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       }
       // assert(0);
       
-      ctx->args[
+      printf("%.*s\n", ctx->args[2].tok->len, ctx->args[2].tok->loc);
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg))
+      {
+        if(start != 0)
+          error_tok(len_tok, "__VA_SLICE__ start greater than available args");
+        if(len != 0)
+          error_tok(len_tok, "__VA_SLICE__ length greater than available args");
+      }
+      
+      Token *arg_iter = vaarg->tok;
+      while(arg_iter->kind != TK_EOF)
+      {
+        ;//cur = copy_token(vaarg->);
+      }
+      
+      continue;
     }
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
