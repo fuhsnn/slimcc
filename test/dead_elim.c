@@ -65,6 +65,22 @@ int test_unreach(int v) {
         not_to_be_called();
       }
       not_to_be_called();
+    case 8:
+      if ((v = 1) && 0)
+        not_to_be_called();
+      break;
+    case 9:
+      if (((v = 1) && 0) && 1)
+        not_to_be_called();
+      break;
+    case 10:
+      if (!((v = 1) || 1))
+        not_to_be_called();
+      break;
+    case 11:
+      if (!(((v = 1) || 1) || 0))
+        not_to_be_called();
+      break;
     }
   }
 
@@ -120,6 +136,10 @@ int main(void) {
   ASSERT(-1, test_unreach(5));
   ASSERT(7, test_unreach(6));
   ASSERT(9, test_unreach(7));
+  ASSERT(1, test_unreach(8));
+  ASSERT(1, test_unreach(9));
+  ASSERT(1, test_unreach(10));
+  ASSERT(1, test_unreach(11));
 
   ASSERT(1, test_reach(1));
   ASSERT(2, test_reach(2));

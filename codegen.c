@@ -180,7 +180,7 @@ static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
 static bool gen_load_opt_gp(Node *node, Reg r);
-static Node *bool_expr_opt(Node *node, bool *flip);
+static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void);
 static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz);
 static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64);
 
@@ -2004,18 +2004,24 @@ static void gen_funcall(Node *node) {
 
 static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
   if (opt_optimize) {
-    bool flip;
-    Node *expr = bool_expr_opt(node, &flip);
-    if (expr) {
-      node = expr;
-      jump_cond ^= flip;
-    }
-
     int64_t val;
     if (is_const_expr(node, &val)) {
       if (val == jump_cond)
         Printftn("jmp %s", jump_label);
       return;
+    }
+
+    bool flip, is_void;
+    Node *expr = bool_expr_opt(node, &flip, &is_void);
+    if (expr) {
+      if (is_void) {
+        gen_void_expr(expr);
+        if (flip == jump_cond)
+          Printftn("jmp %s", jump_label);
+        return;
+      }
+      node = expr;
+      jump_cond ^= flip;
     }
 
     if (is_cmp(node) && is_gp_ty(node->m.lhs->ty)) {
@@ -3582,9 +3588,10 @@ static void gen_member_opt(Node *node, int64_t *ofs) {
   gen_addr(node);
 }
 
-static Node *bool_expr_opt(Node *node, bool *flip) {
+static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void) {
   Node *boolexpr = NULL;
   bool has_not = false;
+  *is_void = false;
   bool boolexpr_has_not;
 
   for (;;) {
@@ -3593,14 +3600,25 @@ static Node *bool_expr_opt(Node *node, bool *flip) {
       has_not = !has_not;
       node = node->m.lhs;
       continue;
+    case ND_LOGOR:
+    case ND_LOGAND: {
+      int64_t val;
+      if (is_const_expr(node->m.rhs, &val)) {
+        if (val == (node->kind == ND_LOGAND)) {
+          node = node->m.lhs;
+          continue;
+        }
+        *is_void = true;
+        *flip = (node->kind == ND_LOGOR) ^ has_not;
+        return node->m.lhs;
+      }
+    }
     case ND_EQ:
     case ND_NE:
     case ND_LT:
     case ND_LE:
     case ND_GT:
     case ND_GE:
-    case ND_LOGOR:
-    case ND_LOGAND:
       *flip = has_not;
       return node;
     }
@@ -3620,11 +3638,20 @@ static Node *bool_expr_opt(Node *node, bool *flip) {
 }
 
 static bool gen_bool_opt(Node *node) {
-  bool flip;
-  Node *boolexpr = bool_expr_opt(node, &flip);
+  bool flip, is_void;
+  Node *boolexpr = bool_expr_opt(node, &flip, &is_void);
   if (!boolexpr || boolexpr == node)
     return false;
   node = boolexpr;
+
+  if (is_void) {
+    gen_void_expr(node);
+    if (flip)
+      Printstn("movl $1, %%eax");
+    else
+      Printstn("xor %%eax, %%eax");
+    return true;
+  }
 
   if (is_cmp(node)) {
     Node n = *node;
@@ -3671,6 +3698,15 @@ static bool gen_skip_unreachable_stmt(Node *node, bool is_reach, char *lbl) {
   return true;
 }
 
+static bool gen_if_stmt_const(Node *node, bool cond, char *else_label) {
+  if (cond) {
+    bool is_reach = gen_reachable_stmt(node->ctrl.then);
+    return gen_skip_unreachable_stmt(node->ctrl.els, is_reach, else_label);
+  }
+  bool is_reach = node->ctrl.els ? gen_reachable_stmt(node->ctrl.els) : true;
+  return gen_skip_unreachable_stmt(node->ctrl.then, is_reach, else_label);
+}
+
 static bool gen_if_stmt(Node *node, bool is_reach) {
   int64_t c = count();
   char else_label[STRBUF_SZ];
@@ -3680,17 +3716,20 @@ static bool gen_if_stmt(Node *node, bool is_reach) {
     is_reach = gen_unreachable_stmt(node->ctrl.then);
     return gen_skip_unreachable_stmt(node->ctrl.els, is_reach, else_label);
   }
+
   int64_t val;
-  if (is_const_expr(node->ctrl.cond, &val)) {
-    if (val) {
-      is_reach = gen_reachable_stmt(node->ctrl.then);
-      return gen_skip_unreachable_stmt(node->ctrl.els, is_reach, else_label);
-    }
-    is_reach = node->ctrl.els ? gen_reachable_stmt(node->ctrl.els) : true;
-    return gen_skip_unreachable_stmt(node->ctrl.then, is_reach, else_label);
+  if (is_const_expr(node->ctrl.cond, &val))
+    return gen_if_stmt_const(node, val, else_label);
+
+  bool flip, is_void;
+  Node *expr = bool_expr_opt(node->ctrl.cond, &flip, &is_void);
+
+  if (is_void) {
+    gen_void_expr(expr);
+    return gen_if_stmt_const(node, flip, else_label);
   }
 
-  gen_cond(node->ctrl.cond, false, else_label);
+  gen_cond(expr, flip, else_label);
   is_reach = gen_reachable_stmt(node->ctrl.then);
   if (!node->ctrl.els) {
     Printfsn("%s:", else_label);
