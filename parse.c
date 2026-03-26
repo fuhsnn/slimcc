@@ -1159,7 +1159,6 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
     switch (tk_kind) {
     case TK_auto: attr->strg |= SC_AUTO; continue;
-    case TK_constexpr: attr->strg |= SC_CONSTEXPR; qual |= Q_CONST; continue;
     case TK_extern: attr->strg |= SC_EXTERN; continue;
     case TK_register: attr->strg |= SC_REGISTER; continue;
     case TK_static: attr->strg |= SC_STATIC; continue;
@@ -1167,6 +1166,10 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_thread_local: attr->strg |= SC_THREAD; continue;
     case TK_inline: attr->is_inline = true; continue;
     case TK_Noreturn: attr->is_noreturn = true; continue;
+    case TK_constexpr:
+      attr->strg |= SC_CONSTEXPR;
+      qual |= Q_CONST;
+      continue;
     case TK_alignas: {
       tok = skip(tok, "(");
       int align;
@@ -4802,12 +4805,19 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   return ty;
 }
 
+static int64_t member_align(Member *mem, int pack_align) {
+  if (mem->is_packed)
+    return 1;
+  if (pack_align > 0 && pack_align < mem->ty->align)
+    return pack_align;
+  return mem->ty->align;
+}
+
 static Type *struct_decl(Type *ty, int align, int pack_align) {
   int64_t bits = 0;
 
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    int64_t mem_align = mem->is_packed ? 1 :
-      (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
+    int64_t mem_align = member_align(mem, pack_align);
 
     if (!mem->is_bitfield || mem->name) {
       align = MAX(align, mem_align);
@@ -4872,8 +4882,7 @@ static Type *struct_decl(Type *ty, int align, int pack_align) {
 
 static Type *union_decl(Type *ty, int align, int pack_align) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    int64_t mem_align = mem->is_packed ? 1 :
-      (pack_align > 0 && pack_align < mem->ty->align) ? pack_align : mem->ty->align;
+    int64_t mem_align = member_align(mem, pack_align);
 
     if (!mem->is_bitfield || mem->name) {
       align = MAX(align, mem_align);

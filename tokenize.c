@@ -23,8 +23,8 @@ static bool has_space;
 static void canonicalize_newline(char *p);
 static void remove_backslash_newline(char *p, SlashDelta *dlt);
 
-#define startswith2(p, x, y) ((*(p) == x) && ((p)[1] == y))
-#define startswith3(p, x, y, z) ((*(p) == x) && ((p)[1] == y) && ((p)[2] == z))
+#define Startswith2(p, x, y) ((*(p) == x) && ((p)[1] == y))
+#define Startswith3(p, x, y, z) ((*(p) == x) && ((p)[1] == y) && ((p)[2] == z))
 
 // Reports an error and exit.
 void error(char *fmt, ...) {
@@ -767,7 +767,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
       ll = true, p += 2;
     else
       l = true, p += 1;
-  } else if (startswith2(p, 'w', 'b') || startswith2(p, 'W', 'B')) {
+  } else if (Startswith2(p, 'w', 'b') || Startswith2(p, 'W', 'B')) {
     wb = true, p += 2;
   }
 
@@ -962,7 +962,7 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Skip line comments.
-    if (startswith2(p, '/', '/')) {
+    if (Startswith2(p, '/', '/')) {
       p += 2;
       while (*p != '\n')
         p++;
@@ -971,10 +971,10 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Skip block comments.
-    if (startswith2(p, '/', '*')) {
+    if (Startswith2(p, '/', '*')) {
       char *q = p + 2;
       for (; *q; q++)
-        if (startswith2(q, '*', '/'))
+        if (Startswith2(q, '*', '/'))
           break;
       if (!*q)
         error_at(p, "unclosed block comment");
@@ -1019,28 +1019,31 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
       }
 
       // UTF-8 string literal
-      if (startswith3(p, 'u', '8', '\"')) {
-        cur = cur->next = read_string_literal(p, p + 2, opt_std >= STD_C23 ? ty_uchar : ty_pchar);
+      if (Startswith3(p, 'u', '8', '\"')) {
+        if (opt_std >= STD_C23)
+          cur = cur->next = read_string_literal(p, p + 2, ty_uchar);
+        else
+          cur = cur->next = read_string_literal(p, p + 2, ty_pchar);
         p += cur->len;
         continue;
       }
 
       // UTF-16 string literal
-      if (startswith2(p, 'u', '\"')) {
+      if (Startswith2(p, 'u', '\"')) {
         cur = cur->next = read_utf16_string_literal(p, p + 1);
         p += cur->len;
         continue;
       }
 
       // Wide string literal
-      if (startswith2(p, 'L', '\"')) {
+      if (Startswith2(p, 'L', '\"')) {
         cur = cur->next = read_utf32_string_literal(p, p + 1, ty_wchar_t);
         p += cur->len;
         continue;
       }
 
       // UTF-32 string literal
-      if (startswith2(p, 'U', '\"')) {
+      if (Startswith2(p, 'U', '\"')) {
         cur = cur->next = read_utf32_string_literal(p, p + 1, ty_char32_t);
         p += cur->len;
         continue;
@@ -1054,28 +1057,28 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
       }
 
       // UTF-8 character literal
-      if (startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
+      if (Startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
         cur = cur->next = read_unicode_char_literal(p, p + 2, ty_uchar);
         p += cur->len;
         continue;
       }
 
       // UTF-16 character literal
-      if (startswith2(p, 'u', '\'')) {
+      if (Startswith2(p, 'u', '\'')) {
         cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char16_t);
         p += cur->len;
         continue;
       }
 
       // Wide character literal
-      if (startswith2(p, 'L', '\'')) {
+      if (Startswith2(p, 'L', '\'')) {
         cur = cur->next = read_unicode_char_literal(p, p + 1, ty_wchar_t);
         p += cur->len;
         continue;
       }
 
       // UTF-32 character literal
-      if (startswith2(p, 'U', '\'')) {
+      if (Startswith2(p, 'U', '\'')) {
         cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char32_t);
         p += cur->len;
         continue;
@@ -1141,7 +1144,7 @@ Token *tokenize_file(char *path, Token *tok, Token **end) {
   fclose(out);
 
   // Wipe BOM markers
-  if (startswith3(buf, (char)0xef, (char)0xbb, (char)0xbf))
+  if (Startswith3(buf, (char)0xef, (char)0xbb, (char)0xbf))
     buf[0] = buf[1] = buf[2] = ' ';
 
   canonicalize_newline(buf);
@@ -1219,7 +1222,7 @@ static void remove_backslash_newline(char *start, SlashDelta *dlt) {
     int n = 0;
 
     do {
-      if (startswith2(p, '\\', '\n')) {
+      if (Startswith2(p, '\\', '\n')) {
         p += 2;
         n++;
         delta_push(dlt, q - start, n);

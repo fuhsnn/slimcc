@@ -261,6 +261,16 @@ static int get_align(Obj *var) {
   return var->ty->align;
 }
 
+static int reg_copy_sz(int rem) {
+  if (rem >= 8)
+    return 8;
+  if (rem >= 4)
+    return 4;
+  if (rem >= 2)
+    return 2;
+  return 1;
+}
+
 static int64_t count(void) {
   static int64_t i = 1;
   return i++;
@@ -735,7 +745,7 @@ static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz)
       i += 16;
       continue;
     }
-    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
+    int p2 = reg_copy_sz(rem);
     Printftn("mov %d+%s(%s), %s", i, sofs, sptr, reg_dx(p2));
     Printftn("mov %s, %d+%s(%s)", reg_dx(p2), i, dofs, dptr);
     i += p2;
@@ -757,7 +767,7 @@ static void gen_mem_zero(int dofs, char *dptr, int sz) {
   Printstn("xor %%eax, %%eax");
   for (int i = 0; i < sz;) {
     int rem = sz - i;
-    int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
+    int p2 = reg_copy_sz(rem);
     Printftn("mov %s, %d(%s)", reg_ax(p2), i + dofs, dptr);
     i += p2;
   }
@@ -4997,14 +5007,15 @@ static void emit_data(Obj *var) {
     int rem = (rel ? rel->offset : sz) - pos;
 
     while (rem > 0) {
-      if (rem >= 8)
-        Printftn(".quad %"PRIi64, BUFF_CAST(int64_t, &var->init_data[pos])), pos += 8, rem -= 8;
-      else if (rem >= 4)
-        Printftn(".long %"PRIi32, BUFF_CAST(int32_t, &var->init_data[pos])), pos += 4, rem -= 4;
-      else if (rem >= 2)
-        Printftn(".word %"PRIi16, BUFF_CAST(int16_t, &var->init_data[pos])), pos += 2, rem -= 2;
-      else
-        Printftn(".byte %"PRIi8, BUFF_CAST(int8_t, &var->init_data[pos])), pos += 1, rem -= 1;
+      int p2 = reg_copy_sz(rem);
+      switch (p2) {
+      case 1: Printftn(".byte %" PRIi8, BUFF_CAST(int8_t, &var->init_data[pos])); break;
+      case 2: Printftn(".word %" PRIi16, BUFF_CAST(int16_t, &var->init_data[pos])); break;
+      case 4: Printftn(".long %" PRIi32, BUFF_CAST(int32_t, &var->init_data[pos])); break;
+      case 8: Printftn(".quad %" PRIi64, BUFF_CAST(int64_t, &var->init_data[pos])); break;
+      }
+      pos += p2;
+      rem -= p2;
     }
 
     if (!rel)

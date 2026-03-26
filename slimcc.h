@@ -70,9 +70,16 @@
 #endif
 
 #if defined(__GNUC__)
-#define BUFF_CAST(__t, __ptr) (((union{char __m1; __t __m2;}*)(__ptr))->__m2)
+# define BUFF_CAST(_t, _ptr)  \
+   __extension__({            \
+    union U {                 \
+      char _m1;               \
+      _t _m2;                 \
+    };                        \
+    ((union U *)(_ptr))->_m2; \
+   })
 #else
-#define BUFF_CAST(__t, __ptr) (*((__t*)(__ptr)))
+# define BUFF_CAST(_t, _ptr) (*((_t *)(_ptr)))
 #endif
 
 #ifdef NO_LONG_DOUBLE
@@ -266,7 +273,7 @@ struct Token {
   TokenKind kind : 16;    // Token kind
   bool at_bol : 1;        // True if this token is at beginning of line
   bool has_space : 1;     // True if this token follows a space character
-  bool dont_expand : 1;   // True if a macro token is encountered during the macro's expansion
+  bool dont_expand : 1;   // True if a macro name is encountered during its expansion
   bool is_incl_guard : 1;
   bool is_root : 1;
   bool is_live : 1;

@@ -976,10 +976,7 @@ static void print_dependencies(char *input) {
     for (int i = 1; i < dep_files.len; i++)
       fprintf(out, "%s:\n", quote_makefile(skip_dot_slash(dep_files.data[i])));
 
-  if (out == stdout)
-    fflush(out);
-  else
-    fclose(out);
+  close_file(out);
 }
 
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
