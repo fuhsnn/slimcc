@@ -66,13 +66,15 @@ static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
     HashEntry *ent = &buckets[hash++ & msk];
 
     switch ((uintptr_t)ent->key) {
-    case 0:
+    case 0: {
       return NULL;
+    }
     default:
       if (ent->keylen == keylen && !memcmp(ent->key, key, keylen))
         return ent;
-    case TOMBSTONE_CASE:
+    case TOMBSTONE_CASE: {
       break;
+    }
     }
   }
 }
@@ -101,8 +103,9 @@ HashEntry *hashmap_get_or_insert(HashMap *map, char *key, int keylen) {
     default:
       if (ent->keylen == keylen && !memcmp(ent->key, key, keylen))
         return ent;
-    case TOMBSTONE_CASE:
+    case TOMBSTONE_CASE: {
       break;
+    }
     }
   }
 }
@@ -117,7 +120,7 @@ void *hashmap_get2(HashMap *map, char *key, int keylen) {
 }
 
 void hashmap_put(HashMap *map, char *key, void *val) {
-   hashmap_put2(map, key, strlen(key), val);
+  hashmap_put2(map, key, strlen(key), val);
 }
 
 void hashmap_put2(HashMap *map, char *key, int keylen, void *val) {

@@ -1,0 +1,18 @@
+BasedOnStyle: LLVM
+AllowShortFunctionsOnASingleLine: false
+ContinuationIndentWidth: 2
+BreakBinaryOperations: RespectPrecedence
+
+AlignEscapedNewlines: Left
+IndentPPDirectives: AfterHash
+PPIndentWidth: 1
+
+AllowShortCaseLabelsOnASingleLine: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+
+ColumnLimit: 90
+PenaltyExcessCharacter: 10
+PenaltyBreakAssignment: 100
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakOpenParenthesis: 120

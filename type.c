@@ -184,13 +184,17 @@ int32_t bitfield_footprint(Member *mem) {
 
 bool is_integer(Type *ty) {
   TypeKind k = ty->kind;
-  return k == TY_BOOL || k == TY_PCHAR || k == TY_CHAR || k == TY_SHORT ||
-         k == TY_INT  || k == TY_LONG || k == TY_LONGLONG;
+  return k == TY_BOOL ||
+         k == TY_PCHAR ||
+         k == TY_CHAR ||
+         k == TY_SHORT ||
+         k == TY_INT ||
+         k == TY_LONG ||
+         k == TY_LONGLONG;
 }
 
 bool is_flonum(Type *ty) {
-  return ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE ||
-         ty->kind == TY_LDOUBLE;
+  return ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE || ty->kind == TY_LDOUBLE;
 }
 
 bool is_numeric(Type *ty) {
@@ -217,13 +221,10 @@ static bool is_bitfield2(Node *node, int *width) {
   switch (node->kind) {
   case ND_ASSIGN:
   case ND_ARITH_ASSIGN:
-  case ND_POST_INCDEC:
-    return is_bitfield2(node->m.lhs, width);
+  case ND_POST_INCDEC:  return is_bitfield2(node->m.lhs, width);
   case ND_CHAIN:
-  case ND_COMMA:
-    return is_bitfield2(node->m.rhs, width);
-  case ND_STMT_EXPR:
-    return is_bitfield2(node->blk.result->m.lhs, width);
+  case ND_COMMA:        return is_bitfield2(node->m.rhs, width);
+  case ND_STMT_EXPR:    return is_bitfield2(node->blk.result->m.lhs, width);
   case ND_MEMBER:
     if (node->m.member->is_bitfield) {
       *width = node->m.member->bit_width;
@@ -302,14 +303,13 @@ static bool is_enum_compat(EnumVal *ev1, EnumVal *ev2) {
 
 static int64_t *get_arr_len(Type *ty) {
   if ((ty->kind == TY_ARRAY && ty->array_len >= 0) ||
-    (ty->kind == TY_VLA && !ty->vla_len_expr))
+      (ty->kind == TY_VLA && !ty->vla_len_expr))
     return &ty->array_len;
   return NULL;
 }
 
 static bool is_tag_compat(Type *t1, Type *t2) {
-  return opt_std >= STD_C23 &&
-    t1->tag && t2->tag && equal_tok(t1->tag, t2->tag);
+  return opt_std >= STD_C23 && t1->tag && t2->tag && equal_tok(t1->tag, t2->tag);
 }
 
 static bool is_arr_qual_compat(Type *t1, Type *t2) {
@@ -335,23 +335,23 @@ static bool is_qual_compat(Type *t1, Type *t2) {
 }
 
 bool is_record_compat(Type *t1, Type *t2) {
-  if (t1->size < 0 || t2->size < 0 ||
-    t1->align != t2->align ||
-    t1->is_flexible != t2->is_flexible)
+  if (t1->size < 0 ||
+      t2->size < 0 ||
+      t1->align != t2->align ||
+      t1->is_flexible != t2->is_flexible)
     return false;
 
   Member *mem1 = t1->members;
   Member *mem2 = t2->members;
   while (mem1 && mem2) {
     if (mem1->offset != mem2->offset ||
-      mem1->alt_align != mem2->alt_align ||
-      mem1->is_bitfield != mem2->is_bitfield ||
-      mem1->bit_offset != mem2->bit_offset ||
-      mem1->bit_width != mem2->bit_width)
+        mem1->alt_align != mem2->alt_align ||
+        mem1->is_bitfield != mem2->is_bitfield ||
+        mem1->bit_offset != mem2->bit_offset ||
+        mem1->bit_width != mem2->bit_width)
       return false;
 
-    if ((!mem1->name != !mem2->name) ||
-      (mem1->name && !equal_tok(mem1->name, mem2->name)))
+    if ((!mem1->name != !mem2->name) || (mem1->name && !equal_tok(mem1->name, mem2->name)))
       return false;
 
     Type *t1 = mem1->ty;
@@ -360,8 +360,9 @@ bool is_record_compat(Type *t1, Type *t2) {
       return false;
 
     if (t1->kind == TY_STRUCT || t1->kind == TY_UNION) {
-      if (!mem1->name != !t1->tag || !mem2->name != !t2->tag ||
-        (t1->tag && !equal_tok(t1->tag, t2->tag)))
+      if (!mem1->name != !t1->tag ||
+          !mem2->name != !t2->tag ||
+          (t1->tag && !equal_tok(t1->tag, t2->tag)))
         return false;
       if (!is_qual_compat(t1, t2) || !is_record_compat(t1, t2))
         return false;
@@ -391,7 +392,8 @@ bool is_compatible(Type *t1, Type *t2) {
 
   if (t1->is_enum && t2->is_enum)
     return t1->is_int_enum == t2->is_int_enum &&
-      is_tag_compat(t1, t2) && is_enum_compat(t1->enums, t2->enums);
+           is_tag_compat(t1, t2) &&
+           is_enum_compat(t1->enums, t2->enums);
 
   if (is_array(t1) && is_array(t2)) {
     int64_t *len1 = get_arr_len(t1);
@@ -411,17 +413,13 @@ bool is_compatible(Type *t1, Type *t2) {
   case TY_SHORT:
   case TY_INT:
   case TY_LONG:
-  case TY_LONGLONG:
-    return t1->is_unsigned == t2->is_unsigned;
+  case TY_LONGLONG: return t1->is_unsigned == t2->is_unsigned;
   case TY_BITINT:
-    return (t1->is_unsigned == t2->is_unsigned) &&
-      (t1->bit_cnt == t2->bit_cnt);
+    return (t1->is_unsigned == t2->is_unsigned) && (t1->bit_cnt == t2->bit_cnt);
   case TY_FLOAT:
   case TY_DOUBLE:
-  case TY_LDOUBLE:
-    return true;
-  case TY_PTR:
-    return is_compatible2(t1->base, t2->base);
+  case TY_LDOUBLE: return true;
+  case TY_PTR:     return is_compatible2(t1->base, t2->base);
   case TY_FUNC: {
     if (!is_compatible(t1->return_ty, t2->return_ty))
       return false;
@@ -437,8 +435,7 @@ bool is_compatible(Type *t1, Type *t2) {
     return p1 == NULL && p2 == NULL;
   }
   case TY_STRUCT:
-  case TY_UNION:
-    return is_tag_compat(t1, t2) && is_record_compat(t1, t2);
+  case TY_UNION:  return is_tag_compat(t1, t2) && is_record_compat(t1, t2);
   }
   return false;
 }
@@ -539,17 +536,13 @@ Node *assign_cast(Type *to_ty, Node *expr) {
 
 static int int_rank(Type *t) {
   switch (t->kind) {
-    case TY_BITINT:
-    case TY_BOOL:
-    case TY_CHAR:
-    case TY_SHORT:
-      return 0;
-    case TY_INT:
-      return 1;
-    case TY_LONG:
-      return 2;
-    case TY_LONGLONG:
-      return 3;
+  case TY_BITINT:
+  case TY_BOOL:
+  case TY_CHAR:
+  case TY_SHORT:    return 0;
+  case TY_INT:      return 1;
+  case TY_LONG:     return 2;
+  case TY_LONGLONG: return 3;
   }
   internal_error();
 }
@@ -559,7 +552,8 @@ bool is_null_ptr_constant(Node *node) {
     return true;
 
   if (node->kind == ND_CAST &&
-    node->ty->kind == TY_PTR && is_compatible2(node->ty->base, ty_void))
+      node->ty->kind == TY_PTR &&
+      is_compatible2(node->ty->base, ty_void))
     node = node->m.lhs;
 
   if (node->ty->kind == TY_BITINT)
@@ -693,12 +687,9 @@ static Type *get_common_type(Node **lhs, Node **rhs) {
     return ty1->is_unsigned ? ty1 : ty2;
 
   switch (rnk_ty->kind) {
-    case TY_INT:
-      return ty_uint;
-    case TY_LONG:
-      return ty_ulong;
-    case TY_LONGLONG:
-      return ty_ullong;
+  case TY_INT:      return ty_uint;
+  case TY_LONG:     return ty_ulong;
+  case TY_LONGLONG: return ty_ullong;
   }
   internal_error();
 }
@@ -721,14 +712,16 @@ void add_type(Node *node) {
     return;
 
   switch (node->kind) {
-  case ND_NUM:
+  case ND_NUM: {
     node->ty = ty_int;
     return;
+  }
   case ND_ADD:
   case ND_SUB: {
     add_type(node->m.lhs);
     add_type(node->m.rhs);
-    Node *ptr = node->m.lhs->ty->base ? node->m.lhs : node->m.rhs->ty->base ? node->m.rhs : NULL;
+    Node *ptr = node->m.lhs->ty->base ? node->m.lhs
+                                      : (node->m.rhs->ty->base ? node->m.rhs : NULL);
     if (ptr)
       node->ty = ptr->ty;
     else
@@ -774,15 +767,16 @@ void add_type(Node *node) {
     ptr_convert(&node->m.lhs);
     ptr_convert(&node->m.rhs);
     if ((is_ptr(node->m.lhs->ty) && is_ptr(node->m.rhs->ty)) ||
-      (is_ptr(node->m.lhs->ty) && int_to_ptr(&node->m.rhs)) ||
-      (is_ptr(node->m.rhs->ty) && int_to_ptr(&node->m.lhs)))
+        (is_ptr(node->m.lhs->ty) && int_to_ptr(&node->m.rhs)) ||
+        (is_ptr(node->m.rhs->ty) && int_to_ptr(&node->m.lhs)))
       return;
     usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
   case ND_FUNCALL:
-  case ND_STMT_EXPR:
+  case ND_STMT_EXPR: {
     assert(!!node->ty);
     return;
+  }
   case ND_NOT:
     add_type(node->m.lhs);
     node->ty = ty_int;
@@ -808,9 +802,10 @@ void add_type(Node *node) {
     int_promotion(&node->m.lhs);
     node->ty = node->m.lhs->ty;
     return;
-  case ND_VAR:
+  case ND_VAR: {
     node->ty = node->m.var->ty;
     return;
+  }
   case ND_COND: {
     add_type(node->ctrl.cond);
     Node **lhs = &node->ctrl.then;
@@ -822,8 +817,9 @@ void add_type(Node *node) {
       node->ty = ty_void;
     else if (is_ptr((*lhs)->ty) || is_ptr((*rhs)->ty))
       node->ty = cond_ptr_conv(lhs, rhs, &node->ctrl.cond);
-    else if (!is_numeric((*lhs)->ty) && (*lhs)->ty->size >= 0 &&
-      is_compatible((*lhs)->ty, (*rhs)->ty))
+    else if (!is_numeric((*lhs)->ty) &&
+             (*lhs)->ty->size >= 0 &&
+             is_compatible((*lhs)->ty, (*rhs)->ty))
       node->ty = (*lhs)->ty;
     else
       node->ty = usual_arith_conv(lhs, rhs);
@@ -870,19 +866,22 @@ void add_type(Node *node) {
     add_type(node->ctrl.cond);
     add_type(node->ctrl.then);
     return;
-  case ND_EXPR_STMT:
+  case ND_EXPR_STMT: {
     add_type(node->m.lhs);
     return;
+  }
   case ND_BLOCK:
     for (Node *n = node->blk.body; n; n = n->next)
       add_type(n);
     break;
   case ND_ALLOCA:
-  case ND_ALLOCA_ZINIT:
+  case ND_ALLOCA_ZINIT: {
     add_type(node->m.lhs);
-  case ND_LABEL_VAL:
+  }
+  case ND_LABEL_VAL: {
     node->ty = pointer_to(ty_void);
     return;
+  }
   case ND_CAS:
     add_type(node->cas.addr);
     add_type(node->cas.old_val);
@@ -918,8 +917,9 @@ void add_type(Node *node) {
     return;
   case ND_NULL_EXPR:
   case ND_THREAD_FENCE:
-  case ND_UNREACHABLE:
+  case ND_UNREACHABLE: {
     node->ty = ty_void;
     return;
+  }
   }
 }

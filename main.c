@@ -1,7 +1,11 @@
 #include "slimcc.h"
 
 typedef enum {
-  FILE_NONE, FILE_C, FILE_ASM, FILE_PP_ASM, FILE_LDARG,
+  FILE_NONE,
+  FILE_C,
+  FILE_ASM,
+  FILE_PP_ASM,
+  FILE_LDARG,
 } FileType;
 
 typedef enum {
@@ -275,15 +279,17 @@ static char *quote_makefile(char *s) {
       buf[j++] = '\\';
       buf[j++] = s[i];
       break;
-    default:
+    default: {
       buf[j++] = s[i];
       break;
+    }
     }
   }
   return buf;
 }
 
-static void build_incl_paths(char *opt_B, bool opt_nostdinc, StringArray *isystem, StringArray *idirafter) {
+static void build_incl_paths(char *opt_B, bool opt_nostdinc, StringArray *isystem,
+                             StringArray *idirafter) {
   if (opt_B)
     add_include_path(&sysincl_paths, opt_B);
 
@@ -368,7 +374,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       exit(0);
     }
 
-    if (!strcmp(argv[i], "-print-search-dirs") || !strcmp(argv[i], "--print-search-dirs")) {
+    if (!strcmp(argv[i], "-print-search-dirs") ||
+        !strcmp(argv[i], "--print-search-dirs")) {
       StringArray dirs = {0};
       platform_search_dirs(&dirs);
       printf("libraries: =");
@@ -577,8 +584,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (startswith(argv[i], &arg, "-std=") ||
-      startswith(argv[i], &arg, "--std=") ||
-      take_arg(argv, &i, &arg, "--std")) {
+        startswith(argv[i], &arg, "--std=") ||
+        take_arg(argv, &i, &arg, "--std")) {
       if (startswith(arg, &arg, "c"))
         set_std(true, arg);
       else if (startswith(arg, &arg, "gnu"))
@@ -592,25 +599,39 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       bool b = !startswith(arg, &arg, "no-");
 
       if (set_bool(arg, b, "common", &opt_fcommon) ||
-        set_bool(arg, b, "plt", &opt_use_plt) ||
-        set_bool(arg, b, "function-sections", &opt_func_sections) ||
-        set_bool(arg, b, "data-sections", &opt_data_sections) ||
-        set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
-        set_bool(arg, b, "short-enums", &opt_short_enums) ||
-        set_bool(arg, b, "gnu89-inline", &opt_gnu89_inline))
+          set_bool(arg, b, "plt", &opt_use_plt) ||
+          set_bool(arg, b, "function-sections", &opt_func_sections) ||
+          set_bool(arg, b, "data-sections", &opt_data_sections) ||
+          set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
+          set_bool(arg, b, "short-enums", &opt_short_enums) ||
+          set_bool(arg, b, "gnu89-inline", &opt_gnu89_inline))
         continue;
 
       if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct))
         continue;
 
       if (b) {
-        if (!strcmp(arg, "pic")) { set_fpic("1"); continue; }
-        if (!strcmp(arg, "PIC")) { set_fpic("2"); continue; }
-        if (!strcmp(arg, "pie")) { set_fpie("1"); continue; }
-        if (!strcmp(arg, "PIE")) { set_fpie("2"); continue; }
+        if (!strcmp(arg, "pic")) {
+          set_fpic("1");
+          continue;
+        }
+        if (!strcmp(arg, "PIC")) {
+          set_fpic("2");
+          continue;
+        }
+        if (!strcmp(arg, "pie")) {
+          set_fpie("1");
+          continue;
+        }
+        if (!strcmp(arg, "PIE")) {
+          set_fpie("2");
+          continue;
+        }
       } else {
-        if (!strcmp(arg, "pic") || !strcmp(arg, "PIC") ||
-          !strcmp(arg, "pie") || !strcmp(arg, "PIE")) {
+        if (!strcmp(arg, "pic") ||
+            !strcmp(arg, "PIC") ||
+            !strcmp(arg, "pie") ||
+            !strcmp(arg, "PIE")) {
           opt_fpic = opt_fpie = false;
           undef_macro("__pic__");
           undef_macro("__PIC__");
@@ -627,7 +648,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
           continue;
         }
         if (set_bool(arg, false, "signed-char", &ty_pchar->is_unsigned) ||
-          set_bool(arg, true, "unsigned-char", &ty_pchar->is_unsigned))
+            set_bool(arg, true, "unsigned-char", &ty_pchar->is_unsigned))
           continue;
 
         if (startswith(arg, &arg, "stack-reuse=")) {
@@ -641,7 +662,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
           continue;
 
         if (startswith(arg, &opt_visibility, "visibility=") ||
-          startswith(arg, &opt_use_as, "use-as="))
+            startswith(arg, &opt_use_as, "use-as="))
           continue;
 
         if (startswith(arg, &arg, "use-ld=")) {
@@ -659,13 +680,13 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       arg = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
 
       if (set_true(arg, "r", &opt_r) ||
-        set_true(arg, "rdynamic", &opt_rdynamic) ||
-        set_true(arg, "static", &opt_static) ||
-        set_true(arg, "static-pie", &opt_static_pie) ||
-        set_true(arg, "static-libgcc", &opt_static_libgcc) ||
-        set_true(arg, "shared", &opt_shared) ||
-        set_true(arg, "pie", &opt_pie) ||
-        set_true(arg, "nopie", &opt_nopie))
+          set_true(arg, "rdynamic", &opt_rdynamic) ||
+          set_true(arg, "static", &opt_static) ||
+          set_true(arg, "static-pie", &opt_static_pie) ||
+          set_true(arg, "static-libgcc", &opt_static_libgcc) ||
+          set_true(arg, "shared", &opt_shared) ||
+          set_true(arg, "pie", &opt_pie) ||
+          set_true(arg, "nopie", &opt_nopie))
         continue;
 
       if (!strcmp(arg, "no-pie")) {
@@ -686,8 +707,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (set_true(argv[i], "-nostartfiles", &opt_nostartfiles) ||
-      set_true(argv[i], "-nodefaultlibs", &opt_nodefaultlibs) ||
-      set_true(argv[i], "-nolibc", &opt_nolibc))
+        set_true(argv[i], "-nodefaultlibs", &opt_nodefaultlibs) ||
+        set_true(argv[i], "-nolibc", &opt_nolibc))
       continue;
 
     if (!strcmp(argv[i], "-nostdlib")) {
@@ -696,7 +717,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
     }
 
     if (set_bool(argv[i], true, "-Werror", &opt_werror) ||
-      set_bool(argv[i], false, "-Wno-error", &opt_werror))
+        set_bool(argv[i], false, "-Wno-error", &opt_werror))
       continue;
 
     if (startswith(argv[i], &arg, "-W")) {
@@ -1014,7 +1035,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   close_file(out);
 }
 
-void run_assembler_gnustyle( StringArray *args, char *input, char *output) {
+void run_assembler_gnustyle(StringArray *args, char *input, char *output) {
   StringArray arr = {0};
 
   strarray_push(&arr, opt_use_as ? opt_use_as : default_as);
@@ -1076,28 +1097,18 @@ static LinkType link_type(StringArray *arr, char *ldso_path) {
   LinkType type = get_link_type();
 
   switch (type) {
-  case LT_RELO:
-    strarray_push(arr, "-r");
-    break;
-  case LT_SHARED:
-    strarray_push(arr, "-shared");
-    break;
+  case LT_RELO:   strarray_push(arr, "-r"); break;
+  case LT_SHARED: strarray_push(arr, "-shared"); break;
   case LT_STATIC_PIE:
     strarray_push(arr, "-static");
     strarray_push(arr, "-pie");
     break;
-  case LT_STATIC:
-    strarray_push(arr, "-static");
-    break;
-  case LT_PIE:
-    strarray_push(arr, "-pie");
-    break;
+  case LT_STATIC: strarray_push(arr, "-static"); break;
+  case LT_PIE:    strarray_push(arr, "-pie"); break;
   }
 
   switch (type) {
-  case LT_STATIC_PIE:
-    strarray_push(arr, "-no-dynamic-linker");
-    break;
+  case LT_STATIC_PIE: strarray_push(arr, "-no-dynamic-linker"); break;
   case LT_DYNAMIC:
   case LT_SHARED:
   case LT_PIE:
@@ -1140,7 +1151,7 @@ static void link_libc(StringArray *arr) {
 }
 
 void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
-  char *ldso_path, char *libpath, char *gcc_libpath) {
+                         char *ldso_path, char *libpath, char *gcc_libpath) {
   StringArray arr = {0};
 
   strarray_push(&arr, opt_use_ld ? opt_use_ld : default_ld);
@@ -1157,16 +1168,10 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
 
   if (!opt_nostartfiles && lt != LT_RELO) {
     switch (lt) {
-    case LT_STATIC_PIE:
-      strarray_push(&arr, format("%s/rcrt1.o", libpath));
-      break;
-    case LT_PIE:
-      strarray_push(&arr, format("%s/Scrt1.o", libpath));
-      break;
+    case LT_STATIC_PIE: strarray_push(&arr, format("%s/rcrt1.o", libpath)); break;
+    case LT_PIE:        strarray_push(&arr, format("%s/Scrt1.o", libpath)); break;
     case LT_STATIC:
-    case LT_DYNAMIC:
-      strarray_push(&arr, format("%s/crt1.o", libpath));
-      break;
+    case LT_DYNAMIC:    strarray_push(&arr, format("%s/crt1.o", libpath)); break;
     }
     strarray_push(&arr, format("%s/crti.o", libpath));
 
@@ -1174,15 +1179,9 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
       switch (lt) {
       case LT_STATIC_PIE:
       case LT_SHARED:
-      case LT_PIE:
-        strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath));
-        break;
-      case LT_STATIC:
-        strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath));
-        break;
-      case LT_DYNAMIC:
-        strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath));
-        break;
+      case LT_PIE:        strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath)); break;
+      case LT_STATIC:     strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath)); break;
+      case LT_DYNAMIC:    strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath)); break;
       }
     }
   }
@@ -1213,12 +1212,9 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
       switch (lt) {
       case LT_STATIC_PIE:
       case LT_SHARED:
-      case LT_PIE:
-        strarray_push(&arr, format("%s/crtendS.o", gcc_libpath));
-        break;
+      case LT_PIE:        strarray_push(&arr, format("%s/crtendS.o", gcc_libpath)); break;
       case LT_STATIC:
-      case LT_DYNAMIC:
-        strarray_push(&arr, format("%s/crtend.o", gcc_libpath));
+      case LT_DYNAMIC:    strarray_push(&arr, format("%s/crtend.o", gcc_libpath)); break;
       }
     }
     strarray_push(&arr, format("%s/crtn.o", libpath));

@@ -40,8 +40,6 @@ void run_assembler(StringArray *as_args, char *input, char *output) {
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  run_linker_gnustyle(paths, inputs, output,
-    "/libexec/ld-elf.so.1",
-    "/usr/lib",
-    "/usr/lib");
+  run_linker_gnustyle(paths, inputs, output, "/libexec/ld-elf.so.1", "/usr/lib",
+                      "/usr/lib");
 }

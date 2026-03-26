@@ -48,8 +48,6 @@ void run_assembler(StringArray *as_args, char *input, char *output) {
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  run_linker_gnustyle(paths, inputs, output,
-    "/lib/ld-musl-x86_64.so.1",
-    "/usr/lib", // ubuntu musl: /usr/lib/x86_64-linux-musl/
-    libgccpath);
+  run_linker_gnustyle(paths, inputs, output, "/lib/ld-musl-x86_64.so.1", "/usr/lib",
+                      libgccpath);
 }

@@ -123,6 +123,10 @@ slimcc-lto-je: $(SRCS) slimcc.h
 slimcc-lto-mi: $(SRCS) slimcc.h
 	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@ -lmimalloc
 
+format:
+	$(CLANG_FORMAT) -i $(SRCS) slimcc.h platform/*.c
+	perl -i -p0e 's|\:[ ]+\{\n|: {\n|g' $(SRCS) slimcc.h platform/*.c
+
 clean:
 	rm -f slimcc slimcc-stage2 slimcc-asan slimcc-filc slimcc-lto slimcc-lto-je slimcc-lto-mi
 	rm -f *.o test/*.o test/*.exe test/host/*.o test/abi/*.o

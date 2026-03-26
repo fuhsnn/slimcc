@@ -1,10 +1,9 @@
 #include "slimcc.h"
 
 #if USE_ASAN
-#include <sanitizer/asan_interface.h>
+# include <sanitizer/asan_interface.h>
 
-__attribute__((visibility("default")))
-const char *__asan_default_options(void) {
+__attribute__((visibility("default"))) const char *__asan_default_options(void) {
   return "detect_leaks=0";
 }
 #endif

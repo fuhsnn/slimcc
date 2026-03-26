@@ -42,15 +42,15 @@ typedef enum {
 } Preced;
 
 enum {
-  SC_AUTO      = 1,
+  SC_AUTO = 1,
   SC_CONSTEXPR = 1 << 1,
-  SC_EXTERN    = 1 << 2,
-  SC_REGISTER  = 1 << 3,
-  SC_STATIC    = 1 << 4,
-  SC_THREAD    = 1 << 5,
-  SC_TYPEDEF   = 1 << 6,
-  SC_ALL       = (1 << 7) - 1,
-  SC_NONE      = 0,
+  SC_EXTERN = 1 << 2,
+  SC_REGISTER = 1 << 3,
+  SC_STATIC = 1 << 4,
+  SC_THREAD = 1 << 5,
+  SC_TYPEDEF = 1 << 6,
+  SC_ALL = (1 << 7) - 1,
+  SC_NONE = 0,
 };
 
 typedef uint8_t StorageClass;
@@ -103,26 +103,26 @@ struct Initializer {
   bool is_root;
   bool has_copy;
 
-ANON_UNION_START
-    Token *tok;
-    Node *expr;
+  ANON_UNION_START
+  Token *tok;
+  Node *expr;
 
-    struct {
-      Initializer *data;
-      int32_t cnt;
-      int32_t union_idx;
-    } list;
+  struct {
+    Initializer *data;
+    int32_t cnt;
+    int32_t union_idx;
+  } list;
 
-    struct {
-      Obj *var;
-      Initializer *init;
-    } cpy;
+  struct {
+    Obj *var;
+    Initializer *init;
+  } cpy;
 
-    struct {
-      Token *start;
-      int32_t len;
-    } numseq;
-ANON_UNION_END
+  struct {
+    Token *start;
+    int32_t len;
+  } numseq;
+  ANON_UNION_END
 };
 
 // For local variable initializer.
@@ -218,13 +218,15 @@ static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
-static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, DeclContext *ctx);
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
+                         DeclContext *ctx);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
-static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int offset, EvalKind ev_kind);
+static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int offset,
+                            EvalKind ev_kind);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, Token *label_list);
@@ -488,8 +490,7 @@ static bool invalid_cast(Node *node, Type *to) {
     switch (to->kind) {
     case TY_VOID:
     case TY_BOOL:
-    case TY_PTR:
-      return false;
+    case TY_PTR:  return false;
     }
     return true;
   }
@@ -502,8 +503,7 @@ static bool invalid_cast(Node *node, Type *to) {
     if (to->kind == TY_STRUCT || to->kind == TY_UNION)
       return true;
   }
-  if ((node->ty->base && is_flonum(to)) ||
-    (is_flonum(node->ty) && to->base))
+  if ((node->ty->base && is_flonum(to)) || (is_flonum(node->ty) && to->base))
     return true;
 
   return false;
@@ -518,8 +518,9 @@ Node *new_cast(Node *expr, Type *ty) {
 
   if (ty->kind == TY_BOOL) {
     Node *n = expr;
-    while (n->kind == ND_CAST && n->ty->size == 8 &&
-      (n->ty->kind == TY_PTR || is_integer(n->ty)))
+    while (n->kind == ND_CAST &&
+           n->ty->size == 8 &&
+           (n->ty->kind == TY_PTR || is_integer(n->ty)))
       n = n->m.lhs;
 
     Obj *var = NULL;
@@ -566,8 +567,7 @@ static Node *cond_cast(Node *expr) {
   case ND_GE:
   case ND_LOGAND:
   case ND_LOGOR:
-  case ND_NOT:
-    return expr;
+  case ND_NOT:    return expr;
   }
   ptr_convert(&expr);
   return new_cast(expr, ty_bool);
@@ -630,9 +630,9 @@ static void prepare_array_init(Initializer *init, Type *ty) {
     for (; i < len; i++) {
       int64_t val;
       switch (init->ty->base->size) {
-      case 1: val = ((uint8_t *)tok->str)[i]; break;
-      case 2: val = ((uint16_t *)tok->str)[i]; break;
-      case 4: val = ((uint32_t *)tok->str)[i]; break;
+      case 1:  val = ((uint8_t *)tok->str)[i]; break;
+      case 2:  val = ((uint16_t *)tok->str)[i]; break;
+      case 4:  val = ((uint32_t *)tok->str)[i]; break;
       default: internal_error();
       }
       init->list.data[i].kind = INIT_EXPR;
@@ -743,7 +743,7 @@ static Obj *new_gvar(char *name, Type *ty) {
 
 char *new_unique_name(void) {
   static int64_t id = 0;
-  return format(".L..%"PRIi64, id++);
+  return format(".L..%" PRIi64, id++);
 }
 
 static Obj *new_static_lvar(Type *ty) {
@@ -931,7 +931,8 @@ static void attr_cleanup(Token *loc, TokenKind kind, Obj **fn) {
   }
 }
 
-static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor, uint16_t *priority, uint16_t pri, bool apply) {
+static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor,
+                             uint16_t *priority, uint16_t pri, bool apply) {
   if (apply) {
     if (*is_cdtor && *priority != pri)
       error_tok(tok, "%s priority conflict", attr_name);
@@ -940,7 +941,8 @@ static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor, uint16
   }
 }
 
-static void cdtor_attr(Token *loc, TokenKind kind, char *name, bool *is_cdtor, uint16_t *priority) {
+static void cdtor_attr(Token *loc, TokenKind kind, char *name, bool *is_cdtor,
+                       uint16_t *priority) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind != kind)
       continue;
@@ -1003,13 +1005,14 @@ static void tyspec_attr(Token *tok, VarAttr *attr, TokenKind kind) {
   str_attr(tok, kind, "visibility", &attr->visibility);
 }
 
-#define DeclAttr(Fn, ...) do {               \
+#define DeclAttr(Fn, ...)                    \
+  do {                                       \
     if (name) {                              \
       Fn(name, TK_ATTR, __VA_ARGS__);        \
       Fn(name->next, TK_BATTR, __VA_ARGS__); \
     }                                        \
     Fn(tok, TK_ATTR, __VA_ARGS__);           \
-  } while(0)
+  } while (0)
 
 static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
   if (var->asm_name && (attr->strg & SC_REGISTER))
@@ -1044,10 +1047,12 @@ static void symbol_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
 }
 
 static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn) {
-  apply_cdtor_attr("constructor", name, &fn->is_ctor, &fn->ctor_prior, attr->ctor_prior, attr->is_ctor);
+  apply_cdtor_attr("constructor", name, &fn->is_ctor, &fn->ctor_prior, attr->ctor_prior,
+                   attr->is_ctor);
   DeclAttr(cdtor_attr, "constructor", &fn->is_ctor, &fn->ctor_prior);
 
-  apply_cdtor_attr("destructor", name, &fn->is_dtor, &fn->dtor_prior, attr->dtor_prior, attr->is_dtor);
+  apply_cdtor_attr("destructor", name, &fn->is_dtor, &fn->dtor_prior, attr->dtor_prior,
+                   attr->is_dtor);
   DeclAttr(cdtor_attr, "destructor", &fn->is_dtor, &fn->dtor_prior);
 
   if (fn->is_ctor || fn->is_dtor)
@@ -1112,24 +1117,26 @@ static bool chk_storage_class(uint8_t msk, StorageClass allow) {
     return msk & ~(SC_CONSTEXPR | SC_AUTO | SC_REGISTER | SC_STATIC);
   if (msk & SC_THREAD)
     return msk & ~(SC_THREAD | SC_STATIC | SC_EXTERN);
-  return 1 < ((bool)(msk & SC_EXTERN) + (bool)(msk & SC_REGISTER) +
-    (bool)(msk & SC_STATIC) + (bool)(msk & SC_TYPEDEF));
+  return 1 < ((bool)(msk & SC_EXTERN) +
+              (bool)(msk & SC_REGISTER) +
+              (bool)(msk & SC_STATIC) +
+              (bool)(msk & SC_TYPEDEF));
 }
 
 static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx) {
   enum {
-    VOID     = 1 << 0,
-    BOOL     = 1 << 2,
-    CHAR     = 1 << 4,
-    SHORT    = 1 << 6,
-    INT      = 1 << 8,
-    LONG     = 1 << 10,
-    FLOAT    = 1 << 12,
-    DOUBLE   = 1 << 14,
-    SIGNED   = 1 << 16,
+    VOID = 1 << 0,
+    BOOL = 1 << 2,
+    CHAR = 1 << 4,
+    SHORT = 1 << 6,
+    INT = 1 << 8,
+    LONG = 1 << 10,
+    FLOAT = 1 << 12,
+    DOUBLE = 1 << 14,
+    SIGNED = 1 << 16,
     UNSIGNED = 1 << 18,
-    OTHER    = 1 << 20,
-    BITINT   = 1 << 21,
+    OTHER = 1 << 20,
+    BITINT = 1 << 21,
   };
 
   Type *ty = NULL;
@@ -1158,14 +1165,14 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     tok = tok->next;
 
     switch (tk_kind) {
-    case TK_auto: attr->strg |= SC_AUTO; continue;
-    case TK_extern: attr->strg |= SC_EXTERN; continue;
-    case TK_register: attr->strg |= SC_REGISTER; continue;
-    case TK_static: attr->strg |= SC_STATIC; continue;
-    case TK_typedef: attr->strg |= SC_TYPEDEF; continue;
+    case TK_auto:         attr->strg |= SC_AUTO; continue;
+    case TK_extern:       attr->strg |= SC_EXTERN; continue;
+    case TK_register:     attr->strg |= SC_REGISTER; continue;
+    case TK_static:       attr->strg |= SC_STATIC; continue;
+    case TK_typedef:      attr->strg |= SC_TYPEDEF; continue;
     case TK_thread_local: attr->strg |= SC_THREAD; continue;
-    case TK_inline: attr->is_inline = true; continue;
-    case TK_Noreturn: attr->is_noreturn = true; continue;
+    case TK_inline:       attr->is_inline = true; continue;
+    case TK_Noreturn:     attr->is_noreturn = true; continue;
     case TK_constexpr:
       attr->strg |= SC_CONSTEXPR;
       qual |= Q_CONST;
@@ -1187,12 +1194,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     }
 
     switch (tk_kind) {
-    case TK_const: qual |= Q_CONST; continue;
+    case TK_const:    qual |= Q_CONST; continue;
     case TK_restrict: qual |= Q_RESTRICT; continue;
     case TK_volatile: qual |= Q_VOLATILE; continue;
     case TK_Atomic:
       qual |= Q_ATOMIC;
-      if (consume(&tok, tok , "(")) {
+      if (consume(&tok, tok, "(")) {
         if (ty)
           error_tok(tok, "invalid type");
         ty = typename(&tok, tok);
@@ -1204,12 +1211,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
     if (!ty) {
       switch (tk_kind) {
-      case TK_struct: ty = struct_union_decl(&tok, tok, TY_STRUCT); break;
-      case TK_union: ty = struct_union_decl(&tok, tok, TY_UNION); break;
-      case TK_enum: ty = enum_specifier(&tok, tok); break;
-      case TK_typeof: ty = typeof_specifier(&tok, tok, attr); break;
+      case TK_struct:        ty = struct_union_decl(&tok, tok, TY_STRUCT); break;
+      case TK_union:         ty = struct_union_decl(&tok, tok, TY_UNION); break;
+      case TK_enum:          ty = enum_specifier(&tok, tok); break;
+      case TK_typeof:        ty = typeof_specifier(&tok, tok, attr); break;
       case TK_typeof_unqual: ty = unqual(typeof_specifier(&tok, tok, attr)); break;
-      case TK_auto_type: ty = new_type(TY_AUTO, -1, 0); break;
+      case TK_auto_type:     ty = new_type(TY_AUTO, -1, 0); break;
       }
       if (ty) {
         counter |= OTHER;
@@ -1218,62 +1225,60 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     }
 
     switch (tk_kind) {
-    case TK_void: counter += VOID; break;
-    case TK_bool: counter += BOOL; break;
-    case TK_char: counter += CHAR; break;
-    case TK_short: counter += SHORT; break;
-    case TK_int: counter += INT; break;
-    case TK_long: counter += LONG; break;
-    case TK_float: counter += FLOAT; break;
-    case TK_double: counter += DOUBLE; break;
-    case TK_signed: counter += SIGNED; break;
+    case TK_void:     counter += VOID; break;
+    case TK_bool:     counter += BOOL; break;
+    case TK_char:     counter += CHAR; break;
+    case TK_short:    counter += SHORT; break;
+    case TK_int:      counter += INT; break;
+    case TK_long:     counter += LONG; break;
+    case TK_float:    counter += FLOAT; break;
+    case TK_double:   counter += DOUBLE; break;
+    case TK_signed:   counter += SIGNED; break;
     case TK_unsigned: counter += UNSIGNED; break;
     case TK_BitInt:
       counter += BITINT;
       ty = new_bitint(const_expr(&tok, skip(tok, "(")), tok);
       tok = skip(tok, ")");
       break;
-    default:
-      error_tok(tok, "invalid type");
+    default: error_tok(tok, "invalid type");
     }
 
     switch (counter) {
-    case VOID: ty = ty_void; break;
-    case BOOL: ty = ty_bool; break;
-    case CHAR: ty = ty_pchar; break;
-    case SIGNED + CHAR: ty = ty_char; break;
-    case UNSIGNED + CHAR: ty = ty_uchar; break;
+    case VOID:                         ty = ty_void; break;
+    case BOOL:                         ty = ty_bool; break;
+    case CHAR:                         ty = ty_pchar; break;
+    case SIGNED + CHAR:                ty = ty_char; break;
+    case UNSIGNED + CHAR:              ty = ty_uchar; break;
     case SHORT:
     case SHORT + INT:
     case SIGNED + SHORT:
-    case SIGNED + SHORT + INT: ty = ty_short; break;
+    case SIGNED + SHORT + INT:         ty = ty_short; break;
     case UNSIGNED + SHORT:
-    case UNSIGNED + SHORT + INT: ty = ty_ushort; break;
+    case UNSIGNED + SHORT + INT:       ty = ty_ushort; break;
     case INT:
     case SIGNED:
-    case SIGNED + INT: ty = ty_int; break;
+    case SIGNED + INT:                 ty = ty_int; break;
     case UNSIGNED:
-    case UNSIGNED + INT: ty = ty_uint; break;
+    case UNSIGNED + INT:               ty = ty_uint; break;
     case LONG:
     case LONG + INT:
     case SIGNED + LONG:
-    case SIGNED + LONG + INT: ty = ty_long; break;
+    case SIGNED + LONG + INT:          ty = ty_long; break;
     case LONG + LONG:
     case LONG + LONG + INT:
     case SIGNED + LONG + LONG:
-    case SIGNED + LONG + LONG + INT: ty = ty_llong; break;
+    case SIGNED + LONG + LONG + INT:   ty = ty_llong; break;
     case UNSIGNED + LONG:
-    case UNSIGNED + LONG + INT: ty = ty_ulong; break;
+    case UNSIGNED + LONG + INT:        ty = ty_ulong; break;
     case UNSIGNED + LONG + LONG:
     case UNSIGNED + LONG + LONG + INT: ty = ty_ullong; break;
-    case FLOAT: ty = ty_float; break;
-    case DOUBLE: ty = ty_double; break;
-    case LONG + DOUBLE: ty = ty_ldouble; break;
+    case FLOAT:                        ty = ty_float; break;
+    case DOUBLE:                       ty = ty_double; break;
+    case LONG + DOUBLE:                ty = ty_ldouble; break;
     case BITINT:
-    case BITINT + SIGNED: break;
-    case BITINT + UNSIGNED: ty->is_unsigned = true; break;
-    default:
-      error_tok(tok, "invalid type");
+    case BITINT + SIGNED:              break;
+    case BITINT + UNSIGNED:            ty->is_unsigned = true; break;
+    default:                           error_tok(tok, "invalid type");
     }
   }
   *rest = tok;
@@ -1359,7 +1364,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     Token *name = NULL;
     Type *ty = declspec(&tok, tok, &attr, SC_REGISTER);
     ty = declarator2(&tok, tok, ty, &name,
-      &(DeclContext){.let_star = !is_def, .is_param = true});
+                     &(DeclContext){.let_star = !is_def, .is_param = true});
 
     if (is_def)
       chain_expr(&expr, calc_vla2(ty, tok, &attr));
@@ -1424,8 +1429,8 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok) {
   QualMask qual = 0;
   for (;; tok = tok->next) {
     switch (tok->kind) {
-    case TK_Atomic: qual |= Q_ATOMIC; continue;
-    case TK_const: qual |= Q_CONST; continue;
+    case TK_Atomic:   qual |= Q_ATOMIC; continue;
+    case TK_const:    qual |= Q_CONST; continue;
     case TK_restrict: qual |= Q_RESTRICT; continue;
     case TK_volatile: qual |= Q_VOLATILE; continue;
     }
@@ -1494,7 +1499,8 @@ Token *skip_paren(Token *tok) {
   return tok->next;
 }
 
-static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok, DeclContext *ctx) {
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
+                         DeclContext *ctx) {
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
@@ -1547,8 +1553,8 @@ static bool chk_enum_tag(Type *tag_ty, Type *fixed_ty, Token *tag) {
     return false;
   if (tag_ty->kind == TY_STRUCT || tag_ty->kind == TY_UNION)
     error_tok(tag, "not an enum tag");
-  if (fixed_ty && (fixed_ty->kind != tag_ty->kind ||
-    fixed_ty->is_unsigned != tag_ty->is_unsigned))
+  if (fixed_ty &&
+      (fixed_ty->kind != tag_ty->kind || fixed_ty->is_unsigned != tag_ty->is_unsigned))
     error_tok(tag, "enum redeclared with incompatible type");
   return true;
 }
@@ -1706,8 +1712,8 @@ static Type *enum_specifier(Token **rest, Token *tok) {
 
   if (ty->kind != TY_ENUM) {
     if ((ty->is_unsigned && been_neg) ||
-      (ty->size < enum_ty[ety]->size) ||
-      ((ty->size == enum_ty[ety]->size) && (ty->is_unsigned < enum_ty[ety]->is_unsigned)))
+        (ty->size < enum_ty[ety]->size) ||
+        ((ty->size == enum_ty[ety]->size) && (ty->is_unsigned < enum_ty[ety]->is_unsigned)))
       error_tok(tok, "enum value out of type range");
     return ty;
   }
@@ -1798,7 +1804,8 @@ static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr) {
   return n;
 }
 
-static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr, Obj **cond_var) {
+static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
+                          Obj **cond_var) {
   Token *name = NULL;
   Type *ty = declarator(&tok, tok, basety, &name);
 
@@ -1869,8 +1876,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (attr->strg & SC_CONSTEXPR) {
     Obj *init_var = new_static_lvar(ty);
     constexpr_initializer(&tok, skip(tok, "="), init_var, var);
-    chain_expr(&expr, new_binary(ND_ASSIGN,
-      new_var_node(var, tok), new_var_node(init_var, tok), tok));
+    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
+                                 new_var_node(init_var, tok), tok));
     *cond_var = var;
     *rest = tok;
     return expr;
@@ -2032,8 +2039,8 @@ static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
   return mem;
 }
 
-static void designation(Token **rest, Token *tok, Initializer *init,
-  bool post_bracket, DesgContext *ctx) {
+static void designation(Token **rest, Token *tok, Initializer *init, bool post_bracket,
+                        DesgContext *ctx) {
   if (equal(tok, "[")) {
     if (init->ty->kind != TY_ARRAY)
       error_tok(tok, "array index not in array initializer");
@@ -2127,7 +2134,8 @@ static int count_array_init_elements(Token *tok, Type *ty, int i) {
   return max;
 }
 
-static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, Node *expr, bool has_brace) {
+static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, Node *expr,
+                                  bool has_brace) {
   if (!has_brace && init->is_root)
     error_tok(tok, "expected initializer list");
 
@@ -2181,8 +2189,7 @@ static bool is_num_seq(Token **rest, Token *tok, int32_t *val) {
       cnt++;
       tok = tok->next;
 
-      if (consume(rest, tok, "}") ||
-        (equal(tok, ",") && consume(rest, tok->next, "}"))) {
+      if (consume(rest, tok, "}") || (equal(tok, ",") && consume(rest, tok->next, "}"))) {
         *val = cnt;
         return true;
       }
@@ -2223,8 +2230,9 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
       }
     }
 
-    if (is_integer(init->ty->base) && init->ty->base->kind != TY_BOOL &&
-      (expr || !(equal(tok, "[") || equal(tok, ".") || equal(tok, "{")))) {
+    if (is_integer(init->ty->base) &&
+        init->ty->base->kind != TY_BOOL &&
+        (expr || !(equal(tok, "[") || equal(tok, ".") || equal(tok, "{")))) {
       if (!expr)
         expr = assign(&tok, tok);
       if (expr->kind == ND_VAR && expr->m.var->is_string_lit) {
@@ -2262,8 +2270,9 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     return;
   }
 
-  if (!expr && (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) &&
-    (equal(tok->next, ",") || equal(tok->next, "}") || equal(tok->next, ";"))) {
+  if (!expr &&
+      (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) &&
+      (equal(tok->next, ",") || equal(tok->next, "}") || equal(tok->next, ";"))) {
     init->kind = INIT_TOK;
     init->tok = tok;
     tok = tok->next;
@@ -2343,8 +2352,9 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
   switch (init->kind) {
   case INIT_NONE:
   case INIT_FLEX:
-  case INIT_FLEX_NESTED:
+  case INIT_FLEX_NESTED: {
     return;
+  }
   case INIT_TOK:
   case INIT_EXPR: {
     Node *node = init_num_tok(init, new_node(ND_NUM, init->tok));
@@ -2423,9 +2433,11 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
       init->cpy.init->has_copy = true;
       create_lvar_init(cur, init->cpy.init, desg, tok);
 
-      n = new_binary(ND_ASSIGN, new_var_node(init->cpy.var, tok), init_desg_expr(desg, tok), tok);
+      n = new_binary(ND_ASSIGN, new_var_node(init->cpy.var, tok),
+                     init_desg_expr(desg, tok), tok);
     } else {
-      n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), new_var_node(init->cpy.var, tok), tok);
+      n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok),
+                     new_var_node(init->cpy.var, tok), tok);
     }
     add_type(n);
     (*cur) = (*cur)->next = n;
@@ -2492,12 +2504,14 @@ static long_double_t read_double_buf(char *buf, Type *ty) {
   internal_error();
 }
 
-static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int offset, EvalKind ev_kind) {
+static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int offset,
+                            EvalKind ev_kind) {
   switch (init->kind) {
   case INIT_NONE:
   case INIT_FLEX:
-  case INIT_FLEX_NESTED:
+  case INIT_FLEX_NESTED: {
     return;
+  }
   case INIT_TOK:
   case INIT_EXPR: {
     Node *node = init_num_tok(init, &(Node){.kind = ND_NUM, .tok = init->tok});
@@ -2513,8 +2527,10 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
       if (is_compatible(init->ty, init->expr->ty))
         var = eval_var(init->expr, &sofs, false);
 
-      if (var && var->init_data && !var->is_weak &&
-        (is_const_var(var) || var->is_compound_lit)) {
+      if (var &&
+          var->init_data &&
+          !var->is_weak &&
+          (is_const_var(var) || var->is_compound_lit)) {
         Relocation *srel = var->rel;
         while (srel && srel->offset < sofs)
           srel = srel->next;
@@ -2612,7 +2628,8 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
 
           if (mem->ty->kind == TY_BITINT) {
             uint64_t *val = eval_bitint(node);
-            eval_bitint_bitfield_save(mem->ty->bit_cnt, val, loc, mem->bit_width, mem->bit_offset);
+            eval_bitint_bitfield_save(mem->ty->bit_cnt, val, loc, mem->bit_width,
+                                      mem->bit_offset);
             free(val);
             continue;
           }
@@ -2717,8 +2734,7 @@ static bool is_typename(Token *tok) {
 }
 
 static bool is_typename_paren(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
-  if (equal(tok, "(") && is_typename(tok->next) &&
-    !equal(skip_paren(tok->next->next), "{")) {
+  if (equal(tok, "(") && is_typename(tok->next) && !equal(skip_paren(tok->next->next), "{")) {
     *ty = typename2(&tok, tok->next, attr);
     *rest = skip(tok, ")");
     return true;
@@ -2875,7 +2891,7 @@ static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
 
   for (CaseRange *cr = sw->ctrl.sw_cases; cr; cr = cr->next)
     if ((less_eq(ty, cr->lo, lo) && less_eq(ty, lo, cr->hi)) ||
-      (less_eq(ty, lo, cr->lo) && less_eq(ty, cr->lo, hi)))
+        (less_eq(ty, lo, cr->lo) && less_eq(ty, cr->lo, hi)))
       error_tok(tok, "duplicated case");
 
   *rest = skip(tok, ":");
@@ -3343,25 +3359,30 @@ static bool eval_ctx(Node *node, EvalContext *ctx, int64_t *val) {
 static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     EvalContext ctx = {.kind = EV_AGGREGATE,
-      .let_array = true, .let_atomic = true, .let_volatile = true};
+                       .let_array = true,
+                       .let_atomic = true,
+                       .let_volatile = true};
     if (eval_ctx(node, &ctx, ofs) && !ctx.var)
       return true;
   }
   return false;
 }
 
-static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile, bool let_atomic) {
+static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile,
+                         bool let_atomic) {
   if (node->kind == ND_VAR && node->ty->kind != TY_VLA) {
     if ((let_volatile || !(node->ty->qual & Q_VOLATILE)) &&
-      (let_atomic || !(node->ty->qual & Q_ATOMIC))) {
+        (let_atomic || !(node->ty->qual & Q_ATOMIC))) {
       *ofs = 0;
       return node->m.var;
     }
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     int64_t offset;
-    EvalContext ctx = {.kind = EV_AGGREGATE, .let_array = let_array,
-      .let_volatile = let_volatile, .let_atomic = let_atomic};
+    EvalContext ctx = {.kind = EV_AGGREGATE,
+                       .let_array = let_array,
+                       .let_volatile = let_volatile,
+                       .let_atomic = let_atomic};
     if (eval_ctx(node, &ctx, &offset) && ctx.var) {
       *ofs = offset;
       return ctx.var;
@@ -3395,11 +3416,13 @@ static char *eval_constexpr_data(Node *node) {
   int32_t ofs;
   Obj *var = eval_var(node, &ofs, false);
 
-  if (!var || !(var->constexpr_data || var->is_string_lit ||
-    is_static_const_var(var, ofs, node->ty->size)))
+  if (!var || !(var->constexpr_data ||
+                var->is_string_lit ||
+                is_static_const_var(var, ofs, node->ty->size)))
     return (char *)eval_error(node);
 
-  int32_t access_sz = !is_bitfield(node) ? node->ty->size : bitfield_footprint(node->m.member);
+  int32_t access_sz = !is_bitfield(node) ? node->ty->size
+                                         : bitfield_footprint(node->m.member);
 
   if (ofs < 0 || (var->ty->size < (ofs + access_sz)))
     return (char *)eval_error2(node, "constexpr access out of bounds");
@@ -3504,12 +3527,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   Node *rhs = node->m.rhs;
 
   switch (node->kind) {
-  case ND_ADD:
-    return eval_sign_extend(ty, eval2(lhs, ctx) + eval2(rhs, ctx));
-  case ND_SUB:
-    return eval_sign_extend(ty, eval2(lhs, ctx) - eval(rhs));
-  case ND_MUL:
-    return eval_sign_extend(ty, eval(lhs) * eval(rhs));
+  case ND_ADD: return eval_sign_extend(ty, eval2(lhs, ctx) + eval2(rhs, ctx));
+  case ND_SUB: return eval_sign_extend(ty, eval2(lhs, ctx) - eval(rhs));
+  case ND_MUL: return eval_sign_extend(ty, eval(lhs) * eval(rhs));
   case ND_DIV: {
     int64_t lval = eval(lhs);
     int64_t rval = eval(rhs);
@@ -3532,18 +3552,12 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return 0;
     return lval % rval;
   }
-  case ND_POS:
-    return eval(lhs);
-  case ND_NEG:
-    return eval_sign_extend(ty, -eval(lhs));
-  case ND_BITAND:
-    return eval(lhs) & eval(rhs);
-  case ND_BITOR:
-    return eval(lhs) | eval(rhs);
-  case ND_BITXOR:
-    return eval(lhs) ^ eval(rhs);
-  case ND_SHL:
-    return eval_sign_extend(ty, eval(lhs) << eval(rhs));
+  case ND_POS:    return eval(lhs);
+  case ND_NEG:    return eval_sign_extend(ty, -eval(lhs));
+  case ND_BITAND: return eval(lhs) & eval(rhs);
+  case ND_BITOR:  return eval(lhs) | eval(rhs);
+  case ND_BITXOR: return eval(lhs) ^ eval(rhs);
+  case ND_SHL:    return eval_sign_extend(ty, eval(lhs) << eval(rhs));
   case ND_SHR:
     if (ty->size == 4)
       return (uint32_t)eval(lhs) >> eval(rhs);
@@ -3557,21 +3571,17 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_LT:
   case ND_LE:
   case ND_GT:
-  case ND_GE:
-    return eval_cmp(node);
+  case ND_GE: return eval_cmp(node);
   case ND_COND:
     return eval(node->ctrl.cond) ? eval2(node->ctrl.then, ctx) : eval2(node->ctrl.els, ctx);
-  case ND_COMMA:
+  case ND_COMMA: {
     eval_void(lhs);
     return eval2(rhs, ctx);
-  case ND_NOT:
-    return !eval(lhs);
-  case ND_BITNOT:
-    return eval_sign_extend(ty, ~eval(lhs));
-  case ND_LOGAND:
-    return eval(lhs) && eval(rhs);
-  case ND_LOGOR:
-    return eval(lhs) || eval(rhs);
+  }
+  case ND_NOT:    return !eval(lhs);
+  case ND_BITNOT: return eval_sign_extend(ty, ~eval(lhs));
+  case ND_LOGAND: return eval(lhs) && eval(rhs);
+  case ND_LOGOR:  return eval(lhs) || eval(rhs);
   case ND_CAST: {
     if (lhs->ty->kind == TY_BITINT) {
       uint64_t *val = eval_bitint(lhs);
@@ -3610,13 +3620,12 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval_sign_extend(ty, val);
     return val;
   }
-  case ND_NUM:
-    return node->num.val;
+  case ND_NUM: return node->num.val;
   }
 
   if (ctx->kind == EV_AGGREGATE) {
     if (((ty->qual & Q_ATOMIC) && !ctx->let_atomic) ||
-      ((ty->qual & Q_VOLATILE) && !ctx->let_volatile))
+        ((ty->qual & Q_VOLATILE) && !ctx->let_volatile))
       return eval_error(node);
 
     if (node->kind == ND_DEREF) {
@@ -3776,8 +3785,8 @@ static int64_t align_expr(Token **rest, Token *tok) {
 
 static long_double_t eval_fp_cast(long_double_t fval, Type *ty) {
   switch (ty->kind) {
-  case TY_FLOAT: return (float)fval;
-  case TY_DOUBLE: return (double)fval;
+  case TY_FLOAT:   return (float)fval;
+  case TY_DOUBLE:  return (double)fval;
   case TY_LDOUBLE: return fval;
   }
   internal_error();
@@ -3785,10 +3794,10 @@ static long_double_t eval_fp_cast(long_double_t fval, Type *ty) {
 
 static void build_math_constant(Node *node, FPVal *fval) {
   switch (node->num.constant) {
-  case MATH_CONSTANT_NANF: fval->chunk[0] = 0x7FC00000; return;
-  case MATH_CONSTANT_INFF: fval->chunk[0] = 0x7F800000; return;
+  case MATH_CONSTANT_NANF:  fval->chunk[0] = 0x7FC00000; return;
+  case MATH_CONSTANT_INFF:  fval->chunk[0] = 0x7F800000; return;
   case MATH_CONSTANT_NANSF: fval->chunk[0] = 0x7FA00000; return;
-  case MATH_CONSTANT_NANS: fval->chunk[0] = 0x7FF4000000000000; return;
+  case MATH_CONSTANT_NANS:  fval->chunk[0] = 0x7FF4000000000000; return;
   case MATH_CONSTANT_NANSL:
     fval->chunk[0] = 0xA000000000000000;
     fval->chunk[1] = 0x7FFF;
@@ -3810,8 +3819,8 @@ void eval_fp(Node *node, FPVal *fval) {
   long_double_t v = eval_double(node);
   if (fval) {
     switch (node->ty->kind) {
-    case TY_FLOAT: fval->f = (float)v; return;
-    case TY_DOUBLE: fval->d = (double)v; return;
+    case TY_FLOAT:   fval->f = (float)v; return;
+    case TY_DOUBLE:  fval->d = (double)v; return;
     case TY_LDOUBLE: fval->ld = v; return;
     }
     internal_error();
@@ -3837,15 +3846,15 @@ static long_double_t eval_double(Node *node) {
       break;
     return eval_fp_cast(lval / rval, ty);
   }
-  case ND_POS:
-    return eval_double(lhs);
-  case ND_NEG:
-    return -eval_double(lhs);
+  case ND_POS: return eval_double(lhs);
+  case ND_NEG: return -eval_double(lhs);
   case ND_COND:
-    return eval(node->ctrl.cond) ? eval_double(node->ctrl.then) : eval_double(node->ctrl.els);
-  case ND_COMMA:
+    return eval(node->ctrl.cond) ? eval_double(node->ctrl.then)
+                                 : eval_double(node->ctrl.els);
+  case ND_COMMA: {
     eval_void(lhs);
     return eval_double(rhs);
+  }
   case ND_CAST:
     if (is_flonum(lhs->ty))
       return eval_fp_cast(eval_double(lhs), ty);
@@ -3860,8 +3869,8 @@ static long_double_t eval_double(Node *node) {
       build_math_constant(node, &fval);
 
       switch (node->ty->kind) {
-      case TY_FLOAT: return fval.f;
-      case TY_DOUBLE: return fval.d;
+      case TY_FLOAT:   return fval.f;
+      case TY_DOUBLE:  return fval.d;
       case TY_LDOUBLE: return fval.ld;
       }
       internal_error();
@@ -3900,11 +3909,11 @@ static uint64_t *eval_bitint(Node *node) {
 
     switch (node->kind) {
     case ND_BITAND: eval_bitint_bitand(ty->bit_cnt, lval, rval); break;
-    case ND_BITOR: eval_bitint_bitor(ty->bit_cnt, lval, rval); break;
+    case ND_BITOR:  eval_bitint_bitor(ty->bit_cnt, lval, rval); break;
     case ND_BITXOR: eval_bitint_bitxor(ty->bit_cnt, lval, rval); break;
-    case ND_ADD: eval_bitint_add(ty->bit_cnt, lval, rval); break;
-    case ND_SUB: eval_bitint_sub(ty->bit_cnt, lval, rval); break;
-    case ND_MUL: eval_bitint_mul(ty->bit_cnt, lval, rval); break;
+    case ND_ADD:    eval_bitint_add(ty->bit_cnt, lval, rval); break;
+    case ND_SUB:    eval_bitint_sub(ty->bit_cnt, lval, rval); break;
+    case ND_MUL:    eval_bitint_mul(ty->bit_cnt, lval, rval); break;
     case ND_DIV:
     case ND_MOD: {
       bool res = eval_bitint_to_bool(ty->bit_cnt, rval);
@@ -3941,15 +3950,17 @@ static uint64_t *eval_bitint(Node *node) {
       return NULL;
     switch (node->kind) {
     case ND_BITNOT: eval_bitint_bitnot(ty->bit_cnt, val); break;
-    case ND_NEG: eval_bitint_neg(ty->bit_cnt, val); break;
+    case ND_NEG:    eval_bitint_neg(ty->bit_cnt, val); break;
     }
     return val;
   }
   case ND_COND:
-    return eval(node->ctrl.cond) ? eval_bitint(node->ctrl.then) : eval_bitint(node->ctrl.els);
-  case ND_COMMA:
+    return eval(node->ctrl.cond) ? eval_bitint(node->ctrl.then)
+                                 : eval_bitint(node->ctrl.els);
+  case ND_COMMA: {
     eval_void(lhs);
     return eval_bitint(rhs);
+  }
   case ND_CAST:
     if (lhs->ty->kind == TY_BITINT) {
       uint64_t *val = eval_bitint(lhs);
@@ -3982,8 +3993,8 @@ static uint64_t *eval_bitint(Node *node) {
     uint64_t *val = malloc(MAX(ty->size, 8));
     if (is_bitfield(node)) {
       memcpy(val, data, bitfield_footprint(node->m.member));
-      eval_bitint_bitfield_load(ty->bit_cnt, val, val,
-        node->m.member->bit_width, node->m.member->bit_offset, ty->is_unsigned);
+      eval_bitint_bitfield_load(ty->bit_cnt, val, val, node->m.member->bit_width,
+                                node->m.member->bit_offset, ty->is_unsigned);
       return val;
     }
     memcpy(val, data, ty->size);
@@ -4020,30 +4031,29 @@ static Node *atomic_op(Node *binary, bool return_old) {
   Obj *old = new_lvar(binary->m.lhs->ty);
   Obj *new = new_lvar(binary->m.lhs->ty);
 
-  cur = cur->next =
-    new_unary(ND_EXPR_STMT,
-              new_binary(ND_ASSIGN, new_var_node(addr, tok),
-                         new_unary(ND_ADDR, binary->m.lhs, tok), tok),
-              tok);
+  cur = cur->next = new_unary(ND_EXPR_STMT,
+                              new_binary(ND_ASSIGN, new_var_node(addr, tok),
+                                         new_unary(ND_ADDR, binary->m.lhs, tok), tok),
+                              tok);
 
-  cur = cur->next =
-    new_unary(ND_EXPR_STMT,
-              new_binary(ND_ASSIGN, new_var_node(val, tok), binary->m.rhs, tok),
-              tok);
+  cur = cur->next = new_unary(ND_EXPR_STMT,
+                              new_binary(ND_ASSIGN, new_var_node(val, tok), binary->m.rhs,
+                                         tok),
+                              tok);
 
-  cur = cur->next =
-    new_unary(ND_EXPR_STMT,
-              new_binary(ND_ASSIGN, new_var_node(old, tok),
-                         new_unary(ND_DEREF, new_var_node(addr, tok), tok), tok),
-              tok);
+  cur = cur->next = new_unary(ND_EXPR_STMT,
+                              new_binary(ND_ASSIGN, new_var_node(old, tok),
+                                         new_unary(ND_DEREF, new_var_node(addr, tok), tok),
+                                         tok),
+                              tok);
 
   Node *loop = new_node(ND_DO, tok);
-  loop->ctrl.then =
-    new_unary(ND_EXPR_STMT,
-              new_binary(ND_ASSIGN, new_var_node(new, tok),
-                         new_binary(binary->kind, new_var_node(old, tok),
-                                    new_var_node(val, tok), tok), tok),
-              tok);
+  loop->ctrl.then = new_unary(ND_EXPR_STMT,
+                              new_binary(ND_ASSIGN, new_var_node(new, tok),
+                                         new_binary(binary->kind, new_var_node(old, tok),
+                                                    new_var_node(val, tok), tok),
+                                         tok),
+                              tok);
 
   Node *cas = new_node(ND_CAS, tok);
   cas->cas.addr = new_var_node(addr, tok);
@@ -4123,8 +4133,7 @@ static Node *assign2(Token **rest, Token *tok, Node *node) {
     Obj *tmp = new_lvar(rhs->ty);
     Node *expr = new_binary(ND_ASSIGN, new_var_node(tmp, tok), rhs, tok);
     chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok),
-                                          new_var_node(tmp, tok),
-                                          tok));
+                                 new_var_node(tmp, tok), tok));
     chain_expr(&expr, new_var_node(tmp, tok));
     return expr;
   }
@@ -4205,7 +4214,8 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
       return vla_of(base, val ? len1 : len2, 0);
 
     *cond_var = new_lvar2(ty_bool, base_scope());
-    *cond = new_binary(ND_ASSIGN, new_var_node(*cond_var, (*cond)->tok), *cond, (*cond)->tok);
+    *cond = new_binary(ND_ASSIGN, new_var_node(*cond_var, (*cond)->tok), *cond,
+                       (*cond)->tok);
     add_type(*cond);
   }
   Node *node = new_node(ND_COND, (*cond)->tok);
@@ -4246,7 +4256,8 @@ static Node *conditional(Token **rest, Token *tok) {
   add_type(cond);
   enter_tmp_scope();
   Obj *var = new_lvar(cond->ty);
-  node->ctrl.cond = cond_cast(new_binary(ND_ASSIGN, new_var_node(var, cond->tok), cond, tok));
+  node->ctrl.cond = cond_cast(new_binary(ND_ASSIGN, new_var_node(var, cond->tok), cond,
+                                         tok));
   node->ctrl.then = new_var_node(var, cond->tok);
   leave_scope();
   return node;
@@ -4382,8 +4393,8 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
   for (;;) {
     Token *start = tok;
     if (equal(tok, "&&")) {
-      node = new_binary(ND_LOGAND,
-        cond_cast(node), cond_cast(binary(&tok, tok->next, PCD_BITOR)), start);
+      node = new_binary(ND_LOGAND, cond_cast(node),
+                        cond_cast(binary(&tok, tok->next, PCD_BITOR)), start);
       continue;
     }
     if (stop == PCD_LOGAND)
@@ -4394,8 +4405,8 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
   for (;;) {
     Token *start = tok;
     if (equal(tok, "||")) {
-      node = new_binary(ND_LOGOR,
-        cond_cast(node), cond_cast(binary(&tok, tok->next, PCD_LOGAND)), start);
+      node = new_binary(ND_LOGOR, cond_cast(node),
+                        cond_cast(binary(&tok, tok->next, PCD_LOGAND)), start);
       continue;
     }
     break;
@@ -4560,7 +4571,9 @@ static Node *unary(Token **rest, Token *tok) {
       case ND_MEMBER:
         return new_size_t(MAX(node->m.member->ty->align, node->m.member->alt_align), tok);
       case ND_VAR:
-        return new_size_t(node->m.var->alt_align ? node->m.var->alt_align : node->m.var->ty->align, tok);
+        return new_size_t(node->m.var->alt_align ? node->m.var->alt_align
+                                                 : node->m.var->ty->align,
+                          tok);
       }
       add_type(node);
       ty = node->ty;
@@ -4571,7 +4584,7 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_Countof) {
-    Node *expr = NULL;    
+    Node *expr = NULL;
     Type *ty = sizeof_arg(rest, tok->next, &expr);
 
     if (ty->kind == TY_VLA) {
@@ -4779,8 +4792,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   *rest = tok;
 
-  int pack_align = is_packed ? 1 :
-    pack_stk.cnt ? pack_stk.data[pack_stk.cnt - 1] : 0;
+  int pack_align = is_packed ? 1 : pack_stk.cnt ? pack_stk.data[pack_stk.cnt - 1] : 0;
 
   if (kind == TY_STRUCT)
     ty = struct_decl(ty, alt_align, pack_align);
@@ -4825,7 +4837,7 @@ static Type *struct_decl(Type *ty, int align, int pack_align) {
     }
     if (mem->alt_align)
       if (mem->alt_align > mem->ty->align ||
-        (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION))
+          (mem->ty->kind != TY_STRUCT && mem->ty->kind != TY_UNION))
         bits = align_to(bits, mem->alt_align * 8);
 
     if (mem->is_bitfield) {
@@ -4862,7 +4874,7 @@ static Type *struct_decl(Type *ty, int align, int pack_align) {
     bits = align_to(bits, mem_align * 8);
     mem->offset = bits / 8;
 
-    if (mem->ty->size < 0)  {
+    if (mem->ty->size < 0) {
       if (!mem->next && ty->is_flexible)
         break;
       internal_error();
@@ -4910,7 +4922,7 @@ static Member *get_struct_member(Type *ty, Token *tok) {
     } else {
       // Anonymous struct member
       if ((mem->ty->kind == TY_STRUCT || mem->ty->kind == TY_UNION) &&
-        get_struct_member(mem->ty, tok))
+          get_struct_member(mem->ty, tok))
         return mem;
     }
   }
@@ -5091,8 +5103,9 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   // If a function returns a struct, it is caller's responsibility
   // to allocate a space for the return value.
-  if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION ||
-    (node->ty->kind == TY_BITINT && bitint_rtn_need_copy(node->ty->bit_cnt)))
+  if (node->ty->kind == TY_STRUCT ||
+      node->ty->kind == TY_UNION ||
+      (node->ty->kind == TY_BITINT && bitint_rtn_need_copy(node->ty->bit_cnt)))
     node->call.rtn_buf = new_lvar(node->ty);
   return node;
 }
@@ -5139,7 +5152,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
     ret = def;
   if (!ret)
     error_tok(start, "controlling expression type not compatible with"
-              " any generic association type");
+                     " any generic association type");
   return ret;
 }
 
@@ -5156,8 +5169,9 @@ static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
   add_type(node);
 
   Token *bad_tok = NULL;
-  if (node->m.target->ty->kind != TY_PTR || node->m.target->ty->base->kind == TY_BOOL ||
-    !is_int_class(node->m.target->ty->base))
+  if (node->m.target->ty->kind != TY_PTR ||
+      node->m.target->ty->base->kind == TY_BOOL ||
+      !is_int_class(node->m.target->ty->base))
     bad_tok = node->m.target->tok;
   else if (!is_int_class(node->m.lhs->ty))
     bad_tok = node->m.lhs->tok;
@@ -5173,13 +5187,15 @@ static Node *compound_literal(Token **rest, Token *tok) {
   Token *start = tok;
   VarAttr attr = {0};
   Type *ty = declspec(&tok, tok->next, &attr,
-    SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
+                      SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
 
   ty = declarator(&tok, tok, ty, NULL);
   tok = skip(tok, ")");
 
-  if (ty->kind == TY_VOID || ty->kind == TY_FUNC ||
-    ty->kind == TY_VLA || (ty->size < 0 && ty->kind != TY_ARRAY))
+  if (ty->kind == TY_VOID ||
+      ty->kind == TY_FUNC ||
+      ty->kind == TY_VLA ||
+      (ty->size < 0 && ty->kind != TY_ARRAY))
     error_tok(tok, "invalid compound literal type");
 
   Node *expr = NULL;
@@ -5208,8 +5224,8 @@ static Node *compound_literal(Token **rest, Token *tok) {
   if (attr.strg & SC_CONSTEXPR) {
     Obj *init_var = new_anon_gvar(ty);
     constexpr_initializer(&tok, tok, init_var, var);
-    chain_expr(&expr,
-      new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok));
+    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
+                                 new_var_node(init_var, tok), tok));
   } else {
     chain_expr(&expr, lvar_initializer(&tok, tok, var));
   }
@@ -5291,8 +5307,8 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     add_type(exp);
 
     if (((is_integer(exp->ty) || is_ptr(exp->ty)) && is_const_expr(exp, NULL)) ||
-      (is_flonum(exp->ty) && is_const_fp(exp, NULL)) ||
-      (exp->kind == ND_VAR && exp->m.var->is_string_lit))
+        (is_flonum(exp->ty) && is_const_fp(exp, NULL)) ||
+        (exp->kind == ND_VAR && exp->m.var->is_string_lit))
       node->num.val = 1;
 
     node->ty = ty_int;
@@ -5682,8 +5698,10 @@ static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name) {
     fn = ent->val = new_gvar(get_ident(name), ty);
     fn->is_static = attr->strg & SC_STATIC;
 
-    if (strstr(fn->name, "setjmp") || strstr(fn->name, "savectx") ||
-      strstr(fn->name, "vfork") || strstr(fn->name, "getcontext"))
+    if (strstr(fn->name, "setjmp") ||
+        strstr(fn->name, "savectx") ||
+        strstr(fn->name, "vfork") ||
+        strstr(fn->name, "getcontext"))
       fn->returns_twice = true;
   }
   push_gvar_name(name, fn);
@@ -5819,8 +5837,9 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->body->blk.body = precalc;
   }
 
-  if (fnctx->use_vla && !fnctx->dont_dealloc_vla &&
-    (opt_reuse_stack && !fnctx->fn->dont_reuse_stk))
+  if (fnctx->use_vla &&
+      !fnctx->dont_dealloc_vla &&
+      (opt_reuse_stack && !fnctx->fn->dont_reuse_stk))
     fn->dealloc_vla = true;
 
   if (fnctx->gotos)
@@ -5862,7 +5881,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
   for (; comma_list(&tok, &tok, ";", !first); first = false) {
     Token *name = NULL;
     Type *ty = declarator2(&tok, tok, basety, &name,
-      &(DeclContext){.is_glob = !scope->parent});
+                           &(DeclContext){.is_glob = !scope->parent});
 
     if (ty->kind == TY_FUNC) {
       Obj *fn = func_prototype(&tok, tok, name, ty, attr);
@@ -5897,7 +5916,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       if (!is_compatible2(var->ty, ty))
         error_tok(tok, "incompatible type");
       if ((!var->is_static && !!(attr->strg & SC_STATIC)) ||
-        (var->is_static && !(attr->strg & (SC_STATIC | SC_EXTERN))))
+          (var->is_static && !(attr->strg & (SC_STATIC | SC_EXTERN))))
         error_tok(name, "inconsistent static");
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;

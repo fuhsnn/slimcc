@@ -14,9 +14,9 @@ void platform_init(void) {
 }
 
 void platform_stdinc_paths(StringArray *paths) {
-  add_include_path(paths, LINUX_SRC"/usr/lib/slimcc/include");
-  add_include_path(paths, LINUX_SRC"/tools/include/nolibc");
-  add_include_path(paths, LINUX_SRC"/usr/include");
+  add_include_path(paths, LINUX_SRC "/usr/lib/slimcc/include");
+  add_include_path(paths, LINUX_SRC "/tools/include/nolibc");
+  add_include_path(paths, LINUX_SRC "/usr/include");
 }
 
 void platform_search_dirs(StringArray *paths) {

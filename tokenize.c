@@ -37,15 +37,11 @@ void error(char *fmt, ...) {
 }
 
 void error_ice(char *file, int32_t line) {
-  error("internal error at %s:%"PRIi32, file, line);
+  error("internal error at %s:%" PRIi32, file, line);
 }
 
-// Reports an error message in the following format.
-//
-// foo.c:10: x = y + 1;
-//               ^ <error message here>
-static void verror_at(char *filename, char *input, int line_no,
-               char *loc, char *fmt, va_list ap) {
+static void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt,
+                      va_list ap) {
   // Find a line containing `loc`.
   char *line = loc;
   while (input < line && line[-1] != '\n')
@@ -74,10 +70,11 @@ void verror_at_tok(Token *tok, char *fmt, va_list ap) {
     if (!tok)
       internal_error();
   }
-  if (!tok->origin && tok->display_line_no)
+  if (!tok->origin && tok->display_line_no) {
     if (tok->file->file_no != tok->display_file_no || tok->line_no != tok->display_line_no)
-      fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no], tok->display_line_no);
-
+      fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no],
+              tok->display_line_no);
+  }
   verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
 
   if (tok->origin)
@@ -233,8 +230,7 @@ static int read_punct(char *p) {
   case '&':
   case '+':
   case '=':
-  case '|':
-    return (is_repeat | is_assign) + 1;
+  case '|': return (is_repeat | is_assign) + 1;
   case '<':
   case '>':
     if (is_repeat)
@@ -243,15 +239,11 @@ static int read_punct(char *p) {
   case '%':
   case '*':
   case '/':
-  case '^':
-    return is_assign + 1;
+  case '^': return is_assign + 1;
   case '#':
-  case ':':
-    return is_repeat + 1;
-  case '.':
-    return (is_repeat && p[2] == *p) ? 3 : 1;
-  case '$':
-    return opt_cc1_asm_pp;
+  case ':': return is_repeat + 1;
+  case '.': return (is_repeat && p[2] == *p) ? 3 : 1;
+  case '$': return opt_cc1_asm_pp;
   case '(':
   case ')':
   case ',':
@@ -263,8 +255,7 @@ static int read_punct(char *p) {
   case '`':
   case '{':
   case '}':
-  case '~':
-    return 1;
+  case '~': return 1;
   }
   return 0;
 }
@@ -468,7 +459,7 @@ static uint32_t read_escape_seq(char **new_pos, char *p) {
   case 'r': return '\r';
   // [GNU] \e for the ASCII escape character is a GNU C extension.
   case 'e': return 27;
-  default: return *p;
+  default:  return *p;
   }
 }
 
@@ -693,7 +684,8 @@ static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
   *limb_cnt = cnt;
 }
 
-static bool convert_pp_bitint(char *begin, char *end, Node *node, int base, bool is_unsigned) {
+static bool convert_pp_bitint(char *begin, char *end, Node *node, int base,
+                              bool is_unsigned) {
   uint32_t *data = calloc(2, sizeof(uint32_t));
   size_t limb32 = 1;
 
@@ -919,8 +911,10 @@ void convert_ucn_ident(Token *tok) {
         continue;
       }
       uint32_t c;
-      if (Casecmp(p[1], 'u') && read_ucn(&c, &p, p + 1) && (c > 0x7F) &&
-        (p == tok->loc ? is_ident1(c) : is_ident2(c))) {
+      if (Casecmp(p[1], 'u') &&
+          read_ucn(&c, &p, p + 1) &&
+          (c > 0x7F) &&
+          (p == tok->loc ? is_ident1(c) : is_ident2(c))) {
         q += encode_utf8(q, c);
         continue;
       }
@@ -955,8 +949,9 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Skip whitespace characters.
-    if (*p == ' ' || *p == '\t' || *p =='\v' || *p == '\f') {
-      for (char c = *p; *(++p) == c;);
+    if (*p == ' ' || *p == '\t' || *p == '\v' || *p == '\f') {
+      for (char c = *p; *(++p) == c;)
+        ;
       has_space = true;
       continue;
     }

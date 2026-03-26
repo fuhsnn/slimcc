@@ -7,9 +7,10 @@
 #include <glob.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <signal.h>
 #include <stdarg.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,19 +20,17 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <signal.h>
-
 
 #if defined(__SANITIZE_ADDRESS__)
-#define USE_ASAN 1
+# define USE_ASAN 1
 #elif defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define USE_ASAN 1
-#endif
+# if __has_feature(address_sanitizer)
+#  define USE_ASAN 1
+# endif
 #endif
 
 #ifdef __clang__
-#pragma clang diagnostic ignored "-Wswitch"
+# pragma clang diagnostic ignored "-Wswitch"
 #endif
 
 #define MAX(x, y) ((x) < (y) ? (y) : (x))
@@ -45,28 +44,28 @@
 #define Casecmp(c, a) (((c) | 0x20) == a)
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
-#define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
-#define NORETURN __attribute__((noreturn))
+# define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
+# define NORETURN __attribute__((noreturn))
 #elif defined(__has_attribute)
-#if __has_attribute(format)
-#define FMTCHK(x,y) __attribute__((format(printf,(x),(y))))
-#endif
-#if __has_attribute(noreturn)
-#define NORETURN __attribute__((noreturn))
-#endif
+# if __has_attribute(format)
+#  define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
+# endif
+# if __has_attribute(noreturn)
+#  define NORETURN __attribute__((noreturn))
+# endif
 #endif
 
 #ifndef FMTCHK
-#define FMTCHK(x,y)
+# define FMTCHK(x, y)
 #endif
 #ifndef NORETURN
-#define NORETURN
+# define NORETURN
 #endif
 
 #if defined(__has_builtin) && !(USE_ASAN || defined(__FILC__))
-#if __has_builtin(__builtin_popcount)
-#define BITCNT_POP(x) __builtin_popcount(x)
-#endif
+# if __has_builtin(__builtin_popcount)
+#  define BITCNT_POP(x) __builtin_popcount(x)
+# endif
 #endif
 
 #if defined(__GNUC__)
@@ -89,11 +88,13 @@ typedef long double long_double_t;
 #endif
 
 #if __STDC_VERSION__ >= 201112L
-#define ANON_UNION_START union {
-#define ANON_UNION_END };
+# define ANON_UNION_START union {
+# define ANON_UNION_END \
+   }                    \
+   ;
 #else
-#define ANON_UNION_START
-#define ANON_UNION_END
+# define ANON_UNION_START
+# define ANON_UNION_END
 #endif
 
 typedef struct Type Type;
@@ -167,7 +168,7 @@ typedef struct {
 } StringArray;
 
 void strarray_push(StringArray *arr, char *s);
-char *format(char *fmt, ...) FMTCHK(1,2);
+char *format(char *fmt, ...) FMTCHK(1, 2);
 
 //
 // tokenize.c
@@ -269,40 +270,40 @@ struct File {
 // Token type
 typedef struct Token Token;
 struct Token {
-  Token *next;            // Next token
-  TokenKind kind : 16;    // Token kind
-  bool at_bol : 1;        // True if this token is at beginning of line
-  bool has_space : 1;     // True if this token follows a space character
-  bool dont_expand : 1;   // True if a macro name is encountered during its expansion
+  Token *next;          // Next token
+  TokenKind kind : 16;  // Token kind
+  bool at_bol : 1;      // True if this token is at beginning of line
+  bool has_space : 1;   // True if this token follows a space character
+  bool dont_expand : 1; // True if a macro name is encountered during its expansion
   bool is_incl_guard : 1;
   bool is_root : 1;
   bool is_live : 1;
   bool has_ucn : 1;
-  int len;                // Token length
-  char *loc;              // Token location
-  File *file;             // Source location
-  Token *origin;          // If this is expanded from a macro, the original token
-  int line_no;            // Line number
+  int len;       // Token length
+  char *loc;     // Token location
+  File *file;    // Source location
+  Token *origin; // If this is expanded from a macro, the original token
+  int line_no;   // Line number
   int display_line_no;
   int display_file_no;
-  Type *ty;               // Used if TK_INT_NUM or TK_STR
-ANON_UNION_START
-    Token *attr_next;
-    Token *alloc_next;
-ANON_UNION_END
-ANON_UNION_START
-    int64_t ival;         // If kind is TK_INT_NUM, its value
-    char *str;            // String literal contents including terminating '\0'
-    Token *label_next;
-ANON_UNION_END
+  Type *ty; // Used if TK_INT_NUM or TK_STR
+  ANON_UNION_START
+  Token *attr_next;
+  Token *alloc_next;
+  ANON_UNION_END
+  ANON_UNION_START
+  int64_t ival; // If kind is TK_INT_NUM, its value
+  char *str;    // String literal contents including terminating '\0'
+  Token *label_next;
+  ANON_UNION_END
 };
 
-void error(char *fmt, ...) FMTCHK(1,2) NORETURN;
+void error(char *fmt, ...) FMTCHK(1, 2) NORETURN;
 void error_ice(char *file, int32_t line) NORETURN;
-void error_at(char *loc, char *fmt, ...) FMTCHK(2,3) NORETURN;
-void error_tok(Token *tok, char *fmt, ...) FMTCHK(2,3) NORETURN;
-void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
-void notice_tok(Token *tok, char *fmt, ...) FMTCHK(2,3);
+void error_at(char *loc, char *fmt, ...) FMTCHK(2, 3) NORETURN;
+void error_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3) NORETURN;
+void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3);
+void notice_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3);
 void verror_at_tok(Token *tok, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);
@@ -317,8 +318,7 @@ void convert_pp_number(Token *tok, Node *node);
 TokenKind ident_keyword(Token *tok);
 void convert_ucn_ident(Token *tok);
 
-#define internal_error() \
-  error_ice(__FILE__, __LINE__)
+#define internal_error() error_ice(__FILE__, __LINE__)
 
 //
 // preprocess.c
@@ -509,13 +509,13 @@ typedef enum {
   ND_NUM,       // Integer
   ND_CAST,      // Type cast
   ND_INIT_SEQ,
-  ND_ASM,       // "asm"
-  ND_CAS,       // Atomic compare-and-swap
-  ND_EXCH,      // Atomic exchange
-  ND_VA_START,  // "va_start"
-  ND_VA_COPY,   // "va_copy"
-  ND_VA_ARG,    // "va_arg"
-  ND_CHAIN,     // ND_COMMA without array-to-pointer conversion
+  ND_ASM,      // "asm"
+  ND_CAS,      // Atomic compare-and-swap
+  ND_EXCH,     // Atomic exchange
+  ND_VA_START, // "va_start"
+  ND_VA_COPY,  // "va_copy"
+  ND_VA_ARG,   // "va_arg"
+  ND_CHAIN,    // ND_COMMA without array-to-pointer conversion
   ND_ALLOCA,
   ND_ALLOCA_ZINIT,
   ND_ARITH_ASSIGN,
@@ -538,18 +538,18 @@ struct CaseRange {
 
 // AST node type
 struct Node {
-  Node *next;    // Next node
-  NodeKind kind; // Node kind
+  Node *next;               // Next node
+  NodeKind kind;            // Node kind
   NodeKind arith_kind : 30; // Arithmetic Assignment
   bool no_label : 1;
   bool is_nonlval : 1;
-  Type *ty;      // Type, e.g. int or pointer to int
-  Token *tok;    // Representative token
+  Type *ty;   // Type, e.g. int or pointer to int
+  Token *tok; // Representative token
 
   DeferStmt *dfr_from;
   DeferStmt *dfr_dest;
 
-ANON_UNION_START
+  ANON_UNION_START
   // Misc
   struct {
     Node *lhs;
@@ -585,15 +585,15 @@ ANON_UNION_START
   struct {
     Node *cond;
     Node *then;
-  ANON_UNION_START
+    ANON_UNION_START
     Node *els;
     Node *for_init;
     Node *sw_default;
-  ANON_UNION_END
-  ANON_UNION_START
+    ANON_UNION_END
+    ANON_UNION_START
     Node *for_inc;
     CaseRange *sw_cases;
-  ANON_UNION_END
+    ANON_UNION_END
     Node *breaks;
   } ctrl;
 
@@ -627,7 +627,7 @@ ANON_UNION_START
     AsmParam *labels;
     AsmContext *ctx; // backend defined
   } gasm;
-ANON_UNION_END
+  ANON_UNION_END
 };
 
 // Represents a block scope.
@@ -682,8 +682,10 @@ void eval_bitint_bitor(int32_t bits, void *lp, void *rp);
 void eval_bitint_bitxor(int32_t bits, void *lp, void *rp);
 void eval_bitint_shl(int32_t bits, void *sp, void *dp, int32_t amount);
 void eval_bitint_shr(int32_t bits, void *sp, void *dp, int32_t amount, bool is_unsigned);
-void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width, int32_t ofs, bool is_unsigned);
-void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width, int32_t ofs);
+void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width,
+                                int32_t ofs, bool is_unsigned);
+void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width,
+                               int32_t ofs);
 void eval_bitint_add(int32_t bits, void *lp, void *rp);
 void eval_bitint_sub(int32_t bits, void *lp, void *rp);
 void eval_bitint_mul(int32_t bits, void *lp, void *rp);
@@ -745,22 +747,22 @@ typedef enum {
 } TypeKind;
 
 typedef enum {
-  Q_CONST    = 1,
+  Q_CONST = 1,
   Q_VOLATILE = 1 << 1,
-  Q_ATOMIC   = 1 << 2,
+  Q_ATOMIC = 1 << 2,
   Q_RESTRICT = 1 << 3,
 } QualMask;
 
 struct Type {
   TypeKind kind;
-  int64_t size;       // sizeof() value
-  int32_t align;      // alignment
-  bool is_unsigned;   // unsigned or signed
+  int64_t size;     // sizeof() value
+  int32_t align;    // alignment
+  bool is_unsigned; // unsigned or signed
   bool is_int_enum;
   bool is_enum;
   QualMask qual;
-  Type *origin;       // for type compatibility check
-  Type *decl_next;    // forward declarations
+  Type *origin;    // for type compatibility check
+  Type *decl_next; // forward declarations
   Token *tag;
   EnumVal *enums;
 
@@ -897,7 +899,6 @@ bool va_arg_need_copy(Type *ty);
 bool bitint_rtn_need_copy(size_t width);
 void emit_text(Obj *fn);
 
-
 //
 // unicode.c
 //
@@ -921,13 +922,7 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output);
 //
 // main.c
 //
-typedef enum {
-  STD_C89,
-  STD_C99,
-  STD_C11,
-  STD_C17,
-  STD_C23
-} StdVer;
+typedef enum { STD_C89, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
 
 bool file_exists(char *path);
 bool in_sysincl_path(int idx);
@@ -940,7 +935,7 @@ void set_fpie(char *lvl);
 void add_include_path(StringArray *arr, char *s);
 void run_assembler_gnustyle(StringArray *as_args, char *input, char *output);
 void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
-  char *ldso_path, char *libpath, char *gcclibpath);
+                         char *ldso_path, char *libpath, char *gcclibpath);
 
 extern char *argv0;
 extern StringArray include_paths;

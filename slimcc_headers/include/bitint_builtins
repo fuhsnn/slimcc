@@ -169,7 +169,8 @@ static __inline void __slimcc_bitint_shr(int bits, void *sp, void *dp, int amoun
   __slimcc_bitint_sign_ext(bits - amount, dp, bits, is_unsigned);
 }
 
-static __inline void *__slimcc_bitint_bitfield_load(int bits, void *sp, void *dp, int width, int ofs, _Bool is_unsigned) {
+static __inline void *__slimcc_bitint_bitfield_load(int bits, void *sp, void *dp, int width,
+                                int ofs, _Bool is_unsigned) {
   char *src = sp, *dst = dp;
   int sz = (bits + 7) / 8;
 
@@ -181,7 +182,8 @@ static __inline void *__slimcc_bitint_bitfield_load(int bits, void *sp, void *dp
   return sp;
 }
 
-static __inline void __slimcc_bitint_bitfield_save(int bits, void *sp, void *dp, int width, int ofs) {
+static __inline void __slimcc_bitint_bitfield_save(int bits, void *sp, void *dp, int width,
+                               int ofs) {
   int cnt = (bits + 63) / 64;
   int full_bits = cnt * 64;
 

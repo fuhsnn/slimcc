@@ -169,7 +169,8 @@ void eval_bitint_shr(int32_t bits, void *sp, void *dp, int32_t amount, bool is_u
   eval_bitint_sign_ext(bits - amount, dp, bits, is_unsigned);
 }
 
-void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width, int32_t ofs, bool is_unsigned) {
+void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width,
+                                int32_t ofs, bool is_unsigned) {
   char *src = sp, *dst = dp;
   int32_t sz = (bits + 7) / 8;
 
@@ -181,7 +182,8 @@ void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width,
   return sp;
 }
 
-void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width, int32_t ofs) {
+void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width,
+                               int32_t ofs) {
   int32_t cnt = (bits + 63) / 64;
   int32_t full_bits = cnt * 64;
 

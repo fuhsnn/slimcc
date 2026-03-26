@@ -34,8 +34,6 @@ void run_assembler(StringArray *as_args, char *input, char *output) {
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  run_linker_gnustyle(paths, inputs, output,
-    "/usr/lib64/ld-linux-x86-64.so.2",
-    "/usr/lib/x86_64-linux-gnu",
-    "/usr/lib/gcc/x86_64-linux-gnu/14");
+  run_linker_gnustyle(paths, inputs, output, "/usr/lib64/ld-linux-x86-64.so.2",
+                      "/usr/lib/x86_64-linux-gnu", "/usr/lib/gcc/x86_64-linux-gnu/14");
 }

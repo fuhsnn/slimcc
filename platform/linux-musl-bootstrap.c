@@ -13,12 +13,12 @@ void platform_init(void) {
 }
 
 void platform_stdinc_paths(StringArray *paths) {
-  add_include_path(paths, ROOT_DIR"/lib/slimcc/include");
-  add_include_path(paths, ROOT_DIR"/usr/include");
+  add_include_path(paths, ROOT_DIR "/lib/slimcc/include");
+  add_include_path(paths, ROOT_DIR "/usr/include");
 }
 
 void platform_search_dirs(StringArray *paths) {
-  strarray_push(paths, ROOT_DIR"/lib");
+  strarray_push(paths, ROOT_DIR "/lib");
 }
 
 void run_assembler(StringArray *as_args, char *input, char *output) {
@@ -28,8 +28,6 @@ void run_assembler(StringArray *as_args, char *input, char *output) {
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
   strarray_push(inputs, "--gc-sections");
 
-  run_linker_gnustyle(paths, inputs, output,
-    ROOT_DIR"/lib/libc.so",
-    ROOT_DIR"/lib",
-    NULL);
+  run_linker_gnustyle(paths, inputs, output, ROOT_DIR "/lib/libc.so", ROOT_DIR "/lib",
+                      NULL);
 }

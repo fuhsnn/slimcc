@@ -118,21 +118,22 @@ static Token *get_line(Token **cur, Token *tok) {
 }
 
 #if USE_ASAN || defined(__FILC__)
-#define to_freelist(first, last) \
-  do {                           \
-    Token *x = first;            \
-    Token *y = last->next;       \
-    for (; x != y;) {            \
-      Token *nxt = x->next;      \
-      free(x);                   \
-      x = nxt;                   \
-    }                            \
-  } while (0)
+# define to_freelist(first, last) \
+   do {                           \
+     Token *x = first;            \
+     Token *y = last->next;       \
+     for (; x != y;) {            \
+       Token *nxt = x->next;      \
+       free(x);                   \
+       x = nxt;                   \
+     }                            \
+   } while (0)
 #else
-#define to_freelist(first, last) do { \
-    last->next = tok_freelist;        \
-    tok_freelist = first;             \
-  } while (0)
+# define to_freelist(first, last) \
+   do {                           \
+     last->next = tok_freelist;   \
+     tok_freelist = first;        \
+   } while (0)
 #endif
 
 static Token *copy_token(Token *tok) {
@@ -164,7 +165,7 @@ static Token *to_eof(Token *tok) {
   return tok;
 }
 
-static Token *new_fmark(Token *tok){
+static Token *new_fmark(Token *tok) {
   Token *t = copy_token(tok);
   t->kind = TK_FMARK;
   t->len = 0;
@@ -173,7 +174,7 @@ static Token *new_fmark(Token *tok){
   return t;
 }
 
-static Token *new_pmark(Token *tok){
+static Token *new_pmark(Token *tok) {
   Token *t = copy_token(tok);
   t->kind = TK_PMARK;
   t->len = 0;
@@ -207,20 +208,23 @@ static Token *skip_cond_incl(Token *tok) {
   int lvl = 0;
   for (; tok->kind != TK_EOF; last = tok, tok = tok->next) {
     if (is_hash(tok)) {
-      if ((equal(tok->next, "if") || equal(tok->next, "ifdef") ||
+      if ((equal(tok->next, "if") ||
+           equal(tok->next, "ifdef") ||
            equal(tok->next, "ifndef"))) {
         lvl++;
         tok = tok->next;
         continue;
       }
-      if (lvl && equal(tok->next, "endif"))  {
+      if (lvl && equal(tok->next, "endif")) {
         lvl--;
         tok = tok->next;
         continue;
       }
       if (lvl == 0 && (equal(tok->next, "endif") ||
-        equal(tok->next, "else") || equal(tok->next, "elif") ||
-        equal(tok->next, "elifdef") || equal(tok->next, "elifndef")))
+                       equal(tok->next, "else") ||
+                       equal(tok->next, "elif") ||
+                       equal(tok->next, "elifdef") ||
+                       equal(tok->next, "elifndef")))
         break;
     }
   }
@@ -391,10 +395,10 @@ static Token *read_const_expr(Token *tok) {
       break;
     case TK_INT_NUM:
     case TK_PP_NUM:
-    case TK_PUNCT:
+    case TK_PUNCT: {
       break;
-    default:
-      error_tok(tok, "invalid token in preprocessor expression");
+    }
+    default: error_tok(tok, "invalid token in preprocessor expression");
     }
 
     cur = cur->next = tok;
@@ -837,7 +841,8 @@ static Token *subst(Token *tok, MacroContext *ctx) {
         tok = skip(tok->next, ")");
       }
       if (!(tail_m && tail_m->arg_cnt))
-        error_tok(start, "expected function-like macro with at least one named parameter");
+        error_tok(start,
+                  "expected function-like macro with at least one named parameter");
 
       MacroArg *vaarg;
       if (!has_non_empty_va_arg(ctx, &vaarg)) {
@@ -1174,8 +1179,10 @@ static Token *include_file(Token *tok, char *path, Token *filename_tok, InclIdx 
     return tok;
   }
 
-  if (is_hash(start) && equal(start->next, "ifndef") &&
-    start->next->next->kind == TK_IDENT && equal(end, "endif"))
+  if (is_hash(start) &&
+      equal(start->next, "ifndef") &&
+      start->next->next->kind == TK_IDENT &&
+      equal(end, "endif"))
     start->next->is_incl_guard = end->is_incl_guard = true;
 
   end->next = tok;
@@ -1211,11 +1218,7 @@ static Token *embed_file(Token *cont, Token *tok, char *path, Token *start) {
     limit = eval_const_expr(split_paren2(&dummy, limit_seq, NULL));
 
   if (!cont) {
-    enum {
-      EMBED_NOT_FOUND = 0,
-      EMBED_FOUND = 1,
-      EMBED_EMPTY = 2
-    };
+    enum { EMBED_NOT_FOUND = 0, EMBED_FOUND = 1, EMBED_EMPTY = 2 };
 
     if (tok->kind != TK_EOF)
       return to_int_token(start, EMBED_NOT_FOUND);
@@ -1601,11 +1604,10 @@ static Token *date_macro(Token *start) {
       cur_time = localtime(&(time_t){time(NULL)});
 
     static char mon[][4] = {
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
-    str = format("\"%s %2d %d\"",
-      mon[cur_time->tm_mon], cur_time->tm_mday, cur_time->tm_year + 1900);
+    str = format("\"%s %2d %d\"", mon[cur_time->tm_mon], cur_time->tm_mday,
+                 cur_time->tm_year + 1900);
   }
   return make_token(str, start, start->next);
 }
@@ -1617,8 +1619,8 @@ static Token *time_macro(Token *start) {
     if (!cur_time)
       cur_time = localtime(&(time_t){time(NULL)});
 
-    str = format("\"%02d:%02d:%02d\"",
-      cur_time->tm_hour, cur_time->tm_min, cur_time->tm_sec);
+    str = format("\"%02d:%02d:%02d\"", cur_time->tm_hour, cur_time->tm_min,
+                 cur_time->tm_sec);
   }
   return make_token(str, start, start->next);
 }
@@ -1660,18 +1662,20 @@ static Token *pragma_macro(Token *start) {
       continue;
 
     switch (progress++) {
-    case 0:
+    case 0: {
       tok = skip(tok, "(");
       continue;
+    }
     case 1:
       if (tok->kind != TK_STR && tok->kind != TK_ASM_STR)
         error_tok(tok, "expected string literal");
       str_tok = tok;
       tok = tok->next;
       continue;
-    case 2:
+    case 2: {
       tok = skip(tok, ")");
       tok->at_bol = true;
+    }
     }
     break;
   }
@@ -1745,23 +1749,23 @@ static Token *has_builtin_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
   bool has_it = equal(tok, "__builtin_alloca") ||
-    equal(tok, "__builtin_constant_p") ||
-    equal(tok, "__builtin_expect") ||
-    equal(tok, "__builtin_expect_with_probability") ||
-    equal(tok, "__builtin_extract_return_addr") ||
-    equal(tok, "__builtin_frame_address") ||
-    equal(tok, "__builtin_offsetof") ||
-    equal(tok, "__builtin_add_overflow") ||
-    equal(tok, "__builtin_sub_overflow") ||
-    equal(tok, "__builtin_mul_overflow") ||
-    equal(tok, "__builtin_return_address") ||
-    equal(tok, "__builtin_types_compatible_p") ||
-    equal(tok, "__builtin_unreachable") ||
-    equal(tok, "__builtin_c23_va_start") ||
-    equal(tok, "__builtin_va_start") ||
-    equal(tok, "__builtin_va_copy") ||
-    equal(tok, "__builtin_va_end") ||
-    equal(tok, "__builtin_va_arg");
+                equal(tok, "__builtin_constant_p") ||
+                equal(tok, "__builtin_expect") ||
+                equal(tok, "__builtin_expect_with_probability") ||
+                equal(tok, "__builtin_extract_return_addr") ||
+                equal(tok, "__builtin_frame_address") ||
+                equal(tok, "__builtin_offsetof") ||
+                equal(tok, "__builtin_add_overflow") ||
+                equal(tok, "__builtin_sub_overflow") ||
+                equal(tok, "__builtin_mul_overflow") ||
+                equal(tok, "__builtin_return_address") ||
+                equal(tok, "__builtin_types_compatible_p") ||
+                equal(tok, "__builtin_unreachable") ||
+                equal(tok, "__builtin_c23_va_start") ||
+                equal(tok, "__builtin_va_start") ||
+                equal(tok, "__builtin_va_copy") ||
+                equal(tok, "__builtin_va_end") ||
+                equal(tok, "__builtin_va_arg");
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1772,19 +1776,18 @@ static Token *has_extension_macro(Token *start) {
   Token *tok = skip(start->next, "(");
 
   // Check clang/include/clang/Basic/Features.def, gcc/c/c-objc-common.cc
-  bool has_it =
-    equal(tok, "c_alignas") ||
-    equal(tok, "c_alignof") ||
-    equal(tok, "c_atomic") ||
-    equal(tok, "c_generic_selections") ||
-    equal(tok, "c_static_assert") ||
-    equal(tok, "c_thread_local") ||
-    equal(tok, "cxx_binary_literals") ||
-    equal(tok, "c_fixed_enum") ||
-    equal(tok, "c_countof") ||
-    equal(tok, "gnu_asm") ||
-    equal(tok, "gnu_asm_goto_with_outputs") ||
-    equal(tok, "gnu_asm_goto_with_outputs_full");
+  bool has_it = equal(tok, "c_alignas") ||
+                equal(tok, "c_alignof") ||
+                equal(tok, "c_atomic") ||
+                equal(tok, "c_generic_selections") ||
+                equal(tok, "c_static_assert") ||
+                equal(tok, "c_thread_local") ||
+                equal(tok, "cxx_binary_literals") ||
+                equal(tok, "c_fixed_enum") ||
+                equal(tok, "c_countof") ||
+                equal(tok, "gnu_asm") ||
+                equal(tok, "gnu_asm_goto_with_outputs") ||
+                equal(tok, "gnu_asm_goto_with_outputs_full");
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1855,7 +1858,7 @@ void dump_defines(FILE *out) {
       fprintf(out, "#define %s", d->name);
       if (!m->is_objlike) {
         fprintf(out, "(");
-        for (Token *t = m->params; t; t = t->next)  {
+        for (Token *t = m->params; t; t = t->next) {
           if (t != m->params)
             fprintf(out, ",");
           if (equal(t, "__VA_ARGS__"))
@@ -1876,7 +1879,11 @@ void dump_defines(FILE *out) {
 }
 
 typedef enum {
-  STR_NONE, STR_UTF8, STR_UTF16, STR_UTF32, STR_WIDE,
+  STR_NONE,
+  STR_UTF8,
+  STR_UTF16,
+  STR_UTF32,
+  STR_WIDE,
 } StringKind;
 
 static StringKind getStringKind(Token *tok) {
@@ -1938,10 +1945,11 @@ static void join_adjacent_string_literals(Token *tok) {
 }
 
 static bool is_gnu_attr(Token *tok) {
-#define PutAttr(str) do {                        \
+#define PutAttr(str)                             \
+  do {                                           \
     hashmap_put(&map, str, (void *)1);           \
     hashmap_put(&map, "__" str "__", (void *)1); \
-  } while(0)
+  } while (0)
 
   static HashMap map;
   if (map.capacity == 0) {
@@ -2099,11 +2107,11 @@ static Token *preprocess3(Token *tok) {
       else
         tok->kind = ident_keyword(tok);
       break;
-    case TK_UNICODE:
-      error_tok(tok, "unallowed unicode character");
     case TK_STR:
       if (tok->next->kind == TK_STR)
         join_adjacent_string_literals(tok);
+      break;
+    case TK_UNICODE: error_tok(tok, "unallowed unicode character");
     }
 
     stash_attr(tok, &attr_head, &attr_cur);
@@ -2154,13 +2162,13 @@ Token *preprocess(char *file, StringArray *incls, StringArray *imacros) {
 Token *prepare_parse(Token *tok) {
   {
     Token *cur;
-    Token *head = tokenize(new_file("slimcc_builtins",
-    "typedef struct {"
-    "  unsigned int gp_offset;"
-    "  unsigned int fp_offset;"
-    "  void *overflow_arg_area;"
-    "  void *reg_save_area;"
-    "} __builtin_va_list[1];"), NULL, &cur);
+    Token *head = tokenize(new_file("slimcc_builtins", "typedef struct {"
+                                                       "  unsigned int gp_offset;"
+                                                       "  unsigned int fp_offset;"
+                                                       "  void *overflow_arg_area;"
+                                                       "  void *reg_save_area;"
+                                                       "} __builtin_va_list[1];"),
+                           NULL, &cur);
 
     char *path = search_include_paths("bitint_builtins", NULL);
     if (path) {

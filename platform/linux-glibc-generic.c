@@ -75,8 +75,6 @@ static char *libpath(void) {
 }
 
 void run_linker(StringArray *paths, StringArray *inputs, char *output) {
-  run_linker_gnustyle(paths, inputs, output,
-    "/lib64/ld-linux-x86-64.so.2",
-    libpath(),
-    gcclibpath);
+  run_linker_gnustyle(paths, inputs, output, "/lib64/ld-linux-x86-64.so.2", libpath(),
+                      gcclibpath);
 }
