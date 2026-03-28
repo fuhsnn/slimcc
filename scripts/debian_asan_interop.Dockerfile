@@ -33,6 +33,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  protobuf-compiler scons python3-grpcio \
  # sdl3
  libxtst-dev \
+ # protobuf-c
+ libprotobuf-dev libprotoc-dev \
  && apt-get clean && rm -rf /var/cache/apt/*
 
 FROM install-deps AS setup-toolchain

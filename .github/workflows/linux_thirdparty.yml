@@ -86,6 +86,7 @@ jobs:
           - { vm: interop, proj: test_nanomsg }
           - { vm: interop, proj: test_nanopb }
           - { vm: interop, proj: test_nob }
+          - { vm: interop, proj: test_protobufc }
           - { vm: interop, proj: test_redis }
           - { vm: interop, proj: test_rpmalloc }
           - { vm: interop, proj: test_rvvm }
@@ -122,9 +123,11 @@ jobs:
           - { vm: main, proj: build_zig }
           - { vm: main, proj: test_ag }
           - { vm: main, proj: test_apk }
+          - { vm: main, proj: test_argtable3 }
           - { vm: main, proj: test_bash }
           - { vm: main, proj: test_bearssl }
           - { vm: main, proj: test_bfs }
+          - { vm: main, proj: test_binn }
           - { vm: main, proj: test_binutils }
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
@@ -136,15 +139,22 @@ jobs:
           - { vm: main, proj: test_bzip3 }
           - { vm: main, proj: test_c2 }
           - { vm: main, proj: test_c23doku }
+          - { vm: main, proj: test_c4 }
           - { vm: main, proj: test_calc }
+          - { vm: main, proj: test_camgunz_cmp }
           - { vm: main, proj: test_cello }
+          - { vm: main, proj: test_cfitsio }
           - { vm: main, proj: test_cgit }
           - { vm: main, proj: test_cjson }
           - { vm: main, proj: test_cmocka }
+          - { vm: main, proj: test_coremark }
+          - { vm: main, proj: test_coremarkpro }
           - { vm: main, proj: test_coreutils }
           - { vm: main, proj: test_cpio }
           - { vm: main, proj: test_cproc }
           - { vm: main, proj: test_curl }
+          - { vm: main, proj: test_cwalk }
+          - { vm: main, proj: test_cwpack }
           - { vm: main, proj: test_darkhttpd }
           - { vm: main, proj: test_diffutils }
           - { vm: main, proj: test_discount }
@@ -209,6 +219,7 @@ jobs:
           - { vm: main, proj: test_libxml }
           - { vm: main, proj: test_libyaml }
           - { vm: main, proj: test_lighthttpd }
+          - { vm: main, proj: test_linenoise }
           - { vm: main, proj: test_lmdb }
           - { vm: main, proj: test_lua }
           - { vm: main, proj: test_lwan }
@@ -225,6 +236,7 @@ jobs:
           - { vm: main, proj: test_mquickjs }
           - { vm: main, proj: test_mruby }
           - { vm: main, proj: test_munit }
+          - { vm: main, proj: test_ncompress }
           - { vm: main, proj: test_neovim }
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_njs }
@@ -242,8 +254,10 @@ jobs:
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_perl }
           - { vm: main, proj: test_php }
+          - { vm: main, proj: test_picohttpparser }
           - { vm: main, proj: test_pixman }
           - { vm: main, proj: test_postgres }
+          - { vm: main, proj: test_ptmalloc }
           - { vm: main, proj: test_python }
           - { vm: main, proj: test_qbe }
           - { vm: main, proj: test_quickjs }
@@ -252,11 +266,14 @@ jobs:
           - { vm: main, proj: test_samba }
           - { vm: main, proj: test_scrapscript }
           - { vm: main, proj: test_sds }
+          - { vm: main, proj: test_shoco }
           - { vm: main, proj: test_smaz }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }
           - { vm: main, proj: test_tcpdump }
+          - { vm: main, proj: test_tinycthread }
           - { vm: main, proj: test_tinyexpr }
+          - { vm: main, proj: test_tinyregexc }
           - { vm: main, proj: test_tomlc17 }
           - { vm: main, proj: test_toxcore }
           - { vm: main, proj: test_toybox }

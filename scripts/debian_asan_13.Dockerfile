@@ -58,6 +58,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  libpcap-dev \
  # hoedown
  tidy \
+ # cmp
+ libcmocka-dev \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain
