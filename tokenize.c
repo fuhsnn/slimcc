@@ -291,7 +291,7 @@ TokenKind ident_keyword(Token *tok) {
     hashmap_put(&map, "__alignof__", (void *)TK_alignof);
     hashmap_put(&map, "_Alignof", (void *)TK_alignof);
 
-    if (!is_iso_std)
+    if (opt_gnu_keywords)
       hashmap_put(&map, "asm", (void *)TK_asm);
     hashmap_put(&map, "__asm", (void *)TK_asm);
     hashmap_put(&map, "__asm__", (void *)TK_asm);
@@ -347,7 +347,7 @@ TokenKind ident_keyword(Token *tok) {
     if (opt_std >= STD_C23)
       hashmap_put(&map, "constexpr", (void *)TK_constexpr);
 
-    if (opt_std >= STD_C99 || !is_iso_std)
+    if (opt_std >= STD_C99 || opt_gnu_keywords)
       hashmap_put(&map, "inline", (void *)TK_inline);
     hashmap_put(&map, "__inline", (void *)TK_inline);
     hashmap_put(&map, "__inline__", (void *)TK_inline);
@@ -361,7 +361,7 @@ TokenKind ident_keyword(Token *tok) {
     hashmap_put(&map, "__signed", (void *)TK_signed);
     hashmap_put(&map, "__signed__", (void *)TK_signed);
 
-    if (opt_std >= STD_C23 || !is_iso_std)
+    if (opt_std >= STD_C23 || opt_gnu_keywords)
       hashmap_put(&map, "typeof", (void *)TK_typeof);
     hashmap_put(&map, "__typeof", (void *)TK_typeof);
     hashmap_put(&map, "__typeof__", (void *)TK_typeof);

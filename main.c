@@ -48,6 +48,7 @@ StdVer opt_std = STD_C17;
 bool is_iso_std;
 bool opt_fdefer_ts;
 bool opt_short_enums;
+bool opt_gnu_keywords;
 bool opt_gnu89_inline;
 bool opt_ms_anon_struct;
 bool opt_disable_visibility;
@@ -332,6 +333,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   int input_cnt = 0;
   char *opt_B = NULL;
   bool has_wl = false;
+  bool has_gnu_keywords_option = false;
   bool opt_nostdinc = false;
   StringArray libpaths = {0};
   StringArray isystem = {0};
@@ -610,6 +612,12 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct))
         continue;
 
+      if (!strcmp(arg, "asm") || !strcmp(arg, "gnu-keywords")) {
+        opt_gnu_keywords = b;
+        has_gnu_keywords_option = true;
+        continue;
+      }
+
       if (b) {
         if (!strcmp(arg, "pic")) {
           set_fpic("1");
@@ -765,6 +773,9 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
 
   if (opt_disable_visibility && opt_visibility)
     error("-fvisibility disabled with -fdisable-visibility");
+
+  if (!has_gnu_keywords_option)
+    opt_gnu_keywords = !is_iso_std;
 
   if (opt_B) {
     char *as_b = format("%s/%s", opt_B, default_as);

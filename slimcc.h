@@ -960,6 +960,7 @@ extern StdVer opt_std;
 extern bool is_iso_std;
 extern bool opt_fdefer_ts;
 extern bool opt_short_enums;
+extern bool opt_gnu_keywords;
 extern bool opt_gnu89_inline;
 extern bool opt_ms_anon_struct;
 extern bool opt_disable_visibility;
