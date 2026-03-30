@@ -1010,7 +1010,7 @@ static void print_dependencies(char *input) {
   if (opt_MF)
     path = opt_MF;
   else if (opt_MD)
-    path = replace_extn(opt_o ? opt_o : input, ".d");
+    path = replace_extn(opt_o ?: input, ".d");
   else if (opt_o)
     path = opt_o;
   else
@@ -1072,7 +1072,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
 void run_assembler_gnustyle(StringArray *args, char *input, char *output) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_as ? opt_use_as : default_as);
+  strarray_push(&arr, opt_use_as ?: default_as);
   strarray_push(&arr, input);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
@@ -1187,7 +1187,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
                          char *ldso_path, char *libpath, char *gcc_libpath) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_ld ? opt_use_ld : default_ld);
+  strarray_push(&arr, opt_use_ld ?: default_ld);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
   strarray_push(&arr, "-m");
@@ -1299,7 +1299,7 @@ int main(int argc, char **argv) {
 
     char *input = input_args.data[i];
 
-    FileType type = opt_x ? opt_x : get_file_type(input);
+    FileType type = opt_x ?: get_file_type(input);
 
     if (type == FILE_LDARG) {
       strarray_push(&ld_args, input);
@@ -1339,7 +1339,7 @@ int main(int argc, char **argv) {
     // Handle .S
     if (type == FILE_PP_ASM) {
       if (opt_S || opt_E || opt_M) {
-        run_cc1(input, (opt_o ? opt_o : "-"), no_fork, true);
+        run_cc1(input, (opt_o ?: "-"), no_fork, true);
         continue;
       }
       if (opt_c) {
@@ -1360,7 +1360,7 @@ int main(int argc, char **argv) {
     assert(type == FILE_C);
 
     if (opt_E || opt_M) {
-      run_cc1(input, (opt_o ? opt_o : "-"), no_fork, false);
+      run_cc1(input, (opt_o ?: "-"), no_fork, false);
       continue;
     }
 
@@ -1389,7 +1389,7 @@ int main(int argc, char **argv) {
     if (opt_c || opt_S || opt_E || opt_M)
       fprintf(stderr, "linker input unused\n");
     else
-      run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
+      run_linker(&ld_paths, &ld_args, opt_o ?: "a.out");
   }
 
   cleanup();

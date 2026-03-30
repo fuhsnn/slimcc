@@ -246,11 +246,11 @@ static char *get_symbol(Obj *var) {
              (var->is_always_inline && opt_fake_always_inline))
       push_ref(var);
   }
-  return var->asm_name ? var->asm_name : var->name;
+  return var->asm_name ?: var->name;
 }
 
 static char *asm_name(Obj *var) {
-  return var->asm_name ? var->asm_name : var->name;
+  return var->asm_name ?: var->name;
 }
 
 static int get_align(Obj *var) {
@@ -338,7 +338,7 @@ static bool use_rip(Obj *var) {
       return var->is_definition && export_fn(var);
     return var->is_definition || !var->is_weak;
   }
-  char *vis = var->visibility ? var->visibility : opt_visibility;
+  char *vis = var->visibility ?: opt_visibility;
   if (vis && (!strcmp(vis, "hidden"))) {
     if (var->ty->kind == TY_FUNC)
       return var->is_definition && export_fn(var);
@@ -4874,7 +4874,7 @@ static void emit_symbol2(Obj *var, char *name, char *vis) {
 }
 
 static void emit_symbol(Obj *var, char *name) {
-  emit_symbol2(var, name, var->visibility ? var->visibility : opt_visibility);
+  emit_symbol2(var, name, var->visibility ?: opt_visibility);
 }
 
 static bool is_rodata_obj(Obj *var) {

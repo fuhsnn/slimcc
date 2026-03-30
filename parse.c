@@ -1154,7 +1154,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
       if (is_typename(tok)) {
         VarAttr attr2 = {0};
         Type *ty2 = typename2(&tok, tok, &attr2);
-        align = attr2.align ? attr2.align : ty2->align;
+        align = attr2.align ?: ty2->align;
       } else {
         align = align_expr(&tok, tok);
       }
@@ -1295,7 +1295,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
       fn_ty->is_oldstyle = true;
     return fn_ty;
   }
-  bool is_def = end && is_func_def(*end ? *end : skip_paren(tok));
+  bool is_def = end && is_func_def(*end ?: skip_paren(tok));
 
   if (!is_typename(tok)) {
     fn_ty->is_oldstyle = true;
@@ -2012,7 +2012,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
       for (int i = begin; i <= end; i++)
         designation(&tok, start, &init->list.data[i], true, ctx);
     } else {
-      ctx = ctx ? ctx : &(DesgContext){0};
+      ctx = ctx ?: &(DesgContext){0};
       ctx->lvl++;
 
       for (int i = begin; i <= end; i++) {
@@ -2237,7 +2237,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
       cnt++;
 
     init->kind = INIT_EXPR;
-    init->expr = expr ? expr : assign(&tok, tok);
+    init->expr = expr ?: assign(&tok, tok);
 
     while (cnt--)
       tok = skip(tok, "}");
@@ -4234,7 +4234,7 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
   Node *len2 = vla_cond_result_len2(ty2);
 
   if (!len1 + !len2 == 1)
-    return vla_of(base, len1 ? len1 : len2, 0);
+    return vla_of(base, len1 ?: len2, 0);
 
   if (!*cond_var) {
     int64_t val;
@@ -4596,9 +4596,7 @@ static Node *unary(Token **rest, Token *tok) {
       case ND_MEMBER:
         return new_size_t(MAX(node->m.member->ty->align, node->m.member->alt_align), tok);
       case ND_VAR:
-        return new_size_t(node->m.var->alt_align ? node->m.var->alt_align
-                                                 : node->m.var->ty->align,
-                          tok);
+        return new_size_t(node->m.var->alt_align ?: node->m.var->ty->align, tok);
       }
       add_type(node);
       ty = node->ty;
@@ -4735,7 +4733,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           flex_tok = tok;
           continue;
         }
-        error_tok(flex_tok ? flex_tok : tok, "member has incomplete type");
+        error_tok(flex_tok ?: tok, "member has incomplete type");
       }
     }
   }

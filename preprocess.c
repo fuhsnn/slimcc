@@ -1091,7 +1091,7 @@ static char *read_filename(Token **rest, Token *tok, char **dir) {
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
     filename = strndup(tok->loc + 1, tok->len - 2);
-    *dir = (tok->origin ? tok->origin : tok)->file->name;
+    *dir = (tok->origin ?: tok)->file->name;
   } else if (equal(tok, "<")) {
     // Pattern 2: #include <foo.h>
     // Reconstruct a filename from between "<" and ">".
@@ -1710,7 +1710,7 @@ static Token *has_c_attribute_macro(Token *start) {
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
-  return make_token(str ? str : "0", start, tok);
+  return make_token(str ?: "0", start, tok);
 }
 
 static Token *has_builtin_macro(Token *start) {

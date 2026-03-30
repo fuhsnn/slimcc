@@ -118,11 +118,11 @@ Type *copy_type(Type *ty) {
 }
 
 Type *unqual(Type *ty) {
-  return ty->origin ? ty->origin : ty;
+  return ty->origin ?: ty;
 }
 
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
-  ty = ty->origin ? ty->origin : ty;
+  ty = ty->origin ?: ty;
 
   if (tok && ty->kind != TY_AUTO)
     if (qual & Q_RESTRICT)
