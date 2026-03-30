@@ -80,7 +80,7 @@ $(TESTS_ASAN): slimcc-asan test/host/common.o
 test-asan: $(TESTS_ASAN)
 	for i in $(TESTS_ASAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-asan $(CC)
-	./slimcc-asan scripts/amalgamation.c -c -o/dev/null
+	./slimcc-asan -std=c23 scripts/amalgamation.c -c -o/dev/null
 	./slimcc-asan -hashmap-test
 
 test-misc: slimcc-asan test/host/common.o

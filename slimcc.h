@@ -9,7 +9,7 @@
 #include <libgen.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <stdbool.h>
+#include <stdbit.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,6 +20,34 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+
+#if __has_include(<stdcountof.h>)
+# include <stdcountof.h>
+#else
+# define countof(_x) (sizeof(_x) / sizeof(*(_x)))
+#endif
+
+// From Jens Gustedt's blog
+#if __has_include(<stddefer.h>)
+# include <stddefer.h>
+# if defined(__clang__)
+#  if __is_identifier(_Defer)
+#   error "clang may need the option -fdefer-ts for the _Defer feature"
+#  endif
+# endif
+#elif __GNUC__ > 8
+# define defer _Defer
+# define _Defer _Defer_A(__COUNTER__)
+# define _Defer_A(N) _Defer_B(N)
+# define _Defer_B(N) _Defer_C(_Defer_func_##N, _Defer_var_##N)
+# define _Defer_C(F, V)                                                               \
+   auto void F(int *);                                                                \
+   __attribute__((__cleanup__(F), __deprecated__, __unused__)) int V;                 \
+   __attribute__((__always_inline__, __deprecated__, __unused__)) inline auto void F( \
+     __attribute__((__unused__)) int *V)
+#else
+# error "The _Defer feature seems not available"
+#endif
 
 #if defined(__SANITIZE_ADDRESS__)
 # define USE_ASAN 1
@@ -43,22 +71,15 @@
 #define Isxdigit(c) (Isdigit(c) || Inrange((c) | 0x20, 'a', 'f'))
 #define Casecmp(c, a) (((c) | 0x20) == a)
 
-#if defined(__GNUC__) && (__GNUC__ >= 3)
-# define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
-# define NORETURN __attribute__((noreturn))
-#elif defined(__has_attribute)
-# if __has_attribute(format)
-#  define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
-# endif
-# if __has_attribute(noreturn)
-#  define NORETURN __attribute__((noreturn))
-# endif
-#endif
-
-#ifndef FMTCHK
+#if __has_c_attribute(gnu::format)
+# define FMTCHK(x, y) [[gnu::format(printf, x, y)]]
+#else
 # define FMTCHK(x, y)
 #endif
-#ifndef NORETURN
+
+#if __has_c_attribute(noreturn)
+# define NORETURN [[noreturn]]
+#else
 # define NORETURN
 #endif
 
@@ -169,7 +190,7 @@ typedef struct {
 } StringArray;
 
 void strarray_push(StringArray *arr, char *s);
-char *format(char *fmt, ...) FMTCHK(1, 2);
+char *format FMTCHK(1, 2)(char *fmt, ...);
 
 //
 // tokenize.c
@@ -296,12 +317,12 @@ struct Token {
   ANON_UNION_END
 };
 
-void error(char *fmt, ...) FMTCHK(1, 2) NORETURN;
-void error_ice(char *file, int32_t line) NORETURN;
-void error_at(char *loc, char *fmt, ...) FMTCHK(2, 3) NORETURN;
-void error_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3) NORETURN;
-void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3);
-void notice_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3);
+NORETURN void error FMTCHK(1, 2)(char *fmt, ...);
+NORETURN void error_ice(char *file, int32_t line);
+NORETURN void error_at FMTCHK(2, 3)(char *loc, char *fmt, ...);
+NORETURN void error_tok FMTCHK(2, 3)(Token *tok, char *fmt, ...);
+void warn_tok FMTCHK(2, 3)(Token *tok, char *fmt, ...);
+void notice_tok FMTCHK(2, 3)(Token *tok, char *fmt, ...);
 void verror_at_tok(Token *tok, char *fmt, va_list ap);
 bool equal(Token *tok, char *op);
 bool equal_ext(Token *tok, char *op);
