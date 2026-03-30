@@ -16,3 +16,5 @@ PenaltyExcessCharacter: 10
 PenaltyBreakAssignment: 100
 PenaltyBreakBeforeFirstCallParameter: 100
 PenaltyBreakOpenParenthesis: 120
+
+IndentGotoLabels: InnerIndent

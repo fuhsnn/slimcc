@@ -1212,9 +1212,9 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
       switch (lt) {
       case LT_STATIC_PIE:
       case LT_SHARED:
-      case LT_PIE:        strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath)); break;
-      case LT_STATIC:     strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath)); break;
-      case LT_DYNAMIC:    strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath)); break;
+      case LT_PIE:     strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath)); break;
+      case LT_STATIC:  strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath)); break;
+      case LT_DYNAMIC: strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath)); break;
       }
     }
   }
