@@ -16,3 +16,9 @@ PenaltyExcessCharacter: 10
 PenaltyBreakAssignment: 100
 PenaltyBreakBeforeFirstCallParameter: 100
 PenaltyBreakOpenParenthesis: 120
+
+IndentGotoLabels: InnerIndent
+
+IntegerLiteralSeparator:
+  Binary: 4
+  Hex: 4
