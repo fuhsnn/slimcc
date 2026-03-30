@@ -2,9 +2,9 @@ SRCS=alloc.c bitint.c codegen.c hashmap.c main.c parse.c platform.c preprocess.c
 
 TEST_SRCS!=ls test/*.c
 
-STG2_FLAGS=
+STG2_FLAGS=-std=gnu23
 
-SAN_FLAGS=-fsanitize=address,undefined -fno-sanitize=alignment,float-cast-overflow -fno-sanitize-recover=undefined
+SAN_FLAGS=-std=gnu23 -fsanitize=address,undefined -fno-sanitize=alignment,float-cast-overflow -fno-sanitize-recover=undefined
 
 .SUFFIXES: .exe .stage2.o .stage2.exe .san.o .san.exe .filc.o .filc.exe
 
@@ -78,7 +78,7 @@ $(TESTS_SAN): slimcc-san test/host/common.o
 test-san: $(TESTS_SAN)
 	for i in $(TESTS_SAN); do echo $$i; ./$$i || exit 1; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-san $(CC)
-	./slimcc-san scripts/amalgamation.c -c -o/dev/null
+	./slimcc-san -std=c23 scripts/amalgamation.c -c -o/dev/null
 	./slimcc-san -hashmap-test
 
 test-misc: slimcc-san test/host/common.o
