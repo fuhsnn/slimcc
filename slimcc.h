@@ -11,7 +11,8 @@
 #include <signal.h>
 #include <spawn.h>
 #include <stdarg.h>
-#include <stdbool.h>
+#include <stdbit.h>
+#include <stdcountof.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -22,18 +23,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-
-#if defined(__has_builtin)
-# define SLIMCC_HAS_BUILTIN(x) __has_builtin(x)
-#else
-# define SLIMCC_HAS_BUILTIN(x) 0
-#endif
-
-#if defined(__has_attribute)
-# define SLIMCC_HAS_ATTR(x) __has_attribute(x)
-#else
-# define SLIMCC_HAS_ATTR(x) 0
-#endif
 
 #if defined(__has_c_attribute)
 # define SLIMCC_HAS_C_ATTR(x) __has_c_attribute(x)
@@ -66,68 +55,46 @@
 # define EAGER_FREE 0
 #endif
 
-#if (defined(__GNUC__) && __GNUC__ >= 3) || SLIMCC_HAS_ATTR(format)
-# define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
+#if SLIMCC_HAS_C_ATTR(gnu::format)
+# define FMTCHK(x, y) [[gnu::format(printf, (x), (y))]]
 #else
 # define FMTCHK(x, y)
 #endif
 
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-# define NORETURN _Noreturn
-#elif __GNUC__ >= 3 || SLIMCC_HAS_ATTR(noreturn)
-# define NORETURN __attribute__((noreturn))
-#elif SLIMCC_HAS_C_ATTR(noreturn)
+#if SLIMCC_HAS_C_ATTR(noreturn)
 # define NORETURN [[noreturn]]
 #else
 # define NORETURN
 #endif
 
-#if defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8
-# if SLIMCC_HAS_BUILTIN(__builtin_popcountll)
-#  define Pop64(x) __builtin_popcountll((uint64_t)(x))
-# endif
-# if SLIMCC_HAS_BUILTIN(__builtin_ctzll)
-#  define Ctz64(x) __builtin_ctzll((uint64_t)(x))
-# endif
-# if SLIMCC_HAS_BUILTIN(__builtin_clzll)
-#  define Clz64(x) __builtin_clzll((uint64_t)(x))
-# endif
-#endif
-
-#if defined(__has_include)
-# if __has_include(<stdbit.h>)
-#  include <stdbit.h>
-#  ifndef Pop64
-#   define Pop64(x) (int)stdc_count_ones((uint64_t)(x))
-#  endif
-#  ifndef Ctz64
-#   define Ctz64(x) (int)stdc_trailing_zeros((uint64_t)(x))
-#  endif
-#  ifndef Clz64
-#   define Clz64(x) (int)stdc_leading_zeros((uint64_t)(x))
-#  endif
-# endif
-#endif
-
-#ifndef Pop64
-# define Pop64(x) _pop64_impl(x)
-static inline int _pop64_impl(uint64_t v) {
-  int cnt = 0;
-  for (; v; cnt++)
-    v &= v - 1;
-  return cnt;
-}
-#endif
-
-#ifndef Ctz64
-# define Ctz64(x) _ctz64_impl(x)
-static inline int _ctz64_impl(uint64_t v) {
-  return Pop64((v & -v) - 1);
-}
-#endif
+#define Pop64(x) (int)stdc_count_ones((uint64_t)(x))
+#define Ctz64(x) (int)stdc_trailing_zeros((uint64_t)(x))
+#define Clz64(x) (int)stdc_leading_zeros((uint64_t)(x))
 
 #ifdef __clang__
 # pragma clang diagnostic ignored "-Wswitch"
+#endif
+
+// From Jens Gustedt's blog
+#if __has_include(<stddefer.h>)
+# include <stddefer.h>
+# if defined(__clang__)
+#  if __is_identifier(_Defer)
+#   error "clang may need the option -fdefer-ts for the _Defer feature"
+#  endif
+# endif
+#elif __GNUC__ > 8
+# define defer _Defer
+# define _Defer _Defer_A(__COUNTER__)
+# define _Defer_A(N) _Defer_B(N)
+# define _Defer_B(N) _Defer_C(_Defer_func_##N, _Defer_var_##N)
+# define _Defer_C(F, V)                                                               \
+   auto void F(int *);                                                                \
+   __attribute__((__cleanup__(F), __deprecated__, __unused__)) int V;                 \
+   __attribute__((__always_inline__, __deprecated__, __unused__)) inline auto void F( \
+     __attribute__((__unused__)) int *V)
+#else
+# error "The _Defer feature seems not available"
 #endif
 
 #if defined(__GNUC__)
@@ -143,11 +110,7 @@ static inline int _ctz64_impl(uint64_t v) {
 # define BUFF_CAST(_t, _ptr) (*((_t *)(_ptr)))
 #endif
 
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-# define S_ASSERT(x) static_assert((x), "");
-#else
-# define S_ASSERT(x)
-#endif
+#define S_ASSERT(x) static_assert(x);
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 # define ANON_UNION_START union {
@@ -253,7 +216,7 @@ typedef struct {
 } StringArray;
 
 void strarray_push(StringArray *arr, const char *s);
-char *format(const char *fmt, ...) FMTCHK(1, 2);
+char *format FMTCHK(1, 2)(const char *fmt, ...);
 
 //
 // tokenize.c
@@ -436,11 +399,11 @@ struct Token {
 };
 
 NORETURN void error_ice(const char *file, int32_t line);
-NORETURN void error(const char *fmt, ...) FMTCHK(1, 2);
-NORETURN void error_at(const char *loc, const char *fmt, ...) FMTCHK(2, 3);
-NORETURN void error_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
-void warn_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
-void notice_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
+NORETURN void error FMTCHK(1, 2)(const char *fmt, ...);
+NORETURN void error_at FMTCHK(2, 3)(const char *loc, const char *fmt, ...);
+NORETURN void error_tok FMTCHK(2, 3)(Token *tok, const char *fmt, ...);
+void warn_tok FMTCHK(2, 3)(Token *tok, const char *fmt, ...);
+void notice_tok FMTCHK(2, 3)(Token *tok, const char *fmt, ...);
 void verror_at_tok(Token *tok, const char *fmt, va_list ap);
 bool equal(Token *tok, const char *op);
 bool equal_ext(Token *tok, const char *op);
