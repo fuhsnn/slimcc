@@ -810,7 +810,7 @@ void convert_pp_number(Token *tok, Node *node) {
   char *p;
   int len = 0;
   if (opt_std >= STD_C23) {
-    // Remove digit seperators
+    // Remove digit separators
     static size_t buflen;
     static char *buf;
 

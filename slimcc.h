@@ -815,7 +815,7 @@ struct Member {
 
   // Bitfield
   bool is_bitfield;
-  bool is_aligned_bitfiled;
+  bool is_aligned_bitfield;
   int bit_offset;
   int bit_width;
 };

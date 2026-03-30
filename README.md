@@ -3,7 +3,7 @@ This is a fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibicc) with
  - C11 features: `_Static_assert()`, over-aligned locals, `_Generic` with qualifiers.
  - C23 features: `constexpr`, `enum:T`, `#embed`, `auto`, `_BitInt`, `nullptr`, `={}`
  - C2Y features: named loops, `if` declarations, `_Countof`.
- - `defer/_Defer`: enable non-unglified form with `-fdefer-ts` option or `#include <stddefer.h>`.
+ - `defer/_Defer`: enable un-uglified form with `-fdefer-ts` option or `#include <stddefer.h>`.
  - WG14 proposals:  `__VA_TAIL__`, `#def #enddef`.
  - GNU features: inline assembly, commonly used `__attribute__`'s.
  - MSVC features: `#pragma pack`, anonymous struct.
@@ -15,7 +15,7 @@ Compiling real C projects with slimcc has been a major focus, the [CI workflow](
  - Command-line tools (curl, git, jq, wget, rsync, apk, pacman)
  - Programming languages (Python, Go, Lua, Perl, Ruby, PHP, Ocaml, Erlang, C3, Zig)
  - Gamedev/graphics libraries (SDL3, glfw, stb, raylib, sokol)
- - Critical infrastructure softwares (Redis, Valkey, Nginx, PostgreSQL)
+ - Critical infrastructure software (Redis, Valkey, Nginx, PostgreSQL)
 
 [slimcc-musl-bootstrap](https://github.com/fuhsnn/slimcc-musl-bootstrap) is a minimal statically-linked chroot environment with `musl`, `binutils`, `toybox` entirely compiled with slimcc.
 

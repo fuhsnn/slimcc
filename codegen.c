@@ -897,7 +897,7 @@ static void gen_bitfield_load(Node *node, int ofs) {
     return;
   }
 
-  if (mem->is_aligned_bitfiled) {
+  if (mem->is_aligned_bitfield) {
     int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
     load2(bitwidth_to_ty(p2bits, mem->ty->is_unsigned), ofs, "%rax");
 
@@ -933,7 +933,7 @@ static void gen_bitfield_load(Node *node, int ofs) {
 }
 
 static void gen_bitfield_store2(char *ptr, Reg r_val, Reg r_tmp, Member *mem) {
-  if (mem->is_aligned_bitfiled) {
+  if (mem->is_aligned_bitfield) {
     int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
     RegSz rsz = bitwidth_to_regsz(p2bits);
     char *tmp = regs[r_tmp][rsz];
@@ -1857,7 +1857,7 @@ static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
 
 // Logic should be in sync with prepare_funcall()
 static void gen_funcall_args(Node *node) {
-  // Pass-by-stack or non-trival args that need spilling
+  // Pass-by-stack or non-trivial args that need spilling
   for (Obj *var = node->call.args; var; var = var->param_next)
     if (var->ptr)
       gen_var_assign(var, var->arg_expr);
@@ -4181,7 +4181,7 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
           match_r &= 1ULL << ap->match->var_asm_reg;
         if (match_r) {
           ap->reg_constraint = match_r;
-          // Ensure the input is sorted after the output during asm_assign_oprands()
+          // Ensure the input is sorted after the output during asm_assign_operands()
           ap->match->reg_constraint |= match_r;
           continue;
         }
@@ -4237,7 +4237,7 @@ static int asm_reg_msk_popcount(AsmParam *ap) {
 #endif
 }
 
-static int asm_assign_oprands_presort(AsmParam **sorted) {
+static int asm_assign_operands_presort(AsmParam **sorted) {
   uint8_t counts[REG_X64_END] = {0};
 
   for (int i = 0; i < asm_ops_cnt; i++) {
@@ -4261,10 +4261,10 @@ static int asm_assign_oprands_presort(AsmParam **sorted) {
   return sorted_cnt;
 }
 
-static void asm_assign_oprands(void) {
+static void asm_assign_operands(void) {
   AsmParam *sorted[ASMOP_BUFSZ];
 
-  int sorted_cnt = asm_assign_oprands_presort(sorted);
+  int sorted_cnt = asm_assign_operands_presort(sorted);
 
   for (uint64_t i = 0; i < sorted_cnt; i++) {
     AsmParam *ap = sorted[i];
@@ -4379,7 +4379,7 @@ void prepare_inline_asm(Node *node) {
   asm_constraint(node->gasm.inputs, true, x87_clobber);
   asm_constraint(node->gasm.outputs, false, 0);
 
-  asm_assign_oprands();
+  asm_assign_operands();
 
   int out_tmp;
   asm_prepare_args(node, &out_tmp);

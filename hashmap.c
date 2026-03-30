@@ -24,7 +24,7 @@ static uint64_t fnv_hash(char *s, int len) {
   return hash;
 }
 
-// Make room for new entires in a given hashmap by removing
+// Make room for new entries in a given hashmap by removing
 // tombstones and possibly extending the bucket size.
 static void rehash(HashMap *map) {
   // Compute the size of the new hashmap.

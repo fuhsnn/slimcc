@@ -2634,7 +2634,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
             continue;
           }
           uint64_t val = eval(node);
-          if (mem->is_aligned_bitfiled) {
+          if (mem->is_aligned_bitfield) {
             int sz = next_pow_of_two(mem->bit_offset + mem->bit_width) / 8;
             uint64_t oldval = read_buf(loc, sz);
             uint64_t mask = (1L << mem->bit_width) - 1;
@@ -2985,7 +2985,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
 
       if (tok->kind == TK_default) {
         if (active_sw->ctrl.sw_default)
-          error_tok(tok, "duplicated defualt");
+          error_tok(tok, "duplicated default");
 
         active_sw->ctrl.sw_default = case_node;
         tok = skip(tok->next, ":");
@@ -3695,7 +3695,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 
         Member *mem = node->m.member;
         uint64_t val = 0;
-        if (mem->is_aligned_bitfiled) {
+        if (mem->is_aligned_bitfield) {
           val = read_buf(data, next_pow_of_two(mem->bit_offset + mem->bit_width) / 8);
           val <<= (64 - mem->bit_width - mem->bit_offset);
         } else {
@@ -4744,7 +4744,7 @@ static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat
 
   if (equal(tok, "{")) {
     if (tag_ty->is_constructing)
-      error_tok(tag, "nested redifinition");
+      error_tok(tag, "nested redefinition");
 
     if (tag_ty->size >= 0) {
       if (opt_std < STD_C23)
@@ -4854,17 +4854,17 @@ static Type *struct_decl(Type *ty, int align, int pack_align) {
           if (mofs * 8 > bits)
             continue;
           mem->offset = mofs;
-          mem->is_aligned_bitfiled = true;
+          mem->is_aligned_bitfield = true;
           break;
         }
-        if (!mem->is_aligned_bitfiled)
+        if (!mem->is_aligned_bitfield)
           mem->offset = bits / 8;
       } else {
         int64_t bsz = mem->ty->size * 8;
         if (bits / bsz != (bits + mem->bit_width - 1) / bsz)
           bits = align_to(bits, bsz);
         mem->offset = bits / bsz * mem->ty->size;
-        mem->is_aligned_bitfiled = true;
+        mem->is_aligned_bitfield = true;
       }
 
       mem->bit_offset = bits - mem->offset * 8;
@@ -5496,7 +5496,7 @@ static Node *primary(Token **rest, Token *tok) {
 
     if (equal(tok->next, "{")) {
       if (!fnctx)
-        error_tok(tok, "statement expresssion not in a function");
+        error_tok(tok, "statement expression not in a function");
 
       Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
       *rest = skip(tok, ")");
