@@ -3461,13 +3461,13 @@ static int64_t eval_cmp(Node *node) {
   Node *rhs = node->m.rhs;
 
   if (lhs->ty->kind == TY_BITINT) {
-    uint64_t *ldata = eval_bitint(lhs);
-    uint64_t *rdata = eval_bitint(rhs);
+    uint64_t *lval = eval_bitint(lhs);
+    uint64_t *rval = eval_bitint(rhs);
     if (eval_recover && *eval_recover)
-      return free(ldata), free(rdata), 0;
+      return free(lval), free(rval), 0;
 
-    int res = eval_bitint_cmp(lhs->ty->bit_cnt, ldata, rdata, lhs->ty->is_unsigned);
-    free(ldata), free(rdata);
+    int res = eval_bitint_cmp(lhs->ty->bit_cnt, lval, rval, lhs->ty->is_unsigned);
+    free(lval), free(rval);
 
     switch (node->kind) {
     case ND_EQ: return res == 0;

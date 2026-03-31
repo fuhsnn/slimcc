@@ -1,7 +1,7 @@
 #include "slimcc.h"
 
 typedef enum {
-  FILE_NONE,
+  FILE_NONE = 0,
   FILE_C,
   FILE_ASM,
   FILE_PP_ASM,
@@ -1280,11 +1280,7 @@ int main(int argc, char **argv) {
 
     char *input = input_args.data[i];
 
-    FileType type;
-    if (opt_x != FILE_NONE)
-      type = opt_x;
-    else
-      type = get_file_type(input);
+    FileType type = opt_x ? opt_x : get_file_type(input);
 
     if (type == FILE_LDARG) {
       strarray_push(&ld_args, input);

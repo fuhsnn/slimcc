@@ -1851,30 +1851,29 @@ void init_macros(void) {
 
 void dump_defines(FILE *out) {
   for (MacroDef *d = macro_head; d; d = d->next) {
-    Macro *m;
-    if ((m = hashmap_get(&macros, d->name))) {
-      if (m->is_locked || m->handler)
-        continue;
-      fprintf(out, "#define %s", d->name);
-      if (!m->is_objlike) {
-        fprintf(out, "(");
-        for (Token *t = m->params; t; t = t->next) {
-          if (t != m->params)
-            fprintf(out, ",");
-          if (equal(t, "__VA_ARGS__"))
-            break;
-          fprintf(out, "%.*s", t->len, t->loc);
-        }
-        fprintf(out, m->has_va_arg ? "...)" : ")");
-      }
-      for (Token *t = m->body; t; t = t->next) {
-        if (t->has_space || t == m->body)
-          fprintf(out, " ");
+    Macro *m = hashmap_get(&macros, d->name);
+    if (!m || m->is_locked || m->handler)
+      continue;
+
+    fprintf(out, "#define %s", d->name);
+    if (!m->is_objlike) {
+      fprintf(out, "(");
+      for (Token *t = m->params; t; t = t->next) {
+        if (t != m->params)
+          fprintf(out, ",");
+        if (equal(t, "__VA_ARGS__"))
+          break;
         fprintf(out, "%.*s", t->len, t->loc);
       }
-      fprintf(out, "\n");
-      m->is_locked = true;
+      fprintf(out, m->has_va_arg ? "...)" : ")");
     }
+    for (Token *t = m->body; t; t = t->next) {
+      if (t->has_space || t == m->body)
+        fprintf(out, " ");
+      fprintf(out, "%.*s", t->len, t->loc);
+    }
+    fprintf(out, "\n");
+    m->is_locked = true;
   }
 }
 
