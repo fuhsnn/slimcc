@@ -413,14 +413,14 @@ static bool in_range(uint32_t c, UTF32Range *range, int len) {
 }
 
 bool is_ident1(uint32_t c) {
-  return in_range(c, xid_start, sizeof(xid_start) / sizeof(UTF32Range)) ||
-         in_range(c, math_start, sizeof(math_start) / sizeof(UTF32Range));
+  return in_range(c, xid_start, countof(xid_start)) ||
+         in_range(c, math_start, countof(math_start));
 }
 
 bool is_ident2(uint32_t c) {
   return is_ident1(c) ||
-         in_range(c, xid_cont, sizeof(xid_cont) / sizeof(UTF32Range)) ||
-         in_range(c, math_cont, sizeof(math_cont) / sizeof(UTF32Range));
+         in_range(c, xid_cont, countof(xid_cont)) ||
+         in_range(c, math_cont, countof(math_cont));
 }
 
 // Returns the number of columns needed to display a given
@@ -428,10 +428,10 @@ bool is_ident2(uint32_t c) {
 //
 // Based on https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
 static int char_width(uint32_t c) {
-  if (in_range(c, width_range1, sizeof(width_range1) / sizeof(UTF32Range)))
+  if (in_range(c, width_range1, countof(width_range1)))
     return 0;
 
-  if (in_range(c, width_range2, sizeof(width_range2) / sizeof(UTF32Range)))
+  if (in_range(c, width_range2, countof(width_range2)))
     return 2;
   return 1;
 }
