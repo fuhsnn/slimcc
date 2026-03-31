@@ -5802,8 +5802,14 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fn->ty = ty;
 
   arena_on(&ast_arena);
+  defer {
+    arena_off(&ast_arena);
+  }
 
   fnctx = &(FuncContext){.fn = fn};
+  defer {
+    fnctx = NULL;
+  }
 
   Node *precalc = NULL;
 
@@ -5841,9 +5847,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     resolve_gotos();
 
   emit_text(fn);
-
-  fnctx = NULL;
-  arena_off(&ast_arena);
 }
 
 static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr) {
@@ -5980,14 +5983,19 @@ Obj *parse(Token *tok) {
     }
 
     arena_on(&node_arena);
-
-    if (pragma_pack(&tok, tok)) {
+    defer {
       arena_off(&node_arena);
-      continue;
     }
+
+    if (pragma_pack(&tok, tok))
+      continue;
 
     if (tok->kind == TK_static_assert) {
       arena_on(&ast_arena);
+      defer {
+        arena_off(&ast_arena);
+      }
+
       Obj *last = globals;
 
       eval_static_assert(&tok, tok->next);
@@ -6000,9 +6008,6 @@ Obj *parse(Token *tok) {
       }
       globals = last;
       last->next = NULL;
-
-      arena_off(&ast_arena);
-      arena_off(&node_arena);
       continue;
     }
 
@@ -6011,12 +6016,10 @@ Obj *parse(Token *tok) {
 
     if (attr.strg & SC_TYPEDEF) {
       parse_typedef(&tok, tok, basety, &attr);
-      arena_off(&node_arena);
       continue;
     }
 
     global_declaration(&tok, tok, basety, &attr);
-    arena_off(&node_arena);
   }
 
   return glb_head->next;

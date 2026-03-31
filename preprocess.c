@@ -393,13 +393,17 @@ static int64_t eval_const_expr(Token *tok) {
     error_tok(start, "no expression");
 
   arena_on(&ast_arena);
+  defer {
+    arena_off(&ast_arena);
+  }
+
   arena_on(&node_arena);
+  defer {
+    arena_off(&node_arena);
+  }
 
   Token *end;
   int64_t val = const_expr(&end, tok);
-
-  arena_off(&node_arena);
-  arena_off(&ast_arena);
 
   if (end->kind != TK_EOF)
     error_tok(end, "extra token");
@@ -2149,10 +2153,12 @@ Token *prepare_parse(Token *tok) {
     tok = head;
   }
 
-  if (!(free_alloc = check_mem_usage())) {
+  defer {
     arena_off(&pp_arena);
-    return preprocess3(tok);
   }
+
+  if (!(free_alloc = check_mem_usage()))
+    return preprocess3(tok);
 
   Token *t = tok;
   for (t = last_alloc_tok; t;) {
@@ -2175,6 +2181,5 @@ Token *prepare_parse(Token *tok) {
   free(pragma_once.buckets);
   free(include_guards.buckets);
   free(cond_incl.data);
-  arena_off(&pp_arena);
   return tok;
 }
