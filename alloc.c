@@ -82,9 +82,9 @@ void arena_on(Arena *arena) {
 void arena_off(Arena *arena) {
   if (free_alloc) {
     for (Pool *p = arena->head; p;) {
-      Pool *nxt = p->next;
-      free(p);
-      p = nxt;
+      Pool *tmp = p;
+      p = p->next;
+      free(tmp);
     }
   } else {
     arena->cur->next = pool_freelist;

@@ -5947,18 +5947,20 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 static Token *free_parsed_tok(Token *tok, Token *end) {
   while (tok != end) {
     for (Token *t = tok->attr_next; t;) {
-      Token *nxt_attr = t->attr_next;
-      while (t) {
-        Token *nxt_t = t->next;
-        free(t);
-        t = nxt_t;
+      Token *t2 = t;
+      t = t->attr_next;
+
+      while (t2) {
+        Token *tmp = t2;
+        t2 = t2->next;
+        free(tmp);
       }
-      t = nxt_attr;
     }
-    Token *nxt = tok->next;
-    if (!tok->is_live)
-      free(tok);
-    tok = nxt;
+    Token *tmp = tok;
+    tok = tok->next;
+
+    if (!tmp->is_live)
+      free(tmp);
   }
   return end;
 }

@@ -2189,18 +2189,19 @@ Token *prepare_parse(Token *tok) {
 
   Token *t = tok;
   for (t = last_alloc_tok; t;) {
-    Token *nxt = t->alloc_next;
-    if (!t->is_root)
-      free(t);
-    t = nxt;
+    Token *tmp = t;
+    t = t->alloc_next;
+
+    if (!tmp->is_root)
+      free(tmp);
   }
 
   tok = preprocess3(tok);
 
   for (t = tok_freelist; t;) {
-    Token *nxt = t->next;
-    free(t);
-    t = nxt;
+    Token *tmp = t;
+    t = t->next;
+    free(tmp);
   }
 
   free(macros.buckets);
