@@ -1017,6 +1017,10 @@ static void print_dependencies(char *input) {
     path = "-";
 
   FILE *out = open_file(path);
+  defer {
+    close_file(out);
+  }
+
   if (opt_MT)
     fprintf(out, "%s:", opt_MT);
   else
@@ -1030,8 +1034,6 @@ static void print_dependencies(char *input) {
   if (opt_MP)
     for (int i = 1; i < dep_files.len; i++)
       fprintf(out, "%s:\n", quote_makefile(skip_dot_slash(dep_files.data[i])));
-
-  close_file(out);
 }
 
 static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
@@ -1049,14 +1051,15 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   }
 
   FILE *out = open_file(output_file);
+  defer {
+    close_file(out);
+  }
 
   if (opt_E) {
     if (opt_dM)
       dump_defines(out);
     else
       print_tokens(tok, out);
-
-    close_file(out);
     return;
   }
 
@@ -1065,8 +1068,6 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   Obj *prog = parse(tok);
 
   codegen(prog, out);
-
-  close_file(out);
 }
 
 void run_assembler_gnustyle(StringArray *args, char *input, char *output) {
