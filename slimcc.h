@@ -83,12 +83,6 @@
 # define NORETURN
 #endif
 
-#if defined(__has_builtin) && !(USE_ASAN || defined(__FILC__))
-# if __has_builtin(__builtin_popcount)
-#  define BITCNT_POP(x) __builtin_popcount(x)
-# endif
-#endif
-
 #if defined(__GNUC__)
 # define BUFF_CAST(_t, _ptr)  \
    __extension__({            \
