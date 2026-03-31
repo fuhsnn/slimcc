@@ -360,8 +360,7 @@ static Node *skip_gp_cast(Node *node) {
 
 static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_array, bool let_atomic) {
   int offset;
-  Obj *var = eval_var_opt(node, &offset, let_array, let_atomic);
-  if (var) {
+  if (Obj *var = eval_var_opt(node, &offset, let_array, let_atomic)) {
     if (var->is_local) {
       snprintf(ofs, STRBUF_SZ, "%d", offset + var->ofs);
       *ptr = var->ptr;
