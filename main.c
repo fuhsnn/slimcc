@@ -349,13 +349,13 @@ static void build_incl_paths(const char *opt_B, bool opt_nostdinc, StringArray *
     add_include_path(&sysincl_paths, idirafter->data[i]);
 
   // Filter system directories passed as -I
+  outer_loop:
   for (int i = 0; i < include_paths.len; i++) {
-    bool match = false;
     for (int j = 0; j < sysincl_paths.len; j++)
-      if ((match = !strcmp(sysincl_paths.data[j], include_paths.data[i])))
-        break;
-    if (!match)
-      include_paths.data[incl_cnt++] = include_paths.data[i];
+      if (!strcmp(sysincl_paths.data[j], include_paths.data[i]))
+        continue outer_loop;
+
+    include_paths.data[incl_cnt++] = include_paths.data[i];
   }
   include_paths.len = incl_cnt;
 
