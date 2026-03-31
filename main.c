@@ -254,8 +254,7 @@ static void build_macros(MacroChangeArr *arr, bool is_asm_pp) {
   }
 
   for (int i = 0; i < arr->len; i++) {
-    MacroChange *m = &arr->data[i];
-    if (m->is_def)
+    if (MacroChange *m = &arr->data[i]; m->is_def)
       define_macro_cli(m->arg);
     else
       undef_macro(m->arg);
