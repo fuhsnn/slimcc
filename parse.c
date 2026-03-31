@@ -3947,7 +3947,8 @@ static uint64_t *eval_bitint(Node *node) {
   case ND_NEG: {
     uint64_t *val = eval_bitint(lhs);
     if (eval_recover && *eval_recover)
-      return NULL;
+      return free(val), NULL;
+
     switch (node->kind) {
     case ND_BITNOT: eval_bitint_bitnot(ty->bit_cnt, val); break;
     case ND_NEG:    eval_bitint_neg(ty->bit_cnt, val); break;
