@@ -2965,22 +2965,20 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
   Token head = {};
   Token *cur = &head;
 
+  outer_loop:
   for (;;) {
     if (tok->kind == TK_IDENT && tok->next->kind == TK_COLON) {
       Token *start = tok;
       cur = cur->label_next = tok;
       tok = tok->next->next;
 
-      LocalLabel *ll = nullptr;
-      for (Scope *sc = scope; sc; sc = sc->parent)
-        if ((ll = find_local_label(sc, start)))
-          break;
-
-      if (ll) {
-        if (ll->label)
-          error_tok(start, "duplicated label");
-        (*stmt) = (*stmt)->next = ll->label = new_label(ND_LABEL, start);
-        continue;
+      for (Scope *sc = scope; sc; sc = sc->parent) {
+        if (LocalLabel *ll = find_local_label(sc, start)) {
+          if (ll->label)
+            error_tok(tok, "duplicated label");
+          (*stmt) = (*stmt)->next = ll->label = new_label(ND_LABEL, start);
+          continue outer_loop;
+        }
       }
 
       if (!fnctx->defr_ctx) {
