@@ -166,7 +166,7 @@ Token *skip_tk(Token *tok, TokenKind kind) {
     // clang-format on
   };
 
-  if (kind < sizeof(tbl) / sizeof(*tbl)) {
+  if (kind < countof(tbl)) {
     const char *str = tbl[kind];
     if (str)
       error_tok(tok, "expected '%s'", str);
