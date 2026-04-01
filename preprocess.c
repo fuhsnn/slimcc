@@ -320,8 +320,10 @@ static Token *new_bool_int_token(bool b, Token *orig, Token *nxt) {
   return make_token(b ? "1" : "0", orig, nxt);
 }
 
-static Token *new_num_token(int val, Token *orig, Token *nxt) {
-  return make_token(format("%d\n", val), orig, nxt);
+static Token *new_num_token(int64_t val, Token *orig, Token *nxt) {
+  if (val < 0)
+    internal_error();
+  return make_token(format("%" PRIi64 "\n", val), orig, nxt);
 }
 
 static Token *new_str_token(char *str, Token *orig) {
@@ -1542,7 +1544,9 @@ static Token *line_macro(Token *start) {
   Token *tok = start;
   if (tok->origin)
     tok = tok->origin;
-  int val = tok->file->line_delta + tok->line_no + tok->display_line_no;
+  int64_t val = tok->line_no;
+  val += tok->display_line_no;
+  val += tok->file->line_delta;
   return new_num_token(val, tok, start->next);
 }
 
