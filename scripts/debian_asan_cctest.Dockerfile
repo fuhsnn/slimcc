@@ -7,8 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  zip lzip xz-utils bzip2 zlib1g-dev \
  autoconf autopoint automake gettext texinfo \
  git curl ca-certificates wget \
- # build_gcc
-# libgmp-dev libmpfr-dev libmpc-dev \
  python3 \
  && apt-get clean && rm -rf /var/cache/apt/*
 

@@ -4,42 +4,19 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build-docker:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
+          - { vm: cctest, file: debian_asan_cctest }
+          - { vm: debian12, file: debian_asan_12 }
           - { vm: interop, file: debian_asan_interop }
           - { vm: main, file: debian_asan_13 }
-          - { vm: debian12, file: debian_asan_12 }
-          - { vm: cctest, file: debian_asan_cctest }
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+    uses: ./.github/workflows/docker_build_upload.yml
+    with:
+      vm: ${{ matrix.vm }}
+      file: ${{ matrix.file }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build image
-        uses: docker/build-push-action@v7
-        with:
-          platforms: linux/amd64
-          context: .
-          file: scripts/${{ matrix.file }}.Dockerfile
-          tags: ${{ matrix.vm }}:latest
-          outputs: type=docker,dest=/tmp/${{ matrix.vm }}.tar
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          no-cache-filters: setup-toolchain
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.vm }}
-          path: /tmp/${{ matrix.vm }}.tar
-          compression-level: 0
-
-  run:
-    runs-on: ubuntu-latest
+  run0:
     needs: build-docker
     strategy:
       fail-fast: false
@@ -50,6 +27,7 @@ jobs:
           - { vm: cctest, proj: cctest_pcctests }
           - { vm: cctest, proj: cctest_wacc }
           - { vm: cctest, proj: test_binutils_gccverify }
+          - { vm: cctest, proj: test_cc65 }
           - { vm: cctest, proj: test_kefir }
           - { vm: cctest, proj: test_tinycc }
           - { vm: debian12, proj: bootstrap_uclibcng }
@@ -92,6 +70,7 @@ jobs:
           - { vm: interop, proj: test_rvvm }
           - { vm: interop, proj: test_sdl3 }
           - { vm: interop, proj: test_sokol }
+          - { vm: interop, proj: test_tinycbor }
           - { vm: interop, proj: test_vlc }
           - { vm: interop, proj: test_wuffs }
           - { vm: interop, proj: test_xterm }
@@ -133,6 +112,8 @@ jobs:
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_blake3 }
           - { vm: main, proj: test_blosc2 }
+          - { vm: main, proj: test_brieflz }
+          - { vm: main, proj: test_brotli }
           - { vm: main, proj: test_bubblewrap }
           - { vm: main, proj: test_byacc }
           - { vm: main, proj: test_bzip2 }
@@ -145,6 +126,7 @@ jobs:
           - { vm: main, proj: test_cello }
           - { vm: main, proj: test_cfitsio }
           - { vm: main, proj: test_cgit }
+          - { vm: main, proj: test_chibischeme }
           - { vm: main, proj: test_cjson }
           - { vm: main, proj: test_cmocka }
           - { vm: main, proj: test_coremark }
@@ -162,6 +144,7 @@ jobs:
           - { vm: main, proj: test_elk }
           - { vm: main, proj: test_emacs }
           - { vm: main, proj: test_espruino }
+          - { vm: main, proj: test_femtolisp }
           - { vm: main, proj: test_fftw }
           - { vm: main, proj: test_file }
           - { vm: main, proj: test_findutils }
@@ -238,6 +221,18 @@ jobs:
           - { vm: main, proj: test_munit }
           - { vm: main, proj: test_ncompress }
           - { vm: main, proj: test_neovim }
+          - { vm: main, proj: test_nettle }
+    uses: ./.github/workflows/docker_download_run.yml
+    with:
+      vm: ${{ matrix.vm }}
+      proj: ${{ matrix.proj }}
+
+  run1:
+    needs: build-docker
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_njs }
           - { vm: main, proj: test_noplate }
@@ -267,6 +262,7 @@ jobs:
           - { vm: main, proj: test_scrapscript }
           - { vm: main, proj: test_sds }
           - { vm: main, proj: test_shoco }
+          - { vm: main, proj: test_slimcc_c2y }
           - { vm: main, proj: test_smaz }
           - { vm: main, proj: test_sqlite }
           - { vm: main, proj: test_tcl }
@@ -298,23 +294,10 @@ jobs:
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: test_zuo_chezscheme }
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ matrix.vm }}
-          path: /tmp
-
-      - name: Load image
-        run: |
-          docker load --input /tmp/${{ matrix.vm }}.tar
-          rm /tmp/${{ matrix.vm }}.tar
-
-      - name: Run test
-        run: >
-          sudo docker run ${{ matrix.vm }}
-          su non-root -c
-          'bash "$0" "$1"' /work/slimcc/scripts/linux_thirdparty.bash ${{ matrix.proj }}
+    uses: ./.github/workflows/docker_download_run.yml
+    with:
+      vm: ${{ matrix.vm }}
+      proj: ${{ matrix.proj }}
 
   musl-bootstrap:
     runs-on: ubuntu-latest

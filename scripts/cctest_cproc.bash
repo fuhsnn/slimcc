@@ -13,6 +13,10 @@ fix_up() {
   for src in varargs*.c; do
     sed -i 's|__builtin_va_start(ap)|__builtin_c23_va_start(ap)|g' $src
   done
+
+  # overflow'd unicode seq
+  sed -i '/char/d' initializer-string-wide.c
+  sed -i '/short/d' initializer-string-wide.c
 }
 
 match_skip() {

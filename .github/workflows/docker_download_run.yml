@@ -1,0 +1,30 @@
+on:
+  workflow_call:
+    inputs:
+      vm:
+        required: true
+        type: string
+      proj:
+        required: true
+        type: string
+
+jobs:
+  docker-download-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.vm }}
+          path: /tmp
+
+      - name: Load image
+        run: |
+          docker load --input /tmp/${{ inputs.vm }}.tar
+          rm /tmp/${{ inputs.vm }}.tar
+
+      - name: Run test
+        run: >
+          sudo docker run ${{ inputs.vm }}
+          su non-root -c
+          'bash "$0" "$1"' /work/slimcc/scripts/linux_thirdparty.bash ${{ inputs.proj }}

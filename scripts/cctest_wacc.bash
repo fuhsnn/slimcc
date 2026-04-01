@@ -1,7 +1,7 @@
 set -u
 
 skip_files=(
-# todo
+# don't matter
 chapter_1/invalid_lex/backslash.c
 
 # c++

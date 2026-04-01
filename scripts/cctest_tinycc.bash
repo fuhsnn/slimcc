@@ -63,11 +63,6 @@ fix_up() {
   regen_expect 70_floating_point_literals
   regen_expect 102_alignas
 
-  # we detect invalid UCN in strings before processing #if's,
-  # modify it to test invalid UCN in identifier instead,
-  # to prevent this string halting all other tests in the file
-  sed -i 's|char \*str = \"\\Uffffffff\";|int \\u0024;|g' 60_errors_and_warnings.c
-
   # behavior difference, we prefer gcc's
   gcc 104_inline.c 104+_inline.c -std=gnu89
   ./a.out > 104_inline.expect
