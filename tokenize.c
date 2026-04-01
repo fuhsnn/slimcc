@@ -11,7 +11,6 @@ struct SlashDelta {
   int len;
 };
 
-// Input file
 static File *current_file;
 
 // True if the current position is at the beginning of a line
@@ -118,7 +117,6 @@ void notice_tok(Token *tok, char *fmt, ...) {
   va_end(ap);
 }
 
-// Consumes the current token if it matches `op`.
 bool equal(Token *tok, char *op) {
   return strlen(op) == tok->len && !memcmp(tok->loc, op, tok->len);
 }
@@ -129,7 +127,6 @@ bool equal_ext(Token *tok, char *op) {
   return equal(tok, op) || equal(tok, buf);
 }
 
-// Ensure that the current token is `op`.
 Token *skip(Token *tok, char *op) {
   if (!equal(tok, op))
     error_tok(tok, "expected '%s'", op);
@@ -144,7 +141,6 @@ bool consume(Token **rest, Token *tok, char *str) {
   return false;
 }
 
-// Create a new token.
 static Token *new_token(TokenKind kind, char *start, char *end) {
   Token *tok;
   if ((tok = tok_freelist)) {
@@ -405,7 +401,6 @@ static bool read_ucn(uint32_t *val, char **new_pos, char *p) {
 
 static uint32_t read_escape_seq(char **new_pos, char *p) {
   if (Inrange(*p, '0', '7')) {
-    // Read an octal number.
     uint32_t c = *p++ - '0';
     if (Inrange(*p, '0', '7')) {
       c = (c << 3) + (*p++ - '0');
@@ -417,7 +412,6 @@ static uint32_t read_escape_seq(char **new_pos, char *p) {
   }
 
   if (*p == 'x') {
-    // Read a hexadecimal number.
     p++;
     if (!Isxdigit(*p))
       error_at(p, "invalid hex escape sequence");
@@ -438,17 +432,6 @@ static uint32_t read_escape_seq(char **new_pos, char *p) {
 
   *new_pos = p + 1;
 
-  // Escape sequences are defined using themselves here. E.g.
-  // '\n' is implemented using '\n'. This tautological definition
-  // works because the compiler that compiles our compiler knows
-  // what '\n' actually is. In other words, we "inherit" the ASCII
-  // code of '\n' from the compiler that compiles our compiler,
-  // so we don't have to teach the actual code here.
-  //
-  // This fact has huge implications not only for the correctness
-  // of the compiler but also for the security of the generated code.
-  // For more info, read "Reflections on Trusting Trust" by Ken Thompson.
-  // https://github.com/rui314/chibicc/wiki/thompson1984.pdf
   switch (*p) {
   case 'a': return '\a';
   case 'b': return '\b';
@@ -797,7 +780,6 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
   return true;
 }
 
-// Converts a pp-number token to a regular number token.
 void convert_pp_number(Token *tok, Node *node) {
   if (tok->kind == TK_INT_NUM) {
     if ((uint64_t)tok->ival >> tok->ty->size * 8)
@@ -928,7 +910,6 @@ void convert_ucn_ident(Token *tok) {
     *q++ = ' ';
 }
 
-// Tokenize a given string and returns new tokens.
 Token *tokenize(File *file, SlashDelta *delta, Token **end) {
   current_file = file;
 
@@ -1099,7 +1080,6 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
   return head.next;
 }
 
-// Returns the contents of a given file.
 Token *tokenize_file(char *path, Token *tok, Token **end) {
   FILE *fp;
 

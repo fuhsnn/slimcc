@@ -861,13 +861,11 @@ void run_subprocess(char **argv) {
   }
 
   if (fork() == 0) {
-    // Child process. Run a new command.
     execvp(argv[0], argv);
     fprintf(stderr, "exec failed: %s: %s\n", argv[0], strerror(errno));
     _exit(1);
   }
 
-  // Wait for the child process to finish.
   int status;
   if (wait(&status) <= 0 || status != 0) {
     fprintf(stderr, "exec failed: %s\n", argv[0]);
@@ -889,7 +887,6 @@ static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
     _exit(0);
   }
 
-  // Wait for the child process to finish.
   int status;
   if (wait(&status) <= 0 || status != 0)
     exit(1);
@@ -904,7 +901,6 @@ static void print_linemarker(FILE *out, Token *tok) {
   fprintf(out, "# %d \"%s\"\n", tok->display_line_no, name);
 }
 
-// Print tokens to stdout. Used for -E.
 static void print_tokens(Token *tok, FILE *out) {
   int line = 0;
   int file_no = -1;
@@ -981,9 +977,6 @@ static char *skip_dot_slash(char *p) {
   return p;
 }
 
-// If -M options is given, the compiler write a list of input files to
-// stdout in a format that "make" command can read. This feature is
-// used to automate file dependency management.
 static void print_dependencies(char *input) {
   char *path;
   if (opt_MF)
@@ -1086,7 +1079,6 @@ char *find_dir_w_file(char *pattern) {
   return path;
 }
 
-// Returns true if a given file exists.
 bool file_exists(char *path) {
   struct stat st;
   return !stat(path, &st);
@@ -1299,6 +1291,7 @@ int main(int argc, char **argv) {
     } else {
       output = replace_extn(input, ".o");
     }
+
     // Handle .s
     if (type == FILE_ASM) {
       if (opt_S || opt_E || opt_M)
@@ -1339,19 +1332,16 @@ int main(int argc, char **argv) {
 
     assert(type == FILE_C);
 
-    // Just preprocess
     if (opt_E || opt_M) {
       run_cc1(input, (opt_o ? opt_o : "-"), no_fork, false);
       continue;
     }
 
-    // Compile
     if (opt_S) {
       run_cc1(input, output, no_fork, false);
       continue;
     }
 
-    // Compile and assemble
     if (opt_c) {
       char *tmp = create_tmpfile();
       run_cc1(input, tmp, no_fork, false);
@@ -1359,7 +1349,6 @@ int main(int argc, char **argv) {
       continue;
     }
 
-    // Compile, assemble and link
     char *tmp1 = create_tmpfile();
     char *tmp2 = create_tmpfile();
     run_cc1(input, tmp1, no_fork, false);

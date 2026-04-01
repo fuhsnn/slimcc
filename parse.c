@@ -1,25 +1,5 @@
-// This file contains a recursive descent parser for C.
-//
-// Most functions in this file are named after the symbols they are
-// supposed to read from an input token list. For example, stmt() is
-// responsible for reading a statement from a token list. The function
-// then construct an AST node representing a statement.
-//
-// Each function conceptually returns two values, an AST node and
-// remaining part of the input tokens. Since C doesn't support
-// multiple return values, the remaining tokens are returned to the
-// caller via a pointer argument.
-//
-// Input tokens are represented by a linked list. Unlike many recursive
-// descent parsers, we don't have the notion of the "input token stream".
-// Most parsing functions don't change the global state of the parser.
-// So it is very easy to lookahead arbitrary number of tokens in this
-// parser.
-
 #include "slimcc.h"
 
-// Scope for local variables, global variables, typedefs
-// or enum constants
 typedef struct {
   Obj *var;
   Type *type_def;
@@ -55,7 +35,6 @@ enum {
 
 typedef uint8_t StorageClass;
 
-// Variable attributes such as typedef or extern.
 typedef struct {
   Node *typeof_vm_expr;
   StorageClass strg;
@@ -81,9 +60,6 @@ typedef struct {
   int align;
 } VarAttr;
 
-// This struct represents a variable initializer. Since initializers
-// can be nested (e.g. `int x[2][2] = {{1, 2}, {3, 4}}`), this struct
-// is a tree data structure.
 typedef struct Initializer Initializer;
 struct Initializer {
   Type *ty;
@@ -199,15 +175,10 @@ struct FuncContext {
   Token *defr_ctx;
 };
 
-// Likewise, global variables are accumulated to this list.
 static Obj *globals = &(Obj){0};
-
 static Scope *scope = &(Scope){0};
-
 static HashMap symbols;
-
 static FuncContext *fnctx;
-
 static bool *eval_recover;
 
 static bool is_type_kw(TokenKind kind);
@@ -342,7 +313,6 @@ static Scope *decl_scope(void) {
   return sc;
 }
 
-// Find a variable by name.
 static VarScope *find_var(Token *tok) {
   for (Scope *sc = scope; sc; sc = sc->parent) {
     VarScope *sc2 = hashmap_get2(&sc->vars, tok->loc, tok->len);
@@ -1469,7 +1439,6 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
   return ty;
 }
 
-// pointers = ("*" ("const" | "volatile" | "restrict")*)*
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
   while (consume(&tok, tok, "*")) {
     QualMask q = pointer_qualifiers(&tok, tok);
@@ -1564,7 +1533,6 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   bool_attr(tok, TK_BATTR, "packed", &is_packed);
 
-  // Read a tag.
   Token *tag = NULL;
   if (tok->kind == TK_IDENT) {
     tag = tok;
@@ -1739,7 +1707,6 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   return ty;
 }
 
-// typeof-specifier = "(" (expr | typename) ")"
 static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr) {
   tok = skip(tok, "(");
 
@@ -1983,33 +1950,9 @@ static void string_initializer(Token *tok, Initializer *init) {
   init->tok = tok;
 }
 
-// array-designator = "[" const-expr "]"
-//
-// C99 added the designated initializer to the language, which allows
-// programmers to move the "cursor" of an initializer to any element.
-// The syntax looks like this:
-//
-//   int x[10] = { 1, 2, [5]=3, 4, 5, 6, 7 };
-//
-// `[5]` moves the cursor to the 5th element, so the 5th element of x
-// is set to 3. Initialization then continues forward in order, so
-// 6th, 7th, 8th and 9th elements are initialized with 4, 5, 6 and 7,
-// respectively. Unspecified elements (in this case, 3rd and 4th
-// elements) are initialized with zero.
-//
-// Nesting is allowed, so the following initializer is valid:
-//
-//   int x[5][10] = { [5][8]=1, 2, 3 };
-//
-// It sets x[5][8], x[5][9] and x[6][0] to 1, 2 and 3, respectively.
-//
-// Use `.fieldname` to move the cursor for a struct initializer. E.g.
-//
-//   struct { int a, b, c; } x = { .c=5 };
-//
-// The above initializer sets x.c to 5.
 static void array_designator(Token **rest, Token *tok, Type *ty, int *begin, int *end) {
   *begin = const_expr(&tok, tok->next);
+
   if (*begin >= ty->array_len)
     error_tok(tok, "array designator index exceeds array bounds");
 
@@ -2026,7 +1969,6 @@ static void array_designator(Token **rest, Token *tok, Type *ty, int *begin, int
   *rest = skip(tok, "]");
 }
 
-// struct-designator = "." ident
 static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected a field designator");
@@ -2107,9 +2049,6 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
   initializer2(rest, tok, init);
 }
 
-// An array length can be omitted if an array has an initializer
-// (e.g. `int x[] = {1,2,3}`). If it's omitted, count the number
-// of initializer elements.
 static int count_array_init_elements(Token *tok, Type *ty, int i) {
   enter_isolated_scope();
 
@@ -2447,16 +2386,6 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
   internal_error();
 }
 
-// A variable definition with an initializer is a shorthand notation
-// for a variable definition followed by assignments. This function
-// generates assignment expressions for an initializer. For example,
-// `int x[2][2] = {{6, 7}, {8, 9}}` is converted to the following
-// expressions:
-//
-//   x[0][0] = 6;
-//   x[0][1] = 7;
-//   x[1][0] = 8;
-//   x[1][1] = 9;
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer init = {0};
   initializer(rest, tok, &init, var);
@@ -2471,10 +2400,6 @@ static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   if (opt_optimize && (init.kind == INIT_EXPR || init.kind == INIT_TOK))
     return head.next;
 
-  // If a partial initializer list is given, the standard requires
-  // that unspecified elements are set to 0. Here, we simply
-  // zero-initialize the entire memory region of a variable before
-  // initializing it with user-supplied values.
   Node *node = new_node(ND_INIT_SEQ, tok);
   node->m.var = var;
   node->m.lhs = head.next;
@@ -2671,10 +2596,6 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
   internal_error();
 }
 
-// Initializers for global variables are evaluated at compile-time and
-// embedded to .data section. This function serializes Initializer
-// objects to a flat byte array. It is a compile error if an
-// initializer list contains a non-constant expression.
 static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   bool ctx = false;
   if (fnctx) {
@@ -3233,7 +3154,6 @@ static void local_labels(Token **rest, Token *tok) {
   *rest = tok;
 }
 
-// compound-stmt = (typedef | declaration | stmt)* "}"
 static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   Node *node = new_node(kind, tok);
   node->dfr_dest = fnctx->defr;
@@ -3300,7 +3220,6 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
   return compound_stmt2(rest, tok, kind);
 }
 
-// expr-stmt = expr? ";"
 static Node *expr_stmt(Token **rest, Token *tok) {
   if (consume(rest, tok, ";"))
     return new_node(ND_NULL_STMT, tok);
@@ -3316,7 +3235,6 @@ static Node *expr_stmt(Token **rest, Token *tok) {
   return node;
 }
 
-// expression = assign ("," expression)?
 static Node *expression(Token **rest, Token *tok) {
   Node *node = assign(&tok, tok);
 
@@ -3512,12 +3430,6 @@ static int64_t eval(Node *node) {
   return eval2(node, &(EvalContext){.kind = EV_CONST});
 }
 
-// Evaluate a given node as a constant expression.
-//
-// A constant expression is either just a number or ptr+n where ptr
-// is a pointer to a global variable and n is a postiive/negative
-// number. The latter form is accepted only as an initialization
-// expression for a global variable.
 static int64_t eval2(Node *node, EvalContext *ctx) {
   if (eval_recover && *eval_recover)
     return 0;
@@ -4123,9 +4035,6 @@ static Node *to_assign(Node *binary) {
   return binary;
 }
 
-// assign    = conditional (assign-op assign)?
-// assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
-//           | "<<=" | ">>="
 static Node *assign2(Token **rest, Token *tok, Node *node) {
   // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
   if (equal(tok, "=") && (node->ty->qual & Q_ATOMIC)) {
@@ -4226,7 +4135,6 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
   return vla_of(base, node, 0);
 }
 
-// conditional = logor ("?" expression? ":" conditional)?
 static Node *conditional(Token **rest, Token *tok) {
   Node *cond = binary(&tok, tok, PCD_LOGOR);
 
@@ -4416,16 +4324,10 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
   return node;
 }
 
-// In C, `+` operator is overloaded to perform the pointer arithmetic.
-// If p is a pointer, p+n adds not n but sizeof(*p)*n to the value of p,
-// so that p+n points to the location n elements (not bytes) ahead of p.
-// In other words, we need to scale an integer value before adding to a
-// pointer value. This function takes care of the scaling.
 static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   add_type(lhs);
   add_type(rhs);
 
-  // num + num
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_ADD, lhs, rhs, tok);
 
@@ -4443,25 +4345,21 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   error_tok(tok, "invalid operands");
 }
 
-// Like `+`, `-` is overloaded for the pointer type.
 static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   add_type(lhs);
   add_type(rhs);
 
-  // num - num
   if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
     return new_binary(ND_SUB, lhs, rhs, tok);
 
   ptr_convert(&lhs);
   ptr_convert(&rhs);
 
-  // ptr - num
   if (lhs->ty->base && is_integer(rhs->ty)) {
     Node *sz = ptr_base_size(lhs->ty->base, tok);
     return new_binary(ND_SUB, lhs, new_binary(ND_MUL, rhs, sz, tok), tok);
   }
 
-  // ptr - ptr
   if (lhs->ty->base && rhs->ty->base && is_compatible(lhs->ty->base, rhs->ty->base)) {
     Node *sz = new_cast(ptr_base_size(lhs->ty->base, tok), ty_ptrdiff_t);
     lhs = new_cast(lhs, ty_ptrdiff_t);
@@ -4645,7 +4543,6 @@ static void chk_mem_name(HashMap *map, Member *members) {
   }
 }
 
-// struct-members = (declspec declarator (","  declarator)* ";")*
 static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {0};
   Member *cur = &head;
@@ -4766,7 +4663,6 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   attr_aligned(tok, TK_ATTR, &alt_align);
   attr_aligned(tok, TK_BATTR, &alt_align);
 
-  // Read a tag.
   Token *tag = NULL;
   if (tok->kind == TK_IDENT) {
     tag = tok;
@@ -4913,15 +4809,12 @@ static Type *union_decl(Type *ty, int align, int pack_align) {
   return ty;
 }
 
-// Find a struct member by name.
 static Member *get_struct_member(Type *ty, Token *tok) {
   for (Member *mem = ty->members; mem; mem = mem->next) {
     if (mem->name) {
-      // Regular struct member
       if (equal_tok(mem->name, tok))
         return mem;
     } else {
-      // Anonymous struct member
       if ((mem->ty->kind == TY_STRUCT || mem->ty->kind == TY_UNION) &&
           get_struct_member(mem->ty, tok))
         return mem;
@@ -4930,19 +4823,6 @@ static Member *get_struct_member(Type *ty, Token *tok) {
   return NULL;
 }
 
-// Create a node representing a struct member access, such as foo.bar
-// where foo is a struct and bar is a member name.
-//
-// C has a feature called "anonymous struct" which allows a struct to
-// have another unnamed struct as a member like this:
-//
-//   struct { struct { int a; }; int b; } x;
-//
-// The members of an anonymous struct belong to the outer struct's
-// member namespace. Therefore, in the above example, you can access
-// member "a" of the anonymous struct as "x.a".
-//
-// This function takes care of anonymous structs.
 static Node *struct_ref(Node *node, Token *tok) {
   add_type(node);
   if (node->ty->kind != TY_STRUCT && node->ty->kind != TY_UNION)
@@ -4987,15 +4867,6 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
   return node;
 }
 
-// postfix = ident "(" func-args ")" postfix-tail*
-//         | primary postfix-tail*
-//
-// postfix-tail = "[" expr "]"
-//              | "(" func-args ")"
-//              | "." ident
-//              | "->" ident
-//              | "++"
-//              | "--"
 static Node *postfix(Node *node, Token **rest, Token *tok) {
   for (;;) {
     if (equal(tok, "(")) {
@@ -5054,7 +4925,6 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
   }
 }
 
-// funcall = (assign ("," assign)*)? ")"
 static Node *funcall(Token **rest, Token *tok, Node *fn) {
   Type *ty = get_func_ty(fn);
 
@@ -5111,10 +4981,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   return node;
 }
 
-// generic-selection = "(" assign "," generic-assoc ("," generic-assoc)* ")"
-//
-// generic-assoc = type-name ":" assign
-//               | "default" ":" assign
 static Node *generic_selection(Token **rest, Token *tok) {
   Token *start = tok;
   tok = skip(tok, "(");
@@ -5513,7 +5379,6 @@ static Node *primary(Token **rest, Token *tok) {
     return generic_selection(rest, tok->next);
 
   if (tok->kind == TK_IDENT) {
-    // Variable or enum constant
     VarScope *sc = find_var(tok);
     *rest = tok->next;
 
@@ -5965,7 +5830,6 @@ static Token *free_parsed_tok(Token *tok, Token *end) {
   return end;
 }
 
-// program = (typedef | function-definition | global-variable)*
 Obj *parse(Token *tok) {
   Obj *glb_head = globals;
 
@@ -6016,14 +5880,12 @@ Obj *parse(Token *tok) {
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr, SC_ALL);
 
-    // Typedef
     if (attr.strg & SC_TYPEDEF) {
       parse_typedef(&tok, tok, basety, &attr);
       arena_off(&node_arena);
       continue;
     }
 
-    // Global declarations
     global_declaration(&tok, tok, basety, &attr);
     arena_off(&node_arena);
   }

@@ -1,20 +1,3 @@
-// This file implements the C preprocessor.
-//
-// The preprocessor takes a list of tokens as an input and returns a
-// new list of tokens as an output.
-//
-// The preprocessing language is designed in such a way that that's
-// guaranteed to stop even if there is a recursive macro.
-// Informally speaking, a macro is applied only once for each token.
-// That is, if a macro token T appears in a result of direct or
-// indirect macro expansion of T, T won't be expanded any further.
-// For example, if T is defined as U, and U is defined as T, then
-// token T is expanded to U and then to T and the macro expansion
-// stops at that point.
-//
-// To achieve the above behavior, we lock an expanding macro until
-// the next token following its expansion ("stop_tok") is reached.
-
 #include "slimcc.h"
 
 typedef struct {
@@ -32,7 +15,7 @@ struct Macro {
   Token *body;
   macro_handler_fn *handler;
   int arg_cnt;
-  bool is_objlike; // Object-like or function-like
+  bool is_objlike;
   bool is_locked;
   bool has_va_arg;
   bool align;
@@ -50,7 +33,6 @@ struct MacroDef {
   char *name;
 };
 
-// `#if` can be nested, so we use a stack to manage nested `#if`s.
 typedef struct {
   Token *tok;
   bool is_else;
@@ -63,9 +45,6 @@ static struct {
   int cnt;
 } cond_incl;
 
-// A linked list of locked macros. Since macro nesting happens in
-// LIFO fashion (inner expansions end first), we only need to check
-// the lastest one for unlocking.
 static Macro *locked_macros;
 static MacroDef *macro_head;
 static MacroDef *macro_defs = &(MacroDef){0};
@@ -97,8 +76,6 @@ bool is_pragma(Token **rest, Token *tok) {
   return is_hash(tok) && consume(rest, tok->next, "pragma");
 }
 
-// Some preprocessor directives such as #include allow extraneous
-// tokens before newline. This function skips such tokens.
 Token *skip_line(Token *tok) {
   if (tok->at_bol)
     return tok;
@@ -200,8 +177,6 @@ static void pop_macro_lock_until(Token *tok, Token *end) {
     pop_macro_lock(tok);
 }
 
-// Skip until next `#else`, `#elif` or `#endif`.
-// Nested `#if` and `#endif` are skipped.
 static Token *skip_cond_incl(Token *tok) {
   Token *start = tok;
   Token *last = NULL;
@@ -235,9 +210,6 @@ static Token *skip_cond_incl(Token *tok) {
   return tok;
 }
 
-// Copy all tokens until the next newline, terminate them with
-// an EOF token and then returns them. This function is used to
-// create a new list of tokens for `#if` arguments.
 static Token *copy_line(Token **rest, Token *tok) {
   Token head = {0};
   Token *cur = &head;
@@ -411,7 +383,6 @@ static Token *read_const_expr(Token *tok) {
   return head.next;
 }
 
-// Read and evaluate a constant expression.
 static int64_t eval_const_expr(Token *tok) {
   Token *start = tok;
   tok = read_const_expr(tok);
@@ -643,8 +614,6 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
     idx++;
   }
 
-  // __VA_OPT__(x) is treated like a parameter which expands to parameter-
-  // substituted (x) if macro-expanded __VA_ARGS__ is not empty.
   if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
     MacroArg *arg = arena_malloc(&pp_arena, sizeof(MacroArg));
     arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
@@ -702,8 +671,6 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
   return buf;
 }
 
-// Concatenates all tokens and returns a new string token.
-// This function is used for the stringizing operator (#).
 static Token *stringize(Token *hash, Token *tok) {
   Token head = {0};
   Token *cur = &head;
@@ -756,7 +723,6 @@ static Token *subst(Token *tok, MacroContext *ctx) {
   while (tok->kind != TK_EOF) {
     Token *start = tok;
 
-    // "#" followed by a parameter is replaced with stringized actuals.
     if (equal(tok, "#")) {
       MacroArg *arg = find_arg(&tok, tok->next, ctx);
       if (!arg)
@@ -766,9 +732,6 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       continue;
     }
 
-    // [GNU] If __VA_ARGS__ is empty, `,##__VA_ARGS__` is expanded
-    // to an empty token list. Otherwise, it's expanded to `,` and
-    // __VA_ARGS__.
     if (equal(tok, ",") && equal(tok->next, "##") && ctx->m->has_va_arg) {
       MacroArg *arg = find_arg(NULL, tok->next->next, ctx);
       if (arg && (arg == &ctx->args[ctx->m->arg_cnt - 1])) {
@@ -861,7 +824,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       cur = find_last_tok(cur);
       continue;
     }
-    // Handle a non-parameter token.
+
     cur = cur->next = copy_token(tok);
     tok = tok->next;
     continue;
@@ -972,8 +935,6 @@ static void free_funclike_args(Token *tok, Token *stop_tok) {
   }
 }
 
-// If tok is a macro, expand it and return true.
-// Otherwise, do nothing and return false.
 static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   if (tok->kind != TK_IDENT || tok->dont_expand)
     return false;
@@ -1149,13 +1110,11 @@ static char *read_filename(Token **rest, Token *tok, char **dir) {
   error_tok(tok, "expected a filename");
 }
 
-// Read an #include argument.
 static char *read_include_filename(Token *tok, char **dir) {
   return read_filename(NULL, tok, dir);
 }
 
 static Token *include_file(Token *tok, char *path, Token *filename_tok, InclIdx idx) {
-  // Check for "#pragma once"
   if (hashmap_get(&pragma_once, realpath(path, NULL)))
     return tok;
 
@@ -1308,13 +1267,10 @@ static void finalize_tok(Token *tok) {
   finalize_tok2(tok, orig);
 }
 
-// Visit all tokens in `tok` while evaluating preprocessing
-// macros and directives.
 void preprocess2(Token *tok, Token **cur) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    // If it is a macro, expand it.
     if (expand_macro(&tok, tok, true))
       continue;
 
@@ -1800,7 +1756,6 @@ void init_macros(void) {
   define_macro("__slimcc__", "1");
   macro_head = macro_defs;
 
-  // Define predefined macros
   define_macro("__STDC_EMBED_EMPTY__", "2");
   define_macro("__STDC_EMBED_FOUND__", "1");
   define_macro("__STDC_EMBED_NOT_FOUND__", "0");

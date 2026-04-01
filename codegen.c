@@ -1028,8 +1028,6 @@ static void gen_bitfield_store(Node *node, bool is_void) {
   }
 }
 
-// Compute the absolute address of a given node.
-// It's an error if a given node does not reside in memory.
 static void gen_addr(Node *node) {
   if (opt_optimize && gen_addr_opt(node))
     return;
@@ -1143,14 +1141,7 @@ static void load(Node *node, int ofs) {
   case TY_STRUCT:
   case TY_UNION:
   case TY_FUNC:
-  case TY_VLA:
-    // If it is an array, do not attempt to load a value to the
-    // register because in general we can't load an entire array to a
-    // register. As a result, the result of an evaluation of an array
-    // becomes not the array itself but the address of the array.
-    // This is where "array is automatically converted to a pointer to
-    // the first element of the array in C" occurs.
-    return;
+  case TY_VLA:    return;
   }
   internal_error();
 }
@@ -1300,7 +1291,6 @@ static int getTypeId(Type *ty) {
   return U64;
 }
 
-// The table for type casts
 static char i32i8[] = "movsbl %al, %eax";
 static char i32u8[] = "movzbl %al, %eax";
 static char i32i16[] = "movswl %ax, %eax";
@@ -2378,7 +2368,6 @@ static void gen_gp_arith(Node *node) {
   internal_error();
 }
 
-// Generate code for a given node.
 static void gen_expr2(Node *node, bool is_void) {
   if (opt_g)
     print_loc(node->tok);

@@ -110,6 +110,7 @@ typedef struct SlashDelta SlashDelta;
 
 //
 // alloc.c
+//
 
 typedef struct Pool Pool;
 typedef struct {
@@ -174,7 +175,6 @@ char *format(char *fmt, ...) FMTCHK(1, 2);
 // tokenize.c
 //
 
-// Token
 typedef enum {
   TK_IDENT,   // Identifiers
   TK_PUNCT,   // Punctuators
@@ -260,18 +260,16 @@ struct File {
   char *contents;
   int file_no;
 
-  // For #line directive
   int display_file_no;
   int line_delta;
   InclIdx incl_idx;
   bool is_syshdr;
 };
 
-// Token type
 typedef struct Token Token;
 struct Token {
-  Token *next;          // Next token
-  TokenKind kind : 16;  // Token kind
+  Token *next;
+  TokenKind kind : 16;
   bool at_bol : 1;      // True if this token is at beginning of line
   bool has_space : 1;   // True if this token follows a space character
   bool dont_expand : 1; // True if a macro name is encountered during its expansion
@@ -279,9 +277,9 @@ struct Token {
   bool is_root : 1;
   bool is_live : 1;
   bool has_ucn : 1;
-  int len;       // Token length
-  char *loc;     // Token location
-  File *file;    // Source location
+  int len;   // Token length
+  char *loc; // Token location
+  File *file;
   Token *origin; // If this is expanded from a macro, the original token
   int line_no;   // Line number
   int display_line_no;
@@ -340,13 +338,12 @@ extern Token *tok_freelist;
 // parse.c
 //
 
-// Variable or function
 typedef struct Obj Obj;
 struct Obj {
   Obj *next;
-  char *name;    // Variable name
-  Type *ty;      // Type
-  bool is_local; // local or global/function
+  char *name;
+  Type *ty;
+  bool is_local;
   bool is_live;
   bool is_used;
   bool is_compound_lit;
@@ -401,9 +398,6 @@ struct Obj {
   FuncObj *output; // backend defined output object
 };
 
-// Global variable can be initialized either by a constant expression
-// or a pointer to another global variable. This struct represents the
-// latter.
 struct Relocation {
   Relocation *next;
   int offset;
@@ -515,7 +509,7 @@ typedef enum {
   ND_VA_START, // "va_start"
   ND_VA_COPY,  // "va_copy"
   ND_VA_ARG,   // "va_arg"
-  ND_CHAIN,    // ND_COMMA without array-to-pointer conversion
+  ND_CHAIN,
   ND_ALLOCA,
   ND_ALLOCA_ZINIT,
   ND_ARITH_ASSIGN,
@@ -538,12 +532,12 @@ struct CaseRange {
 
 // AST node type
 struct Node {
-  Node *next;               // Next node
-  NodeKind kind;            // Node kind
+  Node *next;
+  NodeKind kind;
   NodeKind arith_kind : 30; // Arithmetic Assignment
   bool no_label : 1;
   bool is_nonlval : 1;
-  Type *ty;   // Type, e.g. int or pointer to int
+  Type *ty;
   Token *tok; // Representative token
 
   DeferStmt *dfr_from;
@@ -645,8 +639,6 @@ struct Scope {
   bool is_fn_base;
   bool has_label;
 
-  // C has two block scopes; one is for variables/typedefs and
-  // the other is for struct/union/enum tags.
   HashMap vars;
   HashMap tags;
 };
@@ -755,25 +747,18 @@ typedef enum {
 
 struct Type {
   TypeKind kind;
-  int64_t size;     // sizeof() value
-  int32_t align;    // alignment
-  bool is_unsigned; // unsigned or signed
+  int64_t size;
+  int32_t align;
+  bool is_unsigned;
   bool is_int_enum;
   bool is_enum;
   QualMask qual;
-  Type *origin;    // for type compatibility check
+  Type *origin;
   Type *decl_next; // forward declarations
   Token *tag;
   EnumVal *enums;
 
-  // Pointer-to or array-of type. We intentionally use the same member
-  // to represent pointer/array duality in C.
-  //
-  // In many contexts in which a pointer is expected, we examine this
-  // member instead of "kind" member to determine whether a type is a
-  // pointer or not. That means in many contexts "array of T" is
-  // naturally handled as if it were "pointer to T", as required by
-  // the C spec.
+  // Pointer-to or array-of type.
   Type *base;
 
   // _BitInt
@@ -813,7 +798,6 @@ struct Member {
   int alt_align;
   bool is_packed;
 
-  // Bitfield
   bool is_bitfield;
   bool is_aligned_bitfield;
   int bit_offset;
@@ -922,6 +906,7 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output);
 //
 // main.c
 //
+
 typedef enum { STD_C89, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
 
 bool file_exists(char *path);

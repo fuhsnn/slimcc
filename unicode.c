@@ -335,7 +335,6 @@ static UTF32Range width_range2[] = {
 };
 // clang-format on
 
-// Encode a given character in UTF-8.
 int encode_utf8(char *buf, uint32_t c) {
   if (c <= 0x7F) {
     buf[0] = c;
