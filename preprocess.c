@@ -1548,7 +1548,9 @@ static Token *line_macro(Token *start) {
 
 // __COUNTER__ is expanded to serial values starting from 0.
 static Token *counter_macro(Token *start) {
-  static int i = 0;
+  static uint32_t i;
+  if (i > 2147483648)
+    error_tok(start, "__COUNTER__ exceeded 2147483648");
   return new_num_token(i++, start, start->next);
 }
 
