@@ -1745,9 +1745,9 @@ static Node *vla_size(Type *ty, Token *tok) {
 }
 
 static Node *ptr_base_size(Type *ty, Token *tok) {
-  if (ty->kind == TY_VLA)
-    return vla_size(ty, tok);
-  return base_size(ty, tok);
+  if (ty->base->kind == TY_VLA)
+    return vla_size(ty->base, tok);
+  return base_size(ty->base, tok);
 }
 
 static Node *calc_vla(Type *ty, Token *tok) {
@@ -4332,14 +4332,22 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   ptr_convert(&lhs);
   ptr_convert(&rhs);
 
-  Node **ofs = is_integer(lhs->ty) ? &lhs : is_integer(rhs->ty) ? &rhs : NULL;
-  Node *ptr = lhs->ty->base ? lhs : rhs->ty->base ? rhs : NULL;
-
-  if (ptr && ofs) {
-    Node *sz = ptr_base_size(ptr->ty->base, tok);
-    *ofs = new_binary(ND_MUL, *ofs, sz, tok);
+  if (lhs->ty->base && is_integer(rhs->ty)) {
+    Node *sz = ptr_base_size(lhs->ty, tok);
+    rhs = new_binary(ND_MUL, sz, rhs, tok);
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
+
+  if (is_integer(lhs->ty) && rhs->ty->base) {
+    Node *sz = ptr_base_size(rhs->ty, tok);
+    if (is_vm_ty(rhs->ty)) {
+      lhs = new_binary(ND_MUL, sz, lhs, tok);
+      return new_binary(ND_ADD, rhs, lhs, tok);
+    }
+    lhs = new_binary(ND_MUL, lhs, sz, tok);
+    return new_binary(ND_ADD, lhs, rhs, tok);
+  }
+
   error_tok(tok, "invalid operands");
 }
 
@@ -4354,12 +4362,12 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   ptr_convert(&rhs);
 
   if (lhs->ty->base && is_integer(rhs->ty)) {
-    Node *sz = ptr_base_size(lhs->ty->base, tok);
+    Node *sz = ptr_base_size(lhs->ty, tok);
     return new_binary(ND_SUB, lhs, new_binary(ND_MUL, rhs, sz, tok), tok);
   }
 
   if (lhs->ty->base && rhs->ty->base && is_compatible(lhs->ty->base, rhs->ty->base)) {
-    Node *sz = new_cast(ptr_base_size(lhs->ty->base, tok), ty_ptrdiff_t);
+    Node *sz = new_cast(ptr_base_size(lhs->ty, tok), ty_ptrdiff_t);
     lhs = new_cast(lhs, ty_ptrdiff_t);
     rhs = new_cast(rhs, ty_ptrdiff_t);
     return new_binary(ND_DIV, new_binary(ND_SUB, lhs, rhs, tok), sz, tok);

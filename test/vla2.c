@@ -51,6 +51,17 @@ int fn4(int i){
   return sizeof(*(char(*)[i+7]){0});
 }
 
+int vm_ptr_arith(int i) {
+  extern int ext_fn1(int), ext_fn2(int);
+
+  void *p = ext_fn1(i) + ({ volatile int j = i * 11; (char(*)[j])0; });
+  ASSERT(1, (void*)99 == p);
+
+  void *q = ({ volatile int j = i + 4; (char(*)[j])0; }) + ext_fn2(i * 2);
+  ASSERT(1, (void*)42 == q);
+  return 1;
+}
+
 int vm_in_cast(int i) {
   (int(*)[i++])(void *)0;
 
@@ -122,8 +133,8 @@ int main(void){
 
   ASSERT(14, fn4(7));
 
+  ASSERT(1, vm_ptr_arith(3));
   ASSERT(1, vm_in_cast(9));
-
   ASSERT(1, vm_in_va_arg(5, &(char){7}));
 
   ASSERT(85, infer_inner_scope(137, 222));
