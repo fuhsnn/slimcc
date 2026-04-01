@@ -3434,15 +3434,15 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   if (rhs->ty->kind == TY_FUNC)
     rhs = new_cast(rhs, pointer_to(rhs->ty));
 
-  Node **ofs = is_integer(lhs->ty) ? &lhs : is_integer(rhs->ty) ? &rhs : NULL;
-  Node *ptr = lhs->ty->base ? lhs : rhs->ty->base ? rhs : NULL;
+  if (lhs->ty->base && is_integer(rhs->ty)) {
+    Node *sz = new_size(lhs->ty->base->size, tok);
+    rhs = new_binary(ND_MUL, sz, rhs, tok);
+    return new_binary(ND_ADD, lhs, rhs, tok);
+  }
 
-  if (ptr && ofs) {
-    if (ptr->ty->base->kind == TY_VLA)
-      *ofs = new_binary(ND_MUL, *ofs, new_var_node(ptr->ty->base->vla_size, tok), tok);
-    else
-      *ofs = new_binary(ND_MUL, *ofs, new_intptr(ptr->ty->base->size, tok), tok);
-
+  if (is_integer(lhs->ty) && rhs->ty->base) {
+    Node *sz = new_size(rhs->ty->base->size, tok);
+    lhs = new_binary(ND_MUL, lhs, sz, tok);
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
 

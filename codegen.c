@@ -225,6 +225,7 @@ static Node *skip_gp_cast(Node *node) {
   return node;
 }
 
+static char *rip = "%rip";
 static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, bool let_atomic) {
   int offset;
   Obj *var = eval_var_opt(node, &offset, let_subarray, let_atomic);
@@ -239,7 +240,7 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, boo
         snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, asm_name(var));
       else
         snprintf(ofs, STRBUF_SZ, "\"%s\"", asm_name(var));
-      *ptr = "%rip";
+      *ptr = rip;
       return true;
     }
   }
@@ -2865,6 +2866,52 @@ static bool gen_bool_opt(Node *node) {
   return true;
 }
 
+static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
+  int64_t val;
+  if (is_const_expr(mul, &val)) {
+    int64_t ofs = 0;
+    gen_deref_opt(lhs, &ofs);
+    load2(ty, ofs + val, "%rax");
+    return true;
+  }
+
+  int sz = 0;
+  switch (mul->lhs->val) {
+  case 1:  sz = 1; break;
+  case 2:  sz = 2; break;
+  case 4:  sz = 4; break;
+  case 8:  sz = 8; break;
+  default: {
+    return false;
+  }
+  }
+
+  char *ptr;
+  char ofs[STRBUF_SZ];
+  char op[STRBUF_SZ2];
+
+  if (is_memop(lhs, ofs, &ptr, true)) {
+    gen_expr(mul->rhs);
+    Printftn("movq %s(%s), %%rdx", ofs, ptr);
+    snprintf(op, STRBUF_SZ2, "(%%rdx, %%rax, %d)", sz);
+  } else if (is_memop_ptr(lhs, ofs, &ptr) && ptr != rip) {
+    gen_expr(mul->rhs);
+    snprintf(op, STRBUF_SZ2, "%s(%s, %%rax, %d)", ofs, ptr, sz);
+  } else {
+    gen_expr(lhs);
+    push();
+    gen_expr(mul->rhs);
+    const char *reg = pop_inreg(tmpreg64[0]);
+    snprintf(op, STRBUF_SZ2, "(%s, %%rax, %d)", reg, sz);
+  }
+
+  if (ty->size == 8)
+    Printftn("movq %s, %%rax", op);
+  else
+    cast_extend_int32(ty, op, "%eax");
+  return true;
+}
+
 static bool gen_expr_opt(Node *node) {
   NodeKind kind = node->kind;
   Type *ty = node->ty;
@@ -2904,8 +2951,17 @@ static bool gen_expr_opt(Node *node) {
   if (gen_bool_opt(node))
     return true;
 
-  if (is_gp_ty(ty) && gen_gp_opt(node))
-    return true;
+  if (is_gp_ty(ty)) {
+    if (gen_gp_opt(node))
+      return true;
+
+    if (kind == ND_DEREF && lhs->kind == ND_ADD && lhs->rhs->kind == ND_MUL) {
+      Node *mul = lhs->rhs;
+      if (mul->lhs->kind == ND_NUM)
+        if (gen_scaled_idx_load(ty, lhs->lhs, mul))
+          return true;
+    }
+  }
 
   if (is_int_to_int_cast(node) && ty->size == 4 && lhs->ty->size == 8)
     if (gen_arith_opt_gp(lhs, ty->size))
