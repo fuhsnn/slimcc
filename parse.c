@@ -1726,15 +1726,12 @@ static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr) {
   return ty;
 }
 
-static Node *vla_count(Type *ty, Token *tok, bool is_void) {
+static Node *vla_count(Type *ty, Token *tok) {
   if (!ty->vla_len_expr)
-    return is_void ? NULL : new_size_t(ty->array_len, tok);
-
+    return new_size_t(ty->array_len, tok);
   if (ty->vla_len_val)
-    return is_void ? NULL : new_var_node(ty->vla_len_val, tok);
-
-  ty->vla_len_val = new_lvar2(ty_size_t, base_scope());
-  return new_binary(ND_ASSIGN, new_var_node(ty->vla_len_val, tok), ty->vla_len_expr, tok);
+    return new_var_node(ty->vla_len_val, tok);
+  return ty->vla_len_expr;
 }
 
 static Node *vla_size(Type *ty, Token *tok) {
@@ -1744,7 +1741,7 @@ static Node *vla_size(Type *ty, Token *tok) {
   else
     base_sz = new_size_t(ty->base->size, tok);
 
-  return new_binary(ND_MUL, vla_count(ty, tok, false), base_sz, tok);
+  return new_binary(ND_MUL, vla_count(ty, tok), base_sz, tok);
 }
 
 static Node *ptr_base_size(Type *ty, Token *tok) {
@@ -1755,9 +1752,10 @@ static Node *ptr_base_size(Type *ty, Token *tok) {
 
 static Node *calc_vla(Type *ty, Token *tok) {
   Node *n = NULL;
-  if (ty->kind == TY_VLA)
-    n = vla_count(ty, tok, true);
-
+  if (ty->kind == TY_VLA && ty->vla_len_expr && !ty->vla_len_val) {
+    ty->vla_len_val = new_lvar2(ty_size_t, base_scope());
+    n = new_binary(ND_ASSIGN, new_var_node(ty->vla_len_val, tok), ty->vla_len_expr, tok);
+  }
   if (ty->base)
     chain_expr(&n, calc_vla(ty->base, tok));
   else if (ty->kind == TY_FUNC)
@@ -4489,7 +4487,7 @@ static Node *unary(Token **rest, Token *tok) {
     if (ty->kind == TY_VLA) {
       if (!ty->vla_len_expr)
         expr = NULL;
-      chain_expr(&expr, vla_count(ty, tok, false));
+      chain_expr(&expr, vla_count(ty, tok));
       return expr;
     }
     if (ty->kind == TY_ARRAY) {
