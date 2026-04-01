@@ -4340,7 +4340,7 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
 
   if (is_integer(lhs->ty) && rhs->ty->base) {
     Node *sz = ptr_base_size(rhs->ty, tok);
-    if (is_vm_ty(rhs->ty)) {
+    if (rhs->ty->base->kind == TY_VLA) {
       lhs = new_binary(ND_MUL, sz, lhs, tok);
       return new_binary(ND_ADD, rhs, lhs, tok);
     }
