@@ -5526,8 +5526,7 @@ static Node *primary(Token **rest, Token *tok) {
     }
 
     if (equal(tok->next, "(")) {
-      Node *node = builtin_functions(rest, tok);
-      if (node)
+      if (Node *node = builtin_functions(rest, tok))
         return node;
 
       if (opt_std == STD_C89) {
