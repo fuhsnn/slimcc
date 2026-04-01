@@ -1035,16 +1035,14 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Numeric literal
-    char *p2 = (*p == '.') ? p + 1 : p;
-    if (Isdigit(*p2)) {
+    if (char *p2 = (*p == '.') ? p + 1 : p; Isdigit(*p2)) {
       cur = cur->next = new_pp_number(p, p2 + 1);
       p += cur->len;
       continue;
     }
 
     // Punctuators
-    int punct_len = read_punct(p);
-    if (punct_len) {
+    if (int punct_len = read_punct(p)) {
       cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
       p += cur->len;
       continue;
@@ -1142,8 +1140,7 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Identifier or keyword
-    Token *ident = read_ident(p);
-    if (ident) {
+    if (Token *ident = read_ident(p)) {
       cur = cur->next = ident;
       p += cur->len;
       continue;
