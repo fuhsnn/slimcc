@@ -5078,8 +5078,8 @@ void emit_text(Obj *fn) {
   else
     Printstn(".text");
 
-  int fnalign = get_align(fn);
-  if (fnalign > 1)
+  int fnalign = fn->alt_align ? fn->alt_align : opt_fn_align;
+  if (fnalign)
     Printftn(".align %d", fnalign);
   Printftn(".type \"%s\", @function", fn_name);
   Printfsn("\"%s\":", fn_name);

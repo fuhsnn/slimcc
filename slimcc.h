@@ -931,6 +931,7 @@ extern bool opt_dM;
 extern bool opt_fpic;
 extern bool opt_fpie;
 extern bool opt_femulated_tls;
+extern int opt_fn_align;
 extern bool opt_use_plt;
 extern bool opt_fcommon;
 extern bool opt_optimize;

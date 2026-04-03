@@ -35,6 +35,7 @@ bool opt_fcommon;
 bool opt_fpic;
 bool opt_fpie;
 bool opt_femulated_tls;
+int opt_fn_align = 1;
 bool opt_use_plt = true;
 bool opt_optimize = true;
 bool opt_reuse_stack = true;
@@ -616,6 +617,22 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         opt_gnu_keywords = b;
         has_gnu_keywords_option = true;
         continue;
+      }
+
+      if (!strncmp(arg, "align-functions", 15)) {
+        arg += 15;
+        if (*arg == '\0') {
+          opt_fn_align = b ? 16 : 1;
+          continue;
+        }
+        if (b && *arg == '=') {
+          char *end;
+          if (!(opt_fn_align = strtoul(arg + 1, &end, 10)))
+            opt_fn_align = 16;
+          if (*end == '\0' && is_pow_of_two(opt_fn_align))
+            continue;
+        }
+        error("unsupported form of '-falign-functions'");
       }
 
       if (b) {
