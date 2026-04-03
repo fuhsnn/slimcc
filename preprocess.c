@@ -641,7 +641,10 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
     if (t->has_space && len != 1)
       len++;
 
-    if (add_slash && (t->kind == TK_INT_NUM || t->kind == TK_STR || t->kind == TK_ASM_STR))
+    if (add_slash && (t->kind == TK_INT_NUM ||
+                      t->kind == TK_STR ||
+                      t->kind == TK_ASM_STR ||
+                      t->kind == TK_INVALID))
       for (int i = 0; i < t->len; i++)
         if (t->loc[i] == '\\' || t->loc[i] == '"')
           len++;
@@ -657,7 +660,10 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
     if (t->has_space && pos != 0)
       buf[pos++] = ' ';
 
-    if (add_slash && (t->kind == TK_INT_NUM || t->kind == TK_STR || t->kind == TK_ASM_STR)) {
+    if (add_slash && (t->kind == TK_INT_NUM ||
+                      t->kind == TK_STR ||
+                      t->kind == TK_ASM_STR ||
+                      t->kind == TK_INVALID)) {
       for (int i = 0; i < t->len; i++) {
         if (t->loc[i] == '\\' || t->loc[i] == '"')
           buf[pos++] = '\\';
@@ -2071,7 +2077,7 @@ static Token *preprocess3(Token *tok) {
       if (tok->next->kind == TK_STR)
         join_adjacent_string_literals(tok);
       break;
-    case TK_UNICODE: error_tok(tok, "unallowed unicode character");
+    case TK_INVALID: error_tok(tok, "invalid token");
     }
 
     stash_attr(tok, &attr_head, &attr_cur);

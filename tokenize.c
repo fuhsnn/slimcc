@@ -166,7 +166,7 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
 static Token *read_ident(char *p) {
   char *start = p;
   bool has_ucn = false;
-  bool bad_unicode = false;
+  bool invalid = false;
 
   for (;;) {
     if (*p == '$') {
@@ -188,7 +188,7 @@ static Token *read_ident(char *p) {
       char *pos;
       uint32_t c = decode_utf8(&pos, p);
       if (!(p == start ? is_ident1(c) : is_ident2(c)))
-        bad_unicode = true;
+        invalid = true;
       p = pos;
       continue;
     }
@@ -198,8 +198,8 @@ static Token *read_ident(char *p) {
   if (p == start)
     return NULL;
 
-  if (bad_unicode)
-    return new_token(TK_UNICODE, start, p);
+  if (invalid)
+    return new_token(TK_INVALID, start, p);
 
   Token *tok = new_token(TK_IDENT, start, p);
   tok->has_ucn = has_ucn;
@@ -381,25 +381,33 @@ TokenKind ident_keyword(Token *tok) {
   return val ? (TokenKind)(intptr_t)val : TK_IDENT;
 }
 
-static bool read_ucn(uint32_t *val, char **new_pos, char *p) {
+static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid) {
+  if (!Casecmp(*p, 'u'))
+    return false;
+
   int len = (*p++ == 'u') ? 4 : 8;
 
-  uint32_t c = 0;
-  for (int i = 0; i < len; i++) {
-    if (!Isxdigit(p[i]))
-      return false;
-    c = (c << 4) | from_hex(p[i]);
+  char *end = p + len;
+  uint64_t c = 0;
+  for (; p != end; p++) {
+    if (!Isxdigit(*p))
+      break;
+    c = (c << 4) | from_hex(*p);
+    if (c >> 32)
+      *invalid = true;
   }
-  if (c >= 0xD800 && c <= 0xDFFF)
-    return false;
-  if (c > 0x10FFFF)
-    return false;
-  *val = c;
-  *new_pos = p + len;
+
+  if (p != end)
+    *invalid = true;
+  if ((c >= 0xD800 && c <= 0xDFFF) || (c > 0x10FFFF))
+    *invalid = true;
+
+  *val = *invalid ? 0 : c;
+  *new_pos = p;
   return true;
 }
 
-static uint32_t read_escape_seq(char **new_pos, char *p) {
+static uint32_t read_escape_seq(char **new_pos, char *p, bool *invalid) {
   if (Inrange(*p, '0', '7')) {
     uint32_t c = *p++ - '0';
     if (Inrange(*p, '0', '7')) {
@@ -414,21 +422,21 @@ static uint32_t read_escape_seq(char **new_pos, char *p) {
   if (*p == 'x') {
     p++;
     if (!Isxdigit(*p))
-      error_at(p, "invalid hex escape sequence");
+      *invalid = true;
 
-    uint32_t c = 0;
-    for (; Isxdigit(*p); p++)
+    uint64_t c = 0;
+    for (; Isxdigit(*p); p++) {
       c = (c << 4) + from_hex(*p);
+      if (c >> 32)
+        *invalid = true;
+    }
     *new_pos = p;
     return c;
   }
 
-  if (Casecmp(*p, 'u')) {
-    uint32_t c;
-    if (!read_ucn(&c, new_pos, p))
-      error_at(p, "invalid universal character name");
+  uint32_t c;
+  if (read_ucn(new_pos, p, &c, invalid))
     return c;
-  }
 
   *new_pos = p + 1;
 
@@ -481,19 +489,27 @@ static Token *read_string_literal(char *start, char *quote, Type *ty) {
   char *end = string_literal_end(quote + 1);
   char *buf = calloc(1, end - quote);
   int len = 0;
+  bool invalid = false;
 
   for (char *p = quote + 1; p < end;) {
     if (*p == '\\') {
-      if (Casecmp(p[1], 'u')) {
-        len += encode_utf8(&buf[len], read_escape_seq(&p, p + 1));
+      uint32_t c;
+      if (read_ucn(&p, p + 1, &c, &invalid)) {
+        len += encode_utf8(&buf[len], c);
         continue;
       }
-      buf[len++] = read_escape_seq(&p, p + 1);
+      c = read_escape_seq(&p, p + 1, &invalid);
+      if (c >> 8)
+        invalid = true;
+      buf[len++] = (uint8_t)c;
       continue;
     }
     buf[len++] = *p++;
   }
-
+  if (invalid) {
+    free(buf);
+    return new_token(TK_INVALID, start, end + 1);
+  }
   Token *tok = new_token(TK_STR, start, end + 1);
   tok->ty = array_of(ty, len + 1);
   tok->str = buf;
@@ -511,25 +527,33 @@ static Token *read_utf16_string_literal(char *start, char *quote) {
   char *end = string_literal_end(quote + 1);
   uint16_t *buf = calloc(2, end - start);
   int len = 0;
+  bool invalid = false;
 
   for (char *p = quote + 1; p < end;) {
     uint32_t c;
     if (*p == '\\')
-      c = read_escape_seq(&p, p + 1);
+      c = read_escape_seq(&p, p + 1, &invalid);
     else
       c = decode_utf8(&p, p);
 
     if (c < 0x10000) {
       // Encode a code point in 2 bytes.
       buf[len++] = c;
-    } else {
+      continue;
+    }
+    if (c <= 0x10ffff) {
       // Encode a code point in 4 bytes.
       c -= 0x10000;
-      buf[len++] = 0xd800 + ((c >> 10) & 0x3ff);
+      buf[len++] = 0xd800 + (c >> 10);
       buf[len++] = 0xdc00 + (c & 0x3ff);
+      continue;
     }
+    invalid = true;
   }
-
+  if (invalid) {
+    free(buf);
+    return new_token(TK_INVALID, start, end + 1);
+  }
   Token *tok = new_token(TK_STR, start, end + 1);
   tok->ty = array_of(ty_char16_t, len + 1);
   tok->str = (char *)buf;
@@ -544,14 +568,18 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
   char *end = string_literal_end(quote + 1);
   uint32_t *buf = calloc(4, end - quote);
   int len = 0;
+  bool invalid = false;
 
   for (char *p = quote + 1; p < end;) {
     if (*p == '\\')
-      buf[len++] = read_escape_seq(&p, p + 1);
+      buf[len++] = read_escape_seq(&p, p + 1, &invalid);
     else
       buf[len++] = decode_utf8(&p, p);
   }
-
+  if (invalid) {
+    free(buf);
+    return new_token(TK_INVALID, start, end + 1);
+  }
   Token *tok = new_token(TK_STR, start, end + 1);
   tok->ty = array_of(ty, len + 1);
   tok->str = (char *)buf;
@@ -559,8 +587,9 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
 }
 
 static Token *read_char_literal(char *start) {
-  uint32_t val = 0;
+  uint64_t val = 0;
   bool is_multi = false;
+  bool invalid = false;
   char *p = start + 1;
   if (*p == '\'')
     error_at(p, "empty character literal");
@@ -569,20 +598,27 @@ static Token *read_char_literal(char *start) {
     if (*p == '\0')
       error_at(start, "unclosed character literal");
 
-    uint8_t c;
+    uint32_t c;
     if (*p == '\\')
-      c = read_escape_seq(&p, p + 1);
+      c = read_escape_seq(&p, p + 1, &invalid);
     else
       c = decode_utf8(&p, p);
+    if (c >> 8)
+      invalid = true;
 
     val <<= 8;
-    val |= c;
+    val |= (uint8_t)c;
+    if (val >> 32)
+      invalid = true;
     if (*p == '\'')
       break;
     is_multi = true;
   }
+  if (invalid)
+    return new_token(TK_INVALID, start, p + 1);
+
   if (!is_multi && !ty_pchar->is_unsigned)
-    val = (int8_t)val;
+    val = (uint32_t)(int8_t)val;
 
   Token *tok = new_token(TK_INT_NUM, start, p + 1);
   tok->ival = val;
@@ -591,18 +627,22 @@ static Token *read_char_literal(char *start) {
 }
 
 static Token *read_unicode_char_literal(char *start, char *quote, Type *ty) {
+  bool invalid = false;
   char *p = quote + 1;
   if (*p == '\0')
     error_at(start, "unclosed character literal");
 
   uint32_t c;
   if (*p == '\\')
-    c = read_escape_seq(&p, p + 1);
+    c = read_escape_seq(&p, p + 1, &invalid);
   else
     c = decode_utf8(&p, p);
 
   if (*p != '\'')
     error_at(p, "invalid unicode character literal");
+
+  if (invalid)
+    return new_token(TK_INVALID, start, p + 1);
 
   Token *tok = new_token(TK_INT_NUM, start, p + 1);
   tok->ival = c;
@@ -892,13 +932,15 @@ void convert_ucn_ident(Token *tok) {
         *q++ = *p++;
         continue;
       }
+      bool invalid = false;
       uint32_t c;
-      if (Casecmp(p[1], 'u') &&
-          read_ucn(&c, &p, p + 1) &&
-          (c > 0x7F) &&
-          (p == tok->loc ? is_ident1(c) : is_ident2(c))) {
-        q += encode_utf8(q, c);
-        continue;
+      if (read_ucn(&p, p + 1, &c, &invalid) && !invalid) {
+        if (c <= 0x7F)
+          break;
+        if (p == tok->loc ? is_ident1(c) : is_ident2(c)) {
+          q += encode_utf8(q, c);
+          continue;
+        }
       }
     }
     error_tok(tok, "invalid token");
