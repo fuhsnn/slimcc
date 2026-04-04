@@ -771,7 +771,6 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         !strcmp(argv[i], "-malign-double") ||
         !strcmp(argv[i], "-mfpmath=sse") ||
         !strcmp(argv[i], "-mno-red-zone") ||
-        !strcmp(argv[i], "-msse2") ||
         !strcmp(argv[i], "-pedantic") ||
         !strcmp(argv[i], "--pedantic") ||
         !strcmp(argv[i], "-pedantic-errors") ||
