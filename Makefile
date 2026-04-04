@@ -4,6 +4,10 @@ TEST_SRCS!=ls test/*.c
 
 TEST_FLAGS=-Itest -std=gnu23
 
+STG2_FLAGS=
+
+SAN_FLAGS=-fsanitize=address
+
 .SUFFIXES: .exe .stage2.o .stage2.exe .asan.o .asan.exe .filc.o .filc.exe
 
 # Stage 1
@@ -37,10 +41,10 @@ OBJS_S2=$(SRCS:.c=.stage2.o)
 $(OBJS_S2): slimcc
 
 .c.stage2.o:
-	./slimcc -o $@ -c $<
+	./slimcc $(STG2_FLAGS) -o $@ -c $<
 
 slimcc-stage2: $(OBJS_S2)
-	./slimcc -o $@ $(OBJS_S2) $(LDFLAGS)
+	./slimcc $(STG2_FLAGS) -o $@ $(OBJS_S2) $(LDFLAGS)
 
 TESTS_S2=$(TEST_SRCS:.c=.stage2.exe)
 
@@ -61,10 +65,10 @@ OBJS_ASAN=$(SRCS:.c=.asan.o)
 $(OBJS_ASAN): slimcc.h
 
 .c.asan.o:
-	$(CC) $(CFLAGS) -fsanitize=address -g -o $@ -c $<
+	$(CC) $(SAN_FLAGS) -g -o $@ -c $<
 
 slimcc-asan: $(OBJS_ASAN)
-	$(CC) $(CFLAGS) -fsanitize=address -g -o $@ $(OBJS_ASAN) $(LDFLAGS)
+	$(CC) $(SAN_FLAGS) -g -o $@ $(OBJS_ASAN) $(LDFLAGS)
 
 TESTS_ASAN=$(TEST_SRCS:.c=.asan.exe)
 
@@ -128,7 +132,7 @@ format:
 	perl -i -p0e 's|\:[ ]+\{\n|: {\n|g' $(SRCS) slimcc.h platform/*.c
 
 clean:
-	rm -f slimcc slimcc-stage2 slimcc-asan slimcc-filc slimcc-lto slimcc-lto-je slimcc-lto-mi
+	rm -f slimcc slimcc-stage2 slimcc-asan slimcc-filc slimcc-lto*
 	rm -f *.o test/*.o test/*.exe test/host/*.o test/abi/*.o
 
 .PHONY: clean test test-stage2 test-all test-asan test-filc
