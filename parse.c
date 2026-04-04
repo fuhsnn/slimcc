@@ -175,6 +175,8 @@ struct FuncContext {
   Token *defr_ctx;
 };
 
+bool is_redecl_context;
+
 static Obj *globals = &(Obj){0};
 static Scope *scope = &(Scope){0};
 static HashMap symbols;
@@ -4706,8 +4708,13 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
     ty->is_constructing = false;
 
     if (tag_compat_ty) {
+      bool prv = is_redecl_context;
+      is_redecl_context = true;
+
       if (!is_record_compat(ty, tag_compat_ty))
         error_tok(tag, "tag redeclaration");
+
+      is_redecl_context = prv;
       return tag_compat_ty;
     }
 

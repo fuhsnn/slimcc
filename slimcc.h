@@ -643,6 +643,8 @@ struct Scope {
   HashMap tags;
 };
 
+extern bool is_redecl_context;
+
 Node *new_cast(Node *expr, Type *ty);
 int64_t const_expr(Token **rest, Token *tok);
 int64_t eval_sign_extend(Type *ty, int64_t val);

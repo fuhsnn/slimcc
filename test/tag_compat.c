@@ -141,6 +141,18 @@ int main(void) {
   ASSERT(1, incomplete_ptr());
   ASSERT(1, incomplete_param());
 
+  {
+    struct S1 { enum E1 { A1 } i; };
+    struct S2 { enum E2 : unsigned { A2 } i; };
+    {
+      struct S1 s1;
+      static_assert( _Generic(s1, struct S1 { unsigned i; }:1, default: 0) );
+      static_assert( _Generic(&s1, struct S1 { unsigned i; } *:1, default: 0) );
+      struct S2 s2;
+      static_assert( _Generic(s2, struct S2 { unsigned i; }:1, default: 0) );
+      static_assert( _Generic(&s2, struct S2 { unsigned i; } *:1, default: 0) );
+    }
+  }
 
   printf("OK\n");
 }

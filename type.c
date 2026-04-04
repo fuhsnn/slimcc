@@ -359,6 +359,10 @@ bool is_record_compat(Type *t1, Type *t2) {
     if (t1->kind != t2->kind)
       return false;
 
+    if (is_redecl_context)
+      if (t1->is_enum != t2->is_enum)
+        return false;
+
     if (t1->kind == TY_STRUCT || t1->kind == TY_UNION) {
       if (!mem1->name != !t1->tag ||
           !mem2->name != !t2->tag ||
