@@ -682,13 +682,13 @@ static Type *get_common_type(Node **lhs, Node **rhs) {
 
   int rnk1 = int_rank(ty1);
   int rnk2 = int_rank(ty2);
+  if (rnk1 == rnk2)
+    return ty1->is_unsigned ? ty1 : ty2;
+
   Type *rnk_ty = rnk1 > rnk2 ? ty1 : ty2;
 
   if (ty1->is_unsigned == ty2->is_unsigned)
     return rnk_ty;
-
-  if (rnk1 == rnk2)
-    return ty1->is_unsigned ? ty1 : ty2;
 
   switch (rnk_ty->kind) {
   case TY_INT:      return ty_uint;
