@@ -19,6 +19,7 @@ static bool at_bol;
 // True if the current position follows a space character
 static bool has_space;
 
+static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid);
 static void canonicalize_newline(char *p);
 static void remove_backslash_newline(char *p, SlashDelta *dlt);
 
@@ -179,9 +180,8 @@ static Token *read_ident(char *p) {
       p++;
       continue;
     }
-    if (*p == '\\') {
+    if (*p == '\\' && read_ucn(&p, p + 1, &(uint32_t){0}, &invalid)) {
       has_ucn = true;
-      p++;
       continue;
     }
     if ((unsigned char)*p >= 128) {
@@ -381,15 +381,26 @@ TokenKind ident_keyword(Token *tok) {
   return val ? (TokenKind)(intptr_t)val : TK_IDENT;
 }
 
+static void chk_delimit_end(char **p, bool *invalid) {
+  if (**p == '}') {
+    *p += 1;
+    return;
+  }
+  *invalid = true;
+}
+
 static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid) {
   if (!Casecmp(*p, 'u'))
     return false;
 
-  int len = (*p++ == 'u') ? 4 : 8;
+  int len = (*p == 'u') ? 4 : 8;
+
+  bool has_brace = p[1] == '{';
+  p += 1 + has_brace;
 
   char *end = p + len;
   uint64_t c = 0;
-  for (; p != end; p++) {
+  for (; has_brace || p != end; p++) {
     if (!Isxdigit(*p))
       break;
     c = (c << 4) | from_hex(*p);
@@ -397,7 +408,9 @@ static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid) {
       *invalid = true;
   }
 
-  if (p != end)
+  if (has_brace)
+    chk_delimit_end(&p, invalid);
+  else if (p != end)
     *invalid = true;
   if ((c >= 0xD800 && c <= 0xDFFF) || (c > 0x10FFFF))
     *invalid = true;
@@ -419,8 +432,27 @@ static uint32_t read_escape_seq(char **new_pos, char *p, bool *invalid) {
     return c;
   }
 
+  if (*p == 'o' && p[1] == '{') {
+    p += 2;
+    if (!Inrange(*p, '0', '7'))
+      *invalid = true;
+
+    uint64_t c = 0;
+    for (; Inrange(*p, '0', '7'); p++) {
+      c = (c << 3) + *p - '0';
+      if (c >> 32)
+        *invalid = true;
+    }
+
+    chk_delimit_end(&p, invalid);
+    *new_pos = p;
+    return c;
+  }
+
   if (*p == 'x') {
-    p++;
+    bool has_brace = p[1] == '{';
+    p += 1 + has_brace;
+
     if (!Isxdigit(*p))
       *invalid = true;
 
@@ -430,6 +462,9 @@ static uint32_t read_escape_seq(char **new_pos, char *p, bool *invalid) {
       if (c >> 32)
         *invalid = true;
     }
+
+    if (has_brace)
+      chk_delimit_end(&p, invalid);
     *new_pos = p;
     return c;
   }
@@ -1108,6 +1143,12 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     if (ident) {
       cur = cur->next = ident;
       p += cur->len;
+      continue;
+    }
+
+    if (*p == '\\') {
+      cur = cur->next = new_token(TK_PUNCT, p, p + 1);
+      p++;
       continue;
     }
 

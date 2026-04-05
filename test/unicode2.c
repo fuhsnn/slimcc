@@ -50,15 +50,29 @@ int main(void) {
   ASSERT(1, sizeof(tst16) == sizeof(chk16) && !memcmp(&tst16, &chk16, sizeof(chk16)));
   ASSERT(1, sizeof(tst32) == sizeof(chk32) && !memcmp(&tst32, &chk32, sizeof(chk32)));
 
-  int µ42µ = 33;
-  \U000000b542\u00b5 += 6;
-  ASSERT(39, \u00b542\U000000b5);
+  int µ42µ = '\u{1}';
+  \U000000b542\u00b5 += '\o{12}';
+  \u{000b5}42\u00b5 += '\x{64}';
+  \U000000b542\u{0b5} += 1000;
+  \u{b5}42\u{b5} += 10000;
+  ASSERT(11111, \u00b542\U000000b5);
 
   int CAT(\U000000b5, \u00b5) = 44;
 
 #ifdef NOTCLANG
   ASSERT(44, µµ);
 #endif
+
+#if 0
+  \U000 \* \U{ff \u{ff \x{zz \x{} \o{99}
+#endif
+
+#define invalid_in_macro \U000 \* \U{ff \u{ff \x{zz \x{} \o{99}
+
+  static char tst_invalid[] = STR(invalid_in_macro);
+  static char chk_invalid[] = {0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x5f, 0x69, 0x6e, 0x5f, 0x6d, 0x61, 0x63, 0x72, 0x6f, 0};
+
+  ASSERT(1, sizeof(tst_invalid) == sizeof(chk_invalid) && !memcmp(&tst_invalid, &chk_invalid, sizeof(chk_invalid)));
 
   printf("OK\n");
 }
