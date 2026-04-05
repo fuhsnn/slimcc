@@ -26,6 +26,8 @@ static void remove_backslash_newline(char *p, SlashDelta *dlt);
 #define Startswith2(p, x, y) ((*(p) == x) && ((p)[1] == y))
 #define Startswith3(p, x, y, z) ((*(p) == x) && ((p)[1] == y) && ((p)[2] == z))
 
+#define Is_c_ident(c) (Isalnum(c) || (c) == '_' || (c) == '$')
+
 // Reports an error and exit.
 void error(char *fmt, ...) {
   va_list ap;
@@ -170,13 +172,7 @@ static Token *read_ident(char *p) {
   bool invalid = false;
 
   for (;;) {
-    if (*p == '$') {
-      if (opt_cc1_asm_pp)
-        break;
-      p++;
-      continue;
-    }
-    if (Isalnum(*p) || *p == '_') {
+    if (Is_c_ident(*p)) {
       p++;
       continue;
     }
@@ -239,7 +235,6 @@ static int read_punct(char *p) {
   case '#':
   case ':': return is_repeat + 1;
   case '.': return (is_repeat && p[2] == *p) ? 3 : 1;
-  case '$': return opt_cc1_asm_pp;
   case '(':
   case ')':
   case ',':
@@ -692,24 +687,16 @@ static Token *read_unicode_char_literal(char *start, char *quote, Type *ty) {
 // token after preprocessing.
 static Token *new_pp_number(char *start, char *p) {
   for (;;) {
-    if (*p == '.') {
+    if (Is_c_ident(*p) || *p == '.') {
       p++;
       continue;
-    } else if (*p == '\'' && Isalnum(p[1]) && opt_std >= STD_C23) {
+    }
+    if ((*p == '+' || *p == '-') && (Casecmp(p[-1], 'e') || Casecmp(p[-1], 'p'))) {
+      p++;
+      continue;
+    }
+    if (*p == '\'' && Isalnum(p[1]) && opt_std >= STD_C23) {
       p += 2;
-      continue;
-    } else if ((*p == '+' || *p == '-') && (Casecmp(p[-1], 'e') || Casecmp(p[-1], 'p'))) {
-      p++;
-      continue;
-    }
-    if (*p == '$') {
-      if (opt_cc1_asm_pp)
-        break;
-      p++;
-      continue;
-    }
-    if (Isalnum(*p) || *p == '_') {
-      p++;
       continue;
     }
     if ((unsigned char)*p >= 128) {
@@ -1053,6 +1040,11 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     if (opt_cc1_asm_pp) {
+      if (*p == '$') {
+        cur = cur->next = new_token(TK_PUNCT, p, p + 1);
+        p++;
+        continue;
+      }
       if (*p == '"') {
         cur = cur->next = asm_string_literal(p, '"');
         p += cur->len;

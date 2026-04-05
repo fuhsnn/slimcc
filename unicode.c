@@ -413,9 +413,7 @@ static bool in_range(uint32_t c, UTF32Range *range, int len) {
 }
 
 bool is_ident1(uint32_t c) {
-  return c == '$' ||
-         c == '_' ||
-         in_range(c, xid_start, sizeof(xid_start) / sizeof(UTF32Range)) ||
+  return in_range(c, xid_start, sizeof(xid_start) / sizeof(UTF32Range)) ||
          in_range(c, math_start, sizeof(math_start) / sizeof(UTF32Range));
 }
 
