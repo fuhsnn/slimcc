@@ -78,6 +78,18 @@ As such, optimization flags and custom allocators have great impact on its perfo
 
 ## How portable is the compiler?
  - It's written in C99 with several POSIX 2008 functions.
- - Little endian is assumed.
- - `tcc(TinyCC)`, `kefir` and `pcc` should be able to compile it, `chibicc` needs [a few patches](https://github.com/fuhsnn/chibicc/tree/minimum-fix).
- - `cproc`(QBE), `cparser`(libFirm) have incomplete support for `long double`, adding `-DNO_LONG_DOUBLE` to the flags allow these otherwise capable compilers to bootstrap slimcc. `long double` constants would be broken so don't use the build for anything other than self-hosting slimcc.
+ - Host is assumed to be little-endian.
+ - For compilers with more restricted feature set, preprocessor flags are provided to enable bootstrapping stage1 with unneeded features crippled, please don't use them outside of self-hosting.
+ - - `BOOTSTRAP_NO_LDOUBLE` aliases `long double` to `double`.
+ - - `BOOTSTRAP_NO_VLA` makes VLA-using functions no-op (only `_BitInt` evaluation affected).
+ - As proof of portability and reproducibility, the following compilers are known to bootstrap identical stage2 of `slimcc`:
+ - - `gcc`, `clang`, `tcc`, [`kefir`](https://sr.ht/~jprotopopov/kefir), [`fil-c`](https://github.com/pizlonator/fil-c)
+ - - `chibicc` with [backported patches](https://github.com/fuhsnn/chibicc/tree/minimum-fix), [`widcc`](https://github.com/fuhsnn/widcc)
+ - - [`pcc`](https://github.com/portablecc/pcc) with `-std=c99`
+ - - [`antcc`](https://codeberg.org/lsof/antcc) with `-DBOOTSTRAP_NO_VLA`
+ - - [`cproc`](https://sr.ht/~mcf/cproc) with `-DBOOTSTRAP_NO_LDOUBLE -U__has_builtin`
+ - - [`cparser`](https://github.com/libfirm/cparser) with `-DBOOTSTRAP_NO_LDOUBLE`
+ - - [`compcert`](https://github.com/AbsInt/CompCert) with `-DBOOTSTRAP_NO_LDOUBLE -DBOOTSTRAP_NO_VLA -U__has_builtin -fstruct-passing`
+ - - [`dmd`](https://dlang.org/) with `-P=-DBOOTSTRAP_NO_VLA -P=-U__has_builtin`, without `-O`, after patching out file scope compound literals with `perl -i -pe 's|^([\w ]+) \*(\S+) = &\(\S+\)({.*};)$|\1 _\2 = \3\n\1 *\2 = &_\2;|g' *.c`
+ - - If using `platform/linux-glibc-generic.c`, remember to pass `-fno-pie -no-pie` when building stage2 to avoid host deterministic behavior.
+ - - In case you're wondering — no, "Claude's C compiler" doesn't work, worse still, the cli option that could help bypass the miscompilation also wasn't implemented properly.

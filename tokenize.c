@@ -888,7 +888,7 @@ void convert_pp_number(Token *tok, Node *node) {
     ty = ty_float;
     end++;
   } else if (*end == 'l' || *end == 'L') {
-#ifndef NO_LONG_DOUBLE
+#ifndef BOOTSTRAP_NO_LDOUBLE
     val = strtold(p, NULL);
 #endif
     ty = ty_ldouble;

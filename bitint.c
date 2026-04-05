@@ -184,6 +184,7 @@ void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width,
 
 void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width,
                                int32_t ofs) {
+#ifndef BOOTSTRAP_NO_VLA
   int32_t cnt = (bits + 63) / 64;
   int32_t full_bits = cnt * 64;
 
@@ -204,6 +205,7 @@ void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width,
 
   for (int32_t j = ofs / 8; j <= top; j++)
     dst[j] = (dst[j] & msk[j]) | src[j];
+#endif
 }
 
 void eval_bitint_add(int32_t bits, void *lp, void *rp) {
@@ -231,6 +233,7 @@ void eval_bitint_sub(int32_t bits, void *lp, void *rp) {
 }
 
 void eval_bitint_mul(int32_t bits, void *lp, void *rp) {
+#ifndef BOOTSTRAP_NO_VLA
   int32_t cnt = (bits + 31) / 32;
   uint32_t *lh = lp, *rh = rp;
 
@@ -248,9 +251,11 @@ void eval_bitint_mul(int32_t bits, void *lp, void *rp) {
   }
   for (int32_t j = 0; j < cnt; j++)
     rh[j] = buf[j];
+#endif
 }
 
 void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is_div) {
+#ifndef BOOTSTRAP_NO_VLA
   int32_t cnt = (bits + 63) / 64 * 2;
   uint32_t *lh = lp, *rh = rp;
 
@@ -346,4 +351,5 @@ void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is
   }
   for (int32_t j = 0; j < cnt; j++)
     rh[j] = res[j];
+#endif
 }

@@ -81,7 +81,7 @@
 # define BUFF_CAST(_t, _ptr) (*((_t *)(_ptr)))
 #endif
 
-#ifdef NO_LONG_DOUBLE
+#ifdef BOOTSTRAP_NO_LDOUBLE
 typedef double long_double_t;
 #else
 typedef long double long_double_t;

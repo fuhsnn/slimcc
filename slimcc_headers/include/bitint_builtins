@@ -1,5 +1,4 @@
 
-
 static __inline int __slimcc_bitint_first_set(int bits, void *lp) {
   int idx = (bits - 1) / 64;
   unsigned long long *lh = lp;
