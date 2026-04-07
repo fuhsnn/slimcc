@@ -92,6 +92,16 @@ int main() {
     static_assert(i == 0);
   }
 
+  {
+    const long i0 = {};
+    const auto i1 = i0 + 1;
+    static const long i2 = { len - 15 };
+    static_assert(i0 == 0);
+    static_assert(i1 == 1);
+    static_assert(i2 == 2);
+    static_assert(_Generic(i1, long:1));
+  }
+
   printf("OK\n");
   return 0;
 }

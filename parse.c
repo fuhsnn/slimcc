@@ -201,6 +201,7 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int offset,
                             EvalKind ev_kind);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
+static void constexpr_initializer2(Initializer *init, Obj *init_var, Obj *var);
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, Token *label_list);
 static Node *expr_stmt(Token **rest, Token *tok);
@@ -2383,9 +2384,45 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
   internal_error();
 }
 
+static bool promote_int_constexpr(Initializer *init, Type *ty) {
+  if (!(ty->qual & Q_CONST) || (ty->qual & Q_VOLATILE) || !is_int_class(ty))
+    return false;
+
+  switch (init->kind) {
+  case INIT_NONE: // C23 "={}"
+    return true;
+  case INIT_TOK:
+    if (init->tok->kind == TK_INT_NUM)
+      return true;
+    if (init->tok->kind == TK_PP_NUM)
+      return is_pp_token_int(init->tok);
+    break;
+  case INIT_EXPR: {
+    Node *exp = init->expr;
+    add_type(exp);
+
+    if (is_integer(exp->ty))
+      return is_const_expr(exp, NULL);
+    if (exp->ty->kind == TY_BITINT)
+      return is_const_bitint(exp, NULL);
+    break;
+  }
+  }
+  return false;
+}
+
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer init = {0};
   initializer(rest, tok, &init, var);
+
+  if (promote_int_constexpr(&init, var->ty)) {
+    Obj *init_var = new_static_lvar(var->ty);
+
+    constexpr_initializer2(&init, init_var, var);
+
+    free_initializers(&init);
+    return new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok);
+  }
 
   Node head = {0};
   InitDesg desg = {.var = var};
@@ -2628,19 +2665,23 @@ static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *
   Initializer init = {0};
   initializer(rest, tok, &init, init_var);
 
-  Relocation head = {0};
-  char *buf = calloc(1, init_var->ty->size);
-
-  write_gvar_data(&(Relocation *){&head}, &init, buf, 0, EV_CONST);
-
-  init_var->init_data = var->constexpr_data = buf;
-  init_var->rel = head.next;
-  var->ty = init_var->ty;
+  constexpr_initializer2(&init, init_var, var);
 
   free_initializers(&init);
 
   if (fnctx)
     fnctx->is_static_init_context = ctx;
+}
+
+static void constexpr_initializer2(Initializer *init, Obj *init_var, Obj *var) {
+  Relocation head = {0};
+  char *buf = calloc(1, init_var->ty->size);
+
+  write_gvar_data(&(Relocation *){&head}, init, buf, 0, EV_CONST);
+
+  init_var->init_data = var->constexpr_data = buf;
+  init_var->rel = head.next;
+  var->ty = init_var->ty;
 }
 
 static bool is_type_kw(TokenKind kind) {

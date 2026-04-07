@@ -813,6 +813,8 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
 
   if (p != p_end)
     return false;
+  if (!node)
+    return true;
   if (wb)
     return convert_pp_bitint(digit_begin, digit_end, node, base, u);
 
@@ -842,6 +844,37 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
   return true;
 }
 
+static char *filter_digit_sep(Token *tok, int *len) {
+  if (opt_std < STD_C23) {
+    *len = tok->len;
+    return tok->loc;
+  }
+
+  static size_t buflen;
+  static char *buf;
+
+  if (tok->len >= buflen) {
+    buflen = tok->len + 1;
+    buf = realloc(buf, buflen);
+  }
+  int cnt = 0;
+  for (int i = 0; i < tok->len; i++) {
+    if (tok->loc[i] == '\'')
+      continue;
+    buf[cnt++] = tok->loc[i];
+  }
+  buf[cnt] = '\0';
+  *len = cnt;
+  return buf;
+}
+
+bool is_pp_token_int(Token *tok) {
+  int len;
+  char *p = filter_digit_sep(tok, &len);
+
+  return convert_pp_int(p, len, NULL);
+}
+
 void convert_pp_number(Token *tok, Node *node) {
   if (tok->kind == TK_INT_NUM) {
     if ((uint64_t)tok->ival >> tok->ty->size * 8)
@@ -851,31 +884,9 @@ void convert_pp_number(Token *tok, Node *node) {
     return;
   }
 
-  char *p;
-  int len = 0;
-  if (opt_std >= STD_C23) {
-    // Remove digit separators
-    static size_t buflen;
-    static char *buf;
+  int len;
+  char *p = filter_digit_sep(tok, &len);
 
-    if (tok->len >= buflen) {
-      buflen = tok->len + 1;
-      buf = realloc(buf, buflen);
-    }
-
-    for (int i = 0; i < tok->len; i++) {
-      if (tok->loc[i] == '\'')
-        continue;
-      buf[len++] = tok->loc[i];
-    }
-    buf[len] = '\0';
-    p = buf;
-  } else {
-    len = tok->len;
-    p = tok->loc;
-  }
-
-  // Try to parse as an integer constant.
   if (convert_pp_int(p, len, node))
     return;
 

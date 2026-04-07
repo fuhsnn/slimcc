@@ -313,6 +313,7 @@ int add_display_file(char *path);
 void tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, SlashDelta *delta, Token **end);
 void convert_pp_number(Token *tok, Node *node);
+bool is_pp_token_int(Token *tok);
 TokenKind ident_keyword(Token *tok);
 void convert_ucn_ident(Token *tok);
 

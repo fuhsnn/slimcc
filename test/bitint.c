@@ -156,6 +156,22 @@ int main() {
     }
     ASSERT(1011, accum);
   }
+  {
+    const _BitInt(999) i0 = {};
+    const _BitInt(999) i1 = 1;
+    const auto i2 = 4uwb / 2wb;
+    const int i3 = (_BitInt(999))3;
+
+    static_assert(i0 == 0);
+    static_assert(i1 == 1);
+    static_assert(i2 == 2);
+    static_assert(i3 == 3);
+    static_assert(_Generic(i0, _BitInt(999): 1));
+    static_assert(_Generic(i1, _BitInt(999): 1));
+    static_assert(_Generic(i2, unsigned _BitInt(3): 1));
+    static_assert(_Generic(i3, int: 1));
+  }
+
   bitint_bitfiled();
   bitint_bitfiled_var(-3, 2, -1);
   bitint_null_ptr_constant(1);
