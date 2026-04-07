@@ -178,6 +178,10 @@ int next_pow_of_two(int val) {
   return 8;
 }
 
+int64_t bitint_buffer_size(Type *ty) {
+  return MAX(ty->size, 8);
+}
+
 int32_t bitfield_footprint(Member *mem) {
   return align_to(mem->bit_width + mem->bit_offset, 8) / 8;
 }

@@ -232,6 +232,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 static Node *calc_vla(Type *ty, Token *tok);
 static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
+static bool is_const_bitint(Node *node, uint64_t **result);
 static Node *new_node(NodeKind kind, Token *tok);
 static Node *resolve_local_gotos(void);
 static void push_goto(Node *node);
@@ -2660,8 +2661,18 @@ static bool is_typename_paren(Token **rest, Token *tok, Type **ty, VarAttr *attr
 }
 
 static void eval_static_assert(Token **rest, Token *tok) {
-  int64_t result = const_expr(&tok, skip(tok, "("));
-  if (!result)
+  Node *node = conditional(&tok, skip(tok, "("));
+  add_type(node);
+
+  bool res;
+  if (is_integer(node->ty))
+    res = eval(node);
+  else if (node->ty->kind == TY_BITINT)
+    res = !is_const_zero_bitint(node);
+  else
+    error_tok(tok, "static_assert argument not integer");
+
+  if (!res)
     error_tok(tok, "static assertion failed");
 
   if (equal(tok, ",")) {
@@ -3628,6 +3639,16 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   return eval_error(node);
 }
 
+static void chk_bitint_within_64bit(uint64_t *data, Type *ty, Token *tok) {
+  int64_t cnt = bitint_buffer_size(ty) / 8;
+
+  uint64_t chunk = (!ty->is_unsigned && ((int64_t)data[cnt - 1] < 0)) ? -1 : 0;
+
+  for (int64_t i = 1; i < cnt; i++)
+    if (chunk != data[i])
+      error_tok(tok, "_BitInt constant out of range");
+}
+
 bool is_const_expr(Node *node, int64_t *val) {
   add_type(node);
   bool failed = false;
@@ -3652,32 +3673,51 @@ bool is_const_fp(Node *node, FPVal *fval) {
   return !failed;
 }
 
-bool is_const_zero_bitint(Node *node) {
+static bool is_const_bitint(Node *node, uint64_t **result) {
   bool failed = false;
   bool *prev = eval_recover;
   eval_recover = &failed;
 
-  char *data = (char *)eval_bitint_clean(node);
+  uint64_t *data = eval_bitint(node);
 
   eval_recover = prev;
 
-  if (!failed)
-    for (int i = 0; i < node->ty->size; i++)
-      if ((failed = data[i] != 0))
-        break;
-
-  free(data);
+  if (result && !failed)
+    *result = data;
+  else
+    free(data);
   return !failed;
+}
+
+bool is_const_zero_bitint(Node *node) {
+  uint64_t *data = NULL;
+  if (!is_const_bitint(node, &data))
+    return false;
+
+  bool res = !eval_bitint_to_bool(node->ty->bit_cnt, data);
+  free(data);
+  return res;
 }
 
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty) {
   Node *node = conditional(rest, tok);
   add_type(node);
-  if (!is_integer(node->ty))
-    error_tok(tok, "constant expression not integer");
   if (ty)
     *ty = node->ty;
-  return eval(node);
+
+  if (is_integer(node->ty))
+    return eval(node);
+
+  if (node->ty->kind == TY_BITINT) {
+    uint64_t *data = eval_bitint_clean(node);
+
+    chk_bitint_within_64bit(data, node->ty, node->tok);
+
+    int64_t val = data[0];
+    free(data);
+    return val;
+  }
+  error_tok(node->tok, "expression not integer");
 }
 
 int64_t const_expr(Token **rest, Token *tok) {
@@ -3876,13 +3916,13 @@ static uint64_t *eval_bitint(Node *node) {
       if (eval_recover && *eval_recover)
         return NULL;
 
-      val = realloc(val, MAX(ty->size, 8));
+      val = realloc(val, bitint_buffer_size(ty));
       if (ty->bit_cnt > lhs->ty->bit_cnt)
         eval_bitint_sign_ext(lhs->ty->bit_cnt, val, ty->bit_cnt, lhs->ty->is_unsigned);
       return val;
     }
     if (is_integer(lhs->ty)) {
-      uint64_t *val = malloc(MAX(ty->size, 8));
+      uint64_t *val = malloc(bitint_buffer_size(ty));
       val[0] = eval(lhs);
 
       if (ty->bit_cnt > lhs->ty->size * 8)
@@ -3891,7 +3931,7 @@ static uint64_t *eval_bitint(Node *node) {
     }
     error_tok(node->tok, "unimplemented cast");
   case ND_NUM: {
-    uint64_t *val = malloc(MAX(ty->size, 8));
+    uint64_t *val = malloc(bitint_buffer_size(ty));
     memcpy(val, node->num.bitint_data, ty->size);
     return val;
   }
@@ -3899,7 +3939,7 @@ static uint64_t *eval_bitint(Node *node) {
 
   char *data = eval_constexpr_data(node);
   if (data) {
-    uint64_t *val = malloc(MAX(ty->size, 8));
+    uint64_t *val = malloc(bitint_buffer_size(ty));
     if (is_bitfield(node)) {
       memcpy(val, data, bitfield_footprint(node->m.member));
       eval_bitint_bitfield_load(ty->bit_cnt, val, val, node->m.member->bit_width,
@@ -3917,7 +3957,7 @@ static uint64_t *eval_bitint_clean(Node *node) {
   uint64_t *val = eval_bitint(node);
 
   Type *ty = node->ty;
-  if (ty->bit_cnt < ty->size * 8)
+  if (ty->bit_cnt % 64)
     eval_bitint_sign_ext(ty->bit_cnt, val, ty->size * 8, ty->is_unsigned);
   return val;
 }
@@ -5123,11 +5163,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_frame_address")) {
     Node *node = new_node(ND_FRAME_ADDR, tok);
     node->ty = pointer_to(ty_void);
-    tok = skip(tok->next, "(");
-    int64_t val;
-    if (!is_const_expr(expression(&tok, tok), &val))
-      error_tok(tok, "expected integer constant expression");
-    node->num.val = val;
+    node->num.val = const_expr(&tok, skip(tok->next, "("));
     *rest = skip(tok, ")");
     return node;
   }
@@ -5135,11 +5171,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_return_address")) {
     Node *node = new_node(ND_RTN_ADDR, tok);
     node->ty = pointer_to(ty_void);
-    tok = skip(tok->next, "(");
-    int64_t val;
-    if (!is_const_expr(expression(&tok, tok), &val))
-      error_tok(tok, "expected integer constant expression");
-    node->num.val = val;
+    node->num.val = const_expr(&tok, skip(tok->next, "("));
     *rest = skip(tok, ")");
     return node;
   }
@@ -5184,6 +5216,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 
     if (((is_integer(exp->ty) || is_ptr(exp->ty)) && is_const_expr(exp, NULL)) ||
         (is_flonum(exp->ty) && is_const_fp(exp, NULL)) ||
+        (exp->ty->kind == TY_BITINT && is_const_bitint(exp, NULL)) ||
         (exp->kind == ND_VAR && exp->m.var->is_string_lit))
       node->num.val = 1;
 

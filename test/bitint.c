@@ -121,6 +121,18 @@ int main() {
     ASSERT(1, 1 == (v >> 96));
   }
 
+  {
+    enum { A = -999wb } e;
+    SASSERT(A == -999);
+
+    alignas(1000 + 24uwb) _BitInt(300wb + 80) i;
+    ASSERT(0, (int)&i & 1023);
+    ASSERT(48, sizeof(i));
+
+    static_assert(((_BitInt(400))1 << 300));
+    static_assert(__builtin_constant_p((_BitInt(400))1 << 300));
+  }
+
   bitint_bitfiled();
   bitint_bitfiled_var(-3, 2, -1);
   bitint_null_ptr_constant(1);

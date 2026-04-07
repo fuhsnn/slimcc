@@ -853,6 +853,7 @@ bool is_record_compat(Type *t1, Type *t2);
 bool is_null_ptr_constant(Node *node);
 bool is_ptr(Type *ty);
 int next_pow_of_two(int val);
+int64_t bitint_buffer_size(Type *ty);
 int32_t bitfield_footprint(Member *mem);
 void init_ty_lp64(void);
 Type *copy_type(Type *ty);
