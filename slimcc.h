@@ -840,6 +840,7 @@ extern EnumType ety_of_int;
 
 bool is_pow_of_two(uint64_t val);
 bool is_integer(Type *ty);
+bool is_int_class(Type *ty);
 bool is_flonum(Type *ty);
 bool is_numeric(Type *ty);
 bool is_array(Type *ty);

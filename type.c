@@ -193,12 +193,16 @@ bool is_integer(Type *ty) {
          k == TY_LONGLONG;
 }
 
+bool is_int_class(Type *ty) {
+  return is_integer(ty) || ty->kind == TY_BITINT;
+}
+
 bool is_flonum(Type *ty) {
   return ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE || ty->kind == TY_LDOUBLE;
 }
 
 bool is_numeric(Type *ty) {
-  return is_integer(ty) || is_flonum(ty) || ty->kind == TY_BITINT;
+  return is_int_class(ty) || is_flonum(ty);
 }
 
 bool is_array(Type *ty) {
@@ -270,7 +274,7 @@ static void cast_if_not(Type *ty, Node **node) {
 }
 
 static bool int_to_ptr(Node **node) {
-  if (is_integer((*node)->ty) || (*node)->ty->kind == TY_BITINT) {
+  if (is_int_class((*node)->ty)) {
     *node = new_cast(*node, pointer_to(ty_void));
     return true;
   }
@@ -650,7 +654,7 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
 
 static void add_int_type(Node *node) {
   add_type(node);
-  if (!(is_integer(node->ty) || node->ty->kind == TY_BITINT))
+  if (!is_int_class(node->ty))
     error_tok(node->tok, "invalid operand");
 }
 

@@ -361,10 +361,6 @@ bool is_const_var(Obj *var) {
   return ty->qual & Q_CONST;
 }
 
-static bool is_int_class(Type *ty) {
-  return is_integer(ty) || ty->kind == TY_BITINT;
-}
-
 static bool is_vm_ty(Type *ty) {
   for (; ty->base; ty = ty->base)
     if (ty->kind == TY_VLA)
@@ -4600,7 +4596,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         error_tok(tok, "invalid member type");
 
       if (consume(&tok, tok, ":")) {
-        if (!(is_integer(mem->ty) || mem->ty->kind == TY_BITINT))
+        if (!is_int_class(mem->ty))
           error_tok(tok, "bit-field not integer");
         mem->is_bitfield = true;
         mem->bit_width = const_expr(&tok, tok);
@@ -4963,7 +4959,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
       if (!ty->is_variadic && !ty->is_oldstyle)
         error_tok(tok, "too many arguments");
 
-      if (is_integer(arg->ty) && arg->ty->size < 4)
+      if (is_integer(arg->ty) && arg->ty->size < ty_int->size)
         arg = new_cast(arg, ty_int);
       else if (arg->ty->kind == TY_FLOAT)
         arg = new_cast(arg, ty_double);
