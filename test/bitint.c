@@ -132,7 +132,30 @@ int main() {
     static_assert(((_BitInt(400))1 << 300));
     static_assert(__builtin_constant_p((_BitInt(400))1 << 300));
   }
+  {
+    volatile int i = 303;
 
+    char arr[(_BitInt(77))3 << 3];
+    SASSERT(24 == sizeof arr);
+
+    char (*p)[(_BitInt(22))303] = 0;
+    ASSERT(303, sizeof *p);
+
+    ASSERT(1, &arr[-11] == (arr - 11wb));
+    ASSERT(1, &arr[11wb] == (arr + 11));
+  }
+  {
+    int accum = 0;
+    for (_BitInt(63) z = -42; z <= -40; z++) {
+      switch (z) {
+      case -40: accum += 1; break;
+      case -41wb: accum += 10; break;
+      case -(unsigned _BitInt(22))43: accum += 100; break;
+      case -(_BitInt(22))42: accum += 1000; break;
+      }
+    }
+    ASSERT(1011, accum);
+  }
   bitint_bitfiled();
   bitint_bitfiled_var(-3, 2, -1);
   bitint_null_ptr_constant(1);

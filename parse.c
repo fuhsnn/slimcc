@@ -233,6 +233,7 @@ static Node *calc_vla(Type *ty, Token *tok);
 static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 static bool is_const_bitint(Node *node, uint64_t **result);
+static bool int_or_trunc_bitint(Node **node, bool chk_narrow);
 static Node *new_node(NodeKind kind, Token *tok);
 static Node *resolve_local_gotos(void);
 static void push_goto(Node *node);
@@ -1365,8 +1366,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
     tok = tok->next->next;
   } else {
     expr = assign(&tok, tok);
-    add_type(expr);
-    if (!is_integer(expr->ty))
+    if (!int_or_trunc_bitint(&expr, true))
       error_tok(tok, "size of array not integer");
     tok = skip(tok, "]");
   }
@@ -3017,8 +3017,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     Node *node = new_node(ND_SWITCH, tok);
     node->ctrl.cond = cond_declaration(&tok, skip(tok->next, "("), ")", 0);
-    add_type(node->ctrl.cond);
-    if (!is_integer(node->ctrl.cond->ty))
+    if (!int_or_trunc_bitint(&node->ctrl.cond, true))
       error_tok(tok, "controlling expression not integer");
 
     JumpContext ctx = {.next = jump_ctx, .node = node};
@@ -3647,6 +3646,30 @@ static void chk_bitint_within_64bit(uint64_t *data, Type *ty, Token *tok) {
   for (int64_t i = 1; i < cnt; i++)
     if (chunk != data[i])
       error_tok(tok, "_BitInt constant out of range");
+}
+
+static bool int_or_trunc_bitint(Node **node, bool chk_narrow) {
+  add_type(*node);
+
+  if (is_integer((*node)->ty))
+    return true;
+
+  if ((*node)->ty->kind == TY_BITINT) {
+    if (chk_narrow && (*node)->ty->bit_cnt > 64) {
+      uint64_t *data = NULL;
+      if (!is_const_bitint(*node, &data))
+        error_tok((*node)->tok, "large _BitInt unsupported here");
+
+      chk_bitint_within_64bit(data, (*node)->ty, (*node)->tok);
+      free(data);
+    }
+    if ((*node)->ty->is_unsigned)
+      *node = new_cast(*node, enum_ty[ETY_U64]);
+    else
+      *node = new_cast(*node, enum_ty[ETY_I64]);
+    return true;
+  }
+  return false;
 }
 
 bool is_const_expr(Node *node, int64_t *val) {
@@ -4370,13 +4393,13 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
   ptr_convert(&lhs);
   ptr_convert(&rhs);
 
-  if (lhs->ty->base && is_integer(rhs->ty)) {
+  if (lhs->ty->base && int_or_trunc_bitint(&rhs, false)) {
     Node *sz = ptr_base_size(lhs->ty, tok);
     rhs = new_binary(ND_MUL, sz, rhs, tok);
     return new_binary(ND_ADD, lhs, rhs, tok);
   }
 
-  if (is_integer(lhs->ty) && rhs->ty->base) {
+  if (int_or_trunc_bitint(&lhs, false) && rhs->ty->base) {
     Node *sz = ptr_base_size(rhs->ty, tok);
     if (rhs->ty->base->kind == TY_VLA) {
       lhs = new_binary(ND_MUL, sz, lhs, tok);
@@ -4399,7 +4422,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
   ptr_convert(&lhs);
   ptr_convert(&rhs);
 
-  if (lhs->ty->base && is_integer(rhs->ty)) {
+  if (lhs->ty->base && int_or_trunc_bitint(&rhs, false)) {
     Node *sz = ptr_base_size(lhs->ty, tok);
     return new_binary(ND_SUB, lhs, new_binary(ND_MUL, rhs, sz, tok), tok);
   }
