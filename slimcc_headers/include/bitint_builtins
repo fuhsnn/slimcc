@@ -254,11 +254,11 @@ static __inline void __slimcc_bitint_div(int bits, void *lp, void *rp, _Bool is_
   unsigned *lh = lp, *rh = rp;
 
   unsigned r_buf[cnt + 2];
-  unsigned q_buf[cnt];
+  unsigned *q_buf = lh;
 
   for (int i = 0; i < cnt; i++) {
     r_buf[i] = lh[i];
-    q_buf[i] = 0;
+    lh[i] = 0;
   }
   r_buf[cnt] = r_buf[cnt + 1] = 0;
 
@@ -283,7 +283,7 @@ static __inline void __slimcc_bitint_div(int bits, void *lp, void *rp, _Bool is_
 
   if (r_shft) {
     __slimcc_bitint_shl(bits + 64, r_buf, r_buf, r_shft);
-    __slimcc_bitint_shl(bits, rh, rh, r_shft);
+    __slimcc_bitint_shl(rn * 32, rh, rh, r_shft);
   }
 
   for (int qi = ln - rn; qi >= 0; qi--) {

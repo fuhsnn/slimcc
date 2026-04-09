@@ -260,11 +260,11 @@ void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is
   uint32_t *lh = lp, *rh = rp;
 
   uint32_t r_buf[cnt + 2];
-  uint32_t q_buf[cnt];
+  uint32_t *q_buf = lh;
 
   for (int32_t i = 0; i < cnt; i++) {
     r_buf[i] = lh[i];
-    q_buf[i] = 0;
+    lh[i] = 0;
   }
   r_buf[cnt] = r_buf[cnt + 1] = 0;
 
@@ -289,7 +289,7 @@ void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is
 
   if (r_shft) {
     eval_bitint_shl(bits + 64, r_buf, r_buf, r_shft);
-    eval_bitint_shl(bits, rh, rh, r_shft);
+    eval_bitint_shl(rn * 32, rh, rh, r_shft);
   }
 
   for (int32_t qi = ln - rn; qi >= 0; qi--) {
