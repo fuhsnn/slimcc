@@ -171,6 +171,40 @@ int main() {
     static_assert(_Generic(i2, unsigned _BitInt(3): 1));
     static_assert(_Generic(i3, int: 1));
   }
+  {
+    enum E : _BitInt(6) {
+      MAX = 31,
+      MIN = -32
+    };
+    static_assert(31 == MAX);
+    static_assert(-32 == MIN);
+    typedef enum E T;
+    static_assert(_Generic(MIN, T: 1));
+    static_assert(_Generic(MIN, enum E: 1));
+    static_assert(_Generic(MIN, _BitInt(6): 1));
+    static_assert(_Generic(typeof(MIN), T: 1));
+    static_assert(_Generic(typeof(MIN), enum E: 1));
+    static_assert(_Generic(typeof(MIN), _BitInt(6): 1));
+
+    constexpr enum E emax = 31;
+    volatile T emin = -32;
+    static_assert(31 == emax);
+    ASSERT(-32, emin);
+
+    static_assert(_Generic(emax, T: 1));
+    static_assert(_Generic(emax, enum E: 1));
+    static_assert(_Generic(emax, _BitInt(6): 1));
+    static_assert(_Generic(typeof(emax), const T: 1));
+    static_assert(_Generic(typeof(emax), const enum E: 1));
+    static_assert(_Generic(typeof(emax), const _BitInt(6): 1));
+
+    static_assert(_Generic(emin, T: 1));
+    static_assert(_Generic(emin, enum E: 1));
+    static_assert(_Generic(emin, _BitInt(6): 1));
+    static_assert(_Generic(typeof(emin), volatile T: 1));
+    static_assert(_Generic(typeof(emin), volatile enum E: 1));
+    static_assert(_Generic(typeof(emin), volatile _BitInt(6): 1));
+  }
 
   bitint_bitfiled();
   bitint_bitfiled_var(-3, 2, -1);

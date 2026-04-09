@@ -1528,6 +1528,20 @@ static bool chk_enum_tag(Type *tag_ty, Type *fixed_ty, Token *tag) {
   return true;
 }
 
+static bool enum_chk_ty_range(Type *ty, int64_t min, uint64_t max) {
+  int lbits = 64 - (ty->kind == TY_BITINT ? ty->bit_cnt : ty->size * 8);
+  if (lbits < 0)
+    internal_error();
+  if (min) {
+    if (ty->is_unsigned)
+      return true;
+    if (min != (min << lbits) >> lbits)
+      return true;
+  }
+  lbits += !ty->is_unsigned;
+  return max != (max << lbits) >> lbits;
+}
+
 static Type *enum_specifier(Token **rest, Token *tok) {
   bool is_packed = false;
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
@@ -1540,11 +1554,14 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   }
 
   Type *ty = NULL;
-  if (consume(&tok, tok, ":")) {
-    ty = typename(&tok, tok);
+  if (equal(tok, ":") && is_typename(tok->next)) {
+    Token *start = tok;
+    ty = typename(&tok, tok->next);
 
-    if (!is_integer(ty))
-      error_tok(tok, "underlying type not integer");
+    if (!is_int_class(ty) || ty->is_enum)
+      error_tok(start, "invalid enum underlying type");
+    if (ty->kind == TY_BITINT && ty->bit_cnt > 64)
+      error_tok(start, "large _BitInt unsupported here");
     if (!equal(tok, "{"))
       skip(tok, ";");
   }
@@ -1585,11 +1602,11 @@ static Type *enum_specifier(Token **rest, Token *tok) {
       push_tag_scope(tag, ty);
   }
 
-  EnumType ety = ETY_I8;
-  bool been_neg = false;
-
   EnumVal head = {0};
   EnumVal *cur = &head;
+
+  int64_t min_val = 0;
+  uint64_t max_val = 0;
 
   uint64_t val = 0;
   bool is_neg = false;
@@ -1605,36 +1622,12 @@ static Type *enum_specifier(Token **rest, Token *tok) {
       Type *val_ty = NULL;
       val = const_expr2(&tok, tok, &val_ty);
 
-      if ((is_neg = (!val_ty->is_unsigned && (int64_t)val < 0))) {
-        been_neg = true;
-
-        if ((int64_t)val < INT8_MIN) {
-          if ((int64_t)val >= INT16_MIN)
-            ety = MAX(ety, ETY_I16);
-          else if ((int64_t)val >= INT32_MIN)
-            ety = MAX(ety, ETY_I32);
-          else
-            ety = MAX(ety, ETY_I64);
-        }
-      }
+      is_neg = (!val_ty->is_unsigned && (int64_t)val < 0);
     }
-
-    if (!is_neg && val > INT8_MAX) {
-      if (val <= UINT8_MAX)
-        ety = MAX(ety, ETY_U8);
-      else if (val <= INT16_MAX)
-        ety = MAX(ety, ETY_I16);
-      else if (val <= UINT16_MAX)
-        ety = MAX(ety, ETY_U16);
-      else if (val <= INT32_MAX)
-        ety = MAX(ety, ETY_I32);
-      else if (val <= UINT32_MAX)
-        ety = MAX(ety, ETY_U32);
-      else if (val <= INT64_MAX)
-        ety = MAX(ety, ETY_I64);
-      else
-        ety = ETY_U64;
-    }
+    if (is_neg)
+      min_val = MIN(min_val, (int64_t)val);
+    else
+      max_val = MAX(max_val, val);
 
     int64_t v = val++;
     is_ovf = !is_neg && val == 0;
@@ -1679,18 +1672,43 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   }
 
   if (ty->kind != TY_ENUM) {
-    if ((ty->is_unsigned && been_neg) ||
-        (ty->size < enum_ty[ety]->size) ||
-        ((ty->size == enum_ty[ety]->size) && (ty->is_unsigned < enum_ty[ety]->is_unsigned)))
+    if (enum_chk_ty_range(ty, min_val, max_val))
       error_tok(tok, "enum value out of type range");
     return ty;
+  }
+
+  EnumType ety = ETY_I8;
+  if (min_val < INT8_MIN) {
+    if (min_val >= INT16_MIN)
+      ety = MAX(ety, ETY_I16);
+    else if (min_val >= INT32_MIN)
+      ety = MAX(ety, ETY_I32);
+    else
+      ety = MAX(ety, ETY_I64);
+  }
+
+  if (max_val > INT8_MAX) {
+    if (max_val <= UINT8_MAX)
+      ety = MAX(ety, ETY_U8);
+    else if (max_val <= INT16_MAX)
+      ety = MAX(ety, ETY_I16);
+    else if (max_val <= UINT16_MAX)
+      ety = MAX(ety, ETY_U16);
+    else if (max_val <= INT32_MAX)
+      ety = MAX(ety, ETY_I32);
+    else if (max_val <= UINT32_MAX)
+      ety = MAX(ety, ETY_U32);
+    else if (max_val <= INT64_MAX)
+      ety = MAX(ety, ETY_I64);
+    else
+      ety = ETY_U64;
   }
 
   if (!(is_packed || opt_short_enums))
     ety = MAX(ety, ety_of_int);
 
   bool is_int = ety <= ety_of_int;
-  if ((been_neg && (ety & 1)) || (!been_neg && !(ety & 1))) {
+  if ((min_val && (ety & 1)) || (!min_val && !(ety & 1))) {
     ety++;
     if (ety > ETY_U64)
       error_tok(tok, "unsupported enum value range");
@@ -5492,6 +5510,13 @@ static Node *primary(Token **rest, Token *tok) {
       if (sc->var)
         return new_var_node(sc->var, tok);
       if (sc->enum_ty) {
+        if (sc->enum_ty->kind == TY_BITINT) {
+          Node *n = new_node(ND_NUM, tok);
+          n->num.bitint_data = calloc(1, bitint_buffer_size(sc->enum_ty));
+          n->num.bitint_data[0] = sc->enum_val;
+          n->ty = sc->enum_ty;
+          return n;
+        }
         Node *n = new_num(sc->enum_val, tok);
         n->ty = (sc->enum_ty->is_int_enum) ? ty_int : sc->enum_ty;
         return n;
