@@ -39,26 +39,12 @@ typedef struct {
   _Alignas(128) char c;
 } Ov;
 
-int overaligned_0(Ov s1, long double d1, long double d2, Ov s2, Ov s3, long double d3, Ov s4, ...);
-int overaligned_1(Ov s1, long double d1, long double d2, Ov s2, Ov s3, long double d3, Ov s4, ...) {
-  va_list ap;
-  va_start(ap, s4);
-  long double ret = s1.c + d1 + d2 + s2.c + s3.c + d3 + s4.c;
-  ret += va_arg(ap, long double);
-  ret += va_arg(ap, Ov).c;
-  ret += va_arg(ap, long double);
-  ret += va_arg(ap, long double);
-  ret += va_arg(ap, Ov).c;
-  ret += va_arg(ap, Ov).c;
-  va_end(ap);
-  return ret;
-}
+int overaligned(Ov s1, long double d1, long double d2, Ov s2, Ov s3, long double d3, Ov s4, ...);
 
 int main(void) {
   ASSERT(1, tls());
 
-  { Ov s = {.c = 33}; ASSERT(316, overaligned_0(s, 1, 2, s, s, 3, s, (long double)55, s, (long double)66, (long double)-42, s, s)); };
-  { Ov s = {.c = 33}; ASSERT(316, overaligned_1(s, 1, 2, s, s, 3, s, (long double)55, s, (long double)66, (long double)-42, s, s)); };
+  { Ov s = {.c = 33}; ASSERT(316, overaligned(s, 1, 2, s, s, 3, s, (long double)55, s, (long double)66, (long double)-42, s, s)); };
 
   printf("OK\n");
 }

@@ -1,18 +1,18 @@
 
-float mixed1(float f, _Bool, char i);
+float mixed(float f, _Bool, char i);
 
-float mixed1(f, b, c)
+float mixed(f, b, c)
 char c; float f; _Bool b; {
   return f - b + c;
 }
 
-float conv1(
+float conv(
 #ifndef __clang__
 foo, bar
 #endif
 );
 
-float conv1(f, b, c, i)
+float conv(f, b, c, i)
 char c; float f; _Bool b; {
   return f - b + c + i;
 }
