@@ -199,7 +199,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler eaacc45b85e69bfbd91ac797a5655fecf0276aad c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 1c1a38a018f4bcbc51ef20082da5fd985f6df13c c2compiler
  sed -i 's|-pipe ||g' bootstrap/Makefile
  sed -i 's|-pipe ||g' bootstrap/bootstrap.c
  sed -i 's|-pipe ||g' generator/c/c_generator_special.c2
@@ -240,7 +240,7 @@ test_camgunz_cmp() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 80ff9d3f4d6f1a4711ede8b6250374955ed7adb6 cc65
+ git_fetch https://github.com/cc65/cc65 a545b4fc3e7b512fb8de16fa1bb5891166b1bb02 cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
 }
@@ -322,7 +322,7 @@ test_cpio() {
 test_cproc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_cproc.bash
 
- git_fetch https://github.com/michaelforney/cproc 80ed174035f12bfa204e5ec282e6b37cad2802b7 cproc
+ git_fetch https://github.com/michaelforney/cproc 64e7bc48ea7a6a15c646b64c0e4fe58f64bcace3 cproc
  ./configure --host=x86_64-linux-gnu
  make CFLAGS=-std=c99 check
 
@@ -623,7 +623,7 @@ test_janet() {
 }
 
 test_jemalloc() {
- git_fetch https://github.com/jemalloc/jemalloc f265645d02f0bde59833c46977b66acd94dec42e jemalloc
+ git_fetch https://github.com/jemalloc/jemalloc 6515df8cec7fe50f6b45069f82bdf685171f9ee7 jemalloc
  autoconf
  ./configure --disable-cxx
  make check
@@ -661,7 +661,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh a6dd3a30dba156dfe77ca343bcd6179706d7e0da ksh93
+ git_fetch https://github.com/ksh93/ksh ffd52e5a091cf3eae02846ea1de20d8b473862cc ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -719,7 +719,7 @@ test_libexpat() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc 5e49faa10395af4b269c16e5dda4ce571633c0ff libgc
+ git_fetch https://github.com/bdwgc/bdwgc b819d9fe314f95a2ac466987d5e6ff0ddb80587b libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -810,7 +810,7 @@ test_libpcre2() {
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.56
+ github_tar pnggroup libpng v1.6.57
  fix_and_configure
  make test
 }
@@ -847,7 +847,7 @@ test_libsodium() {
 }
 
 test_libtommath() {
- git_fetch https://github.com/libtom/libtommath 839ae9ea66718705fba2b5773d1bdfb2b457cea4 libtommath
+ git_fetch https://github.com/libtom/libtommath 652d70a31fcecc7beb7a01b3edef645039f54778 libtommath
  sed -i 's|defined(__GNUC__) && __GNUC__ >= 4|1|g' tommath_private.h
  cmake_init -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=MinSizeRel
  make && ctest
@@ -953,7 +953,7 @@ test_lua() {
 }
 
 test_lwan(){
- git_fetch https://github.com/lpereira/lwan ebb2254b1c96e34f8a1f9f7532160656069038a3 lwan
+ git_fetch https://github.com/lpereira/lwan 7508daa6037dd4c94a98d32c8e286c9e8212af87 lwan
  use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
  use_stdbit '#include <assert.h>' src/lib/timeout.c
  use_stdbit '#include <assert.h>' src/samples/techempower/json.c
@@ -1038,7 +1038,7 @@ test_mongoose() {
 }
 
 test_monocypher() {
- git_fetch https://github.com/LoupVaillant/Monocypher 9712c5b360f31bd5d30bdffa9945ce8e84c18cc9 monocypher
+ git_fetch https://github.com/LoupVaillant/Monocypher c0e0efd25b614ef22bb72aa71203a747904c370d monocypher
  make -C tests/gen
  make test
 }
@@ -1119,11 +1119,11 @@ test_nettle() {
 }
 
 test_nginx() {
- github_tar nginx nginx release-1.29.7
+ github_tar nginx nginx release-1.29.8
  auto/configure
  make
  cd ../
- git_fetch https://github.com/nginx/nginx-tests f89b3b6650ab49f88b095fe1a68b6cd71996958d nginx-tests
+ git_fetch https://github.com/nginx/nginx-tests 4637eacdafc18bc1e806e4b379dc2da748630b1b nginx-tests
  prove .
 }
 
@@ -1187,7 +1187,7 @@ test_openssh() {
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.6.1
+ github_tar openssl openssl openssl-3.6.2
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -1233,7 +1233,7 @@ test_perl() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.4
+ github_tar php php-src php-8.5.5
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C) || defined(__TINYC__)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
@@ -1286,7 +1286,7 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.14.3
+ github_tar python cpython v3.14.4
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
@@ -1399,7 +1399,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM b9a6657cca842a45496e6db4f6d6865d93dd76e2 rvvm
+ git_fetch https://github.com/LekKit/RVVM d84970934116b40a7212d57b86cfe3cfd436c344 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1461,15 +1461,15 @@ test_smaz() {
 }
 
 test_sokol() {
- git_fetch https://github.com/floooh/sokol f38e0b520f99a501b71172c3a3181c9ab6ebdd79 sokol
- sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.5|g' tests/ext/CMakeLists.txt
+ git_fetch https://github.com/floooh/sokol ccf3fa24094f3fcebd0129688040126e4a713135 sokol
+ sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.7|g' tests/ext/CMakeLists.txt
  cd tests
  cmake_init -DSOKOL_BACKEND=SOKOL_GLCORE
  make && ./sokol-test
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.52.0
+ github_tar sqlite sqlite version-3.53.0
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make test
@@ -1636,7 +1636,7 @@ test_wget() {
 }
 
 test_wolfssl() {
- github_tar wolfSSL wolfssl v5.9.0-stable
+ github_tar wolfSSL wolfssl v5.9.1-stable
  cmake_init
  make && ctest
 }
@@ -1669,7 +1669,7 @@ test_xterm() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash 82cead715cbfddd9e6093db8df95155077ce6e64 xxhash
+ git_fetch https://github.com/Cyan4973/xxHash 668362bb89b7ca00bc37a58a10d37cb811dbe6a9 xxhash
  make CC=$CC DISPATCH=0 check
 }
 
@@ -1779,7 +1779,7 @@ build_ellipsis() {
 }
 
 build_erlang() {
- github_tar erlang otp OTP-28.4.1
+ github_tar erlang otp OTP-28.4.2
  replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
  replace_line "#if defined(__GNUC__)" "#if 1" erts/include/internal/ethread_inline.h
  sed -i 's|-funroll-loops||g' lib/megaco/src/flex/Makefile.in
@@ -1845,7 +1845,7 @@ build_glfw() {
 }
 
 build_htop() {
- github_tar htop-dev htop 3.4.1
+ github_tar htop-dev htop 3.5.0
  sh autogen.sh
  ./configure
  make
@@ -1919,7 +1919,7 @@ build_mksh() {
 }
 
 build_nano() {
- url_xz https://www.nano-editor.org/dist/v8/nano-8.7.1.tar.xz nano
+ url_xz https://www.nano-editor.org/dist/v9/nano-9.0.tar.xz nano
  ./configure && make
 }
 
