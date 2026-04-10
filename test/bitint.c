@@ -1,4 +1,5 @@
 #include "test.h"
+#include <stdckdint.h>
 
 SASSERT(sizeof(_BitInt(7)) == 1);
 SASSERT(sizeof(_BitInt(15)) == 2);
@@ -204,6 +205,55 @@ int main() {
     static_assert(_Generic(typeof(emin), volatile T: 1));
     static_assert(_Generic(typeof(emin), volatile enum E: 1));
     static_assert(_Generic(typeof(emin), volatile _BitInt(6): 1));
+  }
+
+  {
+    enum : _BitInt(1) {
+      A = -1,
+      B = 0,
+    };
+
+    static_assert(A == -1);
+    static_assert(B == 0);
+    static_assert(-A == -1);
+    static_assert(B - A == -1);
+    static_assert(A < B);
+    static_assert(A <= B);
+    static_assert(B > A);
+    static_assert(B >= A);
+    static_assert(B != A);
+    static_assert(!(B == A));
+
+    {
+      _BitInt(1) c;
+      ASSERT(1, ({ bool b = ckd_add(&c, A, B); b == 0 && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_add(&c, B, A); b == 0 && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_add(&c, A, A); b == 1 && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_add(&c, B, B); b == 0 && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, A, B); b == 0 && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, B, A); b == 1 && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, A, A); b == 0 && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, B, B); b == 0 && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, A, B); b == 0 && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, B, A); b == 0 && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, A, A); b == 1 && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, B, B); b == 0 && c == 0; }));
+    }
+    {
+      _BitInt(2) c;
+      ASSERT(1, ({ bool b = ckd_add(&c, A, B); !b && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_add(&c, B, A); !b && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_add(&c, A, A); !b && c == -2; }));
+      ASSERT(1, ({ bool b = ckd_add(&c, B, B); !b && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, A, B); !b && c == -1; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, B, A); !b && c == 1; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, A, A); !b && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_sub(&c, B, B); !b && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, A, B); !b && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, B, A); !b && c == 0; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, A, A); !b && c == 1; }));
+      ASSERT(1, ({ bool b = ckd_mul(&c, B, B); !b && c == 0; }));
+    }
   }
 
   bitint_bitfiled();

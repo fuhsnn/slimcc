@@ -90,8 +90,8 @@ Type *new_type(TypeKind kind, int64_t size, int32_t align) {
 }
 
 Type *new_bitint(int64_t width, Token *tok) {
-  if (width < 0 || width > 65535)
-    error_tok(tok, "unsupported _BitInt size");
+  if (width < 1 || width > 65535)
+    error_tok(tok, "unsupported _BitInt bit width");
 
   int sz, align;
 

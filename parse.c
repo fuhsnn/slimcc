@@ -1283,10 +1283,6 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     if (tok->kind != TK_IDENT || tok->next->kind != TK_EQ)
       error_tok(tok, "unsupported form for type inference");
 
-  if (ty->kind == TY_BITINT)
-    if (ty->bit_cnt < (1 + !ty->is_unsigned))
-      error_tok(tok, "invalid bit width for _BitInt");
-
   return qual_type(qual, ty, tok);
 }
 
@@ -1548,8 +1544,16 @@ static bool enum_chk_ty_range(Type *ty, int64_t min, uint64_t max) {
     if (min != (int64_t)((uint64_t)min << lbits) >> lbits)
       return true;
   }
-  lbits += !ty->is_unsigned;
-  return max != (max << lbits) >> lbits;
+  if (max) {
+    if (!ty->is_unsigned) {
+      if (ty->bit_cnt == 1)
+        return true;
+      lbits++;
+    }
+    if (max != (max << lbits) >> lbits)
+      return true;
+  }
+  return false;
 }
 
 static Type *enum_specifier(Token **rest, Token *tok) {
