@@ -101,6 +101,7 @@ static StringArray as_args;
 static MacroChangeArr macrodefs;
 static int incl_cnt;
 
+static bool is_fork_child;
 char *argv0;
 
 static void cc1(char *input_file, char *output, bool is_asm_pp);
@@ -855,6 +856,15 @@ static void cleanup(void) {
     unlink(tmpfiles.data[i]);
 }
 
+void cleanup_exit(int status) {
+  if (is_fork_child)
+    _exit(status);
+
+  cleanup();
+
+  exit(status);
+}
+
 static char *create_tmpfile(void) {
   char *path = strdup("/tmp/slimcc-XXXXXX");
   int fd = mkstemp(path);
@@ -877,6 +887,7 @@ void run_subprocess(char **argv) {
   }
 
   if (fork() == 0) {
+    is_fork_child = true;
     execvp(argv[0], argv);
     fprintf(stderr, "exec failed: %s: %s\n", argv[0], strerror(errno));
     _exit(1);
@@ -885,7 +896,7 @@ void run_subprocess(char **argv) {
   int status;
   if (wait(&status) <= 0 || status != 0) {
     fprintf(stderr, "exec failed: %s\n", argv[0]);
-    exit(1);
+    cleanup_exit(1);
   }
 }
 
@@ -899,13 +910,14 @@ static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
   }
 
   if (fork() == 0) {
+    is_fork_child = true;
     cc1(input, output, is_asm_pp);
     _exit(0);
   }
 
   int status;
   if (wait(&status) <= 0 || status != 0)
-    exit(1);
+    cleanup_exit(1);
 }
 
 static void print_linemarker(FILE *out, Token *tok) {
@@ -1267,7 +1279,6 @@ static FileType get_file_type(char *filename) {
 
 int main(int argc, char **argv) {
   argv0 = argv[0];
-  atexit(cleanup);
   init_macros();
   platform_init();
 
@@ -1380,5 +1391,6 @@ int main(int argc, char **argv) {
     else
       run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
   }
-  return 0;
+
+  cleanup();
 }

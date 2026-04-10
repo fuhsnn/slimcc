@@ -3320,7 +3320,7 @@ static int64_t eval_error2(Node *node, char *fmt, ...) {
   va_start(ap, fmt);
   verror_at_tok(node->tok, fmt, ap);
   va_end(ap);
-  exit(1);
+  cleanup_exit(1);
 }
 
 static int64_t eval_error(Node *node) {

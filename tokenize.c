@@ -35,7 +35,7 @@ void error(char *fmt, ...) {
   vfprintf(stderr, fmt, ap);
   va_end(ap);
   fprintf(stderr, "\n");
-  exit(1);
+  cleanup_exit(1);
 }
 
 void error_ice(char *file, int32_t line) {
@@ -93,7 +93,7 @@ void error_at(char *loc, char *fmt, ...) {
   va_start(ap, fmt);
   verror_at(current_file->name, current_file->contents, line_no, loc, fmt, ap);
   va_end(ap);
-  exit(1);
+  cleanup_exit(1);
 }
 
 void error_tok(Token *tok, char *fmt, ...) {
@@ -101,7 +101,7 @@ void error_tok(Token *tok, char *fmt, ...) {
   va_start(ap, fmt);
   verror_at_tok(tok, fmt, ap);
   va_end(ap);
-  exit(1);
+  cleanup_exit(1);
 }
 
 void warn_tok(Token *tok, char *fmt, ...) {
@@ -110,7 +110,7 @@ void warn_tok(Token *tok, char *fmt, ...) {
   verror_at_tok(tok, fmt, ap);
   va_end(ap);
   if (opt_werror)
-    exit(1);
+    cleanup_exit(1);
 }
 
 void notice_tok(Token *tok, char *fmt, ...) {
