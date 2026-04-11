@@ -35,11 +35,11 @@ void platform_search_dirs(StringArray *paths) {
   strarray_push(paths, "/lib");
 }
 
-void run_assembler(StringArray *as_args, char *input, char *output) {
+void run_assembler(StringArray *as_args, const char *input, const char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
-void run_linker(StringArray *paths, StringArray *inputs, char *output) {
+void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
   run_linker_gnustyle(paths, inputs, output, "/libexec/ld-elf.so.1", "/usr/lib",
                       "/usr/lib");
 }

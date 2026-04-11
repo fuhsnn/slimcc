@@ -19,7 +19,7 @@ static bool at_bol;
 // True if the current position follows a space character
 static bool has_space;
 
-static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid);
+static bool read_ucn(const char **new_pos, const char *p, uint32_t *val, bool *invalid);
 static void canonicalize_newline(char *p);
 static void remove_backslash_newline(char *p, SlashDelta *dlt);
 
@@ -29,7 +29,7 @@ static void remove_backslash_newline(char *p, SlashDelta *dlt);
 #define Is_c_ident(c) (Isalnum(c) || (c) == '_' || (c) == '$')
 
 // Reports an error and exit.
-void error(char *fmt, ...) {
+void error(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
@@ -38,18 +38,18 @@ void error(char *fmt, ...) {
   cleanup_exit(1);
 }
 
-void error_ice(char *file, int32_t line) {
+void error_ice(const char *file, int32_t line) {
   error("internal error at %s:%" PRIi32, file, line);
 }
 
-static void verror_at(char *filename, char *input, int line_no, char *loc, char *fmt,
-                      va_list ap) {
+static void verror_at(const char *filename, const char *input, int line_no,
+                      const char *loc, const char *fmt, va_list ap) {
   // Find a line containing `loc`.
-  char *line = loc;
+  const char *line = loc;
   while (input < line && line[-1] != '\n')
     line--;
 
-  char *end = loc;
+  const char *end = loc;
   while (*end && *end != '\n')
     end++;
 
@@ -66,7 +66,7 @@ static void verror_at(char *filename, char *input, int line_no, char *loc, char 
   fprintf(stderr, "\n");
 }
 
-void verror_at_tok(Token *tok, char *fmt, va_list ap) {
+void verror_at_tok(Token *tok, const char *fmt, va_list ap) {
   if (!tok->file) {
     tok = tok->origin;
     if (!tok)
@@ -83,9 +83,9 @@ void verror_at_tok(Token *tok, char *fmt, va_list ap) {
     notice_tok(tok->origin, "in expansion of macro");
 }
 
-void error_at(char *loc, char *fmt, ...) {
+void error_at(const char *loc, const char *fmt, ...) {
   int line_no = 1;
-  for (char *p = current_file->contents; p < loc; p++)
+  for (const char *p = current_file->contents; p < loc; p++)
     if (*p == '\n')
       line_no++;
 
@@ -96,7 +96,7 @@ void error_at(char *loc, char *fmt, ...) {
   cleanup_exit(1);
 }
 
-void error_tok(Token *tok, char *fmt, ...) {
+void error_tok(Token *tok, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   verror_at_tok(tok, fmt, ap);
@@ -104,7 +104,7 @@ void error_tok(Token *tok, char *fmt, ...) {
   cleanup_exit(1);
 }
 
-void warn_tok(Token *tok, char *fmt, ...) {
+void warn_tok(Token *tok, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   verror_at_tok(tok, fmt, ap);
@@ -113,30 +113,30 @@ void warn_tok(Token *tok, char *fmt, ...) {
     cleanup_exit(1);
 }
 
-void notice_tok(Token *tok, char *fmt, ...) {
+void notice_tok(Token *tok, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   verror_at_tok(tok, fmt, ap);
   va_end(ap);
 }
 
-bool equal(Token *tok, char *op) {
+bool equal(Token *tok, const char *op) {
   return strlen(op) == tok->len && !memcmp(tok->loc, op, tok->len);
 }
 
-bool equal_ext(Token *tok, char *op) {
+bool equal_ext(Token *tok, const char *op) {
   char buf[64];
   snprintf(buf, 64, "__%s__", op);
   return equal(tok, op) || equal(tok, buf);
 }
 
-Token *skip(Token *tok, char *op) {
+Token *skip(Token *tok, const char *op) {
   if (!equal(tok, op))
     error_tok(tok, "expected '%s'", op);
   return tok->next;
 }
 
-bool consume(Token **rest, Token *tok, char *str) {
+bool consume(Token **rest, Token *tok, const char *str) {
   if (equal(tok, str)) {
     *rest = tok->next;
     return true;
@@ -144,7 +144,7 @@ bool consume(Token **rest, Token *tok, char *str) {
   return false;
 }
 
-static Token *new_token(TokenKind kind, char *start, char *end) {
+static Token *new_token(TokenKind kind, const char *start, const char *end) {
   Token *tok;
   if ((tok = tok_freelist)) {
     tok_freelist = tok->next;
@@ -166,8 +166,8 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
   return tok;
 }
 
-static Token *read_ident(char *p) {
-  char *start = p;
+static Token *read_ident(const char *p) {
+  const char *start = p;
   bool has_ucn = false;
   bool invalid = false;
 
@@ -181,7 +181,7 @@ static Token *read_ident(char *p) {
       continue;
     }
     if ((unsigned char)*p >= 128) {
-      char *pos;
+      const char *pos;
       uint32_t c = decode_utf8(&pos, p);
       if (!(p == start ? is_ident1(c) : is_ident2(c)))
         invalid = true;
@@ -211,7 +211,7 @@ static int from_hex(char c) {
 }
 
 // Read a punctuator token from p and returns its length.
-static int read_punct(char *p) {
+static int read_punct(const char *p) {
   bool is_repeat = p[1] == *p;
   bool is_assign = p[1] == '=';
 
@@ -376,7 +376,7 @@ TokenKind ident_keyword(Token *tok) {
   return val ? (TokenKind)(intptr_t)val : TK_IDENT;
 }
 
-static void chk_delimit_end(char **p, bool *invalid) {
+static void chk_delimit_end(const char **p, bool *invalid) {
   if (**p == '}') {
     *p += 1;
     return;
@@ -384,7 +384,7 @@ static void chk_delimit_end(char **p, bool *invalid) {
   *invalid = true;
 }
 
-static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid) {
+static bool read_ucn(const char **new_pos, const char *p, uint32_t *val, bool *invalid) {
   if (!Casecmp(*p, 'u'))
     return false;
 
@@ -393,7 +393,7 @@ static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid) {
   bool has_brace = p[1] == '{';
   p += 1 + has_brace;
 
-  char *end = p + len;
+  const char *end = p + len;
   uint64_t c = 0;
   for (; has_brace || p != end; p++) {
     if (!Isxdigit(*p))
@@ -415,7 +415,7 @@ static bool read_ucn(char **new_pos, char *p, uint32_t *val, bool *invalid) {
   return true;
 }
 
-static uint32_t read_escape_seq(char **new_pos, char *p, bool *invalid) {
+static uint32_t read_escape_seq(const char **new_pos, const char *p, bool *invalid) {
   if (Inrange(*p, '0', '7')) {
     uint32_t c = *p++ - '0';
     if (Inrange(*p, '0', '7')) {
@@ -484,8 +484,8 @@ static uint32_t read_escape_seq(char **new_pos, char *p, bool *invalid) {
   }
 }
 
-static Token *asm_string_literal(char *p, char end) {
-  char *start = p++;
+static Token *asm_string_literal(const char *p, char end) {
+  const char *start = p++;
   bool is_closed = false;
   for (;;) {
     if (*p == end) {
@@ -504,8 +504,8 @@ static Token *asm_string_literal(char *p, char end) {
 }
 
 // Find a closing double-quote.
-static char *string_literal_end(char *p) {
-  char *start = p;
+static const char *string_literal_end(const char *p) {
+  const char *start = p;
   for (; *p != '"'; p++) {
     if (*p == '\n' || *p == '\0')
       error_at(start, "unclosed string literal");
@@ -515,13 +515,13 @@ static char *string_literal_end(char *p) {
   return p;
 }
 
-static Token *read_string_literal(char *start, char *quote, Type *ty) {
-  char *end = string_literal_end(quote + 1);
+static Token *read_string_literal(const char *start, const char *quote, Type *ty) {
+  const char *end = string_literal_end(quote + 1);
   char *buf = calloc(1, end - quote);
   int len = 0;
   bool invalid = false;
 
-  for (char *p = quote + 1; p < end;) {
+  for (const char *p = quote + 1; p < end;) {
     if (*p == '\\') {
       uint32_t c;
       if (read_ucn(&p, p + 1, &c, &invalid)) {
@@ -553,13 +553,13 @@ static Token *read_string_literal(char *start, char *quote, Type *ty) {
 // equal to or larger than that are encoded in 4 bytes. Each 2 bytes
 // in the 4 byte sequence is called "surrogate", and a 4 byte sequence
 // is called a "surrogate pair".
-static Token *read_utf16_string_literal(char *start, char *quote) {
-  char *end = string_literal_end(quote + 1);
+static Token *read_utf16_string_literal(const char *start, const char *quote) {
+  const char *end = string_literal_end(quote + 1);
   uint16_t *buf = calloc(2, end - start);
   int len = 0;
   bool invalid = false;
 
-  for (char *p = quote + 1; p < end;) {
+  for (const char *p = quote + 1; p < end;) {
     uint32_t c;
     if (*p == '\\')
       c = read_escape_seq(&p, p + 1, &invalid);
@@ -594,13 +594,13 @@ static Token *read_utf16_string_literal(char *start, char *quote) {
 //
 // UTF-32 is a fixed-width encoding for Unicode. Each code point is
 // encoded in 4 bytes.
-static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
-  char *end = string_literal_end(quote + 1);
+static Token *read_utf32_string_literal(const char *start, const char *quote, Type *ty) {
+  const char *end = string_literal_end(quote + 1);
   uint32_t *buf = calloc(4, end - quote);
   int len = 0;
   bool invalid = false;
 
-  for (char *p = quote + 1; p < end;) {
+  for (const char *p = quote + 1; p < end;) {
     if (*p == '\\')
       buf[len++] = read_escape_seq(&p, p + 1, &invalid);
     else
@@ -616,11 +616,11 @@ static Token *read_utf32_string_literal(char *start, char *quote, Type *ty) {
   return tok;
 }
 
-static Token *read_char_literal(char *start) {
+static Token *read_char_literal(const char *start) {
   uint64_t val = 0;
   bool is_multi = false;
   bool invalid = false;
-  char *p = start + 1;
+  const char *p = start + 1;
   if (*p == '\'')
     error_at(p, "empty character literal");
 
@@ -656,9 +656,9 @@ static Token *read_char_literal(char *start) {
   return tok;
 }
 
-static Token *read_unicode_char_literal(char *start, char *quote, Type *ty) {
+static Token *read_unicode_char_literal(const char *start, const char *quote, Type *ty) {
   bool invalid = false;
-  char *p = quote + 1;
+  const char *p = quote + 1;
   if (*p == '\0')
     error_at(start, "unclosed character literal");
 
@@ -685,7 +685,7 @@ static Token *read_unicode_char_literal(char *start, char *quote, Type *ty) {
 // In order to handle that, a numeric literal is tokenized as a
 // "pp-number" token first and then converted to a regular number
 // token after preprocessing.
-static Token *new_pp_number(char *start, char *p) {
+static Token *new_pp_number(const char *start, const char *p) {
   for (;;) {
     if (Is_c_ident(*p) || *p == '.') {
       p++;
@@ -726,12 +726,12 @@ static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
   *limb_cnt = cnt;
 }
 
-static bool convert_pp_bitint(char *begin, char *end, Node *node, int base,
+static bool convert_pp_bitint(const char *begin, const char *end, Node *node, int base,
                               bool is_unsigned) {
   uint32_t *data = calloc(2, sizeof(uint32_t));
   size_t limb32 = 1;
 
-  for (char *p = begin; p != end; p++) {
+  for (const char *p = begin; p != end; p++) {
     int digit;
     if (*p >= 'a')
       digit = *p - 'a' + 10;
@@ -764,9 +764,9 @@ static bool convert_pp_bitint(char *begin, char *end, Node *node, int base,
   return true;
 }
 
-static bool convert_pp_int(char *loc, int len, Node *node) {
-  char *p = loc;
-  char *p_end = loc + len;
+static bool convert_pp_int(const char *loc, int len, Node *node) {
+  const char *p = loc;
+  const char *p_end = loc + len;
 
   // Read a binary, octal, decimal or hexadecimal number.
   int base = 10;
@@ -784,9 +784,9 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
     }
   }
 
-  char *digit_begin = p;
+  const char *digit_begin = p;
   uint64_t val = strtoull(p, (char **)&p, base);
-  char *digit_end = p;
+  const char *digit_end = p;
 
   bool u = false;
   bool ll = false;
@@ -841,7 +841,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
   return true;
 }
 
-static char *filter_digit_sep(Token *tok, int *len) {
+static const char *filter_digit_sep(Token *tok, int *len) {
   if (opt_std < STD_C23) {
     *len = tok->len;
     return tok->loc;
@@ -867,7 +867,7 @@ static char *filter_digit_sep(Token *tok, int *len) {
 
 bool is_pp_token_int(Token *tok) {
   int len;
-  char *p = filter_digit_sep(tok, &len);
+  const char *p = filter_digit_sep(tok, &len);
 
   return convert_pp_int(p, len, NULL);
 }
@@ -882,7 +882,7 @@ void convert_pp_number(Token *tok, Node *node) {
   }
 
   int len;
-  char *p = filter_digit_sep(tok, &len);
+  const char *p = filter_digit_sep(tok, &len);
 
   if (convert_pp_int(p, len, node))
     return;
@@ -914,11 +914,12 @@ void convert_pp_number(Token *tok, Node *node) {
 
 // Initialize line info for all tokens.
 static void add_line_numbers(Token *tok, File *file, SlashDelta *dlt) {
-  char *start = file->contents;
-  char *p = start;
+  const char *start = file->contents;
+  const char *p = start;
   int n = 1;
 
-  char *delta_pos = (dlt && dlt->sp && !opt_cc1_asm_pp) ? (dlt->sp[0].pos + start) : NULL;
+  const char *delta_pos = (dlt && dlt->sp && !opt_cc1_asm_pp) ? (dlt->sp[0].pos + start)
+                                                              : NULL;
   int delta_cnt = 0;
   int idx = 0;
   do {
@@ -952,8 +953,8 @@ void tokenize_string_literal(Token *tok, Type *basety) {
 }
 
 void convert_ucn_ident(Token *tok) {
-  char *p = tok->loc;
-  char *end = p + tok->len;
+  const char *p = tok->loc;
+  const char *end = p + tok->len;
   char *buf = calloc(1, tok->len);
   char *q = buf;
 
@@ -990,7 +991,7 @@ void convert_ucn_ident(Token *tok) {
 Token *tokenize(File *file, SlashDelta *delta, Token **end) {
   current_file = file;
 
-  char *p = file->contents;
+  const char *p = file->contents;
   Token head = {0};
   Token *cur = &head;
 
@@ -1025,7 +1026,7 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
 
     // Skip block comments.
     if (Startswith2(p, '/', '*')) {
-      char *q = p + 2;
+      const char *q = p + 2;
       for (; *q; q++)
         if (Startswith2(q, '*', '/'))
           break;
@@ -1037,7 +1038,7 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Numeric literal
-    char *p2 = (*p == '.') ? p + 1 : p;
+    const char *p2 = (*p == '.') ? p + 1 : p;
     if (Isdigit(*p2)) {
       cur = cur->next = new_pp_number(p, p2 + 1);
       p += cur->len;
@@ -1168,7 +1169,7 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
   return head.next;
 }
 
-Token *tokenize_file(char *path, Token *tok, Token **end) {
+Token *tokenize_file(const char *path, Token *tok, Token **end) {
   FILE *fp;
 
   if (strcmp(path, "-") == 0) {
@@ -1218,7 +1219,7 @@ Token *tokenize_file(char *path, Token *tok, Token **end) {
   return tokenize(new_file(path, buf), &dlt, end);
 }
 
-int add_display_file(char *path) {
+int add_display_file(const char *path) {
   static HashMap map;
   HashEntry *ent = hashmap_get_or_insert(&map, path, strlen(path));
   int *idx = ent->val;
@@ -1232,7 +1233,7 @@ int add_display_file(char *path) {
   return *idx;
 }
 
-File *new_file(char *name, char *contents) {
+File *new_file(const char *name, const char *contents) {
   File *file = calloc(1, sizeof(File));
   file->name = name;
   file->file_no = file->display_file_no = add_display_file(name);

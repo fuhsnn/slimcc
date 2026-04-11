@@ -61,7 +61,7 @@ typedef enum {
   REG_X64_END
 } Reg;
 
-static char *regs[REG_X64_XMM0][4] = {
+static const char *regs[REG_X64_XMM0][4] = {
   [REG_X64_NULL] = {"null", "null", "null", "null"},
   [REG_X64_SP] = {"%spl", "%sp", "%esp", "%rsp"},
   [REG_X64_BP] = {"%bpl", "%bp", "%ebp", "%rbp"},
@@ -83,21 +83,21 @@ static char *regs[REG_X64_XMM0][4] = {
 
 static FILE *output_file;
 
-static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
-static char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
+static const char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
+static const char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 
 static Reg argreg[] = {REG_X64_DI, REG_X64_SI, REG_X64_DX,
                        REG_X64_CX, REG_X64_R8, REG_X64_R9};
 
-static char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
-static char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
+static const char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
+static const char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
 
-static char *rip = "%rip";
-static char *rbp = "%rbp";
-static char *rbx = "%rbx";
+static const char *rip = "%rip";
+static const char *rbp = "%rbp";
+static const char *rbx = "%rbx";
 
 static Obj *codegen_fn;
-static char *lvar_ptr;
+static const char *lvar_ptr;
 static int va_gp_start;
 static int va_fp_start;
 static int va_st_start;
@@ -122,8 +122,8 @@ static int asm_ops_cnt;
 static AsmParam *asm_ops[ASMOP_BUFSZ];
 
 static struct {
-  char *rbp;
-  char *rbx;
+  const char *rbp;
+  const char *rbx;
 } asm_alt_ptr;
 
 typedef enum {
@@ -138,7 +138,7 @@ typedef struct {
   int fp_depth;
   int st_depth;
   int st_ofs;
-  char *push_reg;
+  const char *push_reg;
   long loc;
 } Slot;
 
@@ -164,9 +164,9 @@ struct FuncObj {
   int32_t ref_capacity;
 };
 
-static void load2(Type *ty, int sofs, char *sptr);
-static void store2(Type *ty, int dofs, char *dptr);
-static void store_gp2(char **r, int sz, int dofs, char *dptr);
+static void load2(Type *ty, int sofs, const char *sptr);
+static void store2(Type *ty, int dofs, const char *dptr);
+static void store_gp2(const char **r, int sz, int dofs, const char *dptr);
 
 static void gen_asm(Node *node);
 static void gen_expr(Node *node);
@@ -182,17 +182,18 @@ static bool gen_addr_opt(Node *node);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
 static bool gen_load_opt_gp(Node *node, Reg r);
 static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void);
-static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz);
-static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64);
+static void gen_mem_copy(const char *sofs, const char *sptr, const char *dofs,
+                         const char *dptr, int sz);
+static void load_val2(Type *ty, int64_t val, const char *gp32, const char *gp64);
 
-static void imm_add(char *op, char *tmp, int64_t val);
-static void imm_sub(char *op, char *tmp, int64_t val);
-static void imm_and(char *op, char *tmp, int64_t val);
-static void imm_cmp(char *op, char *tmp, int64_t val);
-static char *arith_ins(NodeKind kind);
-static void imm_tmpl(char *ins, char *op, int64_t val);
+static void imm_add(const char *op, const char *tmp, int64_t val);
+static void imm_sub(const char *op, const char *tmp, int64_t val);
+static void imm_and(const char *op, const char *tmp, int64_t val);
+static void imm_cmp(const char *op, const char *tmp, int64_t val);
+static const char *arith_ins(NodeKind kind);
+static void imm_tmpl(const char *ins, const char *op, int64_t val);
 
-static bool is_asm_symbolic_arg(Node *node, char *punct);
+static bool is_asm_symbolic_arg(Node *node, const char *punct);
 
 #define Prints(str) fprintf(output_file, str)
 #define Printsts(str) fprintf(output_file, "\t" str)
@@ -211,7 +212,7 @@ static long resrvln(void) {
 }
 
 FMTCHK(1, 3)
-static void insrtln(char *fmt, long loc, ...) {
+static void insrtln(const char *fmt, long loc, ...) {
   long cur_loc = ftell(output_file);
   fseek(output_file, loc, SEEK_SET);
 
@@ -237,7 +238,7 @@ static void push_ref(Obj *var) {
   fn->refs[fn->ref_cnt++] = var;
 }
 
-static char *get_symbol(Obj *var) {
+static const char *get_symbol(Obj *var) {
   if (codegen_fn && codegen_fn != var) {
     if (var->is_static_lvar)
       var->is_live = true;
@@ -249,7 +250,7 @@ static char *get_symbol(Obj *var) {
   return var->asm_name ? var->asm_name : var->name;
 }
 
-static char *asm_name(Obj *var) {
+static const char *asm_name(Obj *var) {
   return var->asm_name ? var->asm_name : var->name;
 }
 
@@ -278,7 +279,7 @@ static int64_t count(void) {
   return i++;
 }
 
-static char *goto_label(Node *node) {
+static const char *goto_label(Node *node) {
   if (node->lbl.unique_label)
     return node->lbl.unique_label;
   if (node->lbl.node)
@@ -306,7 +307,7 @@ static void name_brk_cont(Node *node, char *bg, char *brk, char *cont, int64_t c
   }
 }
 
-static char *tmpbuf(int sz) {
+static const char *tmpbuf(int sz) {
   tmpbuf_sz = MAX(tmpbuf_sz, sz);
   return "__BUF";
 }
@@ -346,7 +347,7 @@ static bool use_rip(Obj *var) {
       return var->is_definition && export_fn(var);
     return var->is_definition || !var->is_weak;
   }
-  char *vis = var->visibility ? var->visibility : opt_visibility;
+  const char *vis = var->visibility ? var->visibility : opt_visibility;
   if (vis && (!strcmp(vis, "hidden"))) {
     if (var->ty->kind == TY_FUNC)
       return var->is_definition && export_fn(var);
@@ -366,7 +367,8 @@ static Node *skip_gp_cast(Node *node) {
   return node;
 }
 
-static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_array, bool let_atomic) {
+static bool eval_memop(Node *node, char *ofs, const char **ptr, bool let_array,
+                       bool let_atomic) {
   int offset;
   Obj *var = eval_var_opt(node, &offset, let_array, let_atomic);
   if (var) {
@@ -387,7 +389,7 @@ static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_array, bool l
   return false;
 }
 
-static bool is_memop_ptr(Node *node, char *ofs, char **ptr) {
+static bool is_memop_ptr(Node *node, char *ofs, const char **ptr) {
   node = skip_gp_cast(node);
 
   if (node->kind == ND_ADDR)
@@ -401,7 +403,7 @@ static bool is_memop_ptr(Node *node, char *ofs, char **ptr) {
   return false;
 }
 
-static bool is_memop(Node *node, char *ofs, char **ptr, bool let_atomic) {
+static bool is_memop(Node *node, char *ofs, const char **ptr, bool let_atomic) {
   node = skip_gp_cast(node);
 
   if (is_bitfield(node))
@@ -410,7 +412,8 @@ static bool is_memop(Node *node, char *ofs, char **ptr, bool let_atomic) {
 }
 
 static bool has_memop(Node *node) {
-  char ofs[STRBUF_SZ], *ptr;
+  char ofs[STRBUF_SZ];
+  const char *ptr;
   return is_memop(node, ofs, &ptr, true);
 }
 
@@ -482,7 +485,7 @@ static int64_t limit_imm(int64_t val, int sz) {
   return val;
 }
 
-static char *size_suffix(int sz) {
+static const char *size_suffix(int sz) {
   switch (sz) {
   case 8: return "q";
   case 4: return "l";
@@ -549,21 +552,21 @@ static void push(void) {
   push_tmpstack(SL_GP);
 }
 
-static void push_from(char *reg) {
+static void push_from(const char *reg) {
   Slot *sl = push_tmpstack(SL_GP);
   sl->push_reg = reg;
 }
 
-static char *pop_gp(bool is_r64, char *dest_reg, bool must_be_dest) {
+static const char *pop_gp(bool is_r64, const char *dest_reg, bool must_be_dest) {
   Slot *sl = pop_tmpstack(1);
-  char *push_reg;
+  const char *push_reg;
   if (sl->push_reg)
     push_reg = sl->push_reg;
   else
     push_reg = is_r64 ? "%rax" : "%eax";
 
   if (sl->kind == SL_GP) {
-    char *pop_reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
+    const char *pop_reg = (is_r64 ? tmpreg64 : tmpreg32)[sl->gp_depth];
     insrtln("mov %s, %s", sl->loc, push_reg, pop_reg);
     if (!must_be_dest)
       return pop_reg;
@@ -575,19 +578,19 @@ static char *pop_gp(bool is_r64, char *dest_reg, bool must_be_dest) {
   return dest_reg;
 }
 
-static char *pop_inreg2(bool is_r64, char *fallback_reg) {
+static const char *pop_inreg2(bool is_r64, const char *fallback_reg) {
   return pop_gp(is_r64, fallback_reg, false);
 }
 
-static char *pop_inreg(char *fallback_reg) {
+static const char *pop_inreg(const char *fallback_reg) {
   return pop_inreg2(true, fallback_reg);
 }
 
-static void pop2(bool is_r64, char *arg) {
+static void pop2(bool is_r64, const char *arg) {
   pop_gp(is_r64, arg, true);
 }
 
-static void pop(char *arg) {
+static void pop(const char *arg) {
   pop2(true, arg);
 }
 
@@ -606,7 +609,7 @@ static int pop_fp(bool is_xmm64, int dest_reg, bool must_be_dest) {
     Printftn("movaps %%xmm%d, %%xmm%d", pop_reg, dest_reg);
     return dest_reg;
   }
-  char *mv = is_xmm64 ? "movsd" : "movss";
+  const char *mv = is_xmm64 ? "movsd" : "movss";
   insrtln("%s %%xmm0, %d(%s)", sl->loc, mv, sl->st_ofs, lvar_ptr);
   Printftn("%s %d(%s), %%xmm%d", mv, sl->st_ofs, lvar_ptr, dest_reg);
   return dest_reg;
@@ -675,8 +678,8 @@ static void pop_by_ty(Type *ty) {
   }
 }
 
-static void cast_extend_int32(Type *ty, char *from, char *to) {
-  char *insn = ty->is_unsigned ? "movz" : "movs";
+static void cast_extend_int32(Type *ty, const char *from, const char *to) {
+  const char *insn = ty->is_unsigned ? "movz" : "movs";
   switch (ty->size) {
   case 1: Printftn("%sbl %s, %s", insn, from, to); return;
   case 2: Printftn("%swl %s, %s", insn, from, to); return;
@@ -685,8 +688,8 @@ static void cast_extend_int32(Type *ty, char *from, char *to) {
   internal_error();
 }
 
-static void load_extend_int(Type *ty, char *ofs, char *ptr, char *reg) {
-  char *insn = ty->is_unsigned ? "movz" : "movs";
+static void load_extend_int(Type *ty, const char *ofs, const char *ptr, const char *reg) {
+  const char *insn = ty->is_unsigned ? "movz" : "movs";
   switch (ty->size) {
   case 1: Printftn("%sbl %s(%s), %s", insn, ofs, ptr, reg); return;
   case 2: Printftn("%swl %s(%s), %s", insn, ofs, ptr, reg); return;
@@ -696,7 +699,7 @@ static void load_extend_int(Type *ty, char *ofs, char *ptr, char *reg) {
   internal_error();
 }
 
-static void load_extend_int64(Type *ty, char *ofs, char *ptr, char *reg) {
+static void load_extend_int64(Type *ty, const char *ofs, const char *ptr, const char *reg) {
   switch (ty->size) {
   case 4: Printftn("movslq %s(%s), %s", ofs, ptr, reg); return;
   case 2: Printftn("movswq %s(%s), %s", ofs, ptr, reg); return;
@@ -713,7 +716,7 @@ int64_t align_to(int64_t n, int64_t align) {
   return (n + align - 1) / align * align;
 }
 
-static char *reg_dx(int sz) {
+static const char *reg_dx(int sz) {
   switch (sz) {
   case 1: return "%dl";
   case 2: return "%dx";
@@ -723,7 +726,7 @@ static char *reg_dx(int sz) {
   internal_error();
 }
 
-static char *reg_ax(int sz) {
+static const char *reg_ax(int sz) {
   switch (sz) {
   case 1: return "%al";
   case 2: return "%ax";
@@ -733,7 +736,7 @@ static char *reg_ax(int sz) {
   internal_error();
 }
 
-static char *regop_ax(Type *ty) {
+static const char *regop_ax(Type *ty) {
   switch (ty->size) {
   case 1:
   case 2:
@@ -743,7 +746,8 @@ static char *regop_ax(Type *ty) {
   internal_error();
 }
 
-static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz) {
+static void gen_mem_copy(const char *sofs, const char *sptr, const char *dofs,
+                         const char *dptr, int sz) {
   for (int i = 0; i < sz;) {
     int rem = sz - i;
     if (rem >= 16) {
@@ -759,7 +763,7 @@ static void gen_mem_copy(char *sofs, char *sptr, char *dofs, char *dptr, int sz)
   }
 }
 
-static void gen_mem_zero(int dofs, char *dptr, int sz) {
+static void gen_mem_zero(int dofs, const char *dptr, int sz) {
   if (sz >= 16) {
     Printstn("xorps %%xmm0, %%xmm0");
     for (int i = 0; i < sz;) {
@@ -836,7 +840,7 @@ static void flip_cmp(NodeKind *kind, bool flip) {
   internal_error();
 }
 
-static char *cmp_cc(NodeKind kind, bool is_unsigned) {
+static const char *cmp_cc(NodeKind kind, bool is_unsigned) {
   switch (kind) {
   case ND_EQ: return "e";
   case ND_NE: return "ne";
@@ -853,7 +857,7 @@ static void gen_cmp_setcc(NodeKind kind, bool is_unsigned) {
   Printstn("movzbl %%al, %%eax");
 }
 
-static void gen_bitint_builtin_call2(char *fn) {
+static void gen_bitint_builtin_call2(const char *fn) {
   static HashMap map;
   HashEntry *ent = hashmap_get_or_insert(&map, fn, strlen(fn));
   Obj *var = ent->val;
@@ -868,7 +872,7 @@ static void gen_bitint_builtin_call2(char *fn) {
 }
 
 static void gen_bitint_builtin_call(NodeKind kind) {
-  static char *fn[] = {
+  static const char *fn[] = {
     [ND_NEG] = "__slimcc_bitint_neg",       [ND_BITNOT] = "__slimcc_bitint_bitnot",
     [ND_BITAND] = "__slimcc_bitint_bitand", [ND_BITOR] = "__slimcc_bitint_bitor",
     [ND_BITXOR] = "__slimcc_bitint_bitxor", [ND_SHL] = "__slimcc_bitint_shl",
@@ -932,12 +936,12 @@ static void gen_bitfield_load(Node *node, int ofs) {
   }
 }
 
-static void gen_bitfield_store2(char *ptr, Reg r_val, Reg r_tmp, Member *mem) {
+static void gen_bitfield_store2(const char *ptr, Reg r_val, Reg r_tmp, Member *mem) {
   if (mem->is_aligned_bitfield) {
     int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
     RegSz rsz = bitwidth_to_regsz(p2bits);
-    char *tmp = regs[r_tmp][rsz];
-    char *val = regs[r_val][rsz];
+    const char *tmp = regs[r_tmp][rsz];
+    const char *val = regs[r_val][rsz];
 
     if (mem->bit_width == p2bits) {
       Printftn("mov %s, (%s)", val, ptr);
@@ -961,10 +965,10 @@ static void gen_bitfield_store2(char *ptr, Reg r_val, Reg r_tmp, Member *mem) {
     Printftn("or %s, (%s)", tmp, ptr);
     return;
   }
-  char *valb = regs[r_val][REGSZ_8];
-  char *valq = regs[r_val][REGSZ_64];
-  char *tmpb = regs[r_tmp][REGSZ_8];
-  char *tmpq = regs[r_tmp][REGSZ_64];
+  const char *valb = regs[r_val][REGSZ_8];
+  const char *valq = regs[r_val][REGSZ_64];
+  const char *tmpb = regs[r_tmp][REGSZ_8];
+  const char *tmpq = regs[r_tmp][REGSZ_64];
 
   int rem = mem->bit_offset + mem->bit_width;
   int pofs = 0;
@@ -1018,7 +1022,7 @@ static void gen_bitfield_store(Node *node, bool is_void) {
     return;
   }
 
-  char *ptr = pop_inreg(tmpreg64[0]);
+  const char *ptr = pop_inreg(tmpreg64[0]);
   gen_bitfield_store2(ptr, REG_X64_AX, REG_X64_DX, mem);
 
   if (!is_void && mem->bit_width < 64) {
@@ -1110,7 +1114,7 @@ static void gen_addr(Node *node) {
   error_tok(node->tok, "not an lvalue");
 }
 
-static void load3(Type *ty, char *sofs, char *sptr) {
+static void load3(Type *ty, const char *sofs, const char *sptr) {
   switch (ty->kind) {
   case TY_FLOAT:   Printftn("movss %s(%s), %%xmm0", sofs, sptr); return;
   case TY_DOUBLE:  Printftn("movsd %s(%s), %%xmm0", sofs, sptr); return;
@@ -1121,7 +1125,7 @@ static void load3(Type *ty, char *sofs, char *sptr) {
   load_extend_int(ty, sofs, sptr, regop_ax(ty));
 }
 
-static void load2(Type *ty, int sofs, char *sptr) {
+static void load2(Type *ty, int sofs, const char *sptr) {
   char ofs_buf[STRBUF_SZ];
   snprintf(ofs_buf, STRBUF_SZ, "%d", sofs);
   load3(ty, ofs_buf, sptr);
@@ -1146,7 +1150,7 @@ static void load(Node *node, int ofs) {
   internal_error();
 }
 
-static void store3(Type *ty, char *dofs, char *dptr) {
+static void store3(Type *ty, const char *dofs, const char *dptr) {
   switch (ty->kind) {
   case TY_ARRAY:
   case TY_STRUCT:
@@ -1160,7 +1164,7 @@ static void store3(Type *ty, char *dofs, char *dptr) {
   Printftn("mov %s, %s(%s)", reg_ax(ty->size), dofs, dptr);
 }
 
-static void store2(Type *ty, int dofs, char *dptr) {
+static void store2(Type *ty, int dofs, const char *dptr) {
   char ofs_buf[STRBUF_SZ];
   snprintf(ofs_buf, STRBUF_SZ, "%d", dofs);
   store3(ty, ofs_buf, dptr);
@@ -1171,11 +1175,11 @@ static void store(Node *node, bool is_void) {
     gen_bitfield_store(node, is_void);
     return;
   }
-  char *reg = pop_inreg(tmpreg64[0]);
+  const char *reg = pop_inreg(tmpreg64[0]);
   store2(node->ty, 0, reg);
 }
 
-static void load_val2(Type *ty, int64_t val, char *gp32, char *gp64) {
+static void load_val2(Type *ty, int64_t val, const char *gp32, const char *gp64) {
   if (val == 0) {
     Printftn("xor %s, %s", gp32, gp32);
     return;
@@ -1338,7 +1342,7 @@ static char f64u64[] =
   "cvttsd2siq %xmm0, %rdx; shlq $63, %rax; orq %rdx, %rax";
 static char f64f32[] = "cvtsd2ss %xmm0, %xmm0";
 
-static char *cast_table[][10] = {
+static const char *cast_table[][10] = {
   // clang-format off
   // i8   i16     i32     i64     u8     u16     u32     u64     f32     f64
   {NULL,  NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i8
@@ -1356,7 +1360,8 @@ static char *cast_table[][10] = {
   // clang-format on
 };
 
-static void gen_cast_f80_to_int(char *buf, char *ins, char *mv, char *dst) {
+static void gen_cast_f80_to_int(const char *buf, const char *ins, const char *mv,
+                                const char *dst) {
   Printftn("fnstcw 8+%s", buf);
   Printftn("fnstcw 10+%s", buf);
   Printftn("orb $12, 11+%s", buf);
@@ -1670,7 +1675,7 @@ static void copy_ret_buffer(Obj *var) {
 static void copy_struct_reg(void) {
   Type *ty = codegen_fn->ty->return_ty;
   int gp = 0, fp = 0;
-  char *sptr = "%rax";
+  const char *sptr = "%rax";
 
   if (is_x87_class(ty)) {
     Printftn("fldt (%s)", sptr);
@@ -1818,7 +1823,7 @@ static void print_loc(Token *tok) {
   Printftn(".loc %d %d", debug_file_id[file_no], line_no);
 }
 
-static void place_reg_arg(Type *ty, char *ofs, char *ptr, int *gp, int *fp) {
+static void place_reg_arg(Type *ty, const char *ofs, const char *ptr, int *gp, int *fp) {
   switch (ty->kind) {
   case TY_BITINT:
   case TY_STRUCT:
@@ -1860,7 +1865,8 @@ static void gen_funcall_args(Node *node) {
     if (var->pass_by_stack)
       continue;
 
-    char ofs[STRBUF_SZ], *ptr;
+    char ofs[STRBUF_SZ];
+    const char *ptr;
 
     if (opt_optimize) {
       Node *arg_expr = var->arg_expr;
@@ -1970,7 +1976,7 @@ static void gen_funcall(Node *node) {
   }
 }
 
-static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
+static void gen_cond(Node *node, bool jump_cond, const char *jump_label) {
   if (opt_optimize) {
     int64_t val;
     if (is_const_expr(node, &val)) {
@@ -2000,11 +2006,11 @@ static void gen_cond(Node *node, bool jump_cond, char *jump_label) {
         gen_expr(node->m.rhs);
 
         bool is_r64 = node->m.lhs->ty->size == 8;
-        char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
+        const char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
         Printftn("cmp %s, %s", regop_ax(node->m.lhs->ty), op);
       }
       flip_cmp(&kind, !jump_cond);
-      char *ins = cmp_cc(kind, node->m.lhs->ty->is_unsigned);
+      const char *ins = cmp_cc(kind, node->m.lhs->ty->is_unsigned);
       Printftn("j%s %s", ins, jump_label);
       return;
     }
@@ -2054,8 +2060,8 @@ static void gen_logical(Node *node, bool flip) {
   gen_cond(node->m.lhs, short_cond, short_label);
   gen_cond(node->m.rhs, short_cond, short_label);
 
-  static char *set_zero = "xor %eax, %eax";
-  static char *set_one = "movl $1, %eax";
+  static const char *set_zero = "xor %eax, %eax";
+  static const char *set_one = "movl $1, %eax";
 
   short_cond ^= flip;
   Printftn("%s", short_cond ? set_zero : set_one);
@@ -2087,7 +2093,7 @@ static void gen_xmm_arith(Node *node) {
 
   bool is_xmm64 = node->m.lhs->ty->kind == TY_DOUBLE;
   int reg = popf_inreg(is_xmm64, 1);
-  char *sz = is_xmm64 ? "sd" : "ss";
+  const char *sz = is_xmm64 ? "sd" : "ss";
 
   switch (node->kind) {
   case ND_ADD: {
@@ -2303,7 +2309,7 @@ static void gen_gp_arith(Node *node) {
     gen_expr(node->m.rhs);
     Printstn("mov %%al, %%cl");
 
-    char *ax = regop_ax(node->ty);
+    const char *ax = regop_ax(node->ty);
     pop2((node->ty->size == 8), ax);
 
     switch (node->kind) {
@@ -2319,8 +2325,8 @@ static void gen_gp_arith(Node *node) {
   gen_expr(node->m.rhs);
 
   bool is_r64 = node->m.lhs->ty->size == 8 || node->m.lhs->ty->base;
-  char *ax = is_r64 ? "%rax" : "%eax";
-  char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
+  const char *ax = is_r64 ? "%rax" : "%eax";
+  const char *op = pop_inreg2(is_r64, (is_r64 ? tmpreg64 : tmpreg32)[0]);
 
   switch (node->kind) {
   case ND_ADD: {
@@ -2564,12 +2570,12 @@ static void gen_expr2(Node *node, bool is_void) {
     push();
     gen_expr(node->cas.new_val);
 
-    char *old = pop_inreg(tmpreg64[0]);
-    char *addr = pop_inreg(tmpreg64[1]);
+    const char *old = pop_inreg(tmpreg64[0]);
+    const char *addr = pop_inreg(tmpreg64[1]);
 
     Type *ty = node->cas.addr->ty->base;
-    char *ax = reg_ax(ty->size);
-    char *dx = reg_dx(ty->size);
+    const char *ax = reg_ax(ty->size);
+    const char *dx = reg_dx(ty->size);
 
     switch (ty->kind) {
     case TY_DOUBLE: Printftn("movq %%xmm0, %s", dx); break;
@@ -2593,7 +2599,7 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->m.lhs);
     push();
     gen_expr(node->m.rhs);
-    char *reg = pop_inreg(tmpreg64[0]);
+    const char *reg = pop_inreg(tmpreg64[0]);
 
     int sz = node->m.lhs->ty->base->size;
     Printftn("xchg %s, (%s)", reg_ax(sz), reg);
@@ -2641,7 +2647,7 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->m.lhs);
     push();
     gen_expr(node->m.rhs);
-    char *reg = pop_inreg(tmpreg64[0]);
+    const char *reg = pop_inreg(tmpreg64[0]);
     gen_mem_copy("0", "%rax", "0", reg, 24);
     return;
   }
@@ -2780,7 +2786,7 @@ static void gen_stmt(Node *node) {
     gen_expr(node->ctrl.cond);
 
     int64_t c = count(), cnt = 0;
-    char *ax, *cx, *dx;
+    const char *ax, *cx, *dx;
     if (node->ctrl.cond->ty->size == 8)
       ax = "%rax", cx = "%rcx", dx = "%rdx";
     else
@@ -2907,7 +2913,7 @@ static void gen_stmt(Node *node) {
   error_tok(node->tok, "invalid statement");
 }
 
-static void imm_tmpl(char *ins, char *op, int64_t val) {
+static void imm_tmpl(const char *ins, const char *op, int64_t val) {
   if (val == (int32_t)val) {
     Printftn("%s $%" PRIi64 ", %s", ins, val, op);
     return;
@@ -2920,12 +2926,13 @@ static void imm_tmpl(char *ins, char *op, int64_t val) {
   return;
 }
 
-static void memop_arith(Node *lhs, Node *rhs, char *ins) {
+static void memop_arith(Node *lhs, Node *rhs, const char *ins) {
   char ins_sz[STRBUF_SZ];
   snprintf(ins_sz, STRBUF_SZ, "%s%s", ins, size_suffix(lhs->ty->size));
 
   int64_t rval;
-  char ofs[STRBUF_SZ], *ptr;
+  char ofs[STRBUF_SZ];
+  const char *ptr;
   if (is_const_expr(rhs, &rval)) {
     if (is_memop(lhs, ofs, &ptr, false)) {
       char memop[STRBUF_SZ2];
@@ -2947,7 +2954,7 @@ static void memop_arith(Node *lhs, Node *rhs, char *ins) {
   gen_addr(lhs);
   push();
   gen_expr(rhs);
-  char *dptr = pop_inreg(tmpreg64[0]);
+  const char *dptr = pop_inreg(tmpreg64[0]);
   Printftn("%s %s, (%s)", ins_sz, reg_ax(lhs->ty->size), dptr);
 }
 
@@ -2996,12 +3003,14 @@ static void gen_void_assign(Node *node) {
     return;
   }
 
-  char sofs[STRBUF_SZ], *sptr;
+  char sofs[STRBUF_SZ];
+  const char *sptr;
   if (is_memop(rhs, sofs, &sptr, true) || (is_int_to_int_cast(rhs) &&
                                            lhs->ty->size <= rhs->m.lhs->ty->size &&
                                            lhs->ty->kind != TY_BOOL &&
                                            is_memop(rhs->m.lhs, sofs, &sptr, true))) {
-    char dofs[STRBUF_SZ], *dptr;
+    char dofs[STRBUF_SZ];
+    const char *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       gen_mem_copy(sofs, sptr, dofs, dptr, write_size(lhs->ty));
       return;
@@ -3014,7 +3023,8 @@ static void gen_void_assign(Node *node) {
   }
 
   if (is_memop_ptr(rhs, sofs, &sptr) && sptr == rip && !(opt_fpic || opt_fpie)) {
-    char dofs[STRBUF_SZ], *dptr;
+    char dofs[STRBUF_SZ];
+    const char *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       Printftn("movq $%s, %s(%s)", sofs, dofs, dptr);
       return;
@@ -3088,8 +3098,8 @@ static void gen_void_expr(Node *node) {
   gen_expr2(node, true);
 }
 
-static char *arith_ins(NodeKind kind) {
-  char *ins;
+static const char *arith_ins(NodeKind kind) {
+  const char *ins;
   switch (kind) {
   case ND_ADD:    ins = "add"; break;
   case ND_SUB:    ins = "sub"; break;
@@ -3105,7 +3115,7 @@ static char *arith_ins(NodeKind kind) {
   return ins;
 }
 
-static char *farith_ins(NodeKind kind) {
+static const char *farith_ins(NodeKind kind) {
   switch (kind) {
   case ND_ADD: return "add";
   case ND_SUB: return "sub";
@@ -3115,7 +3125,7 @@ static char *farith_ins(NodeKind kind) {
   internal_error();
 }
 
-static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
+static void imm_arith2(NodeKind kind, const char *op, const char *tmp, int64_t val) {
   if (in_imm_range(val)) {
     Printftn("%s $%" PRIi64 ", %s", arith_ins(kind), val, op);
     return;
@@ -3125,7 +3135,7 @@ static void imm_arith2(NodeKind kind, char *op, char *tmp, int64_t val) {
   return;
 }
 
-static void imm_add(char *op, char *tmp, int64_t val) {
+static void imm_add(const char *op, const char *tmp, int64_t val) {
   switch (val) {
   case 0:  return;
   case 1:  Printftn("inc %s", op); return;
@@ -3134,7 +3144,7 @@ static void imm_add(char *op, char *tmp, int64_t val) {
   imm_arith2(ND_ADD, op, tmp, val);
 }
 
-static void imm_sub(char *op, char *tmp, int64_t val) {
+static void imm_sub(const char *op, const char *tmp, int64_t val) {
   switch (val) {
   case 0:  return;
   case 1:  Printftn("dec %s", op); return;
@@ -3143,7 +3153,7 @@ static void imm_sub(char *op, char *tmp, int64_t val) {
   imm_arith2(ND_SUB, op, tmp, val);
 }
 
-static void imm_and(char *op, char *tmp, int64_t val) {
+static void imm_and(const char *op, const char *tmp, int64_t val) {
   switch (val) {
   case 0:  Printftn("xor %s, %s", op, op); return;
   case -1: return;
@@ -3151,7 +3161,7 @@ static void imm_and(char *op, char *tmp, int64_t val) {
   imm_arith2(ND_BITAND, op, tmp, val);
 }
 
-static void imm_cmp(char *op, char *tmp, int64_t val) {
+static void imm_cmp(const char *op, const char *tmp, int64_t val) {
   if (val == 0) {
     Printftn("test %s, %s", op, op);
     return;
@@ -3165,8 +3175,8 @@ static void imm_cmp(char *op, char *tmp, int64_t val) {
 }
 
 static void imm_arith(NodeKind kind, int sz, int64_t val) {
-  char *ax = reg_ax(sz);
-  char *dx = reg_dx(sz);
+  const char *ax = reg_ax(sz);
+  const char *dx = reg_dx(sz);
 
   switch (kind) {
   case ND_ADD:    imm_add(ax, dx, val); return;
@@ -3211,8 +3221,8 @@ static void imm_arith(NodeKind kind, int sz, int64_t val) {
 }
 
 static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
-  char *ax = reg_ax(ty->size);
-  char *dx = reg_dx(ty->size);
+  const char *ax = reg_ax(ty->size);
+  const char *dx = reg_dx(ty->size);
 
   if (val == 1) {
     gen_expr(expr);
@@ -3293,7 +3303,8 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
 }
 
 static bool gen_cmp_opt_gp2(Node *lhs, Node *rhs) {
-  char ofs[STRBUF_SZ], *ptr;
+  char ofs[STRBUF_SZ];
+  const char *ptr;
   int64_t val;
   if (is_const_expr(rhs, &val)) {
     if (is_memop(lhs, ofs, &ptr, false)) {
@@ -3332,8 +3343,9 @@ static bool gen_cmp_opt_gp(Node *node, NodeKind *kind) {
 
 static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int pass) {
   int64_t val;
-  char ofs[STRBUF_SZ], *ptr;
-  char *ax = reg_ax(sz);
+  char ofs[STRBUF_SZ];
+  const char *ptr;
+  const char *ax = reg_ax(sz);
 
   switch (pass) {
   case 0:
@@ -3399,9 +3411,10 @@ static bool gen_arith_opt_gp(Node *node, int sz) {
 }
 
 static bool gen_shift_opt_gp(Node *node) {
-  char *ax = reg_ax(node->ty->size);
+  const char *ax = reg_ax(node->ty->size);
   int64_t val;
-  char ofs[STRBUF_SZ], *ptr;
+  char ofs[STRBUF_SZ];
+  const char *ptr;
 
   if (is_const_expr(node->m.rhs, &val)) {
     gen_expr(node->m.lhs);
@@ -3449,8 +3462,9 @@ static bool gen_gp_opt(Node *node) {
 }
 
 static bool gen_arith_opt_fp2(NodeKind kind, Node *lhs, Node *rhs, int pass) {
-  char ofs[STRBUF_SZ], *ptr;
-  char *sz = rhs->ty->kind == TY_FLOAT ? "ss" : "sd";
+  char ofs[STRBUF_SZ];
+  const char *ptr;
+  const char *sz = rhs->ty->kind == TY_FLOAT ? "ss" : "sd";
 
   switch (pass) {
   case 0: {
@@ -3493,7 +3507,8 @@ static bool gen_arith_opt_fp(Node *node) {
 }
 
 static bool gen_load_opt_gp(Node *node, Reg r) {
-  char ofs[STRBUF_SZ], *ptr;
+  char ofs[STRBUF_SZ];
+  const char *ptr;
   Node *lhs = node->m.lhs;
   Type *ty = node->ty;
   bool gen = (r != REG_X64_NULL);
@@ -3667,7 +3682,7 @@ static bool gen_block_stmt(Node *node, bool is_reach) {
   return is_reach;
 }
 
-static bool gen_skip_unreachable_stmt(Node *node, bool is_reach, char *lbl) {
+static bool gen_skip_unreachable_stmt(Node *node, bool is_reach, const char *lbl) {
   if (!node)
     return is_reach;
   if (!is_reach)
@@ -3679,7 +3694,7 @@ static bool gen_skip_unreachable_stmt(Node *node, bool is_reach, char *lbl) {
   return true;
 }
 
-static bool gen_if_stmt_const(Node *node, bool cond, char *else_label) {
+static bool gen_if_stmt_const(Node *node, bool cond, const char *else_label) {
   if (cond) {
     bool is_reach = gen_reachable_stmt(node->ctrl.then);
     return gen_skip_unreachable_stmt(node->ctrl.els, is_reach, else_label);
@@ -3791,7 +3806,7 @@ static bool gen_expr_opt(Node *node) {
   Node *lhs = node->m.lhs;
   Node *rhs = node->m.rhs;
 
-  char *var_ptr;
+  const char *var_ptr;
   char var_ofs[STRBUF_SZ];
 
   {
@@ -3850,7 +3865,8 @@ static bool gen_expr_opt(Node *node) {
       ty->kind == TY_STRUCT ||
       ty->kind == TY_UNION ||
       is_bitfield(node)) {
-    char var_ofs[STRBUF_SZ], *var_ptr;
+    char var_ofs[STRBUF_SZ];
+    const char *var_ptr;
     Node addr_node = {.kind = ND_ADDR, .m.lhs = node, .tok = node->tok};
     if (is_memop_ptr(&addr_node, var_ofs, &var_ptr)) {
       Printftn("lea %s(%s), %%rax", var_ofs, var_ptr);
@@ -3891,7 +3907,8 @@ static bool gen_addr_opt(Node *node) {
   NodeKind kind = node->kind;
 
   {
-    char ofs[STRBUF_SZ], *ptr;
+    char ofs[STRBUF_SZ];
+    const char *ptr;
     Node addr_node = {.kind = ND_ADDR, .m.lhs = node, .tok = node->tok};
     if (is_memop_ptr(&addr_node, ofs, &ptr)) {
       Printftn("lea %s(%s), %%rax", ofs, ptr);
@@ -3956,10 +3973,10 @@ static bool is_x87_reg(Reg reg) {
   return REG_X64_X87_ST0 <= reg && reg <= REG_X64_X87_ST7;
 }
 
-static char *gcc_reg_id(char *loc, Token *tok) {
+static const char *gcc_reg_id(const char *loc, Token *tok) {
   // FIXED_REGISTERS in gcc/config/i386/i386.h
   // LLVM call these GCCRegNames
-  static char *names[] = {"ax", "dx", "cx", "bx", "si", "di"};
+  static const char *names[] = {"ax", "dx", "cx", "bx", "si", "di"};
 
   unsigned long idx = strtoul(loc, NULL, 10);
   if (idx >= 6)
@@ -3967,7 +3984,7 @@ static char *gcc_reg_id(char *loc, Token *tok) {
   return names[idx];
 }
 
-static Reg ident_gp_reg(char *loc) {
+static Reg ident_gp_reg(const char *loc) {
   static HashMap map;
   if (map.capacity == 0) {
     for (Reg r = REG_X64_NULL; r < REG_X64_END; r++)
@@ -3983,7 +4000,7 @@ static Reg ident_gp_reg(char *loc) {
   return (intptr_t)hashmap_get(&map, loc);
 }
 
-static Reg ident_reg(char *str, Token *tok) {
+static Reg ident_reg(const char *str, Token *tok) {
   if (Isdigit(*str)) {
     str = gcc_reg_id(str, tok);
   } else {
@@ -4091,7 +4108,7 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
     bool is_x87_st0 = false;
     bool is_x87_st1 = false;
 
-    char *p = ap->constraint->str;
+    const char *p = ap->constraint->str;
     if (is_input) {
       if (*p == '%')
         p++;
@@ -4376,7 +4393,7 @@ void prepare_inline_asm(Node *node) {
   asm_prepare_regs(node, out_tmp);
 }
 
-static char *reg_high_byte(Reg reg) {
+static const char *reg_high_byte(Reg reg) {
   switch (reg) {
   case REG_X64_AX: return "%ah";
   case REG_X64_BX: return "%bh";
@@ -4386,7 +4403,7 @@ static char *reg_high_byte(Reg reg) {
   return regs[reg][0];
 }
 
-static char *reg_sz(Reg reg, int sz) {
+static const char *reg_sz(Reg reg, int sz) {
   if (is_gp_reg(reg)) {
     switch (sz) {
     case 1: return regs[reg][0];
@@ -4413,7 +4430,7 @@ static void asm_gen_operands(void) {
   }
 }
 
-static char *alt_ptr(char *reg) {
+static const char *alt_ptr(const char *reg) {
   if (asm_alt_ptr.rbp && reg == rbp)
     return asm_alt_ptr.rbp;
   if (asm_alt_ptr.rbx && reg == rbx)
@@ -4421,7 +4438,7 @@ static char *alt_ptr(char *reg) {
   return reg;
 }
 
-static void asm_gen_ptr(AsmParam *ap, char *ofs, char **ptr, Reg tmpreg) {
+static void asm_gen_ptr(AsmParam *ap, char *ofs, const char **ptr, Reg tmpreg) {
   if (is_memop(ap->arg, ofs, ptr, true)) {
     *ptr = alt_ptr(*ptr);
     return;
@@ -4441,7 +4458,8 @@ static void asm_gen_ptr(AsmParam *ap, char *ofs, char **ptr, Reg tmpreg) {
 }
 
 static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
-  char ofs[STRBUF_SZ], *ptr = NULL;
+  char ofs[STRBUF_SZ];
+  const char *ptr = NULL;
   asm_gen_ptr(ap, ofs, &ptr, tmpreg);
 
   if (is_gp_reg(ap->reg)) {
@@ -4469,7 +4487,8 @@ static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
 }
 
 static void asm_reg_output(AsmParam *ap, Reg tmpreg) {
-  char ofs[STRBUF_SZ], *ptr = NULL;
+  char ofs[STRBUF_SZ];
+  const char *ptr = NULL;
   asm_gen_ptr(ap, ofs, &ptr, tmpreg);
 
   if (is_gp_reg(ap->reg)) {
@@ -4547,7 +4566,8 @@ static void asm_save_out_flags(Node *node) {
 
   for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_FLAG) {
-      char ofs[STRBUF_SZ], *ptr;
+      char ofs[STRBUF_SZ];
+      const char *ptr;
       asm_gen_ptr(ap, ofs, &ptr, freereg);
       if (ap->arg->ty->size != 1)
         Printftn("mov%s $0, %s(%s)", size_suffix(ap->arg->ty->size), ofs, ptr);
@@ -4580,7 +4600,7 @@ static void asm_save_out_x87(Node *node, int in_cnt) {
 
 static void asm_save_out_bitfield(AsmParam *ap, Reg r1, Reg r2) {
   Member *mem = ap->arg->m.member;
-  char *ptr = regs[r2][3];
+  const char *ptr = regs[r2][3];
 
   Printftn("movq %d(%s), %s", ap->ptr->ofs, alt_ptr(ap->ptr->ptr), ptr);
 
@@ -4606,7 +4626,7 @@ static void asm_save_out(Node *node) {
   }
 }
 
-static bool named_op(char **rest, char *p, Token *tok) {
+static bool named_op(const char **rest, const char *p, Token *tok) {
   if (tok && !strncmp(p, tok->loc, tok->len) && p[tok->len] == ']') {
     *rest = &p[tok->len + 1];
     return true;
@@ -4614,7 +4634,7 @@ static bool named_op(char **rest, char *p, Token *tok) {
   return false;
 }
 
-static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
+static AsmParam *find_op(const char *p, const char **rest, Token *tok, bool is_label) {
   if (*p == '[') {
     for (int i = 0; i < asm_ops_cnt; i++) {
       AsmParam *op = asm_ops[i];
@@ -4634,13 +4654,14 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
   error_tok(tok, "operand not found");
 }
 
-static bool is_asm_symbolic_arg(Node *node, char *punct) {
+static bool is_asm_symbolic_arg(Node *node, const char *punct) {
   if (node->kind == ND_VAR && node->m.var->ty->kind == TY_FUNC && use_rip(node->m.var)) {
     if (punct)
       fprintf(output_file, "%s\"%s\"", punct, get_symbol(node->m.var));
     return true;
   }
-  char ofs[STRBUF_SZ], *ptr;
+  char ofs[STRBUF_SZ];
+  const char *ptr;
   if (node->kind == ND_ADDR && is_memop(node->m.lhs, ofs, &ptr, true) && ptr == rip) {
     if (punct)
       Printf("%s%s", punct, ofs);
@@ -4650,7 +4671,7 @@ static bool is_asm_symbolic_arg(Node *node, char *punct) {
 }
 
 static void asm_body(Node *node) {
-  char *p = node->gasm.str_tok->str;
+  const char *p = node->gasm.str_tok->str;
   for (;;) {
     size_t spn = strcspn(p, "%");
     if (spn) {
@@ -4693,7 +4714,7 @@ static void asm_body(Node *node) {
     }
     if (*p == '[' || Isdigit(*p)) {
       AsmParam *ap = find_op(p, &p, node->gasm.str_tok, false);
-      char *punct = (mod == 'c') ? "" : "$";
+      const char *punct = (mod == 'c') ? "" : "$";
 
       switch (ap->kind) {
       case ASMOP_NUM: {
@@ -4706,7 +4727,8 @@ static void asm_body(Node *node) {
         break;
       }
       case ASMOP_MEM: {
-        char ofs[STRBUF_SZ], *ptr;
+        char ofs[STRBUF_SZ];
+        const char *ptr;
         if (is_memop(ap->arg, ofs, &ptr, true)) {
           Printf("%s(%s)", ofs, alt_ptr(ptr));
           continue;
@@ -4727,7 +4749,7 @@ static void asm_body(Node *node) {
           continue;
         }
         if (is_gp_reg(ap->reg)) {
-          char *regname = NULL;
+          const char *regname = NULL;
           switch (mod) {
           case 'h': regname = reg_high_byte(ap->reg); break;
           case 'b': regname = regs[ap->reg][0]; break;
@@ -4759,8 +4781,8 @@ static void asm_pop_clobbers(Node *node) {
       pop(regs[r][3]);
 }
 
-static char *asm_push_frame_ptr(Node *node) {
-  char *prev = lvar_ptr;
+static const char *asm_push_frame_ptr(Node *node) {
+  const char *prev = lvar_ptr;
 
   if (node->gasm.ctx->frame_ptr1) {
     asm_alt_ptr.rbp = regs[node->gasm.ctx->frame_ptr1][3];
@@ -4782,7 +4804,7 @@ static char *asm_push_frame_ptr(Node *node) {
   return prev;
 }
 
-static void asm_pop_frame_ptr(Node *node, char *prev) {
+static void asm_pop_frame_ptr(Node *node, const char *prev) {
   if (node->gasm.ctx->frame_ptr2)
     pop(rbx);
   if (node->gasm.ctx->frame_ptr1)
@@ -4803,7 +4825,7 @@ static void gen_asm(Node *node) {
   asm_xmm_inputs();
 
   asm_push_clobbers(node);
-  char *prev_lvar_ptr = asm_push_frame_ptr(node);
+  const char *prev_lvar_ptr = asm_push_frame_ptr(node);
 
   asm_gp_inputs();
 
@@ -4814,7 +4836,7 @@ static void gen_asm(Node *node) {
   int meet_label = asm_ops_cnt + 1;
   bool is_goto_with_output = node->gasm.outputs && node->gasm.labels;
   if (is_goto_with_output) {
-    char *tmp_gp = regs[node->gasm.ctx->output_tmp1][3];
+    const char *tmp_gp = regs[node->gasm.ctx->output_tmp1][3];
     Printftn("lea %df(%%rip), %s; jmp %df", fallthrough_label, tmp_gp, meet_label);
     for (AsmParam *ap = node->gasm.labels; ap; ap = ap->next) {
       Printftn("%d:", ap->label_id);
@@ -4875,7 +4897,7 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
   return max_depth;
 }
 
-static void emit_symbol2(Obj *var, char *name, char *vis) {
+static void emit_symbol2(Obj *var, const char *name, const char *vis) {
   if (var->is_static)
     Printftn(".local \"%s\"", name);
   else if (var->is_weak)
@@ -4891,7 +4913,7 @@ static void emit_symbol2(Obj *var, char *name, char *vis) {
     Printftn(".set \"%s\", \"%s\"", asm_name(var), var->alias_name);
 }
 
-static void emit_symbol(Obj *var, char *name) {
+static void emit_symbol(Obj *var, const char *name) {
   emit_symbol2(var, name, var->visibility ? var->visibility : opt_visibility);
 }
 
@@ -4912,7 +4934,7 @@ static bool is_rodata_obj(Obj *var) {
 
 static void emit_data(Obj *var) {
   int64_t sz = var->ty->size;
-  char *var_name = get_symbol(var);
+  const char *var_name = get_symbol(var);
 
   if (var->ty->kind == TY_ARRAY && sz < 0)
     sz = var->ty->base->size;
@@ -5009,14 +5031,14 @@ static void emit_data(Obj *var) {
     if (!rel)
       break;
 
-    char *str = rel->label ? *rel->label : get_symbol(rel->var);
+    const char *str = rel->label ? *rel->label : get_symbol(rel->var);
     Printftn(".quad \"%s\"%+ld", str, rel->addend);
     pos += 8;
     rel = rel->next;
   }
 }
 
-static void store_fp(int r, int sz, int ofs, char *ptr) {
+static void store_fp(int r, int sz, int ofs, const char *ptr) {
   switch (sz) {
   case 4: Printftn("movss %%xmm%d, %d(%s)", r, ofs, ptr); return;
   case 8: Printftn("movsd %%xmm%d, %d(%s)", r, ofs, ptr); return;
@@ -5024,7 +5046,7 @@ static void store_fp(int r, int sz, int ofs, char *ptr) {
   internal_error();
 }
 
-static void store_gp2(char **r, int sz, int dofs, char *dptr) {
+static void store_gp2(const char **r, int sz, int dofs, const char *dptr) {
   for (int ofs = 0;;) {
     int rem = sz - ofs;
     int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;
@@ -5041,11 +5063,11 @@ static void store_gp2(char **r, int sz, int dofs, char *dptr) {
   }
 }
 
-static void store_gp(int idx, int sz, int ofs, char *ptr) {
+static void store_gp(int idx, int sz, int ofs, const char *ptr) {
   store_gp2(regs[argreg[idx]], sz, ofs, ptr);
 }
 
-static void emit_cdtor(char *sec, uint16_t priority, char *fn_name) {
+static void emit_cdtor(const char *sec, uint16_t priority, const char *fn_name) {
   Printfts(".section .%s", sec);
   if (priority)
     Printf(".%" PRIu16, (uint16_t)(priority - 1));
@@ -5062,7 +5084,7 @@ void emit_text(Obj *fn) {
   fn->output = calloc(1, sizeof(FuncObj));
   output_file = open_memstream(&fn->output->buf, &fn->output->buflen);
 
-  char *fn_name = asm_name(fn);
+  const char *fn_name = asm_name(fn);
 
   if (fn->is_ctor)
     emit_cdtor("init_array", fn->ctor_prior, fn_name);

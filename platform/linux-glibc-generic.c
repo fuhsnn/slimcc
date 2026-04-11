@@ -56,12 +56,12 @@ void platform_search_dirs(StringArray *paths) {
   strarray_push(paths, "/lib");
 }
 
-void run_assembler(StringArray *as_args, char *input, char *output) {
+void run_assembler(StringArray *as_args, const char *input, const char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
-static char *libpath(void) {
-  static char *path;
+static const char *libpath(void) {
+  static const char *path;
   if (!path) {
     if (file_exists("/usr/lib/x86_64-linux-gnu/crti.o"))
       path = "/usr/lib/x86_64-linux-gnu";
@@ -74,7 +74,7 @@ static char *libpath(void) {
   return path;
 }
 
-void run_linker(StringArray *paths, StringArray *inputs, char *output) {
+void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
   run_linker_gnustyle(paths, inputs, output, "/lib64/ld-linux-x86-64.so.2", libpath(),
                       gcclibpath);
 }

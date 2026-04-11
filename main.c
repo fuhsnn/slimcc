@@ -18,7 +18,7 @@ typedef enum {
 } LinkType;
 
 typedef struct {
-  char *arg;
+  const char *arg;
   bool is_def;
 } MacroChange;
 
@@ -44,7 +44,7 @@ bool opt_func_sections;
 bool opt_data_sections;
 bool opt_werror;
 bool opt_cc1_asm_pp;
-char *opt_visibility;
+const char *opt_visibility;
 StdVer opt_std = STD_C17;
 bool is_iso_std;
 bool opt_fdefer_ts;
@@ -83,14 +83,14 @@ bool opt_s;
 bool opt_nostartfiles;
 bool opt_nodefaultlibs;
 bool opt_nolibc;
-char *default_ld = "ld";
-char *default_as = "as";
-char *dumpmachine_str;
-static char *opt_use_ld;
-static char *opt_use_as;
-static char *opt_MF;
-static char *opt_MT;
-static char *opt_o;
+const char *default_ld = "ld";
+const char *default_as = "as";
+const char *dumpmachine_str;
+static const char *opt_use_ld;
+static const char *opt_use_as;
+static const char *opt_MF;
+static const char *opt_MT;
+static const char *opt_o;
 
 static StringArray ld_paths;
 static StringArray input_args;
@@ -104,13 +104,13 @@ static int incl_cnt;
 static bool is_fork_child;
 char *argv0;
 
-static void cc1(char *input_file, char *output, bool is_asm_pp);
+static void cc1(const char *input_file, const char *output, bool is_asm_pp);
 
 static void version(void) {
   puts("slimcc version 0.0");
 }
 
-static bool startswith(char *arg, char **p, char *str) {
+static bool startswith(const char *arg, const char **p, const char *str) {
   size_t len = strlen(str);
   if (!strncmp(arg, str, len)) {
     *p = arg + len;
@@ -119,7 +119,7 @@ static bool startswith(char *arg, char **p, char *str) {
   return false;
 }
 
-static bool take_arg(char **argv, int *i, char **arg, char *opt) {
+static bool take_arg(char **argv, int *i, const char **arg, const char *opt) {
   if (strcmp(argv[*i], opt))
     return false;
   *i += 1;
@@ -131,11 +131,11 @@ static bool take_arg(char **argv, int *i, char **arg, char *opt) {
   exit(1);
 }
 
-static bool take_arg_s(char **argv, int *i, char **p, char *str) {
+static bool take_arg_s(char **argv, int *i, const char **p, const char *str) {
   return take_arg(argv, i, p, str) || startswith(argv[*i], p, str);
 }
 
-static bool comma_arg(char *arg, StringArray *arr, char *str) {
+static bool comma_arg(const char *arg, StringArray *arr, const char *str) {
   if (startswith(arg, &arg, str)) {
     arg = strtok(strdup(arg), ",");
     while (arg) {
@@ -147,7 +147,7 @@ static bool comma_arg(char *arg, StringArray *arr, char *str) {
   return false;
 }
 
-void add_include_path(StringArray *arr, char *path) {
+void add_include_path(StringArray *arr, const char *path) {
   size_t orig_len = strlen(path);
   size_t len = orig_len;
 
@@ -155,7 +155,7 @@ void add_include_path(StringArray *arr, char *path) {
     len--;
 
   for (int i = 0; i < arr->len; i++) {
-    char *s2 = arr->data[i];
+    const char *s2 = arr->data[i];
     if (!strncmp(s2, path, len) && s2[len] == '\0')
       return;
   }
@@ -166,7 +166,7 @@ void add_include_path(StringArray *arr, char *path) {
   strarray_push(arr, path);
 }
 
-static FileType parse_opt_x(char *s) {
+static FileType parse_opt_x(const char *s) {
   if (!strcmp(s, "c"))
     return FILE_C;
   if (!strcmp(s, "assembler"))
@@ -178,7 +178,7 @@ static FileType parse_opt_x(char *s) {
   error("<command line>: unknown argument for -x: %s", s);
 }
 
-static bool set_bool(char *p, bool val, char *str, bool *opt) {
+static bool set_bool(const char *p, bool val, const char *str, bool *opt) {
   if (!strcmp(p, str)) {
     *opt = val;
     return true;
@@ -186,11 +186,11 @@ static bool set_bool(char *p, bool val, char *str, bool *opt) {
   return false;
 }
 
-static bool set_true(char *p, char *str, bool *opt) {
+static bool set_true(const char *p, const char *str, bool *opt) {
   return set_bool(p, true, str, opt);
 }
 
-static void set_std(bool is_iso, char *arg) {
+static void set_std(bool is_iso, const char *arg) {
   char *end;
   int val = strtoul(arg, &end, 10);
 
@@ -210,7 +210,7 @@ static void set_std(bool is_iso, char *arg) {
   error("unknown c standard");
 }
 
-void set_fpic(char *lvl) {
+void set_fpic(const char *lvl) {
   opt_fpic = true;
   opt_fpie = false;
   define_macro("__pic__", lvl);
@@ -219,7 +219,7 @@ void set_fpic(char *lvl) {
   undef_macro("__PIE__");
 }
 
-void set_fpie(char *lvl) {
+void set_fpie(const char *lvl) {
   opt_fpic = false;
   opt_fpie = true;
   define_macro("__pic__", lvl);
@@ -228,7 +228,7 @@ void set_fpie(char *lvl) {
   define_macro("__PIE__", lvl);
 }
 
-static void macrochange_push(MacroChangeArr *arr, char *arg, bool is_def) {
+static void macrochange_push(MacroChangeArr *arr, const char *arg, bool is_def) {
   if (arr->len == arr->capacity) {
     arr->capacity += 4;
     arr->data = realloc(arr->data, sizeof(MacroChange) * arr->capacity);
@@ -262,7 +262,7 @@ static void build_macros(MacroChangeArr *arr, bool is_asm_pp) {
   }
 }
 
-static char *quote_makefile(char *s) {
+static char *quote_makefile(const char *s) {
   char *buf = calloc(1, strlen(s) * 2 + 1);
 
   for (int i = 0, j = 0; s[i]; i++) {
@@ -291,7 +291,7 @@ static char *quote_makefile(char *s) {
   return buf;
 }
 
-static void build_incl_paths(char *opt_B, bool opt_nostdinc, StringArray *isystem,
+static void build_incl_paths(const char *opt_B, bool opt_nostdinc, StringArray *isystem,
                              StringArray *idirafter) {
   if (opt_B)
     add_include_path(&sysincl_paths, opt_B);
@@ -320,7 +320,7 @@ static void build_incl_paths(char *opt_B, bool opt_nostdinc, StringArray *isyste
     strarray_push(&include_paths, sysincl_paths.data[i]);
 }
 
-static void build_ld_paths(char *opt_B, StringArray *paths) {
+static void build_ld_paths(const char *opt_B, StringArray *paths) {
   if (opt_B)
     strarray_push(&ld_paths, opt_B);
 
@@ -331,9 +331,9 @@ static void build_ld_paths(char *opt_B, StringArray *paths) {
 }
 
 static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
-  char *arg;
+  const char *arg;
   int input_cnt = 0;
-  char *opt_B = NULL;
+  const char *opt_B = NULL;
   bool has_wl = false;
   bool has_gnu_keywords_option = false;
   bool opt_nostdinc = false;
@@ -819,7 +819,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   *run_ld = has_wl && !(opt_c || opt_S || opt_E);
 }
 
-static FILE *open_file(char *path) {
+static FILE *open_file(const char *path) {
   if (!path || strcmp(path, "-") == 0)
     return stdout;
 
@@ -836,14 +836,14 @@ static void close_file(FILE *file) {
     fclose(file);
 }
 
-static bool endswith(char *p, char *q) {
+static bool endswith(const char *p, const char *q) {
   int len1 = strlen(p);
   int len2 = strlen(q);
   return (len1 >= len2) && !strcmp(p + len1 - len2, q);
 }
 
 // Replace file extension
-static char *replace_extn(char *tmpl, char *extn) {
+static const char *replace_extn(const char *tmpl, const char *extn) {
   char *filename = basename(strdup(tmpl));
   char *dot = strrchr(filename, '.');
   if (dot)
@@ -876,7 +876,7 @@ static char *create_tmpfile(void) {
   return path;
 }
 
-void run_subprocess(char **argv) {
+void run_subprocess(const char **argv) {
   if (opt_hash_hash_hash || opt_verbose) {
     fprintf(stderr, "\"%s\"", argv[0]);
     for (int i = 1; argv[i]; i++)
@@ -900,7 +900,7 @@ void run_subprocess(char **argv) {
   }
 }
 
-static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
+static void run_cc1(const char *input, const char *output, bool no_fork, bool is_asm_pp) {
   if (opt_hash_hash_hash)
     return;
 
@@ -921,7 +921,7 @@ static void run_cc1(char *input, char *output, bool no_fork, bool is_asm_pp) {
 }
 
 static void print_linemarker(FILE *out, Token *tok) {
-  char *name = display_files.data[tok->display_file_no];
+  const char *name = display_files.data[tok->display_file_no];
   if (!strcmp(name, "-"))
     name = "<stdin>";
   if (!tok->at_bol)
@@ -970,7 +970,7 @@ bool in_sysincl_path(int idx) {
   return idx >= incl_cnt;
 }
 
-bool ignore_missing_dep(char *path, char *filename, Token *tok) {
+bool ignore_missing_dep(const char *path, const char *filename, Token *tok) {
   if (!path) {
     if (opt_MG) {
       add_dep_file(filename, false);
@@ -983,7 +983,7 @@ bool ignore_missing_dep(char *path, char *filename, Token *tok) {
   return false;
 }
 
-void add_dep_file(char *path, bool is_sys) {
+void add_dep_file(const char *path, bool is_sys) {
   if (opt_M || opt_MD) {
     if (is_sys && (opt_MM || opt_MMD))
       return;
@@ -997,7 +997,7 @@ void add_dep_file(char *path, bool is_sys) {
   }
 }
 
-static char *skip_dot_slash(char *p) {
+static const char *skip_dot_slash(const char *p) {
   if (*p == '.' && p[1] == '/') {
     for (p += 2; *p == '/';)
       p++;
@@ -1005,8 +1005,8 @@ static char *skip_dot_slash(char *p) {
   return p;
 }
 
-static void print_dependencies(char *input) {
-  char *path;
+static void print_dependencies(const char *input) {
+  const char *path;
   if (opt_MF)
     path = opt_MF;
   else if (opt_MD)
@@ -1034,7 +1034,7 @@ static void print_dependencies(char *input) {
   close_file(out);
 }
 
-static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
+static void cc1(const char *input_file, const char *output_file, bool is_asm_pp) {
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
@@ -1069,7 +1069,7 @@ static void cc1(char *input_file, char *output_file, bool is_asm_pp) {
   close_file(out);
 }
 
-void run_assembler_gnustyle(StringArray *args, char *input, char *output) {
+void run_assembler_gnustyle(StringArray *args, const char *input, const char *output) {
   StringArray arr = {0};
 
   strarray_push(&arr, opt_use_as ? opt_use_as : default_as);
@@ -1086,7 +1086,7 @@ void run_assembler_gnustyle(StringArray *args, char *input, char *output) {
   run_subprocess(arr.data);
 }
 
-static char *find_file(char *pattern) {
+static char *find_file(const char *pattern) {
   char *path = NULL;
   glob_t buf = {0};
   glob(pattern, 0, NULL, &buf);
@@ -1096,7 +1096,7 @@ static char *find_file(char *pattern) {
   return path;
 }
 
-char *find_dir_w_file(char *pattern) {
+char *find_dir_w_file(const char *pattern) {
   static char *path;
   if (!path) {
     path = find_file(pattern);
@@ -1107,7 +1107,7 @@ char *find_dir_w_file(char *pattern) {
   return path;
 }
 
-bool file_exists(char *path) {
+bool file_exists(const char *path) {
   struct stat st;
   return !stat(path, &st);
 }
@@ -1126,7 +1126,7 @@ static LinkType get_link_type(void) {
   return LT_DYNAMIC;
 }
 
-static LinkType link_type(StringArray *arr, char *ldso_path) {
+static LinkType link_type(StringArray *arr, const char *ldso_path) {
   LinkType type = get_link_type();
 
   switch (type) {
@@ -1183,8 +1183,9 @@ static void link_libc(StringArray *arr) {
   }
 }
 
-void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
-                         char *ldso_path, char *libpath, char *gcc_libpath) {
+void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *output,
+                         const char *ldso_path, const char *libpath,
+                         const char *gcc_libpath) {
   StringArray arr = {0};
 
   strarray_push(&arr, opt_use_ld ? opt_use_ld : default_ld);
@@ -1257,7 +1258,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, char *output,
   run_subprocess(arr.data);
 }
 
-static FileType get_file_type(char *filename) {
+static FileType get_file_type(const char *filename) {
   if (endswith(filename, ".c"))
     return FILE_C;
   if (endswith(filename, ".s"))
@@ -1297,7 +1298,7 @@ int main(int argc, char **argv) {
     if (comma_arg(input_args.data[i], &ld_args, "-Wl,"))
       continue;
 
-    char *input = input_args.data[i];
+    const char *input = input_args.data[i];
 
     FileType type = opt_x ? opt_x : get_file_type(input);
 
@@ -1307,7 +1308,7 @@ int main(int argc, char **argv) {
       continue;
     }
 
-    char *output;
+    const char *output;
     if (opt_o) {
       if (opt_c || opt_S || opt_E)
         if (src_cnt++)

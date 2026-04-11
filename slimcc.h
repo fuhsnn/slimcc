@@ -138,7 +138,7 @@ extern bool free_alloc;
 //
 
 typedef struct {
-  char *key;
+  const char *key;
   int keylen;
   void *val;
 } HashEntry;
@@ -149,13 +149,13 @@ typedef struct {
   int used;
 } HashMap;
 
-HashEntry *hashmap_get_or_insert(HashMap *map, char *key, int keylen);
-void *hashmap_get(HashMap *map, char *key);
-void *hashmap_get2(HashMap *map, char *key, int keylen);
-void hashmap_put(HashMap *map, char *key, void *val);
-void hashmap_put2(HashMap *map, char *key, int keylen, void *val);
-void hashmap_delete(HashMap *map, char *key);
-void hashmap_delete2(HashMap *map, char *key, int keylen);
+HashEntry *hashmap_get_or_insert(HashMap *map, const char *key, int keylen);
+void *hashmap_get(HashMap *map, const char *key);
+void *hashmap_get2(HashMap *map, const char *key, int keylen);
+void hashmap_put(HashMap *map, const char *key, void *val);
+void hashmap_put2(HashMap *map, const char *key, int keylen, void *val);
+void hashmap_delete(HashMap *map, const char *key);
+void hashmap_delete2(HashMap *map, const char *key, int keylen);
 void hashmap_test(void);
 
 //
@@ -163,13 +163,13 @@ void hashmap_test(void);
 //
 
 typedef struct {
-  char **data;
+  const char **data;
   int capacity;
   int len;
 } StringArray;
 
-void strarray_push(StringArray *arr, char *s);
-char *format(char *fmt, ...) FMTCHK(1, 2);
+void strarray_push(StringArray *arr, const char *s);
+char *format(const char *fmt, ...) FMTCHK(1, 2);
 
 //
 // tokenize.c
@@ -256,8 +256,8 @@ typedef enum {
 
 typedef struct File File;
 struct File {
-  char *name;
-  char *contents;
+  const char *name;
+  const char *contents;
   int file_no;
 
   int display_file_no;
@@ -277,8 +277,8 @@ struct Token {
   bool is_root : 1;
   bool is_live : 1;
   bool has_ucn : 1;
-  int len;   // Token length
-  char *loc; // Token location
+  int len;         // Token length
+  const char *loc; // Token location
   File *file;
   Token *origin; // If this is expanded from a macro, the original token
   int line_no;   // Line number
@@ -296,20 +296,20 @@ struct Token {
   ANON_UNION_END
 };
 
-void error(char *fmt, ...) FMTCHK(1, 2) NORETURN;
-void error_ice(char *file, int32_t line) NORETURN;
-void error_at(char *loc, char *fmt, ...) FMTCHK(2, 3) NORETURN;
-void error_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3) NORETURN;
-void warn_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3);
-void notice_tok(Token *tok, char *fmt, ...) FMTCHK(2, 3);
-void verror_at_tok(Token *tok, char *fmt, va_list ap);
-bool equal(Token *tok, char *op);
-bool equal_ext(Token *tok, char *op);
-Token *skip(Token *tok, char *op);
-bool consume(Token **rest, Token *tok, char *str);
-Token *tokenize_file(char *path, Token *tok, Token **end);
-File *new_file(char *name, char *contents);
-int add_display_file(char *path);
+void error(const char *fmt, ...) FMTCHK(1, 2) NORETURN;
+void error_ice(const char *file, int32_t line) NORETURN;
+void error_at(const char *loc, const char *fmt, ...) FMTCHK(2, 3) NORETURN;
+void error_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3) NORETURN;
+void warn_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
+void notice_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
+void verror_at_tok(Token *tok, const char *fmt, va_list ap);
+bool equal(Token *tok, const char *op);
+bool equal_ext(Token *tok, const char *op);
+Token *skip(Token *tok, const char *op);
+bool consume(Token **rest, Token *tok, const char *str);
+Token *tokenize_file(const char *path, Token *tok, Token **end);
+File *new_file(const char *name, const char *contents);
+int add_display_file(const char *path);
 void tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, SlashDelta *delta, Token **end);
 void convert_pp_number(Token *tok, Node *node);
@@ -324,11 +324,11 @@ void convert_ucn_ident(Token *tok);
 //
 
 void init_macros(void);
-void define_macro(char *name, char *buf);
-void define_macro_cli(char *str);
-void undef_macro(char *name);
+void define_macro(const char *name, const char *buf);
+void define_macro_cli(const char *str);
+void undef_macro(const char *name);
 void dump_defines(FILE *out);
-Token *preprocess(char *file, StringArray *incls, StringArray *macros);
+Token *preprocess(const char *file, StringArray *incls, StringArray *macros);
 Token *prepare_parse(Token *tok);
 Token *skip_line(Token *tok);
 bool is_pragma(Token **rest, Token *tok);
@@ -353,7 +353,7 @@ struct Obj {
 
   // Local variable
   int ofs;
-  char *ptr;
+  const char *ptr;
   Obj *param_next;
   bool pass_by_stack;
   int stack_offset;
@@ -660,7 +660,7 @@ bool is_const_zero_bitint(Node *node);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool equal_tok(Token *a, Token *b);
 char *new_unique_name(void);
-Obj *get_symbol_var(char *);
+Obj *get_symbol_var(const char *);
 Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **cond_var);
 
 //
@@ -893,10 +893,10 @@ void emit_text(Obj *fn);
 //
 
 int encode_utf8(char *buf, uint32_t c);
-uint32_t decode_utf8(char **new_pos, char *p);
+uint32_t decode_utf8(const char **new_pos, const char *p);
 bool is_ident1(uint32_t c);
 bool is_ident2(uint32_t c);
-int display_width(char *p, int len);
+int display_width(const char *p, int len);
 
 //
 // platform.c
@@ -905,8 +905,8 @@ int display_width(char *p, int len);
 void platform_init(void);
 void platform_stdinc_paths(StringArray *paths);
 void platform_search_dirs(StringArray *paths);
-void run_assembler(StringArray *as_args, char *input, char *output);
-void run_linker(StringArray *paths, StringArray *inputs, char *output);
+void run_assembler(StringArray *as_args, const char *input, const char *output);
+void run_linker(StringArray *paths, StringArray *inputs, const char *output);
 
 //
 // main.c
@@ -915,18 +915,19 @@ void run_linker(StringArray *paths, StringArray *inputs, char *output);
 typedef enum { STD_C89, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
 
 void cleanup_exit(int status) NORETURN;
-bool file_exists(char *path);
+bool file_exists(const char *path);
 bool in_sysincl_path(int idx);
-bool ignore_missing_dep(char *path, char *filename, Token *tok);
-void add_dep_file(char *path, bool is_sys);
-char *find_dir_w_file(char *pattern);
-void run_subprocess(char **argv);
-void set_fpic(char *lvl);
-void set_fpie(char *lvl);
-void add_include_path(StringArray *arr, char *s);
-void run_assembler_gnustyle(StringArray *as_args, char *input, char *output);
-void run_linker_gnustyle(StringArray *paths, StringArray *inputs, char *output,
-                         char *ldso_path, char *libpath, char *gcclibpath);
+bool ignore_missing_dep(const char *path, const char *filename, Token *tok);
+void add_dep_file(const char *path, bool is_sys);
+char *find_dir_w_file(const char *pattern);
+void run_subprocess(const char **argv);
+void set_fpic(const char *lvl);
+void set_fpie(const char *lvl);
+void add_include_path(StringArray *arr, const char *s);
+void run_assembler_gnustyle(StringArray *as_args, const char *input, const char *output);
+void run_linker_gnustyle(StringArray *paths, StringArray *inputs, const char *output,
+                         const char *ldso_path, const char *libpath,
+                         const char *gcclibpath);
 
 extern char *argv0;
 extern StringArray include_paths;
@@ -946,7 +947,7 @@ extern bool opt_g;
 extern bool opt_func_sections;
 extern bool opt_data_sections;
 extern bool opt_werror;
-extern char *opt_visibility;
+extern const char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
 extern bool is_iso_std;
@@ -971,8 +972,8 @@ extern bool opt_s;
 extern bool opt_nostartfiles;
 extern bool opt_nodefaultlibs;
 extern bool opt_nolibc;
-extern char *default_ld;
-extern char *default_as;
-extern char *dumpmachine_str;
+extern const char *default_ld;
+extern const char *default_as;
+extern const char *dumpmachine_str;
 
 #endif

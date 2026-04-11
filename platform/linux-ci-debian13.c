@@ -29,11 +29,11 @@ void platform_search_dirs(StringArray *paths) {
   strarray_push(paths, "/usr/lib/x86_64-linux-gnu");
 }
 
-void run_assembler(StringArray *as_args, char *input, char *output) {
+void run_assembler(StringArray *as_args, const char *input, const char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
-void run_linker(StringArray *paths, StringArray *inputs, char *output) {
+void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
   run_linker_gnustyle(paths, inputs, output, "/usr/lib64/ld-linux-x86-64.so.2",
                       "/usr/lib/x86_64-linux-gnu", "/usr/lib/gcc/x86_64-linux-gnu/14");
 }

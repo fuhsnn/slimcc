@@ -185,7 +185,7 @@ static bool *eval_recover;
 
 static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
-static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma);
+static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool skip_comma);
 static Type *typename(Token **rest, Token *tok);
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
@@ -346,7 +346,7 @@ static void push_tag_scope(Token *tag, Type *ty) {
   hashmap_put2(&decl_scope()->tags, tag->loc, tag->len, ty);
 }
 
-Obj *get_symbol_var(char *name) {
+Obj *get_symbol_var(const char *name) {
   return hashmap_get(&symbols, name);
 }
 
@@ -379,7 +379,7 @@ bool equal_tok(Token *a, Token *b) {
   return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
 }
 
-static bool equal_substr(char *loc, size_t len, char *op) {
+static bool equal_substr(const char *loc, size_t len, const char *op) {
   return strlen(op) == len && !memcmp(loc, op, len);
 }
 
@@ -649,7 +649,7 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
   }
 }
 
-static VarScope *push_var_scope(char *key, int keylen, Obj *var) {
+static VarScope *push_var_scope(const char *key, int keylen, Obj *var) {
   HashEntry *ent = hashmap_get_or_insert(&decl_scope()->vars, key, keylen);
   VarScope *vsc = ent->val;
   if (vsc)
@@ -659,7 +659,7 @@ static VarScope *push_var_scope(char *key, int keylen, Obj *var) {
   return NULL;
 }
 
-static void push_var_name2(char *key, int keylen, Token *tok, Obj *var) {
+static void push_var_name2(const char *key, int keylen, Token *tok, Obj *var) {
   VarScope *vsc = push_var_scope(key, keylen, var);
   if (vsc)
     error_tok(tok, "redeclaration of '%.*s'", keylen, key);
@@ -792,7 +792,7 @@ static void chain_expr(Node **lhs, Node *rhs) {
     *lhs = !*lhs ? rhs : new_binary(ND_CHAIN, *lhs, rhs, rhs->tok);
 }
 
-static bool comma_list(Token **rest, Token **tok_rest, char *end, bool skip_comma) {
+static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool skip_comma) {
   Token *tok = *tok_rest;
   if (consume(rest, tok, end))
     return false;
@@ -902,7 +902,7 @@ static void attr_cleanup(Token *loc, TokenKind kind, Obj **fn) {
   }
 }
 
-static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor,
+static void apply_cdtor_attr(const char *attr_name, Token *tok, bool *is_cdtor,
                              uint16_t *priority, uint16_t pri, bool apply) {
   if (apply) {
     if (*is_cdtor && *priority != pri)
@@ -912,7 +912,7 @@ static void apply_cdtor_attr(char *attr_name, Token *tok, bool *is_cdtor,
   }
 }
 
-static void cdtor_attr(Token *loc, TokenKind kind, char *name, bool *is_cdtor,
+static void cdtor_attr(Token *loc, TokenKind kind, const char *name, bool *is_cdtor,
                        uint16_t *priority) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind != kind)
@@ -927,7 +927,7 @@ static void cdtor_attr(Token *loc, TokenKind kind, char *name, bool *is_cdtor,
   }
 }
 
-static void bool_attr(Token *loc, TokenKind kind, char *name, bool *b) {
+static void bool_attr(Token *loc, TokenKind kind, const char *name, bool *b) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind == kind && equal_ext(tok, name)) {
       *b = true;
@@ -936,7 +936,8 @@ static void bool_attr(Token *loc, TokenKind kind, char *name, bool *b) {
   }
 }
 
-static void apply_str_attr(char *attr_name, Token *tok, char **var_str, char *attr_str) {
+static void apply_str_attr(const char *attr_name, Token *tok, char **var_str,
+                           char *attr_str) {
   if (!*var_str) {
     *var_str = attr_str;
     return;
@@ -945,7 +946,7 @@ static void apply_str_attr(char *attr_name, Token *tok, char **var_str, char *at
     error_tok(tok, "conflict of attribute \'%s\'", attr_name);
 }
 
-static void str_attr(Token *loc, TokenKind kind, char *name, char **str) {
+static void str_attr(Token *loc, TokenKind kind, const char *name, char **str) {
   for (Token *tok = loc->attr_next; tok; tok = tok->attr_next) {
     if (tok->kind == kind && equal_ext(tok, name)) {
       Token *t;
@@ -1877,7 +1878,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   return expr;
 }
 
-static Node *cond_declaration(Token **rest, Token *tok, char *stopper, int clause) {
+static Node *cond_declaration(Token **rest, Token *tok, const char *stopper, int clause) {
   Node *n = NULL;
 
   for (;; clause++) {
@@ -3311,7 +3312,7 @@ static Node *expression(Token **rest, Token *tok) {
   return node;
 }
 
-static int64_t eval_error2(Node *node, char *fmt, ...) {
+static int64_t eval_error2(Node *node, const char *fmt, ...) {
   if (eval_recover) {
     *eval_recover = true;
     return 0;
@@ -4120,7 +4121,7 @@ static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
   *rest = skip(tok, ")");
 
   Node *binary;
-  char *loc = start->loc + 23;
+  const char *loc = start->loc + 23;
   int len = start->len - 23;
 
   if (equal_substr(loc, len, "add"))
@@ -5454,7 +5455,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     *rest = skip(skip(tok->next, "("), ")");
 
     Node *node = new_node(ND_NUM, tok);
-    char *loc = tok->loc + 24;
+    const char *loc = tok->loc + 24;
     int len = tok->len - 24;
 
     if (equal_substr(loc, len, "nanf")) {

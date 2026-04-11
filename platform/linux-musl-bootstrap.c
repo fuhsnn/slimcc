@@ -21,11 +21,11 @@ void platform_search_dirs(StringArray *paths) {
   strarray_push(paths, ROOT_DIR "/lib");
 }
 
-void run_assembler(StringArray *as_args, char *input, char *output) {
+void run_assembler(StringArray *as_args, const char *input, const char *output) {
   run_assembler_gnustyle(as_args, input, output);
 }
 
-void run_linker(StringArray *paths, StringArray *inputs, char *output) {
+void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
   strarray_push(inputs, "--gc-sections");
 
   run_linker_gnustyle(paths, inputs, output, ROOT_DIR "/lib/libc.so", ROOT_DIR "/lib",

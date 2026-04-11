@@ -15,7 +15,7 @@
 #define TOMBSTONE ((void *)-1)
 #define TOMBSTONE_CASE ((uintptr_t)-1)
 
-static uint64_t fnv_hash(char *s, int len) {
+static uint64_t fnv_hash(const char *s, int len) {
   uint64_t hash = 0xcbf29ce484222325;
   for (int i = 0; i < len; i++) {
     hash *= 0x100000001b3;
@@ -54,7 +54,7 @@ static void rehash(HashMap *map) {
   *map = map2;
 }
 
-static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
+static HashEntry *get_entry(HashMap *map, const char *key, int keylen) {
   if (!map->buckets)
     return NULL;
 
@@ -79,7 +79,7 @@ static HashEntry *get_entry(HashMap *map, char *key, int keylen) {
   }
 }
 
-HashEntry *hashmap_get_or_insert(HashMap *map, char *key, int keylen) {
+HashEntry *hashmap_get_or_insert(HashMap *map, const char *key, int keylen) {
   if (!map->buckets) {
     map->buckets = calloc(INIT_SIZE, sizeof(HashEntry));
     map->capacity = INIT_SIZE;
@@ -110,29 +110,29 @@ HashEntry *hashmap_get_or_insert(HashMap *map, char *key, int keylen) {
   }
 }
 
-void *hashmap_get(HashMap *map, char *key) {
+void *hashmap_get(HashMap *map, const char *key) {
   return hashmap_get2(map, key, strlen(key));
 }
 
-void *hashmap_get2(HashMap *map, char *key, int keylen) {
+void *hashmap_get2(HashMap *map, const char *key, int keylen) {
   HashEntry *ent = get_entry(map, key, keylen);
   return ent ? ent->val : NULL;
 }
 
-void hashmap_put(HashMap *map, char *key, void *val) {
+void hashmap_put(HashMap *map, const char *key, void *val) {
   hashmap_put2(map, key, strlen(key), val);
 }
 
-void hashmap_put2(HashMap *map, char *key, int keylen, void *val) {
+void hashmap_put2(HashMap *map, const char *key, int keylen, void *val) {
   HashEntry *ent = hashmap_get_or_insert(map, key, keylen);
   ent->val = val;
 }
 
-void hashmap_delete(HashMap *map, char *key) {
+void hashmap_delete(HashMap *map, const char *key) {
   hashmap_delete2(map, key, strlen(key));
 }
 
-void hashmap_delete2(HashMap *map, char *key, int keylen) {
+void hashmap_delete2(HashMap *map, const char *key, int keylen) {
   HashEntry *ent = get_entry(map, key, keylen);
   if (ent)
     ent->key = TOMBSTONE;
