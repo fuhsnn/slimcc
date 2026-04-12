@@ -17,6 +17,13 @@ typedef enum {
   LT_PIE,
 } LinkType;
 
+typedef enum {
+  PR_NORMAL = 0,
+  PR_NOFORK,
+  PR_PIPE,
+  PR_HHH,
+} ProcMode;
+
 typedef struct {
   const char *arg;
   bool is_def;
@@ -69,7 +76,6 @@ static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
 static bool opt_verbose;
-static bool opt_hash_hash_hash;
 bool opt_pie;
 bool opt_nopie;
 bool opt_pthread;
@@ -97,9 +103,11 @@ static StringArray input_args;
 static StringArray sysincl_paths;
 static StringArray dep_files;
 static StringArray tmpfiles;
+static const char *tmp_folder;
 static StringArray as_args;
 static MacroChangeArr macrodefs;
 static int incl_cnt;
+static ProcMode proc_mode;
 
 static bool is_fork_child;
 char *argv0;
@@ -357,10 +365,12 @@ static void build_ld_paths(const char *opt_B, StringArray *paths) {
   platform_search_dirs(&ld_paths);
 }
 
-static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
+static void parse_args(int argc, char **argv, bool *run_ld) {
   const char *arg;
   int input_cnt = 0;
   const char *opt_B = NULL;
+  bool opt_pipe = false;
+  bool opt_hash_hash_hash = false;
   bool has_wl = false;
   bool has_gnu_keywords_option = false;
   bool opt_nostdinc = false;
@@ -741,7 +751,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
           set_true(arg, "static-libgcc", &opt_static_libgcc) ||
           set_true(arg, "shared", &opt_shared) ||
           set_true(arg, "pie", &opt_pie) ||
-          set_true(arg, "nopie", &opt_nopie))
+          set_true(arg, "nopie", &opt_nopie) ||
+          set_true(arg, "pipe", &opt_pipe))
         continue;
 
       if (!strcmp(arg, "no-pie")) {
@@ -844,7 +855,13 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
   if (no_input)
     error("no input files");
 
-  *no_fork = (input_cnt == 1);
+  if (opt_hash_hash_hash)
+    proc_mode = PR_HHH;
+  else if (opt_pipe)
+    proc_mode = PR_PIPE;
+  else if (input_cnt == 1)
+    proc_mode = PR_NOFORK;
+
   *run_ld = has_wl && !(opt_c || opt_S || opt_E);
 }
 
@@ -883,6 +900,8 @@ static const char *replace_extn(const char *tmpl, const char *extn) {
 static void cleanup(void) {
   for (int i = 0; i < tmpfiles.len; i++)
     unlink(tmpfiles.data[i]);
+  if (tmp_folder)
+    rmdir(tmp_folder);
 }
 
 void cleanup_exit(int status) {
@@ -895,27 +914,37 @@ void cleanup_exit(int status) {
 }
 
 static char *create_tmpfile(void) {
-  char *path = strdup("/tmp/slimcc-XXXXXX");
-  int fd = mkstemp(path);
-  if (fd == -1)
-    error("mkstemp failed: %s", strerror(errno));
-  close(fd);
+  if (!tmp_folder) {
+    tmp_folder = mkdtemp(strdup("/tmp/slimcc-XXXXXX"));
+    if (!tmp_folder)
+      error("mkdtemp failed: %s", strerror(errno));
+  }
+  static int64_t i;
+  char *path = format("%s/%" PRIi64, tmp_folder, i++);
 
   strarray_push(&tmpfiles, path);
   return path;
 }
 
+static char *create_pipefile(void) {
+  char *path = create_tmpfile();
+  if (mkfifo(path, (S_IRUSR | S_IWUSR)) == -1)
+    error("mkfifo failed: %s", strerror(errno));
+  return path;
+}
+
 void run_subprocess(const char **argv) {
-  if (opt_hash_hash_hash || opt_verbose) {
+  if (opt_verbose || proc_mode == PR_HHH) {
     fprintf(stderr, "\"%s\"", argv[0]);
     for (int i = 1; argv[i]; i++)
       fprintf(stderr, " \"%s\"", argv[i]);
     fprintf(stderr, "\n");
-    if (opt_hash_hash_hash)
+    if (proc_mode == PR_HHH)
       return;
   }
 
-  if (fork() == 0) {
+  pid_t id = fork();
+  if (id == 0) {
     is_fork_child = true;
     execvp(argv[0], (char **)argv);
     fprintf(stderr, "exec failed: %s: %s\n", argv[0], strerror(errno));
@@ -923,30 +952,59 @@ void run_subprocess(const char **argv) {
   }
 
   int status;
-  if (wait(&status) <= 0 || status != 0) {
+  if (waitpid(id, &status, 0) <= 0 || status != 0) {
     fprintf(stderr, "exec failed: %s\n", argv[0]);
     cleanup_exit(1);
   }
 }
 
-static void run_cc1(const char *input, const char *output, bool no_fork, bool is_asm_pp) {
-  if (opt_hash_hash_hash)
-    return;
-
-  if (no_fork) {
-    cc1(input, output, is_asm_pp);
-    return;
-  }
-
-  if (fork() == 0) {
+static int fork_cc1(const char *input, const char *output, bool is_asm_pp) {
+  pid_t id = fork();
+  if (id == 0) {
     is_fork_child = true;
     cc1(input, output, is_asm_pp);
     _exit(0);
   }
+  return id;
+}
+
+static void run_cc1(const char *input, const char *output, bool is_asm_pp) {
+  if (proc_mode == PR_HHH)
+    return;
+
+  if (proc_mode == PR_NOFORK) {
+    cc1(input, output, is_asm_pp);
+    return;
+  }
+
+  int id = fork_cc1(input, output, is_asm_pp);
 
   int status;
-  if (wait(&status) <= 0 || status != 0)
+  if (waitpid(id, &status, 0) <= 0 || status != 0)
     cleanup_exit(1);
+}
+
+static void run_cc1_as(const char *input, const char *output, bool is_asm_pp) {
+  if (proc_mode == PR_HHH) {
+    char *tmp = create_tmpfile();
+    run_assembler(&as_args, tmp, output);
+    return;
+  }
+
+  if (proc_mode == PR_PIPE) {
+    char *tmp = create_pipefile();
+    int id = fork_cc1(input, tmp, is_asm_pp);
+    run_assembler(&as_args, tmp, output);
+
+    int status;
+    if (waitpid(id, &status, 0) <= 0 || status != 0)
+      cleanup_exit(1);
+    return;
+  }
+
+  char *tmp = create_tmpfile();
+  run_cc1(input, tmp, is_asm_pp);
+  run_assembler(&as_args, tmp, output);
 }
 
 static void print_linemarker(FILE *out, Token *tok) {
@@ -1069,15 +1127,17 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
 
   build_macros(&macrodefs, is_asm_pp);
 
+  FILE *out = open_file(output_file);
+
   Token *tok = preprocess(input_file, &opt_include, &opt_imacros);
 
   if (opt_M || opt_MD) {
     print_dependencies(input_file);
-    if (opt_M)
+    if (opt_M) {
+      close_file(out);
       return;
+    }
   }
-
-  FILE *out = open_file(output_file);
 
   if (opt_E) {
     if (opt_dM)
@@ -1312,8 +1372,8 @@ int main(int argc, char **argv) {
   init_macros();
   platform_init();
 
-  bool run_ld, no_fork;
-  parse_args(argc, argv, &run_ld, &no_fork);
+  bool run_ld;
+  parse_args(argc, argv, &run_ld);
 
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
@@ -1369,20 +1429,16 @@ int main(int argc, char **argv) {
     // Handle .S
     if (type == FILE_PP_ASM) {
       if (opt_S || opt_E || opt_M) {
-        run_cc1(input, (opt_o ? opt_o : "-"), no_fork, true);
+        run_cc1(input, (opt_o ? opt_o : "-"), true);
         continue;
       }
       if (opt_c) {
-        char *tmp = create_tmpfile();
-        run_cc1(input, tmp, no_fork, true);
-        run_assembler(&as_args, tmp, output);
+        run_cc1_as(input, output, true);
         continue;
       }
-      char *tmp1 = create_tmpfile();
-      char *tmp2 = create_tmpfile();
-      run_cc1(input, tmp1, no_fork, true);
-      run_assembler(&as_args, tmp1, tmp2);
-      strarray_push(&ld_args, tmp2);
+      char *tmp = create_tmpfile();
+      run_cc1_as(input, tmp, true);
+      strarray_push(&ld_args, tmp);
       run_ld = true;
       continue;
     }
@@ -1390,27 +1446,23 @@ int main(int argc, char **argv) {
     assert(type == FILE_C);
 
     if (opt_E || opt_M) {
-      run_cc1(input, (opt_o ? opt_o : "-"), no_fork, false);
+      run_cc1(input, (opt_o ? opt_o : "-"), false);
       continue;
     }
 
     if (opt_S) {
-      run_cc1(input, output, no_fork, false);
+      run_cc1(input, output, false);
       continue;
     }
 
     if (opt_c) {
-      char *tmp = create_tmpfile();
-      run_cc1(input, tmp, no_fork, false);
-      run_assembler(&as_args, tmp, output);
+      run_cc1_as(input, output, false);
       continue;
     }
 
-    char *tmp1 = create_tmpfile();
-    char *tmp2 = create_tmpfile();
-    run_cc1(input, tmp1, no_fork, false);
-    run_assembler(&as_args, tmp1, tmp2);
-    strarray_push(&ld_args, tmp2);
+    char *tmp = create_tmpfile();
+    run_cc1_as(input, tmp, false);
+    strarray_push(&ld_args, tmp);
     run_ld = true;
     continue;
   }
