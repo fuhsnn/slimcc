@@ -556,11 +556,6 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
-    if (take_arg(argv, &i, &arg, "-MF")) {
-      opt_MF = arg;
-      continue;
-    }
-
     if (startswith(argv[i], &arg, "-Wp,-MD,")) {
       opt_MD = true;
       opt_MF = arg;
@@ -583,7 +578,12 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
-    if (take_arg(argv, &i, &arg, "-MT") || startswith(argv[i], &arg, "-Wp,-MT,")) {
+    if (take_arg_s(argv, &i, &arg, "-MF")) {
+      opt_MF = arg;
+      continue;
+    }
+
+    if (take_arg_s(argv, &i, &arg, "-MT") || startswith(argv[i], &arg, "-Wp,-MT,")) {
       if (opt_MT == NULL)
         opt_MT = arg;
       else
@@ -591,7 +591,7 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
       continue;
     }
 
-    if (take_arg(argv, &i, &arg, "-MQ") || startswith(argv[i], &arg, "-Wp,-MQ,")) {
+    if (take_arg_s(argv, &i, &arg, "-MQ") || startswith(argv[i], &arg, "-Wp,-MQ,")) {
       if (opt_MT == NULL)
         opt_MT = quote_makefile(arg);
       else
