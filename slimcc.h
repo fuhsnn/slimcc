@@ -912,7 +912,7 @@ void run_linker(StringArray *paths, StringArray *inputs, const char *output);
 // main.c
 //
 
-typedef enum { STD_C89, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
+typedef enum { STD_C89, STD_C94, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
 
 void cleanup_exit(int status) NORETURN;
 bool file_exists(const char *path);

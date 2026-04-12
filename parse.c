@@ -313,7 +313,7 @@ static Scope *base_scope(void) {
 
 static Scope *decl_scope(void) {
   Scope *sc = scope;
-  while (sc->is_temporary || (sc->is_stmt && opt_std == STD_C89))
+  while (sc->is_temporary || (sc->is_stmt && opt_std < STD_C99))
     sc = sc->parent;
   return sc;
 }
@@ -1259,7 +1259,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     error_tok(tok, "invalid storage class");
 
   if (!ty) {
-    if (opt_std == STD_C89) {
+    if (opt_std < STD_C99) {
       ty = ty_int;
     } else if (opt_std >= STD_C23 && (attr->strg & SC_AUTO)) {
       ty = new_type(TY_AUTO, -1, 0);
@@ -5529,7 +5529,7 @@ static Node *primary(Token **rest, Token *tok) {
       if (node)
         return node;
 
-      if (opt_std == STD_C89) {
+      if (opt_std < STD_C99) {
         Type *ty = func_type(ty_int, tok);
         ty->is_oldstyle = true;
         return new_var_node(func_prototype2(ty, &(VarAttr){0}, tok), tok);

@@ -333,7 +333,7 @@ static bool in_imm_range(int64_t val) {
 }
 
 static bool export_fn(Obj *fn) {
-  if (fn->is_gnu_inline || opt_std == STD_C89 || opt_gnu89_inline)
+  if (fn->is_gnu_inline || opt_gnu89_inline || opt_std < STD_C99)
     return fn->export_fn_gnu;
   return fn->export_fn;
 }

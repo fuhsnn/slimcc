@@ -1773,10 +1773,9 @@ void init_macros(void) {
   define_macro("__STDC_EMBED_FOUND__", "1");
   define_macro("__STDC_EMBED_NOT_FOUND__", "0");
   define_macro("__STDC_HOSTED__", "1");
-  define_macro("__STDC_NO_COMPLEX__", "1");
-  define_macro("__STDC_UTF_16__", "1");
-  define_macro("__STDC_UTF_32__", "1");
   define_macro("__STDC__", "1");
+
+  define_macro("__STDC_NO_COMPLEX__", "1");
 
   define_macro("__STDC_DEFER_TS25755__", "1");
 

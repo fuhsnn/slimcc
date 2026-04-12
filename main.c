@@ -210,6 +210,26 @@ static void set_std(bool is_iso, const char *arg) {
   error("unknown c standard");
 }
 
+static void set_std_iso(const char *arg) {
+  char *end;
+  int val = strtoul(arg, &end, 10);
+
+  if (end != arg) {
+    is_iso_std = true;
+
+    switch (val) {
+    case 1990:   opt_std = STD_C89; return;
+    case 199409: opt_std = STD_C94; return;
+    case 1999:   opt_std = STD_C99; return;
+    case 2011:   opt_std = STD_C11; return;
+    case 2017:
+    case 2018:   opt_std = STD_C17; return;
+    case 2024:   opt_std = STD_C23; return;
+    }
+  }
+  error("unknown c standard");
+}
+
 void set_fpic(const char *lvl) {
   opt_fpic = true;
   opt_fpie = false;
@@ -246,11 +266,18 @@ static void build_macros(MacroChangeArr *arr, bool is_asm_pp) {
       define_macro("__STRICT_ANSI__", "1");
 
     switch (opt_std) {
+    case STD_C94: define_macro("__STDC_VERSION__", "199409L"); break;
     case STD_C99: define_macro("__STDC_VERSION__", "199901L"); break;
     case STD_C11: define_macro("__STDC_VERSION__", "201112L"); break;
     case STD_C17: define_macro("__STDC_VERSION__", "201710L"); break;
     case STD_C23: define_macro("__STDC_VERSION__", "202311L"); break;
     }
+
+    if (opt_std >= STD_C99)
+      define_macro("__GNUC_STDC_INLINE__", "1");
+
+    define_macro("__STDC_UTF_16__", "1");
+    define_macro("__STDC_UTF_32__", "1");
   }
 
   for (int i = 0; i < arr->len; i++) {
@@ -594,6 +621,8 @@ static void parse_args(int argc, char **argv, bool *run_ld, bool *no_fork) {
         set_std(true, arg);
       else if (startswith(arg, &arg, "gnu"))
         set_std(false, arg);
+      else if (startswith(arg, &arg, "iso9899:"))
+        set_std_iso(arg);
       else
         error("unknown c standard");
       continue;
