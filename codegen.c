@@ -4011,15 +4011,18 @@ static Reg ident_reg(const char *str, Token *tok) {
   if (gpreg)
     return gpreg;
 
-  if (!strncmp(str, "xmm", 3) || !strncmp(str, "ymm", 3) || !strncmp(str, "zmm", 3))
-    return REG_X64_XMM0 + strtoul(&str[3], NULL, 10);
-
-  if (!strncmp(str, "st", 2)) {
-    if (str[2] == '(') {
-      unsigned long num = strtoul(&str[3], NULL, 10);
-      return REG_X64_X87_ST0 + MIN(num, 7);
-    }
-    return REG_X64_X87_ST0;
+  if (Inrange(*str, 'x', 'z') && str[1] == 'm' && str[2] == 'm') {
+    str += 3;
+    char *pos;
+    int val = strtoul(str, &pos, 10);
+    if ((pos - str <= 2) && (val <= REG_X64_XMM15 - REG_X64_XMM0) && *pos == '\0')
+      return REG_X64_XMM0 + val;
+  } else if (!strncmp(str, "st", 2)) {
+    str += 2;
+    if (*str == '\0')
+      return REG_X64_X87_ST0;
+    if (*str == '(' && Inrange(str[1], '0', '7') && !strcmp(&str[2], ")"))
+      return REG_X64_X87_ST0 + (str[1] - '0');
   }
   error_tok(tok, "unknown register");
 }
