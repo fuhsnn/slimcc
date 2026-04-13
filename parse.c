@@ -21,7 +21,8 @@ typedef enum {
   PCD_LOGOR,
 } Preced;
 
-enum {
+typedef enum {
+  SC_NONE = 0,
   SC_AUTO = 1,
   SC_CONSTEXPR = 1 << 1,
   SC_EXTERN = 1 << 2,
@@ -30,15 +31,12 @@ enum {
   SC_THREAD = 1 << 5,
   SC_TYPEDEF = 1 << 6,
   SC_ALL = (1 << 7) - 1,
-  SC_NONE = 0,
-};
-
-typedef uint8_t StorageClass;
+  SC_INLINE = 1 << 7,
+} StorageClass;
 
 typedef struct {
   Node *typeof_vm_expr;
-  StorageClass strg;
-  bool is_inline;
+  StorageClass strg : 16;
   bool is_weak;
   bool is_packed;
   bool is_common;
@@ -1078,7 +1076,12 @@ static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
   }
 }
 
-static bool chk_storage_class(uint8_t msk, StorageClass allow) {
+static void chk_inline(VarAttr *attr, Token *tok) {
+  if (attr->strg & SC_INLINE)
+    error_tok(tok, "only function delcarations can be 'inline'");
+}
+
+static bool chk_storage_class(StorageClass msk, StorageClass allow) {
   if (msk == SC_NONE)
     return false;
   if (msk & ~allow)
@@ -1143,7 +1146,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_static:       attr->strg |= SC_STATIC; continue;
     case TK_typedef:      attr->strg |= SC_TYPEDEF; continue;
     case TK_thread_local: attr->strg |= SC_THREAD; continue;
-    case TK_inline:       attr->is_inline = true; continue;
+    case TK_inline:       attr->strg |= SC_INLINE; continue;
     case TK_Noreturn:     attr->is_noreturn = true; continue;
     case TK_constexpr:
       attr->strg |= SC_CONSTEXPR;
@@ -1802,6 +1805,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     error_tok(tok, "variable declared void");
   if (!name)
     error_tok(tok, "variable name omitted");
+  chk_inline(attr, tok);
 
   Node *expr = calc_vla(ty, tok);
 
@@ -1926,7 +1930,7 @@ static Node *cond_declaration(Token **rest, Token *tok, const char *stopper, int
 
 static Node *declaration(Token **rest, Token *tok) {
   VarAttr attr = {0};
-  Type *basety = declspec(&tok, tok, &attr, SC_ALL);
+  Type *basety = declspec(&tok, tok, &attr, SC_ALL | SC_INLINE);
 
   if (attr.strg & SC_EXTERN) {
     global_declaration(rest, tok, basety, &attr);
@@ -1935,13 +1939,21 @@ static Node *declaration(Token **rest, Token *tok) {
 
   Node *expr = calc_vla2(basety, tok, &attr);
 
+  if (equal(tok, ";")) {
+    chk_inline(&attr, tok);
+    *rest = tok->next;
+    return expr;
+  }
+
   if (attr.strg & SC_TYPEDEF) {
+    chk_inline(&attr, tok);
     chain_expr(&expr, parse_typedef(rest, tok, basety, &attr));
     return expr;
   }
 
-  for (bool first = true; comma_list(rest, &tok, ";", !first); first = false)
+  do {
     chain_expr(&expr, declaration2(&tok, tok, basety, &attr, &(Obj *){0}));
+  } while (comma_list(rest, &tok, ";", true));
 
   return expr;
 }
@@ -5866,11 +5878,11 @@ static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarA
 
 static void func_exportness(Obj *fn, VarAttr *attr, bool is_def) {
   if (!fn->is_static && !scope->parent) {
-    fn->export_fn |= !(attr->is_inline && !(attr->strg & SC_EXTERN));
+    fn->export_fn |= !((attr->strg & SC_INLINE) && !(attr->strg & SC_EXTERN));
     if (is_def)
-      fn->export_fn_gnu |= !(attr->is_inline && (attr->strg & SC_EXTERN));
+      fn->export_fn_gnu |= !((attr->strg & SC_INLINE) && (attr->strg & SC_EXTERN));
     else
-      fn->export_fn_gnu |= (attr->is_inline && !(attr->strg & SC_EXTERN));
+      fn->export_fn_gnu |= ((attr->strg & SC_INLINE) && !(attr->strg & SC_EXTERN));
   }
 }
 
@@ -5895,6 +5907,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 
     if (!name)
       error_tok(tok, "variable name omitted");
+    chk_inline(attr, tok);
 
     bool is_definition = !(attr->strg & SC_EXTERN);
     if (!is_definition) {
@@ -6010,9 +6023,17 @@ Obj *parse(Token *tok) {
     }
 
     VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr, SC_ALL);
+    Type *basety = declspec(&tok, tok, &attr, SC_ALL | SC_INLINE);
+
+    if (equal(tok, ";")) {
+      chk_inline(&attr, tok);
+      tok = tok->next;
+      arena_off(&node_arena);
+      continue;
+    }
 
     if (attr.strg & SC_TYPEDEF) {
+      chk_inline(&attr, tok);
       parse_typedef(&tok, tok, basety, &attr);
       arena_off(&node_arena);
       continue;
