@@ -700,11 +700,8 @@ static Token *new_pp_number(char *start, char *p) {
       continue;
     }
     if ((unsigned char)*p >= 128) {
-      char *pos;
-      if (is_ident2(decode_utf8(&pos, p))) {
-        p = pos;
+      if (is_ident2(decode_utf8(&p, p)))
         continue;
-      }
     }
     break;
   }
@@ -788,7 +785,7 @@ static bool convert_pp_int(char *loc, int len, Node *node) {
   }
 
   char *digit_begin = p;
-  uint64_t val = strtoull(p, &p, base);
+  uint64_t val = strtoull(p, (char **)&p, base);
   char *digit_end = p;
 
   bool u = false;
@@ -955,34 +952,39 @@ void tokenize_string_literal(Token *tok, Type *basety) {
 }
 
 void convert_ucn_ident(Token *tok) {
-  char *end = tok->loc + tok->len;
   char *p = tok->loc;
-  char *q = p;
+  char *end = p + tok->len;
+  char *buf = calloc(1, tok->len);
+  char *q = buf;
 
   while (p != end) {
-    if (p < end) {
-      if (*p != '\\') {
-        *q++ = *p++;
+    if (p > end)
+      error_tok(tok, "invalid token");
+
+    if (*p != '\\') {
+      *q++ = *p++;
+      continue;
+    }
+    bool invalid = false;
+    uint32_t c;
+    if (read_ucn(&p, p + 1, &c, &invalid) && !invalid) {
+      if (c <= 0x7F)
+        break;
+      if (q == buf ? is_ident1(c) : is_ident2(c)) {
+        q += encode_utf8(q, c);
         continue;
       }
-      bool invalid = false;
-      uint32_t c;
-      if (read_ucn(&p, p + 1, &c, &invalid) && !invalid) {
-        if (c <= 0x7F)
-          break;
-        if (p == tok->loc ? is_ident1(c) : is_ident2(c)) {
-          q += encode_utf8(q, c);
-          continue;
-        }
-      }
     }
-    error_tok(tok, "invalid token");
   }
-
-  tok->len = q - tok->loc;
-
-  while (q != end)
-    *q++ = ' ';
+  Token *orig = tok->origin;
+  if (!orig) {
+    orig = malloc(sizeof(Token));
+    *orig = *tok;
+  }
+  tok->origin = orig;
+  tok->loc = buf;
+  tok->len = q - buf;
+  tok->file = NULL;
 }
 
 Token *tokenize(File *file, SlashDelta *delta, Token **end) {

@@ -4627,7 +4627,7 @@ static AsmParam *find_op(char *p, char **rest, Token *tok, bool is_label) {
       }
     }
   } else if (Isdigit(*p)) {
-    unsigned long idx = strtoul(p, rest, 10);
+    unsigned long idx = strtoul(p, (char **)rest, 10);
     if (idx < asm_ops_cnt)
       return asm_ops[idx];
   }

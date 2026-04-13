@@ -888,7 +888,7 @@ void run_subprocess(char **argv) {
 
   if (fork() == 0) {
     is_fork_child = true;
-    execvp(argv[0], argv);
+    execvp(argv[0], (char **)argv);
     fprintf(stderr, "exec failed: %s: %s\n", argv[0], strerror(errno));
     _exit(1);
   }

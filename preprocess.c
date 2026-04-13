@@ -1037,15 +1037,15 @@ static char *search_include_paths2(char *filename, char *dir, InclIdx *idx) {
 
   if (*idx <= INCL_REL) {
     if (dir) {
-      dir = strdup(dir);
-      char *path = format("%s/%s", dirname(dir), filename);
+      char *dir2 = strdup(dir);
+      char *path = format("%s/%s", dirname(dir2), filename);
       if (file_exists(path)) {
         *idx = INCL_REL;
-        free(dir);
+        free(dir2);
         return path;
       }
       free(path);
-      free(dir);
+      free(dir2);
 
       for (int i = 0; i < iquote_paths.len; i++) {
         char *path = format("%s/%s", iquote_paths.data[i], filename);
