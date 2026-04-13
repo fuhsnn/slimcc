@@ -4682,6 +4682,14 @@ static void chk_mem_name(HashMap *map, Member *members) {
   }
 }
 
+static bool chk_bitfield_width(int64_t width, Member *mem) {
+  if (width < 0)
+    return true;
+  if (width == 0)
+    return mem->name;
+  return width > bit_size(mem->ty);
+}
+
 static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {0};
   Member *cur = &head;
@@ -4733,10 +4741,13 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       if (consume(&tok, tok, ":")) {
         if (!is_int_class(mem->ty))
           error_tok(tok, "bit-field not integer");
+
+        int64_t width = const_expr(&tok, tok);
+        if (chk_bitfield_width(width, mem))
+          error_tok(tok, "invalid bit-field width");
+
+        mem->bit_width = width;
         mem->is_bitfield = true;
-        mem->bit_width = const_expr(&tok, tok);
-        if (mem->bit_width < 0)
-          error_tok(tok, "bit-field with negative width");
       }
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
       mem_attr(mem->name, tok, &attr, mem);
