@@ -491,6 +491,8 @@ typedef enum {
   ND_FOR,       // "for" or "while"
   ND_DO,        // "do"
   ND_SWITCH,    // "switch"
+  ND_CASE,      // switch cases
+  ND_DEFAULT,   // switch default case
   ND_BLOCK,     // { ... }
   ND_BREAK,
   ND_CONT,
@@ -593,12 +595,18 @@ struct Node {
     int64_t id;
   } ctrl;
 
-  // goto, case, labels
+  // goto, labels
   struct {
     Node *next;
     Node *node;
     char *unique_label;
   } lbl;
+
+  // case
+  struct {
+    Node *parent_sw;
+    int64_t id;
+  } cases;
 
   // break, continue
   struct {

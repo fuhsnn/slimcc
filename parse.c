@@ -433,8 +433,8 @@ static Node *new_var_node(Obj *var, Token *tok) {
   return node;
 }
 
-static Node *new_label(Token *tok) {
-  Node *node = new_node(ND_LABEL, tok);
+static Node *new_label(NodeKind kind, Token *tok) {
+  Node *node = new_node(kind, tok);
   node->dfr_from = fnctx->defr;
   scope->has_label = true;
   return node;
@@ -2936,7 +2936,6 @@ static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
 
 static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
   Node *case_node = NULL;
-  Node *active_sw = NULL;
 
   Token head = {0};
   Token *cur = &head;
@@ -2955,12 +2954,12 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
       if (ll) {
         if (ll->label)
           error_tok(start, "duplicated label");
-        (*stmt) = (*stmt)->next = ll->label = new_label(start);
+        (*stmt) = (*stmt)->next = ll->label = new_label(ND_LABEL, start);
         continue;
       }
 
       if (!fnctx->defr_ctx) {
-        Node *node = new_label(start);
+        Node *node = new_label(ND_LABEL, start);
         node->lbl.next = fnctx->labels;
         (*stmt) = (*stmt)->next = fnctx->labels = node;
       }
@@ -2969,7 +2968,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
 
     if (tok->kind == TK_case || tok->kind == TK_default) {
       if (!case_node) {
-        (*stmt) = (*stmt)->next = case_node = new_label(tok);
+        (*stmt) = (*stmt)->next = case_node = new_label(ND_CASE, tok);
 
         JumpContext *ctx = jump_ctx;
         for (; ctx; ctx = ctx->next)
@@ -2979,19 +2978,20 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
           error_tok(tok, "stray case");
         if (jump_ctx->dfr_lvl != fnctx->defr || jump_ctx->dfr_ctx != fnctx->defr_ctx)
           error_tok(tok, "illegal jump");
-        active_sw = ctx->node;
+        case_node->cases.parent_sw = ctx->node;
       }
 
       if (tok->kind == TK_default) {
-        if (active_sw->ctrl.sw_default)
+        if (case_node->cases.parent_sw->ctrl.sw_default)
           error_tok(tok, "duplicated default");
+        case_node->cases.parent_sw->ctrl.sw_default = case_node;
 
-        active_sw->ctrl.sw_default = case_node;
+        case_node->kind = ND_DEFAULT;
         tok = skip(tok->next, ":");
         continue;
       }
 
-      case_range(&tok, tok->next, active_sw, case_node);
+      case_range(&tok, tok->next, case_node->cases.parent_sw, case_node);
       continue;
     }
     break;

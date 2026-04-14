@@ -2767,13 +2767,13 @@ static void gen_stmt(Node *node) {
     int64_t c = node->ctrl.id = count();
     gen_expr(node->ctrl.cond);
 
-    int64_t cnt = 0;
     const char *ax, *cx, *dx;
     if (node->ctrl.cond->ty->size == 8)
       ax = "%rax", cx = "%rcx", dx = "%rdx";
     else
       ax = "%eax", cx = "%ecx", dx = "%edx";
 
+    int64_t case_cnt = 1;
     Node *label = NULL;
     for (CaseRange *cr = node->ctrl.sw_cases; cr; cr = cr->next) {
       if (cr->label == node->ctrl.sw_default)
@@ -2781,28 +2781,27 @@ static void gen_stmt(Node *node) {
 
       if (label != cr->label) {
         label = cr->label;
-        label->lbl.unique_label = format(".L.case%" PRIi64 ".%" PRIi64, cnt++, c);
+        label->cases.id = ++case_cnt;
       }
 
       if (cr->hi == cr->lo) {
         imm_cmp(ax, dx, cr->lo);
-        Printftn("je %s", label->lbl.unique_label);
+        Printftn("je .L.case.%" PRIi64 ".%" PRIi64, c, case_cnt);
         continue;
       }
       if (cr->lo == 0) {
         imm_cmp(ax, dx, cr->hi);
-        Printftn("jbe %s", label->lbl.unique_label);
+        Printftn("jbe .L.case.%" PRIi64 ".%" PRIi64, c, case_cnt);
         continue;
       }
       Printftn("mov %s, %s", ax, cx);
       imm_sub(cx, dx, cr->lo);
       imm_cmp(cx, dx, cr->hi - cr->lo);
-      Printftn("jbe %s", label->lbl.unique_label);
+      Printftn("jbe .L.case.%" PRIi64 ".%" PRIi64, c, case_cnt);
     }
 
     if (node->ctrl.sw_default) {
-      node->ctrl.sw_default->lbl.unique_label = format(".L.default.%" PRIi64, c);
-      Printftn("jmp %s", node->ctrl.sw_default->lbl.unique_label);
+      Printftn("jmp .L.default.%" PRIi64, c);
     } else {
       Printftn("jmp .L.brk.%" PRIi64, c);
     }
@@ -2829,6 +2828,14 @@ static void gen_stmt(Node *node) {
   case ND_GOTO_EXPR:
     gen_expr(node->m.lhs);
     Printstn("jmp *%%rax");
+    return;
+  case ND_DEFAULT: {
+    Printfsn(".L.default.%" PRIi64 ":", node->cases.parent_sw->ctrl.id);
+    return;
+  }
+  case ND_CASE:
+    Printfsn(".L.case.%" PRIi64 ".%" PRIi64 ":", node->cases.parent_sw->ctrl.id,
+             node->cases.id);
     return;
   case ND_LABEL: {
     if (node->lbl.unique_label)
@@ -3771,6 +3778,8 @@ static bool gen_unreachable_stmt(Node *node) {
   case ND_BLOCK: {
     return gen_block_stmt(node, false);
   }
+  case ND_CASE:
+  case ND_DEFAULT:
   case ND_LABEL: {
     gen_stmt(node);
     return true;
