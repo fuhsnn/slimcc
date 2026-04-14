@@ -590,15 +590,20 @@ struct Node {
     Node *for_inc;
     CaseRange *sw_cases;
     ANON_UNION_END
-    Node *breaks;
+    int64_t id;
   } ctrl;
 
-  // goto, break, continue, case, labels
+  // goto, case, labels
   struct {
     Node *next;
     Node *node;
     char *unique_label;
   } lbl;
+
+  // break, continue
+  struct {
+    Node *parent_loop;
+  } jmp;
 
   // Function call
   struct {

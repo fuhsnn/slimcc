@@ -3194,11 +3194,9 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       error_tok(tok, "illegal jump");
 
     Node *node = new_node(tok->kind == TK_continue ? ND_CONT : ND_BREAK, tok);
+    node->jmp.parent_loop = ctx->node;
     node->dfr_dest = ctx->dfr_lvl;
     node->dfr_from = fnctx->defr;
-
-    node->lbl.next = ctx->node->ctrl.breaks;
-    ctx->node->ctrl.breaks = node;
     return node;
   }
 

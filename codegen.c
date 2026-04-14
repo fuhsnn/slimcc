@@ -292,21 +292,6 @@ static void name_labels(Node *n) {
     n->lbl.unique_label = new_unique_name();
 }
 
-static void name_brk_cont(Node *node, char *bg, char *brk, char *cont, int64_t c) {
-  snprintf(brk, STRBUF_SZ, ".L.brk.%" PRIi64, c);
-  if (bg)
-    snprintf(bg, STRBUF_SZ, ".L.begin.%" PRIi64, c);
-  if (cont)
-    snprintf(cont, STRBUF_SZ, ".L.cont.%" PRIi64, c);
-
-  for (Node *n = node->ctrl.breaks; n; n = n->lbl.next) {
-    if (n->kind == ND_BREAK)
-      n->lbl.unique_label = brk;
-    else
-      n->lbl.unique_label = cont;
-  }
-}
-
 static const char *tmpbuf(int sz) {
   tmpbuf_sz = MAX(tmpbuf_sz, sz);
   return "__BUF";
@@ -2748,38 +2733,41 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_FOR: {
-    char bg[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
-    name_brk_cont(node, bg, brk, cont, count());
+    int64_t c = node->ctrl.id = count();
+    char brk[STRBUF_SZ];
+    snprintf(brk, STRBUF_SZ, ".L.brk.%" PRIi64, c);
 
     if (node->ctrl.for_init)
       gen_stmt(node->ctrl.for_init);
-    Printfsn("%s:", bg);
+    Printfsn(".L.begin.%" PRIi64 ":", c);
     if (node->ctrl.cond)
       gen_cond(node->ctrl.cond, false, brk);
     gen_stmt(node->ctrl.then);
-    Printfsn("%s:", cont);
+    Printfsn(".L.cont.%" PRIi64 ":", c);
     if (node->ctrl.for_inc)
       gen_void_expr(node->ctrl.for_inc);
     gen_defr(node);
-    Printftn("jmp %s", bg);
+    Printftn("jmp .L.begin.%" PRIi64, c);
     Printfsn("%s:", brk);
     return;
   }
   case ND_DO: {
-    char bg[STRBUF_SZ], cont[STRBUF_SZ], brk[STRBUF_SZ];
-    name_brk_cont(node, bg, brk, cont, count());
+    int64_t c = node->ctrl.id = count();
+    char bg[STRBUF_SZ];
+    snprintf(bg, STRBUF_SZ, ".L.begin.%" PRIi64, c);
 
     Printfsn("%s:", bg);
     gen_stmt(node->ctrl.then);
-    Printfsn("%s:", cont);
+    Printfsn(".L.cont.%" PRIi64 ":", c);
     gen_cond(node->ctrl.cond, true, bg);
-    Printfsn("%s:", brk);
+    Printfsn(".L.brk.%" PRIi64 ":", c);
     return;
   }
   case ND_SWITCH: {
+    int64_t c = node->ctrl.id = count();
     gen_expr(node->ctrl.cond);
 
-    int64_t c = count(), cnt = 0;
+    int64_t cnt = 0;
     const char *ax, *cx, *dx;
     if (node->ctrl.cond->ty->size == 8)
       ax = "%rax", cx = "%rcx", dx = "%rdx";
@@ -2812,17 +2800,14 @@ static void gen_stmt(Node *node) {
       Printftn("jbe %s", label->lbl.unique_label);
     }
 
-    char brk[STRBUF_SZ];
-    name_brk_cont(node, NULL, brk, NULL, c);
-
     if (node->ctrl.sw_default) {
       node->ctrl.sw_default->lbl.unique_label = format(".L.default.%" PRIi64, c);
       Printftn("jmp %s", node->ctrl.sw_default->lbl.unique_label);
     } else {
-      Printftn("jmp %s", brk);
+      Printftn("jmp .L.brk.%" PRIi64, c);
     }
     gen_stmt(node->ctrl.then);
-    Printfsn("%s:", brk);
+    Printfsn(".L.brk.%" PRIi64 ":", c);
     return;
   }
   case ND_BLOCK: {
@@ -2830,7 +2815,13 @@ static void gen_stmt(Node *node) {
     return;
   }
   case ND_BREAK:
+    gen_defr(node);
+    Printftn("jmp .L.brk.%" PRIi64, node->jmp.parent_loop->ctrl.id);
+    return;
   case ND_CONT:
+    gen_defr(node);
+    Printftn("jmp .L.cont.%" PRIi64, node->jmp.parent_loop->ctrl.id);
+    return;
   case ND_GOTO:
     gen_defr(node);
     Printftn("jmp %s", goto_label(node));
