@@ -403,7 +403,7 @@ struct Obj {
 struct Relocation {
   Relocation *next;
   int offset;
-  char **label;
+  Node *label;
   Obj *var;
   long addend;
 };

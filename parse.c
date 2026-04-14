@@ -137,7 +137,7 @@ typedef enum {
 
 typedef struct {
   EvalKind kind;
-  char **label;
+  Node *label;
   Obj *var;
   int deref_cnt;
   bool let_array;
@@ -2954,14 +2954,13 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
 
       if (ll) {
         if (ll->label)
-          error_tok(tok, "duplicated label");
-        (*stmt) = (*stmt)->next = ll->label = new_label(tok);
+          error_tok(start, "duplicated label");
+        (*stmt) = (*stmt)->next = ll->label = new_label(start);
         continue;
       }
 
       if (!fnctx->defr_ctx) {
         Node *node = new_label(start);
-        node->lbl.unique_label = new_unique_name();
         node->lbl.next = fnctx->labels;
         (*stmt) = (*stmt)->next = fnctx->labels = node;
       }
@@ -3650,12 +3649,14 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   }
 
   if (ctx->kind == EV_LABEL) {
-    if (!ctx->label) {
-      if (node->kind == ND_LABEL_VAL) {
-        ctx->label = &node->lbl.unique_label;
+    if (node->kind == ND_LABEL_VAL) {
+      if (!ctx->label && !(fnctx && fnctx->defr_ctx)) {
+        ctx->label = node;
         return 0;
       }
-
+      return eval_error(node);
+    }
+    if (!ctx->var) {
       int ofs;
       Obj *var = NULL;
       if (node->kind == ND_ADDR)
@@ -5655,7 +5656,10 @@ static void resolve_goto_defer(Node *node, DeferStmt *dst_dfr) {
   node->dfr_dest = dfr;
 }
 
-static void resolve_gotos(void) {
+static void resolve_gotos(Node *fn_body) {
+  Node *search_list = fnctx->labels;
+  Node live_head = {0};
+  Node *live_cur = &live_head;
   HashMap label_cache = {0};
   for (Node *x = fnctx->gotos; x; x = x->lbl.next) {
     HashEntry *ent = hashmap_get_or_insert(&label_cache, x->tok->loc, x->tok->len);
@@ -5663,25 +5667,28 @@ static void resolve_gotos(void) {
     if (!dest) {
       Node head = {0};
       Node *cur = &head;
-      for (Node *lbl = fnctx->labels; lbl; lbl = lbl->lbl.next) {
+      for (Node *lbl = search_list; lbl; lbl = lbl->lbl.next) {
         if (!equal_tok(lbl->tok, x->tok)) {
           cur = cur->lbl.next = lbl;
           continue;
         }
         if (dest)
           error_tok(x->tok, "duplicated label");
-        dest = lbl;
+        dest = ent->val = lbl;
+        live_cur = live_cur->lbl.next = lbl;
       }
       if (!dest)
         error_tok(x->tok, "use of undeclared label");
       cur->lbl.next = NULL;
-      fnctx->labels = head.lbl.next;
-      ent->val = dest;
+      search_list = head.lbl.next;
     }
-    x->lbl.unique_label = dest->lbl.unique_label;
+    x->lbl.node = dest;
     resolve_goto_defer(x, dest->dfr_from);
   }
   free(label_cache.buckets);
+
+  live_cur->lbl.next = fn_body->blk.local_labels;
+  fn_body->blk.local_labels = live_head.lbl.next;
 }
 
 static Node *resolve_local_gotos(void) {
@@ -5864,7 +5871,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->dealloc_vla = true;
 
   if (fnctx->gotos)
-    resolve_gotos();
+    resolve_gotos(fn->body);
 
   emit_text(fn);
 

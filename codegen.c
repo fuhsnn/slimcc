@@ -2840,7 +2840,8 @@ static void gen_stmt(Node *node) {
     Printstn("jmp *%%rax");
     return;
   case ND_LABEL: {
-    Printfsn("%s:", node->lbl.unique_label);
+    if (node->lbl.unique_label)
+      Printfsn("%s:", node->lbl.unique_label);
     return;
   }
   case ND_RETURN: {
@@ -5028,7 +5029,8 @@ static void emit_data(Obj *var) {
     if (!rel)
       break;
 
-    const char *str = rel->label ? *rel->label : get_symbol(rel->var);
+    const char *str = rel->var ? get_symbol(rel->var)
+                               : rel->label->lbl.node->lbl.unique_label;
     Printftn(".quad \"%s\"%+ld", str, rel->addend);
     pos += 8;
     rel = rel->next;
