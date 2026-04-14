@@ -67,17 +67,16 @@ static void verror_at(const char *filename, const char *input, int line_no,
 }
 
 void verror_at_tok(Token *tok, const char *fmt, va_list ap) {
-  if (!tok->file) {
-    tok = tok->origin;
-    if (!tok)
-      internal_error();
+  if (tok->file->is_placeholder) {
+    verror_at(tok->file->name, tok->loc, 1, tok->loc, fmt, ap);
+  } else {
+    if (!tok->origin && tok->display_line_no) {
+      if (tok->file->file_no != tok->display_file_no || tok->line_no != tok->display_line_no)
+        fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no],
+                tok->display_line_no);
+    }
+    verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
   }
-  if (!tok->origin && tok->display_line_no) {
-    if (tok->file->file_no != tok->display_file_no || tok->line_no != tok->display_line_no)
-      fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no],
-              tok->display_line_no);
-  }
-  verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
 
   if (tok->origin)
     notice_tok(tok->origin, "in expansion of macro");
@@ -985,7 +984,9 @@ void convert_ucn_ident(Token *tok) {
   tok->origin = orig;
   tok->loc = buf;
   tok->len = q - buf;
-  tok->file = NULL;
+
+  static File file = {.name = "<ucn_buffer>", .is_placeholder = true};
+  tok->file = &file;
 }
 
 Token *tokenize(File *file, SlashDelta *delta, Token **end) {

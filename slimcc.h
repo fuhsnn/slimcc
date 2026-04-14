@@ -264,6 +264,7 @@ struct File {
   int line_delta;
   InclIdx incl_idx;
   bool is_syshdr;
+  bool is_placeholder;
 };
 
 typedef struct Token Token;

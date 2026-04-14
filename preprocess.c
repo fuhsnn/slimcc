@@ -298,14 +298,13 @@ static Token *tokenize_buf(const char *buf, Token *orig, Token **end) {
   if (orig->origin)
     orig = orig->origin;
 
-  File file = *orig->file;
+  static File file = {.name = "<generated>", .is_placeholder = true};
   file.contents = buf;
   Token *tok = tokenize(&file, NULL, end);
+  file.contents = NULL;
 
-  for (Token *t = tok; t->kind != TK_EOF; t = t->next) {
-    t->file = NULL;
+  for (Token *t = tok; t->kind != TK_EOF; t = t->next)
     t->origin = orig;
-  }
   return tok;
 }
 
@@ -1500,7 +1499,11 @@ static Token *directives(Token **cur, Token *start) {
 }
 
 void define_macro_cli(const char *str) {
-  Token *tok = tokenize(new_file("<command-line>", str), NULL, NULL);
+  static File file = {.name = "<command-line>", .is_placeholder = true};
+  file.contents = str;
+  Token *tok = tokenize(&file, NULL, NULL);
+  file.contents = NULL;
+
   Macro *m = read_macro_name(&tok, tok);
 
   Token head = {0};
@@ -1524,7 +1527,10 @@ void define_macro_cli(const char *str) {
 }
 
 void define_macro(const char *name, const char *buf) {
-  new_macro(name, true)->body = tokenize(new_file("<built-in>", buf), NULL, NULL);
+  static File file = {.name = "<built-in>", .is_placeholder = true};
+  file.contents = buf;
+  new_macro(name, true)->body = tokenize(&file, NULL, NULL);
+  file.contents = NULL;
 }
 
 void undef_macro(const char *name) {
