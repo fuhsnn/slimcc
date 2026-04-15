@@ -917,7 +917,8 @@ int display_width(const char *p, int len);
 // platform.c
 //
 
-void platform_init(void);
+void platform_init_cc1(void);
+void platform_init_driver(void);
 void platform_stdinc_paths(StringArray *paths);
 void platform_search_dirs(StringArray *paths);
 void run_assembler(StringArray *as_args, const char *input, const char *output);
@@ -936,8 +937,6 @@ bool ignore_missing_dep(const char *path, const char *filename, Token *tok);
 void add_dep_file(const char *path, bool is_sys);
 char *find_dir_w_file(const char *pattern);
 void run_subprocess(const char **argv);
-void set_fpic(const char *lvl);
-void set_fpie(const char *lvl);
 void add_include_path(StringArray *arr, const char *s);
 void run_assembler_gnustyle(StringArray *as_args, const char *input, const char *output);
 void run_linker_gnustyle(StringArray *paths, StringArray *inputs, const char *output,
@@ -950,8 +949,8 @@ extern StringArray iquote_paths;
 extern StringArray display_files;
 extern bool opt_E;
 extern bool opt_dM;
-extern bool opt_fpic;
-extern bool opt_fpie;
+extern int opt_fpic;
+extern int opt_fpie;
 extern bool opt_femulated_tls;
 extern int opt_fn_align;
 extern bool opt_use_plt;

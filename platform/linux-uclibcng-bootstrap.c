@@ -1,7 +1,7 @@
 
 #include "slimcc.h"
 
-void platform_init(void) {
+void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
   define_macro("__linux", "1");
@@ -10,6 +10,9 @@ void platform_init(void) {
   init_ty_lp64();
 
   define_macro("__STDC_NO_THREADS__", "1");
+}
+
+void platform_init_driver(void) {
 }
 
 void platform_stdinc_paths(StringArray *paths) {

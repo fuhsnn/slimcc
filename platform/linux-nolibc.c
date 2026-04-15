@@ -1,13 +1,15 @@
 #include "slimcc.h"
 
-void platform_init(void) {
+void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
   define_macro("__linux", "1");
   define_macro("__linux__", "1");
 
   init_ty_lp64();
+}
 
+void platform_init_driver(void) {
   dumpmachine_str = "x86_64-linux-gnu";
 
   opt_nostartfiles = opt_nodefaultlibs = true;

@@ -2,18 +2,20 @@
 
 static char *libgccpath;
 
-void platform_init(void) {
+void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
   define_macro("linux", "1");
   define_macro("__linux", "1");
   define_macro("__linux__", "1");
+}
 
+void platform_init_driver(void) {
   init_ty_lp64();
 
   dumpmachine_str = "x86_64-alpine-linux-musl";
 
-  set_fpie("2");
+  opt_fpie = 2;
   opt_pie = true;
 }
 

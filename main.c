@@ -39,8 +39,8 @@ StringArray include_paths;
 StringArray iquote_paths;
 StringArray display_files;
 bool opt_fcommon;
-bool opt_fpic;
-bool opt_fpie;
+int opt_fpic;
+int opt_fpie;
 bool opt_femulated_tls;
 int opt_fn_align = 1;
 bool opt_use_plt = true;
@@ -238,27 +238,9 @@ static void set_std_iso(const char *arg) {
   error("unknown c standard");
 }
 
-void set_fpic(const char *lvl) {
-  opt_fpic = true;
-  opt_fpie = false;
-  define_macro("__pic__", lvl);
-  define_macro("__PIC__", lvl);
-  undef_macro("__pie__");
-  undef_macro("__PIE__");
-}
-
-void set_fpie(const char *lvl) {
-  opt_fpic = false;
-  opt_fpie = true;
-  define_macro("__pic__", lvl);
-  define_macro("__PIC__", lvl);
-  define_macro("__pie__", lvl);
-  define_macro("__PIE__", lvl);
-}
-
 static void macrochange_push(MacroChangeArr *arr, const char *arg, bool is_def) {
   if (arr->len == arr->capacity) {
-    arr->capacity += 4;
+    arr->capacity += 8;
     arr->data = realloc(arr->data, sizeof(MacroChange) * arr->capacity);
   }
   MacroChange *m = &arr->data[arr->len++];
@@ -266,7 +248,7 @@ static void macrochange_push(MacroChangeArr *arr, const char *arg, bool is_def) 
   m->is_def = is_def;
 }
 
-static void build_macros(MacroChangeArr *arr, bool is_asm_pp) {
+static void cli_macros(bool is_asm_pp) {
   if (is_asm_pp) {
     define_macro("__ASSEMBLER__", "1");
   } else {
@@ -286,10 +268,33 @@ static void build_macros(MacroChangeArr *arr, bool is_asm_pp) {
 
     define_macro("__STDC_UTF_16__", "1");
     define_macro("__STDC_UTF_32__", "1");
+
+    define_macro("__STDC_DEFER_TS25755__", opt_fdefer_ts ? "2" : "1");
   }
 
-  for (int i = 0; i < arr->len; i++) {
-    MacroChange *m = &arr->data[i];
+  if (opt_pthread)
+    define_macro("_REENTRANT", "1");
+
+  if (opt_fpic == 1) {
+    define_macro("__pic__", "1");
+    define_macro("__PIC__", "1");
+  } else if (opt_fpic == 2) {
+    define_macro("__pic__", "2");
+    define_macro("__PIC__", "2");
+  } else if (opt_fpie == 1) {
+    define_macro("__pic__", "1");
+    define_macro("__PIC__", "1");
+    define_macro("__pie__", "1");
+    define_macro("__PIE__", "1");
+  } else if (opt_fpie == 2) {
+    define_macro("__pic__", "2");
+    define_macro("__PIC__", "2");
+    define_macro("__pie__", "2");
+    define_macro("__PIE__", "2");
+  }
+
+  for (int i = 0; i < macrodefs.len; i++) {
+    MacroChange *m = &macrodefs.data[i];
     if (m->is_def)
       define_macro_cli(m->arg);
     else
@@ -675,43 +680,28 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
         error("unsupported form of '-falign-functions'");
       }
 
-      if (b) {
-        if (!strcmp(arg, "pic")) {
-          set_fpic("1");
-          continue;
-        }
-        if (!strcmp(arg, "PIC")) {
-          set_fpic("2");
-          continue;
-        }
-        if (!strcmp(arg, "pie")) {
-          set_fpie("1");
-          continue;
-        }
-        if (!strcmp(arg, "PIE")) {
-          set_fpie("2");
-          continue;
-        }
-      } else {
-        if (!strcmp(arg, "pic") ||
-            !strcmp(arg, "PIC") ||
-            !strcmp(arg, "pie") ||
-            !strcmp(arg, "PIE")) {
-          opt_fpic = opt_fpie = false;
-          undef_macro("__pic__");
-          undef_macro("__PIC__");
-          undef_macro("__pie__");
-          undef_macro("__PIE__");
-          continue;
-        }
+      if (!strcmp(arg, "pic")) {
+        opt_fpic = 1 * b, opt_fpie = 0;
+        continue;
+      }
+      if (!strcmp(arg, "PIC")) {
+        opt_fpic = 2 * b, opt_fpie = 0;
+        continue;
+      }
+      if (!strcmp(arg, "pie")) {
+        opt_fpic = 0, opt_fpie = 1 * b;
+        continue;
+      }
+      if (!strcmp(arg, "PIE")) {
+        opt_fpic = 0, opt_fpie = 2 * b;
+        continue;
       }
 
       // -f only options
       if (b) {
-        if (set_true(arg, "defer-ts", &opt_fdefer_ts)) {
-          define_macro("__STDC_DEFER_TS25755__", "2");
+        if (set_true(arg, "defer-ts", &opt_fdefer_ts))
           continue;
-        }
+
         if (set_bool(arg, false, "signed-char", &ty_pchar->is_unsigned) ||
             set_bool(arg, true, "unsigned-char", &ty_pchar->is_unsigned))
           continue;
@@ -752,17 +742,13 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
           set_true(arg, "shared", &opt_shared) ||
           set_true(arg, "pie", &opt_pie) ||
           set_true(arg, "nopie", &opt_nopie) ||
+          set_true(arg, "pthread", &opt_pthread) ||
           set_true(arg, "pipe", &opt_pipe))
         continue;
 
       if (!strcmp(arg, "no-pie")) {
         opt_pie = false;
         opt_nopie = true;
-        continue;
-      }
-      if (!strcmp(arg, "pthread")) {
-        opt_pthread = true;
-        define_macro("_REENTRANT", "1");
         continue;
       }
     }
@@ -1125,7 +1111,11 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
-  build_macros(&macrodefs, is_asm_pp);
+  arena_on(&pp_arena);
+
+  init_macros();
+  platform_init_cc1();
+  cli_macros(is_asm_pp);
 
   FILE *out = open_file(output_file);
 
@@ -1135,6 +1125,7 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
     print_dependencies(input_file);
     if (opt_M) {
       close_file(out);
+      arena_off(&pp_arena);
       return;
     }
   }
@@ -1146,10 +1137,13 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
       print_tokens(tok, out);
 
     close_file(out);
+    arena_off(&pp_arena);
     return;
   }
 
   tok = prepare_parse(tok);
+
+  arena_off(&pp_arena);
 
   Obj *prog = parse(tok);
 
@@ -1369,8 +1363,7 @@ static FileType get_file_type(const char *filename) {
 
 int main(int argc, char **argv) {
   argv0 = argv[0];
-  init_macros();
-  platform_init();
+  platform_init_driver();
 
   bool run_ld;
   parse_args(argc, argv, &run_ld);

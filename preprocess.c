@@ -1767,8 +1767,6 @@ static Token *has_extension_macro(Token *start) {
 }
 
 void init_macros(void) {
-  arena_on(&pp_arena);
-
   define_macro("__slimcc__", "1");
   macro_head = macro_defs;
 
@@ -1779,8 +1777,6 @@ void init_macros(void) {
   define_macro("__STDC__", "1");
 
   define_macro("__STDC_NO_COMPLEX__", "1");
-
-  define_macro("__STDC_DEFER_TS25755__", "1");
 
   define_macro("__C99_MACRO_WITH_VA_ARGS", "1");
   define_macro("__USER_LABEL_PREFIX__", "");
@@ -2152,10 +2148,8 @@ Token *prepare_parse(Token *tok) {
     tok = head;
   }
 
-  if (!(free_alloc = check_mem_usage())) {
-    arena_off(&pp_arena);
+  if (!(free_alloc = check_mem_usage()))
     return preprocess3(tok);
-  }
 
   Token *t = tok;
   for (t = last_alloc_tok; t;) {
@@ -2178,6 +2172,5 @@ Token *prepare_parse(Token *tok) {
   free(pragma_once.buckets);
   free(include_guards.buckets);
   free(cond_incl.data);
-  arena_off(&pp_arena);
   return tok;
 }

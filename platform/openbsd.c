@@ -2,19 +2,21 @@
 
 #include "slimcc.h"
 
-void platform_init(void) {
+void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
   define_macro("__OpenBSD__", "1");
 
   init_ty_lp64();
+}
 
+void platform_init_driver(void) {
   dumpmachine_str = "amd64-unknown-openbsd7.7";
 
   default_as = "gas";
 
   opt_femulated_tls = true;
-  set_fpie("1");
+  opt_fpie = 1;
 }
 
 void platform_stdinc_paths(StringArray *paths) {
