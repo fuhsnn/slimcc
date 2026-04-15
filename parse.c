@@ -710,14 +710,12 @@ static Obj *new_gvar(char *name, Type *ty) {
   return globals = globals->next = alloc_var(name, ty);
 }
 
-static char *new_unique_name(void) {
-  static int64_t id = 0;
-  return format(".L..%" PRIi64, id++);
-}
-
 static Obj *new_static_lvar(Type *ty) {
+  static int64_t id = 0;
+  char *name = arena_format(&ast_arena, ".L.pv.%" PRIi64, id++);
+
   Obj *var = alloc_ast_var(ty);
-  var->name = new_unique_name();
+  var->name = name;
   var->is_definition = true;
   var->is_static = true;
   var->is_static_lvar = true;
@@ -729,7 +727,11 @@ static Obj *new_static_lvar(Type *ty) {
 static Obj *new_anon_gvar(Type *ty) {
   if (fnctx)
     return new_static_lvar(ty);
-  Obj *var = new_gvar(new_unique_name(), ty);
+
+  static int64_t id = 0;
+  char *name = arena_format(&cc1_arena, ".L.gv.%" PRIi64, id++);
+
+  Obj *var = new_gvar(name, ty);
   var->is_definition = true;
   var->is_static = true;
   return var;

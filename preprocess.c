@@ -322,7 +322,7 @@ static Token *new_bool_int_token(bool b, Token *orig, Token *nxt) {
 static Token *new_num_token(int64_t val, Token *orig, Token *nxt) {
   if (val < 0)
     internal_error();
-  return make_token(format("%" PRIi64 "\n", val), orig, nxt);
+  return make_token(arena_format(&cc1_arena, "%" PRIi64 "\n", val), orig, nxt);
 }
 
 static Token *new_str_token(const char *str, Token *orig) {
@@ -703,7 +703,7 @@ static void newline_to_space(Token *tok) {
 
 // Concatenate two tokens to create a new token.
 static Token *paste(Token *lhs, Token *rhs) {
-  char *buf = format("%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
+  char *buf = arena_format(&cc1_arena, "%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
   Token *tok = tokenize_buf(buf, lhs, NULL);
   align_token(tok, lhs);
@@ -1578,8 +1578,8 @@ static Token *date_macro(Token *start) {
     static char mon[][4] = {
       "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
-    str = format("\"%s %2d %d\"", mon[cur_time->tm_mon], cur_time->tm_mday,
-                 cur_time->tm_year + 1900);
+    str = arena_format(&cc1_arena, "\"%s %2d %d\"", mon[cur_time->tm_mon],
+                       cur_time->tm_mday, cur_time->tm_year + 1900);
   }
   return make_token(str, start, start->next);
 }
@@ -1591,8 +1591,8 @@ static Token *time_macro(Token *start) {
     if (!cur_time)
       cur_time = localtime(&(time_t){time(NULL)});
 
-    str = format("\"%02d:%02d:%02d\"", cur_time->tm_hour, cur_time->tm_min,
-                 cur_time->tm_sec);
+    str = arena_format(&cc1_arena, "\"%02d:%02d:%02d\"", cur_time->tm_hour,
+                       cur_time->tm_min, cur_time->tm_sec);
   }
   return make_token(str, start, start->next);
 }
@@ -1651,7 +1651,7 @@ static Token *pragma_macro(Token *start) {
     }
     break;
   }
-  char *buf = format("#pragma %s", str_tok->str);
+  char *buf = arena_format(&cc1_arena, "#pragma %s", str_tok->str);
 
   Token *end;
   Token *hash = tokenize_buf(buf, start, &end);
