@@ -279,17 +279,9 @@ static int64_t count(void) {
   return i++;
 }
 
-static const char *goto_label(Node *node) {
-  if (node->lbl.unique_label)
-    return node->lbl.unique_label;
-  if (node->lbl.node)
-    return node->lbl.node->lbl.unique_label;
-  internal_error();
-}
-
 static void name_labels(Node *n) {
   for (; n; n = n->lbl.next)
-    n->lbl.unique_label = new_unique_name();
+    n->lbl.id = count();
 }
 
 static const char *tmpbuf(int sz) {
@@ -2539,7 +2531,7 @@ static void gen_expr2(Node *node, bool is_void) {
     }
     return;
   case ND_LABEL_VAL: {
-    Printftn("lea %s(%%rip), %%rax", goto_label(node));
+    Printftn("lea .L.jmp.%" PRIi64 "(%%rip), %%rax", node->jmp.target->lbl.id);
     return;
   }
   case ND_CAS: {
@@ -2823,7 +2815,7 @@ static void gen_stmt(Node *node) {
     return;
   case ND_GOTO:
     gen_defr(node);
-    Printftn("jmp %s", goto_label(node));
+    Printftn("jmp .L.jmp.%" PRIi64, node->jmp.target->lbl.id);
     return;
   case ND_GOTO_EXPR:
     gen_expr(node->m.lhs);
@@ -2838,8 +2830,8 @@ static void gen_stmt(Node *node) {
              node->cases.id);
     return;
   case ND_LABEL: {
-    if (node->lbl.unique_label)
-      Printfsn("%s:", node->lbl.unique_label);
+    if (node->lbl.id)
+      Printfsn(".L.jmp.%" PRIi64 ":", node->lbl.id);
     return;
   }
   case ND_RETURN: {
@@ -4694,7 +4686,7 @@ static void asm_body(Node *node) {
       if (node->gasm.outputs)
         Printf("%df", ap->label_id);
       else
-        Printf("%s", goto_label(ap->arg));
+        Printf(".L.jmp.%" PRIi64, ap->arg->jmp.target->lbl.id);
       continue;
     }
 
@@ -4838,7 +4830,7 @@ static void gen_asm(Node *node) {
     Printftn("lea %df(%%rip), %s; jmp %df", fallthrough_label, tmp_gp, meet_label);
     for (AsmParam *ap = node->gasm.labels; ap; ap = ap->next) {
       Printftn("%d:", ap->label_id);
-      Printftn("lea %s(%%rip), %s", goto_label(ap->arg), tmp_gp);
+      Printftn("lea .L.jmp.%" PRIi64 "(%%rip), %s", ap->arg->jmp.target->lbl.id, tmp_gp);
       Printftn("jmp %df", meet_label);
     }
     Printftn("%d:", meet_label);
@@ -5029,9 +5021,12 @@ static void emit_data(Obj *var) {
     if (!rel)
       break;
 
-    const char *str = rel->var ? get_symbol(rel->var)
-                               : rel->label->lbl.node->lbl.unique_label;
-    Printftn(".quad \"%s\"%+ld", str, rel->addend);
+    if (rel->var)
+      Printftn(".quad \"%s\"+%" PRIi64, get_symbol(rel->var), rel->addend);
+    else
+      Printftn(".quad .L.jmp.%" PRIi64 "+%" PRIi64, rel->label->jmp.target->lbl.id,
+               rel->addend);
+
     pos += 8;
     rel = rel->next;
   }

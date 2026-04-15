@@ -405,7 +405,7 @@ struct Relocation {
   int offset;
   Node *label;
   Obj *var;
-  long addend;
+  int64_t addend;
 };
 
 typedef enum {
@@ -595,11 +595,10 @@ struct Node {
     int64_t id;
   } ctrl;
 
-  // goto, labels
+  // labels
   struct {
     Node *next;
-    Node *node;
-    char *unique_label;
+    int64_t id;
   } lbl;
 
   // case
@@ -608,9 +607,10 @@ struct Node {
     int64_t id;
   } cases;
 
-  // break, continue
+  // break, continue, goto
   struct {
     Node *parent_loop;
+    Node *target;
   } jmp;
 
   // Function call
@@ -673,7 +673,6 @@ bool is_const_fp(Node *node, FPVal *fval);
 bool is_const_zero_bitint(Node *node);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);
 bool equal_tok(Token *a, Token *b);
-char *new_unique_name(void);
 Obj *get_symbol_var(const char *);
 Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **cond_var);
 

@@ -710,7 +710,7 @@ static Obj *new_gvar(char *name, Type *ty) {
   return globals = globals->next = alloc_var(name, ty);
 }
 
-char *new_unique_name(void) {
+static char *new_unique_name(void) {
   static int64_t id = 0;
   return format(".L..%" PRIi64, id++);
 }
@@ -5680,7 +5680,7 @@ static void resolve_gotos(Node *fn_body) {
       cur->lbl.next = NULL;
       search_list = head.lbl.next;
     }
-    x->lbl.node = dest;
+    x->jmp.target = dest;
     resolve_goto_defer(x, dest->dfr_from);
   }
   free(label_cache.buckets);
@@ -5695,7 +5695,7 @@ static Node *resolve_local_gotos(void) {
     if (!ll || !ll->label)
       error_tok(x->tok, "use of undeclared local label");
 
-    x->lbl.node = ll->label;
+    x->jmp.target = ll->label;
     resolve_goto_defer(x, ll->label->dfr_from);
   }
 
