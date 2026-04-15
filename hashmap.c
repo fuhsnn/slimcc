@@ -140,31 +140,36 @@ void hashmap_delete2(HashMap *map, const char *key, int keylen) {
 
 void hashmap_test(void) {
   HashMap *map = calloc(1, sizeof(HashMap));
+  Arena test_arena = {0};
+  arena_on(&test_arena);
 
   for (int i = 0; i < 5000; i++)
-    hashmap_put(map, format("key %d", i), (void *)(size_t)i);
+    hashmap_put(map, arena_format(&test_arena, "key %d", i), (void *)(size_t)i);
   for (int i = 1000; i < 2000; i++)
-    hashmap_delete(map, format("key %d", i));
+    hashmap_delete(map, arena_format(&test_arena, "key %d", i));
   for (int i = 1500; i < 1600; i++)
-    hashmap_put(map, format("key %d", i), (void *)(size_t)i);
+    hashmap_put(map, arena_format(&test_arena, "key %d", i), (void *)(size_t)i);
   for (int i = 6000; i < 7000; i++)
-    hashmap_put(map, format("key %d", i), (void *)(size_t)i);
+    hashmap_put(map, arena_format(&test_arena, "key %d", i), (void *)(size_t)i);
 
   for (int i = 0; i < 1000; i++)
-    assert((size_t)hashmap_get(map, format("key %d", i)) == i);
+    assert((size_t)hashmap_get(map, arena_format(&test_arena, "key %d", i)) == i);
   for (int i = 1000; i < 1500; i++)
     assert(hashmap_get(map, "no such key") == NULL);
   for (int i = 1500; i < 1600; i++)
-    assert((size_t)hashmap_get(map, format("key %d", i)) == i);
+    assert((size_t)hashmap_get(map, arena_format(&test_arena, "key %d", i)) == i);
   for (int i = 1600; i < 2000; i++)
     assert(hashmap_get(map, "no such key") == NULL);
   for (int i = 2000; i < 5000; i++)
-    assert((size_t)hashmap_get(map, format("key %d", i)) == i);
+    assert((size_t)hashmap_get(map, arena_format(&test_arena, "key %d", i)) == i);
   for (int i = 5000; i < 6000; i++)
     assert(hashmap_get(map, "no such key") == NULL);
   for (int i = 6000; i < 7000; i++)
-    hashmap_put(map, format("key %d", i), (void *)(size_t)i);
+    hashmap_put(map, arena_format(&test_arena, "key %d", i), (void *)(size_t)i);
 
   assert(hashmap_get(map, "no such key") == NULL);
+
+  arena_off(&test_arena);
+
   printf("OK\n");
 }

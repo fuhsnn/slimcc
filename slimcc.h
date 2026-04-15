@@ -119,6 +119,7 @@ typedef struct {
   int used;
 } Arena;
 
+char *arena_format(Arena *arena, const char *fmt, ...);
 void arena_on(Arena *arena);
 void arena_off(Arena *arena);
 void *arena_calloc(Arena *a, size_t sz);

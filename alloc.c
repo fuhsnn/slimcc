@@ -9,7 +9,7 @@ __attribute__((visibility("default"))) const char *__asan_default_options(void) 
 #endif
 
 #define FREE_THRESHOLD (100 * 1024)
-#define ARENA_POOL_SIZE 8168
+#define ARENA_POOL_SIZE 8160
 
 struct Pool {
   char buf[ARENA_POOL_SIZE];
@@ -63,14 +63,49 @@ static void *allocate(Arena *arena, size_t sz, bool clear) {
   }
 
 #if USE_ASAN
-  __asan_unpoison_memory_region(ptr, sz);
-  if (clear)
-    memset(ptr, 0, sz);
-#else
-  if (clear)
-    for (int i = 0; i < (aligned_sz >> 3); i++)
-      ((int64_t *)ptr)[i] = 0;
+  __asan_unpoison_memory_region(ptr, aligned_sz);
 #endif
+  if (clear)
+    memset(ptr, 0, aligned_sz);
+  return ptr;
+}
+
+char *arena_format(Arena *arena, const char *fmt, ...) {
+  void *ptr = &arena->cur->buf[arena->used];
+  size_t n = ARENA_POOL_SIZE - arena->used;
+
+#if USE_ASAN
+  __asan_unpoison_memory_region(ptr, n);
+#endif
+
+  va_list ap;
+  va_start(ap, fmt);
+
+  size_t sz = 1 + (size_t)vsnprintf(ptr, n, fmt, ap);
+  size_t aligned_sz = (sz + 15) & -16LL;
+
+  if (aligned_sz <= n) {
+    va_end(ap);
+    arena->used += aligned_sz;
+#if USE_ASAN
+    __asan_poison_memory_region(ptr + aligned_sz, ARENA_POOL_SIZE - arena->used);
+#endif
+    return ptr;
+  }
+  if (aligned_sz > ARENA_POOL_SIZE)
+    internal_error();
+
+  arena->cur = arena->cur->next = new_pool();
+  ptr = &arena->cur->buf;
+  arena->used = aligned_sz;
+
+#if USE_ASAN
+  __asan_unpoison_memory_region(ptr, aligned_sz);
+#endif
+
+  va_start(ap, fmt);
+  vsnprintf(ptr, aligned_sz, fmt, ap);
+  va_end(ap);
   return ptr;
 }
 
