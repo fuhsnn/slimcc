@@ -1111,6 +1111,7 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
+  arena_on(&cc1_arena);
   arena_on(&pp_arena);
 
   init_macros();
@@ -1126,6 +1127,7 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
     if (opt_M) {
       close_file(out);
       arena_off(&pp_arena);
+      arena_off(&cc1_arena);
       return;
     }
   }
@@ -1138,6 +1140,7 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
 
     close_file(out);
     arena_off(&pp_arena);
+    arena_off(&cc1_arena);
     return;
   }
 
@@ -1150,6 +1153,7 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
   codegen(prog, out);
 
   close_file(out);
+  arena_off(&cc1_arena);
 }
 
 void run_assembler_gnustyle(StringArray *args, const char *input, const char *output) {

@@ -130,6 +130,7 @@ void *ast_arena_calloc(size_t sz);
 bool check_mem_usage(void);
 
 extern Arena ast_arena;
+extern Arena cc1_arena;
 extern Arena node_arena;
 extern Arena pp_arena;
 extern bool free_alloc;

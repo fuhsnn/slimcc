@@ -17,6 +17,7 @@ struct Pool {
 };
 
 Arena ast_arena;
+Arena cc1_arena;
 Arena node_arena;
 Arena pp_arena;
 bool free_alloc;
@@ -138,12 +139,12 @@ void *arena_calloc(Arena *a, size_t sz) {
 
 void *ast_arena_malloc(size_t sz) {
   if (!ast_arena.cur)
-    return malloc(sz);
+    return allocate(&cc1_arena, sz, false);
   return allocate(&ast_arena, sz, false);
 }
 
 void *ast_arena_calloc(size_t sz) {
   if (!ast_arena.cur)
-    return calloc(1, sz);
+    return allocate(&cc1_arena, sz, true);
   return allocate(&ast_arena, sz, true);
 }
