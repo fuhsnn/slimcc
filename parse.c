@@ -1649,7 +1649,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
       error_tok(name, "enum redeclaration");
     } else {
       if (opt_std >= STD_C23) {
-        cur = cur->next = malloc(sizeof(EnumVal));
+        cur = cur->next = arena_malloc(&cc1_arena, sizeof(EnumVal));
         cur->val = v;
         cur->name = name;
         name->is_live = true;

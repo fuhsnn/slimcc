@@ -82,7 +82,7 @@ void init_ty_lp64(void) {
 }
 
 Type *new_type(TypeKind kind, int64_t size, int32_t align) {
-  Type *ty = calloc(1, sizeof(Type));
+  Type *ty = arena_calloc(&cc1_arena, sizeof(Type));
   ty->kind = kind;
   ty->size = size;
   ty->align = align;
@@ -112,7 +112,7 @@ Type *new_bitint(int64_t width, Token *tok) {
 }
 
 Type *copy_type(Type *ty) {
-  Type *ret = malloc(sizeof(Type));
+  Type *ret = arena_malloc(&cc1_arena, sizeof(Type));
   *ret = *ty;
   return ret;
 }
@@ -130,7 +130,7 @@ Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
         error_tok(tok, "type cannot be restrict qualified");
 
   if (!newty)
-    newty = malloc(sizeof(Type));
+    newty = arena_malloc(&cc1_arena, sizeof(Type));
   *newty = *ty;
   newty->origin = ty;
   newty->qual = qual;
