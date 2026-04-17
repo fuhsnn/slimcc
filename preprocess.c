@@ -61,7 +61,7 @@ struct tm *cur_time;
 static Token *preprocess3(Token *tok);
 static bool has_macro(Token *tok);
 static bool expand_macro(Token **rest, Token *tok, bool is_root);
-static Token *directives(Token **cur, Token *start);
+static Token *directives(Token **cur, Token *start, bool is_root);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(Token *tok);
 static const char *supported_c_attr(Token **rest, Token *tok);
@@ -897,7 +897,7 @@ static Token *prepare_funclike_args(Token *start) {
 
     if (!locked_macros) {
       if (is_hash(tok)) {
-        tok = directives(&cur, tok);
+        tok = directives(&cur, tok, false);
         continue;
       }
     } else {
@@ -1280,7 +1280,7 @@ void preprocess2(Token *tok, Token **cur) {
       continue;
 
     if (is_hash(tok) && !locked_macros) {
-      tok = directives(cur, tok);
+      tok = directives(cur, tok, true);
       continue;
     }
 
@@ -1309,7 +1309,7 @@ static Token *pass_line(Token **cur, Token *tok) {
   return tok;
 }
 
-static Token *directives(Token **cur, Token *start) {
+static Token *directives(Token **cur, Token *start, bool is_root) {
   Token *tok = start->next;
 
   if (equal(tok, "embed")) {
@@ -1480,16 +1480,18 @@ static Token *directives(Token **cur, Token *start) {
     return tok;
   }
 
-  if (equal(tok, "pragma")) {
-    if (equal(tok->next, "once")) {
-      hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
-      return skip_line(tok->next->next);
+  if (is_root) {
+    if (equal(tok, "pragma")) {
+      if (equal(tok->next, "once")) {
+        hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
+        return skip_line(tok->next->next);
+      }
+      return pass_line(cur, start);
     }
-    return pass_line(cur, start);
-  }
 
-  if (opt_cc1_asm_pp)
-    return pass_line(cur, start);
+    if (opt_cc1_asm_pp)
+      return pass_line(cur, start);
+  }
 
   // `#`-only line is legal. It's called a null directive.
   if (tok->at_bol)
