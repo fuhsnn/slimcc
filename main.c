@@ -929,16 +929,12 @@ void run_subprocess(const char **argv) {
       return;
   }
 
-  pid_t id = fork();
-  if (id == 0) {
-    is_fork_child = true;
-    execvp(argv[0], (char **)argv);
-    fprintf(stderr, "exec failed: %s: %s\n", argv[0], strerror(errno));
-    _exit(1);
-  }
-
+  extern char **environ;
+  pid_t id;
   int status;
-  if (waitpid(id, &status, 0) <= 0 || status != 0) {
+  if (posix_spawnp(&id, argv[0], NULL, NULL, (char *const *)argv, environ) ||
+      waitpid(id, &status, 0) <= 0 ||
+      status != 0) {
     fprintf(stderr, "exec failed: %s\n", argv[0]);
     cleanup_exit(1);
   }
