@@ -457,12 +457,8 @@ static Type *bitwidth_to_ty(int width, bool is_unsigned) {
 }
 
 static int32_t ovf_headroom(Type *ty, NodeKind kind) {
-  int32_t bits;
-  switch (ty->kind) {
-  case TY_BOOL:   bits = 1; break;
-  case TY_BITINT: bits = ty->bit_cnt; break;
-  default:        bits = ty->size * 8; break;
-  }
+  int32_t bits = (ty->kind == TY_BOOL) ? 1 : bit_size(ty);
+
   if (kind == ND_MUL)
     return bits * 2 + ty->is_unsigned;
   return bits + 1 + ty->is_unsigned;
@@ -2443,9 +2439,7 @@ static void gen_expr2(Node *node, bool is_void) {
     return;
   case ND_CKD_ARITH: {
     Type *res_ty = node->m.target->ty->base;
-    int32_t chk_bits = res_ty->is_unsigned +
-                       (res_ty->kind == TY_BITINT ? res_ty->bit_cnt : res_ty->size * 8);
-
+    int32_t chk_bits = res_ty->is_unsigned + bit_size(res_ty);
     int32_t bits = MAX(chk_bits, res_ty->size * 8);
     bits = MAX(bits, ovf_headroom(node->m.lhs->ty, node->arith_kind));
     bits = MAX(bits, ovf_headroom(node->m.rhs->ty, node->arith_kind));

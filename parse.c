@@ -1533,7 +1533,7 @@ static bool chk_enum_tag(Type *tag_ty, Type *fixed_ty, Token *tag) {
 }
 
 static bool enum_chk_ty_range(Type *ty, int64_t min, uint64_t max) {
-  int lbits = 64 - (ty->kind == TY_BITINT ? ty->bit_cnt : ty->size * 8);
+  int lbits = 64 - bit_size(ty);
   if (lbits < 0)
     internal_error();
   if (min) {

@@ -178,6 +178,10 @@ int next_pow_of_two(int val) {
   return 8;
 }
 
+int64_t bit_size(Type *ty) {
+  return ty->kind == TY_BITINT ? ty->bit_cnt : ty->size * 8;
+}
+
 int64_t bitint_buffer_size(Type *ty) {
   return MAX(ty->size, 8);
 }
@@ -683,8 +687,8 @@ static Type *get_common_type(Node **lhs, Node **rhs) {
   ty1 = (*lhs)->ty;
   ty2 = (*rhs)->ty;
 
-  int32_t sz1 = ty1->kind == TY_BITINT ? ty1->bit_cnt : ty1->size * 8;
-  int32_t sz2 = ty2->kind == TY_BITINT ? ty2->bit_cnt : ty2->size * 8;
+  int32_t sz1 = bit_size(ty1);
+  int32_t sz2 = bit_size(ty2);
   if (sz1 != sz2)
     return sz1 > sz2 ? ty1 : ty2;
 
