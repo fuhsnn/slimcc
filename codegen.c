@@ -3151,48 +3151,51 @@ static void imm_cmp(const char *op, const char *tmp, int64_t val) {
   Printftn("cmp %s, %s", tmp, op);
 }
 
-static void imm_arith(NodeKind kind, int sz, int64_t val) {
+static void imm_arith(NodeKind kind, Node *expr, int sz, int64_t val) {
   const char *ax = reg_ax(sz);
   const char *dx = reg_dx(sz);
+
+  if ((kind == ND_MUL || kind == ND_BITAND) && val == 0) {
+    gen_void_expr(expr);
+    Printstn("xor %%eax, %%eax");
+    return;
+  }
+
+  if (kind == ND_BITOR && val == -1) {
+    gen_void_expr(expr);
+    Printftn("mov $-1, %s", ax);
+    return;
+  }
+
+  gen_expr(expr);
 
   switch (kind) {
   case ND_ADD:    imm_add(ax, dx, val); return;
   case ND_SUB:    imm_sub(ax, dx, val); return;
   case ND_BITAND: imm_and(ax, dx, val); return;
-  }
-
-  if (val == 0) {
-    switch (kind) {
-    case ND_MUL:    Printstn("xor %%eax, %%eax");
-    case ND_BITOR:
-    case ND_BITXOR:
-    case ND_SHL:
-    case ND_SHR:
-    case ND_SAR:    return;
-    }
-  }
-
-  if (val == 1)
-    if (kind == ND_MUL)
+  case ND_BITXOR:
+    if (val == -1) {
+      Printftn("not %s", ax);
       return;
-
-  if (val == -1) {
-    switch (kind) {
-    case ND_MUL:    Printftn("neg %s", ax); return;
-    case ND_BITOR:  Printftn("mov $-1, %s", ax); return;
-    case ND_BITXOR: Printftn("not %s", ax); return;
     }
-  }
-
-  if (kind == ND_MUL && is_pow_of_two(val)) {
-    for (int i = 1; i < sz * 8; i++) {
-      if (1LL << i == val) {
-        Printftn("shl $%d, %s", i, ax);
-        return;
-      }
+  case ND_BITOR:
+  case ND_SHL:
+  case ND_SHR:
+  case ND_SAR:
+    if (val == 0)
+      return;
+    break;
+  case ND_MUL:
+    switch (val) {
+    case 1:  return;
+    case -1: Printftn("neg %s", ax); return;
     }
+    if (Pop64(val) == 1) {
+      Printftn("shl $%d, %s", Ctz64(val), ax);
+      return;
+    }
+    break;
   }
-
   imm_arith2(kind, ax, dx, val);
   return;
 }
@@ -3329,8 +3332,7 @@ static bool gen_arith_opt_gp2(NodeKind kind, int sz, Node *lhs, Node *rhs, int p
   switch (pass) {
   case 0:
     if (is_const_expr(rhs, &val)) {
-      gen_expr(lhs);
-      imm_arith(kind, sz, limit_imm(val, sz));
+      imm_arith(kind, lhs, sz, limit_imm(val, sz));
       return true;
     }
     break;
@@ -3396,8 +3398,7 @@ static bool gen_shift_opt_gp(Node *node) {
   const char *ptr;
 
   if (is_const_expr(node->m.rhs, &val)) {
-    gen_expr(node->m.lhs);
-    imm_arith(node->kind, node->ty->size, val);
+    imm_arith(node->kind, node->m.lhs, node->ty->size, val);
     return true;
   }
   if (is_memop(node->m.rhs, ofs, &ptr, true)) {
