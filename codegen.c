@@ -3197,82 +3197,84 @@ static void imm_arith(NodeKind kind, int sz, int64_t val) {
   return;
 }
 
-static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
+static bool imm_divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
   const char *ax = reg_ax(ty->size);
   const char *dx = reg_dx(ty->size);
 
-  if (val == 1) {
-    gen_expr(expr);
-    if (kind == ND_MOD)
-      Printstn("xor %%eax, %%eax");
-    return true;
-  }
-
-  if (val == -1) {
-    gen_expr(expr);
-
-    if (!ty->is_unsigned) {
-      if (kind == ND_DIV)
-        Printftn("neg %s", ax);
-      else
-        Printstn("xor %%eax, %%eax");
+  switch (val) {
+  case 1:
+    if (kind == ND_DIV) {
+      gen_expr(expr);
       return true;
     }
+    gen_void_expr(expr);
+    Printstn("xor %%eax, %%eax");
+    return true;
+  case -1:
+    if (!ty->is_unsigned) {
+      if (kind == ND_DIV) {
+        gen_expr(expr);
+        Printftn("neg %s", ax);
+        return true;
+      }
+      gen_void_expr(expr);
+      Printstn("xor %%eax, %%eax");
+      return true;
+    }
+    gen_expr(expr);
 
     if (kind == ND_DIV) {
       Printftn("cmp $-1, %s", ax);
       gen_cmp_setcc(ND_EQ, false);
       return true;
     }
-
     Printstn("xor %%edx, %%edx");
     Printftn("cmp $-1, %s", ax);
     Printftn("cmove %s, %s", dx, ax);
     return true;
+  case 0: {
+    Printstn("ud2");
+    return true;
+  }
   }
 
-  if (is_pow_of_two(val)) {
-    if (kind == ND_DIV) {
-      if (ty->is_unsigned) {
-        gen_expr(expr);
+  if (Pop64(val) == 1) {
+    if (ty->is_unsigned) {
+      gen_expr(expr);
+
+      if (kind == ND_DIV) {
         Printftn("shr $%d, %s", Ctz64(val), ax);
         return true;
       }
-      if (val > 1 && val <= (1L << 30)) {
-        gen_expr(expr);
+      uint64_t msk = val - 1;
+      if (msk == UINT32_MAX) {
+        Printstn("movl %%eax, %%eax");
+        return true;
+      }
+      if (msk <= INT32_MAX) {
+        Printftn("and $%d, %%eax", (int)msk);
+        return true;
+      }
+      imm_and(ax, dx, msk);
+      return true;
+    }
+
+    if (val > 1 && val <= ((uint64_t)1 << 30)) {
+      gen_expr(expr);
+
+      if (kind == ND_DIV) {
         Printftn("lea %" PRIi32 "(%s), %s", (int32_t)(val - 1), ax, dx);
         Printftn("test %s, %s", ax, ax);
         Printftn("cmovs %s, %s", dx, ax);
         Printftn("sar $%d, %s", Ctz64(val), ax);
         return true;
       }
-    }
-
-    if (kind == ND_MOD && val != 0) {
-      if (ty->is_unsigned) {
-        gen_expr(expr);
-
-        uint64_t msk = val - 1;
-        if (msk == UINT32_MAX) {
-          Printstn("movl %%eax, %%eax");
-          return true;
-        }
-        if (msk <= INT32_MAX) {
-          Printftn("and $%d, %%eax", (int)msk);
-          return true;
-        }
-        imm_and(ax, dx, msk);
-        return true;
-      }
-      if (val > 1 && val <= (1L << 30)) {
-        gen_expr(expr);
-        Printftn("%s", ty->size == 8 ? "cqto" : "cltd");
-        Printftn("shr $%d, %s", (int)(ty->size * 8 - Ctz64(val)), dx);
-        Printftn("add %s, %s", dx, ax);
-        imm_and(ax, NULL, (int32_t)(val - 1));
-        Printftn("sub %s, %s", dx, ax);
-        return true;
-      }
+      Printftn("%s", ty->size == 8 ? "cqto" : "cltd");
+      Printftn("shr $%d, %s", (int)(ty->size * 8 - Ctz64(val)), dx);
+      Printftn("add %s, %s", dx, ax);
+      imm_and(ax, NULL, (int32_t)(val - 1));
+      Printftn("sub %s, %s", dx, ax);
+      return true;
     }
   }
 
@@ -3424,7 +3426,7 @@ static bool gen_gp_opt(Node *node) {
   case ND_MOD: {
     int64_t val;
     if (is_const_expr(rhs, &val))
-      return divmod_opt(kind, ty, lhs, val);
+      return imm_divmod_opt(kind, ty, lhs, val);
     return false;
   }
   }
