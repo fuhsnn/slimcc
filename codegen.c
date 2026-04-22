@@ -3151,6 +3151,67 @@ static void imm_cmp(const char *op, const char *tmp, int64_t val) {
   Printftn("cmp %s, %s", tmp, op);
 }
 
+static bool gen_imm_mul_p2(const char *ax, int p2) {
+  switch (p2) {
+  case 0:  break;
+  case 1:  Printftn("add %s, %s", ax, ax); break;
+  default: Printftn("shl $%d, %s", p2, ax); break;
+  }
+  return true;
+}
+
+static bool imm_mul_opt(const char *ax, const char *dx, int64_t val) {
+  int x = 0, y;
+  bool use_dx = false;
+
+  switch (val) {
+  case 15: x = 4, y = 2; break;
+  case 27: x = 8, y = 2; break;
+  case 25: x = 4, y = 4; break;
+  case 45: x = 8, y = 4; break;
+  case 81: x = 8, y = 8; break;
+  case 7:  x = 2, y = 2, use_dx = true; break;
+  case 11: x = 4, y = 2, use_dx = true; break;
+  case 19: x = 8, y = 2, use_dx = true; break;
+  case 13: x = 2, y = 4, use_dx = true; break;
+  case 21: x = 4, y = 4, use_dx = true; break;
+  case 37: x = 8, y = 4, use_dx = true; break;
+  case 41: x = 4, y = 8, use_dx = true; break;
+  case 73: x = 8, y = 8, use_dx = true; break;
+  }
+  if (x) {
+    Printftn("lea (%%rax, %%rax, %d), %s", x, (use_dx ? dx : ax));
+    Printftn("lea (%%rax, %s, %d), %s", (use_dx ? "%rdx" : "%rax"), y, ax);
+    return true;
+  }
+
+  int p2 = Ctz64(val);
+  switch ((uint64_t)val >> p2) {
+  case 3: x = 2; break;
+  case 5: x = 4; break;
+  case 9: x = 8; break;
+  }
+  if (x) {
+    Printftn("lea (%%rax, %%rax, %d), %s", x, ax);
+    return gen_imm_mul_p2(ax, p2);
+  }
+
+  if (Pop64((uint64_t)val + 1) == 1) {
+    Printftn("mov %s, %s", ax, dx);
+    gen_imm_mul_p2(ax, Ctz64((uint64_t)val + 1));
+    Printftn("sub %s, %s", dx, ax);
+    return true;
+  }
+
+  if (Pop64((uint64_t)val - 1) == 1) {
+    Printftn("mov %s, %s", ax, dx);
+    gen_imm_mul_p2(ax, Ctz64((uint64_t)val - 1));
+    Printftn("add %s, %s", dx, ax);
+    return true;
+  }
+  return false;
+}
+
 static void imm_arith(NodeKind kind, Node *expr, int sz, int64_t val) {
   const char *ax = reg_ax(sz);
   const char *dx = reg_dx(sz);
@@ -3191,9 +3252,11 @@ static void imm_arith(NodeKind kind, Node *expr, int sz, int64_t val) {
     case -1: Printftn("neg %s", ax); return;
     }
     if (Pop64(val) == 1) {
-      Printftn("shl $%d, %s", Ctz64(val), ax);
+      gen_imm_mul_p2(ax, Ctz64(val));
       return;
     }
+    if (imm_mul_opt(ax, dx, val))
+      return;
     break;
   }
   imm_arith2(kind, ax, dx, val);
