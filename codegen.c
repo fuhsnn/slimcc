@@ -297,14 +297,6 @@ static bool is_scalar(Type *ty) {
   return is_gp_ty(ty) || is_flonum(ty) || ty->kind == TY_BITINT;
 }
 
-static int trailing_zero(uint64_t val) {
-  int tz = 0;
-  for (; tz < 64; tz++)
-    if ((1LL << tz) == val)
-      break;
-  return tz;
-}
-
 static bool in_imm_range(int64_t val) {
   return val == (int32_t)val;
 }
@@ -3243,7 +3235,7 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
     if (kind == ND_DIV) {
       if (ty->is_unsigned) {
         gen_expr(expr);
-        Printftn("shr $%d, %s", trailing_zero(val), ax);
+        Printftn("shr $%d, %s", Ctz64(val), ax);
         return true;
       }
       if (val > 1 && val <= (1L << 30)) {
@@ -3251,7 +3243,7 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
         Printftn("lea %" PRIi32 "(%s), %s", (int32_t)(val - 1), ax, dx);
         Printftn("test %s, %s", ax, ax);
         Printftn("cmovs %s, %s", dx, ax);
-        Printftn("sar $%d, %s", trailing_zero(val), ax);
+        Printftn("sar $%d, %s", Ctz64(val), ax);
         return true;
       }
     }
@@ -3275,7 +3267,7 @@ static bool divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
       if (val > 1 && val <= (1L << 30)) {
         gen_expr(expr);
         Printftn("%s", ty->size == 8 ? "cqto" : "cltd");
-        Printftn("shr $%d, %s", (int)(ty->size * 8 - trailing_zero(val)), dx);
+        Printftn("shr $%d, %s", (int)(ty->size * 8 - Ctz64(val)), dx);
         Printftn("add %s, %s", dx, ax);
         imm_and(ax, NULL, (int32_t)(val - 1));
         Printftn("sub %s, %s", dx, ax);
@@ -4222,17 +4214,6 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
   }
 }
 
-static int asm_reg_msk_popcount(AsmParam *ap) {
-#ifdef BITCNT_POP
-  return BITCNT_POP(ap->reg_constraint);
-#else
-  int pop = 0;
-  for (uint64_t i = 0; i < REG_X64_END; i++)
-    pop += !!(ap->reg_constraint & (1ULL << i));
-  return pop;
-#endif
-}
-
 static int asm_assign_operands_presort(AsmParam **sorted) {
   uint8_t counts[REG_X64_END] = {0};
 
@@ -4240,7 +4221,7 @@ static int asm_assign_operands_presort(AsmParam **sorted) {
     AsmParam *ap = asm_ops[i];
     if (ap->kind || !ap->reg_constraint)
       continue;
-    counts[asm_reg_msk_popcount(ap)]++;
+    counts[Pop64(ap->reg_constraint)]++;
   }
 
   for (uint64_t idx = 1; idx < REG_X64_END; idx++)
@@ -4251,7 +4232,7 @@ static int asm_assign_operands_presort(AsmParam **sorted) {
     AsmParam *ap = asm_ops[i];
     if (ap->kind || !ap->reg_constraint)
       continue;
-    sorted[--counts[asm_reg_msk_popcount(ap)]] = ap;
+    sorted[--counts[Pop64(ap->reg_constraint)]] = ap;
     sorted_cnt++;
   }
   return sorted_cnt;

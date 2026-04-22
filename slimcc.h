@@ -22,6 +22,38 @@
 #include <time.h>
 #include <unistd.h>
 
+#if defined(__has_builtin) && (__SIZEOF_LONG_LONG__ == 8)
+# if __has_builtin(__builtin_popcountll)
+#  define Pop64(x) __builtin_popcountll((uint64_t)(x))
+# endif
+# if __has_builtin(__builtin_ctzll)
+#  define Ctz64(x) __builtin_ctzll((uint64_t)(x))
+# endif
+#elif defined(__has_include)
+# if __has_include(<stdbit.h>)
+#  include <stdbit.h>
+#  define Pop64(x) (int)stdc_count_ones((uint64_t)(x))
+#  define Ctz64(x) (int)stdc_trailing_zeros((uint64_t)(x))
+# endif
+#endif
+
+#ifndef Pop64
+# define Pop64(x) _pop64_impl(x)
+static inline int _pop64_impl(uint64_t v) {
+  int cnt = 0;
+  for (; v; cnt++)
+    v &= v - 1;
+  return cnt;
+}
+#endif
+
+#ifndef Ctz64
+# define Ctz64(x) _ctz64_impl(x)
+static inline int _ctz64_impl(uint64_t v) {
+  return Pop64((v & -v) - 1);
+}
+#endif
+
 #if defined(__SANITIZE_ADDRESS__)
 # define USE_ASAN 1
 #elif defined(__has_feature)
@@ -61,12 +93,6 @@
 #endif
 #ifndef NORETURN
 # define NORETURN
-#endif
-
-#if defined(__has_builtin) && !(USE_ASAN || defined(__FILC__))
-# if __has_builtin(__builtin_popcount)
-#  define BITCNT_POP(x) __builtin_popcount(x)
-# endif
 #endif
 
 #if defined(__GNUC__)
