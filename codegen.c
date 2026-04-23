@@ -2903,25 +2903,54 @@ static void imm_tmpl(const char *ins, const char *op, int64_t val) {
   return;
 }
 
+static void memop_arith_imm2(Node *lhs, int64_t val, const char *ins_sz) {
+  char ofs[STRBUF_SZ];
+  const char *ptr;
+
+  if (is_memop(lhs, ofs, &ptr, false)) {
+    char memop[STRBUF_SZ2];
+    snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
+    imm_tmpl(ins_sz, memop, limit_imm(val, lhs->ty->size));
+    return;
+  }
+  gen_addr(lhs);
+  imm_tmpl(ins_sz, "(%rax)", limit_imm(val, lhs->ty->size));
+}
+
+static bool memop_arith_imm(Node *lhs, Node *rhs, const char *ins) {
+  int64_t rval;
+  if (is_const_expr(rhs, &rval)) {
+    char ins_sz[STRBUF_SZ];
+    snprintf(ins_sz, STRBUF_SZ, "%s%s", ins, size_suffix(lhs->ty->size));
+
+    char ofs[STRBUF_SZ];
+    const char *ptr;
+
+    if (is_memop(lhs, ofs, &ptr, false)) {
+      char memop[STRBUF_SZ2];
+      snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
+      imm_tmpl(ins_sz, memop, limit_imm(rval, lhs->ty->size));
+      return true;
+    }
+    gen_addr(lhs);
+    imm_tmpl(ins_sz, "(%rax)", limit_imm(rval, lhs->ty->size));
+    return true;
+  }
+  return false;
+}
+
 static void memop_arith(Node *lhs, Node *rhs, const char *ins) {
   char ins_sz[STRBUF_SZ];
   snprintf(ins_sz, STRBUF_SZ, "%s%s", ins, size_suffix(lhs->ty->size));
 
   int64_t rval;
-  char ofs[STRBUF_SZ];
-  const char *ptr;
   if (is_const_expr(rhs, &rval)) {
-    if (is_memop(lhs, ofs, &ptr, false)) {
-      char memop[STRBUF_SZ2];
-      snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
-      imm_tmpl(ins_sz, memop, limit_imm(rval, lhs->ty->size));
-      return;
-    }
-    gen_addr(lhs);
-    imm_tmpl(ins_sz, "(%rax)", limit_imm(rval, lhs->ty->size));
+    memop_arith_imm2(lhs, rval, ins_sz);
     return;
   }
 
+  char ofs[STRBUF_SZ];
+  const char *ptr;
   if (is_memop(lhs, ofs, &ptr, false)) {
     gen_expr(rhs);
     Printftn("%s %s, %s(%s)", ins_sz, reg_ax(lhs->ty->size), ofs, ptr);
@@ -2936,36 +2965,42 @@ static void memop_arith(Node *lhs, Node *rhs, const char *ins) {
 }
 
 static void gen_void_arith_assign(Node *node) {
-  if (node->kind == ND_POST_INCDEC) {
-    node->kind = ND_ARITH_ASSIGN;
-    node->arith_kind = ND_ADD;
-  }
+  NodeKind arith_kind = node->kind == ND_POST_INCDEC ? ND_ADD : node->arith_kind;
 
   Node *lhs = node->m.lhs;
   Node *rhs = node->m.rhs;
-  add_type(rhs);
+  Type *ty = lhs->ty;
+
+  Node null = {.kind = ND_NULL_EXPR, .ty = ty, .tok = rhs->tok};
+  Node expr = {.kind = arith_kind, .m.lhs = &null, .m.rhs = rhs, .tok = rhs->tok};
+  add_type(&expr);
 
   if (opt_optimize &&
-      is_gp_ty(lhs->ty) &&
+      is_gp_ty(ty) &&
+      ty->kind != TY_BOOL &&
       !is_bitfield(lhs) &&
-      lhs->ty->kind != TY_BOOL &&
-      is_integer(rhs->ty)) {
-    Node null = {.kind = ND_NULL_EXPR, .ty = lhs->ty, .tok = rhs->tok};
-    Node expr = {.kind = node->arith_kind, .m.lhs = &null, .m.rhs = rhs, .tok = rhs->tok};
-    add_type(&expr);
-
-    switch (node->arith_kind) {
+      is_gp_ty(rhs->ty)) {
+    switch (arith_kind) {
     case ND_ADD:
     case ND_SUB:
     case ND_BITAND:
     case ND_BITOR:
     case ND_BITXOR: {
-      memop_arith(lhs, expr.m.rhs, arith_ins(node->arith_kind));
+      memop_arith(lhs, expr.m.rhs, arith_ins(arith_kind));
       return;
     }
+    case ND_SHL:
+    case ND_SHR:
+    case ND_SAR:
+      if (memop_arith_imm(lhs, expr.m.rhs, arith_ins(arith_kind)))
+        return;
     }
   }
-  gen_expr2(node, true);
+  gen_addr(lhs);
+  push();
+  load(lhs, 0);
+  gen_expr(new_cast(&expr, ty));
+  store(lhs, true);
 }
 
 static void gen_void_assign(Node *node) {
@@ -2975,10 +3010,8 @@ static void gen_void_assign(Node *node) {
   if (is_gp_ty(lhs->ty) &&
       !is_bitfield(lhs) &&
       !(lhs->ty->qual & Q_ATOMIC) &&
-      is_const_expr(rhs, NULL)) {
-    memop_arith(lhs, rhs, "mov");
+      memop_arith_imm(lhs, rhs, "mov"))
     return;
-  }
 
   char sofs[STRBUF_SZ];
   const char *sptr;
