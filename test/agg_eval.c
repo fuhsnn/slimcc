@@ -50,6 +50,10 @@ int main(void) {
     DASSERT(13 == (intptr_t)&((struct S*)0)->s[6].c2);
   }
   {
+    struct S { struct { char c, d[13]; }; };
+    SASSERT(1 == (intptr_t)((struct S*)0)->d);
+  }
+  {
     struct S { char a; _Atomic char b; volatile char c; };
     SASSERT(1 ==  offsetof(struct S, b));
     SASSERT(2 ==  offsetof(struct S, c));

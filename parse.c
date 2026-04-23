@@ -3669,9 +3669,12 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   }
 
   if (ctx->kind == EV_CONST) {
+    int64_t ofs;
     if (node->kind == ND_ADDR) {
-      int64_t ofs;
       if (eval_non_var_ofs(lhs, &ofs))
+        return ofs;
+    } else if (node->ty->kind == TY_ARRAY) {
+      if (eval_non_var_ofs(node, &ofs))
         return ofs;
     }
     if (is_integer(ty) || ty->kind == TY_PTR || ty->kind == TY_NULLPTR) {
