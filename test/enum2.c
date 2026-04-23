@@ -236,15 +236,15 @@ int main(void) {
     E1B = 5000000000,
   };
 
-  DASSERT(sizeof(*p) == 8);
-  DASSERT(5000000000 == E1B);
+  SASSERT(sizeof(*p) == 8);
+  SASSERT(5000000000 == E1B);
 
   enum E2 : short;
   enum E2 : short { E2A };
-  DASSERT(sizeof(E2A) == 2);
+  SASSERT(sizeof(E2A) == 2);
 
   enum : short unsigned { ANON_E };
-  DASSERT(sizeof(ANON_E) == 2);
+  SASSERT(sizeof(ANON_E) == 2);
 
   ASSERT(1, extend());
   ASSERT(1, compat());

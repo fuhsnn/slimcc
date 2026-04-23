@@ -26,8 +26,8 @@ void local_adr(int recur, const int *local_p, const int *static_p) {
   constexpr int local_v = 55;
   static constexpr int static_v  = 66;
 
-  DASSERT(55 == local_v);
-  DASSERT(66 == static_v);
+  SASSERT(55 == local_v);
+  SASSERT(66 == static_v);
 
   if (recur) {
     ASSERT(55, *local_p);
@@ -40,16 +40,16 @@ void local_adr(int recur, const int *local_p, const int *static_p) {
 }
 
 int main() {
-  DASSERT(ld == f * 2);
-  DASSERT(sizeof(arr0) == len * sizeof(typeof(arr0[0])));
+  SASSERT(ld == f * 2);
+  SASSERT(sizeof(arr0) == len * sizeof(typeof(arr0[0])));
 
-  DASSERT(u1.f == 3.1415926f);
+  SASSERT(u1.f == 3.1415926f);
 
   local_adr(0,NULL,NULL);
 
   union U1 { int i; union { int j; union { int k; int m; }; }; };
   constexpr union U1 u1 = {.m =77 };
-  DASSERT( u1.m == 77 );
+  SASSERT( u1.m == 77 );
 
    struct S {
      char c;
@@ -67,12 +67,12 @@ int main() {
    };
   constexpr struct S s = { 11,22,33,-44,55,6};
 
-  DASSERT(s.c == 11);
-  DASSERT(s.a.f == 22);
-  DASSERT(s.w == 33);
-  DASSERT(s.x == -44);
-  DASSERT(s.d == 55);
-  DASSERT(s.b == true);
+  SASSERT(s.c == 11);
+  SASSERT(s.a.f == 22);
+  SASSERT(s.w == 33);
+  SASSERT(s.x == -44);
+  SASSERT(s.d == 55);
+  SASSERT(s.b == true);
 
   {
     struct S { int i; };

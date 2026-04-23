@@ -47,7 +47,7 @@ int aggregate_eval(void) {
 int main(void) {
   {
     struct S { struct { char c, c2; } s[13]; };
-    DASSERT(13 == (intptr_t)&((struct S*)0)->s[6].c2);
+    SASSERT(13 == (intptr_t)&((struct S*)0)->s[6].c2);
   }
   {
     struct S { struct { char c, d[13]; }; };

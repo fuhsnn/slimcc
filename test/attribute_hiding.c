@@ -30,18 +30,18 @@ struct re_def {
 
 
 void pre_include(void) {
-  DASSERT(sizeof(struct pre_inc) == 12);
-  DASSERT(offsetof(struct pre_inc, data) == 4);
+  SASSERT(sizeof(struct pre_inc) == 12);
+  SASSERT(offsetof(struct pre_inc, data) == 4);
 }
 
 void post_include(void){
-  DASSERT(sizeof(struct post_inc) == 12);
-  DASSERT(offsetof(struct post_inc, data) == 4);
+  SASSERT(sizeof(struct post_inc) == 12);
+  SASSERT(offsetof(struct post_inc, data) == 4);
 }
 
 void redefined(void) {
-  DASSERT(sizeof(struct re_def) == 16);
-  DASSERT(offsetof(struct re_def, data) == 8);
+  SASSERT(sizeof(struct re_def) == 16);
+  SASSERT(offsetof(struct re_def, data) == 8);
 }
 
 int main() {

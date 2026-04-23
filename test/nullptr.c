@@ -130,9 +130,9 @@ int main(void){
   constexpr nullptr_t p43 = {};
   constexpr nullptr_t p44 = {0};
 
-  DASSERT(p42 == 0);
-  DASSERT(p43 == NULL);
-  DASSERT(p44 == nullptr);
+  SASSERT(p42 == 0);
+  SASSERT(p43 == NULL);
+  SASSERT(p44 == nullptr);
 
   ASSERT(1, !val_test(NULL, nullptr, 0));
 
