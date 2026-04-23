@@ -414,12 +414,6 @@ static Node *new_size_t(int64_t val, Token *tok) {
   return node;
 }
 
-static Node *base_size(Type *base, Token *tok) {
-  if (base->size < 0)
-    error_tok(tok, "pointer has incomplete type");
-  return new_size_t(base->size, tok);
-}
-
 static Node *new_boolean(bool val, Token *tok) {
   Node *node = new_node(ND_NUM, tok);
   node->num.val = val;
@@ -1771,7 +1765,9 @@ static Node *vla_size(Type *ty, Token *tok) {
 static Node *ptr_base_size(Type *ty, Token *tok) {
   if (ty->base->kind == TY_VLA)
     return vla_size(ty->base, tok);
-  return base_size(ty->base, tok);
+  if (ty->base->size < 0)
+    error_tok(tok, "pointer has incomplete type");
+  return new_size_t(ty->base->size, tok);
 }
 
 static Node *calc_vla(Type *ty, Token *tok) {
