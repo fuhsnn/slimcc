@@ -158,6 +158,11 @@ static Token *new_pmark(Token *tok) {
   return t;
 }
 
+static void get_realpath(const char *path, char *buf) {
+  if (!realpath(path, buf))
+    error("failed to resolve realpath of %s: %s", path, strerror(errno));
+}
+
 static void push_macro_lock(Macro *m, Token *tok) {
   m->is_locked = true;
   m->stop_tok = tok;
@@ -1026,48 +1031,54 @@ static bool expand_macro(Token **rest, Token *tok, bool is_root) {
   return true;
 }
 
+static void format_path(char *buf, const char *p1, const char *p2) {
+  if (PATH_MAX <= snprintf(buf, PATH_MAX, "%s/%s", p1, p2))
+    internal_error();
+}
+
 static const char *search_include_paths2(const char *filename, const char *dir,
-                                         InclIdx *idx) {
+                                         InclIdx *idx, bool noalloc) {
   if (filename[0] == '/') {
     *idx = INCL_ABS;
     return filename;
   }
 
+  char pathbuf[PATH_MAX];
+
   if (*idx <= INCL_REL) {
     if (dir) {
       char *dir2 = strdup(dir);
-      char *path = format("%s/%s", dirname(dir2), filename);
-      if (file_exists(path)) {
-        *idx = INCL_REL;
-        free(dir2);
-        return path;
-      }
-      free(path);
+      format_path(pathbuf, dirname(dir2), filename);
       free(dir2);
 
+      if (file_exists(pathbuf)) {
+        *idx = INCL_REL;
+        return noalloc ? (void *)1 : arena_strdup(&cc1_arena, pathbuf);
+      }
+
       for (int i = 0; i < iquote_paths.len; i++) {
-        char *path = format("%s/%s", iquote_paths.data[i], filename);
-        if (file_exists(path)) {
+        format_path(pathbuf, iquote_paths.data[i], filename);
+
+        if (file_exists(pathbuf)) {
           *idx = INCL_REL;
-          return path;
+          return noalloc ? (void *)1 : arena_strdup(&cc1_arena, pathbuf);
         }
-        free(path);
       }
     }
     *idx = 0;
   }
 
   for (; *idx < include_paths.len; (*idx)++) {
-    char *path = format("%s/%s", include_paths.data[*idx], filename);
-    if (file_exists(path))
-      return path;
-    free(path);
+    format_path(pathbuf, include_paths.data[*idx], filename);
+
+    if (file_exists(pathbuf))
+      return noalloc ? (void *)1 : arena_strdup(&cc1_arena, pathbuf);
   }
   return NULL;
 }
 
 static const char *search_include_paths(const char *filename, const char *dir) {
-  return search_include_paths2(filename, dir, &(InclIdx){INCL_REL});
+  return search_include_paths2(filename, dir, &(InclIdx){INCL_REL}, false);
 }
 
 static char *read_filename(Token **rest, Token *tok, const char **dir) {
@@ -1121,7 +1132,10 @@ static char *read_include_filename(Token *tok, const char **dir) {
 }
 
 static Token *include_file(Token *tok, const char *path, Token *filename_tok, InclIdx idx) {
-  if (hashmap_get(&pragma_once, realpath(path, NULL)))
+  char realpathbuf[PATH_MAX];
+  get_realpath(path, realpathbuf);
+
+  if (hashmap_get(&pragma_once, realpathbuf))
     return tok;
 
   char *guard_name = hashmap_get(&include_guards, path);
@@ -1327,7 +1341,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     char *filename = read_include_filename(split_line(&tok, file_tok), &dir);
 
     InclIdx idx = INCL_REL;
-    const char *path = search_include_paths2(filename, dir, &idx);
+    const char *path = search_include_paths2(filename, dir, &idx, false);
     if (ignore_missing_dep(path, filename, file_tok))
       return tok;
     return include_file(tok, path, file_tok, idx);
@@ -1339,7 +1353,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     char *filename = read_include_filename(split_line(&tok, file_tok), &dir);
 
     InclIdx idx = file_tok->file->incl_idx + 1;
-    const char *path = search_include_paths2(filename, dir, &idx);
+    const char *path = search_include_paths2(filename, dir, &idx, false);
     if (ignore_missing_dep(path, filename, file_tok))
       return tok;
     return include_file(tok, path, file_tok, idx);
@@ -1481,7 +1495,10 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
   if (is_root) {
     if (equal(tok, "pragma")) {
       if (equal(tok->next, "once")) {
-        hashmap_put(&pragma_once, realpath(tok->file->name, NULL), (void *)1);
+        char realpathbuf[PATH_MAX];
+        get_realpath(tok->file->name, realpathbuf);
+
+        hashmap_put(&pragma_once, arena_strdup(&cc1_arena, realpathbuf), (void *)1);
         return skip_line(tok->next->next);
       }
       return pass_line(cur, start);
@@ -1665,7 +1682,7 @@ static Token *has_include_macro(Token *start) {
 
   const char *dir = NULL;
   char *filename = read_include_filename(split_paren(&tok, tok), &dir);
-  bool found = search_include_paths(filename, dir);
+  bool found = search_include_paths2(filename, dir, &(InclIdx){INCL_REL}, true);
 
   pop_macro_lock_until(start, tok);
   return new_bool_int_token(found, start, tok);
@@ -1677,7 +1694,7 @@ static Token *has_include_next_macro(Token *start) {
   const char *dir = NULL;
   Token *end;
   char *filename = read_include_filename(split_paren(&end, file_tok), &dir);
-  bool found = search_include_paths2(filename, dir, &idx);
+  bool found = search_include_paths2(filename, dir, &idx, true);
 
   pop_macro_lock_until(start, end);
   return new_bool_int_token(found, start, end);

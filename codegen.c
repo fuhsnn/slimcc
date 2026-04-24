@@ -4196,7 +4196,7 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
     } else {
       if (!strncmp(p, "=@cc", 4)) {
         ap->kind = ASMOP_FLAG;
-        ap->flag = strdup(&p[4]);
+        ap->flag = arena_strdup(&ast_arena, &p[4]);
         continue;
       }
       if (*p != '=' && *p != '+')

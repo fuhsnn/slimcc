@@ -7,6 +7,7 @@
 #include <glob.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <limits.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdarg.h>
@@ -147,6 +148,7 @@ typedef struct {
 } Arena;
 
 char *arena_format(Arena *arena, const char *fmt, ...);
+char *arena_strdup(Arena *arena, const char *str);
 void arena_on(Arena *arena);
 void arena_off(Arena *arena);
 void *arena_calloc(Arena *a, size_t sz);

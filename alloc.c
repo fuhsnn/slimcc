@@ -57,6 +57,8 @@ static void *allocate(Arena *arena, size_t sz, bool clear) {
     ptr = &arena->cur->buf[arena->used];
     arena->used += aligned_sz;
   } else {
+    if (aligned_sz > ARENA_POOL_SIZE)
+      internal_error();
     arena->cur = arena->cur->next = new_pool();
     ptr = &arena->cur->buf;
     arena->used = aligned_sz;
@@ -107,6 +109,11 @@ char *arena_format(Arena *arena, const char *fmt, ...) {
   vsnprintf(ptr, aligned_sz, fmt, ap);
   va_end(ap);
   return ptr;
+}
+
+char *arena_strdup(Arena *arena, const char *str) {
+  size_t len = 1 + strlen(str);
+  return memcpy(arena_malloc(arena, len), str, len);
 }
 
 void arena_on(Arena *arena) {
