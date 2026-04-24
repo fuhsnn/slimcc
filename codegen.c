@@ -4426,7 +4426,7 @@ static Reg acquire_out_tmp(Node *node) {
 }
 
 static void asm_prepare_regs(Node *node, int tmp_cnt) {
-  node->gasm.ctx = ast_arena_calloc(sizeof(AsmContext));
+  node->gasm.ctx = arena_calloc(&ast_arena, sizeof(AsmContext));
 
   if (asm_use.in[REG_X64_BP] || asm_use.out[REG_X64_BP])
     node->gasm.ctx->frame_ptr1 = acquire_gp(asm_use.in, asm_use.out, node->tok);

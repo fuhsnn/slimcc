@@ -242,14 +242,14 @@ static bool is_const_context(void) {
 }
 
 static void enter_scope(void) {
-  Scope *sc = ast_arena_calloc(sizeof(Scope));
+  Scope *sc = arena_calloc(&ast_arena, sizeof(Scope));
   sc->parent = scope;
   sc->sibling_next = scope->children;
   scope = scope->children = sc;
 }
 
 static void enter_isolated_scope(void) {
-  Scope *sc = ast_arena_calloc(sizeof(Scope));
+  Scope *sc = arena_calloc(&ast_arena, sizeof(Scope));
   sc->parent = scope;
   scope = sc;
 }
@@ -382,7 +382,7 @@ static bool equal_substr(const char *loc, size_t len, const char *op) {
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
-  Node *node = arena_calloc(&node_arena, sizeof(Node));
+  Node *node = arena_calloc(&ast_arena, sizeof(Node));
   node->kind = kind;
   node->tok = tok;
   return node;
@@ -515,7 +515,7 @@ Node *new_cast(Node *expr, Type *ty) {
       return expr;
     }
   }
-  Node *node = arena_malloc(&node_arena, sizeof(Node));
+  Node *node = arena_malloc(&ast_arena, sizeof(Node));
   *node = tmp_node;
   return node;
 }
@@ -646,7 +646,7 @@ static VarScope *push_var_scope(const char *key, int keylen, Obj *var) {
   VarScope *vsc = ent->val;
   if (vsc)
     return vsc;
-  vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
+  vsc = ent->val = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(VarScope));
   vsc->var = var;
   return NULL;
 }
@@ -668,7 +668,7 @@ static void push_gvar_name(Token *name, Obj *var) {
 }
 
 static Obj *alloc_ast_var(Type *ty) {
-  Obj *var = ast_arena_calloc(sizeof(Obj));
+  Obj *var = arena_calloc(&ast_arena, sizeof(Obj));
   var->ty = ty;
   return var;
 }
@@ -732,7 +732,7 @@ static Obj *new_anon_gvar(Type *ty) {
 }
 
 static DeferStmt *new_defr(DeferKind kind) {
-  DeferStmt *defr = ast_arena_calloc(sizeof(DeferStmt));
+  DeferStmt *defr = arena_calloc(&ast_arena, sizeof(DeferStmt));
   defr->kind = kind;
   if (fnctx->defr) {
     defr->vla = fnctx->defr->vla;
@@ -1650,7 +1650,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
         cur->name = name;
         name->is_live = true;
       }
-      vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
+      vsc = ent->val = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(VarScope));
       vsc->enum_ty = ty;
       vsc->enum_val = v;
     }
@@ -2032,7 +2032,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
 
           if (ctx->init)
             continue;
-          ctx->init = ast_arena_malloc(sizeof(Initializer));
+          ctx->init = arena_malloc(&ast_arena, sizeof(Initializer));
           *ctx->init = init->list.data[i];
 
           ctx->var = new_lvar(init->list.data[i].ty);
@@ -2527,7 +2527,8 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
 
         for (int pos = 0; pos < end;) {
           if (srel && srel->offset == pos + sofs) {
-            Relocation *rel = ast_arena_calloc(sizeof(Relocation));
+            Relocation *rel = arena_calloc(fnctx ? &ast_arena : &cc1_arena,
+                                           sizeof(Relocation));
             rel->offset = pos + offset;
             rel->label = srel->label;
             rel->var = srel->var;
@@ -2548,7 +2549,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
       EvalContext ctx = {.kind = (init->ty->size != ty_nullptr->size) ? EV_CONST : ev_kind};
       int64_t val = eval2(node, &ctx);
       if (ctx.label || ctx.var) {
-        Relocation *rel = ast_arena_calloc(sizeof(Relocation));
+        Relocation *rel = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(Relocation));
         rel->offset = offset;
         rel->label = ctx.label;
         rel->var = ctx.var;
@@ -2761,7 +2762,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
     if (cur != &head)
       tok = skip(tok, ",");
 
-    cur = cur->next = ast_arena_calloc(sizeof(AsmParam));
+    cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
 
     if (consume(&tok, tok, "[")) {
       cur->name = tok;
@@ -2800,7 +2801,7 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
 
     Node *node = new_node(ND_GOTO, ident_tok(&tok, tok));
     push_goto(node);
-    cur = cur->next = ast_arena_calloc(sizeof(AsmParam));
+    cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
     cur->arg = node;
   }
   *rest = tok;
@@ -2924,7 +2925,7 @@ static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
     }
   }
 
-  CaseRange *cr = ast_arena_malloc(sizeof(CaseRange));
+  CaseRange *cr = arena_malloc(&ast_arena, sizeof(CaseRange));
   cr->label = case_node;
   cr->lo = lo;
   cr->hi = hi;
@@ -3218,7 +3219,7 @@ static void local_labels(Token **rest, Token *tok) {
   while (consume(&tok, tok, "__label__")) {
     bool first = true;
     for (; comma_list(&tok, &tok, ";", !first); first = false) {
-      LocalLabel *ll = ast_arena_calloc(sizeof(LocalLabel));
+      LocalLabel *ll = arena_calloc(&ast_arena, sizeof(LocalLabel));
       ll->name = ident_tok(&tok, tok);
       ll->next = scope->labels;
       scope->labels = ll;
@@ -5632,7 +5633,7 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
       if (vsc->type_def_align != align)
         error_tok(name, "conflict of typedef alignment");
     } else {
-      vsc = ent->val = ast_arena_calloc(sizeof(VarScope));
+      vsc = ent->val = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(VarScope));
       vsc->type_def = ty;
       vsc->type_def_align = align;
       chain_expr(&node, calc_vla(ty, tok));
@@ -5833,8 +5834,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   Type *prot_ty = fn->ty;
   fn->ty = ty;
 
-  arena_on(&ast_arena);
-
   fnctx = &(FuncContext){.fn = fn};
 
   Node *precalc = NULL;
@@ -5875,7 +5874,6 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   emit_text(fn);
 
   fnctx = NULL;
-  arena_off(&ast_arena);
 }
 
 static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr) {
@@ -6012,15 +6010,14 @@ Obj *parse(Token *tok) {
       continue;
     }
 
-    arena_on(&node_arena);
+    arena_on(&ast_arena);
 
     if (pragma_pack(&tok, tok)) {
-      arena_off(&node_arena);
+      arena_off(&ast_arena);
       continue;
     }
 
     if (tok->kind == TK_static_assert) {
-      arena_on(&ast_arena);
       Obj *last = globals;
 
       eval_static_assert(&tok, tok->next);
@@ -6035,7 +6032,6 @@ Obj *parse(Token *tok) {
       last->next = NULL;
 
       arena_off(&ast_arena);
-      arena_off(&node_arena);
       continue;
     }
 
@@ -6045,19 +6041,19 @@ Obj *parse(Token *tok) {
     if (equal(tok, ";")) {
       chk_inline(&attr, tok);
       tok = tok->next;
-      arena_off(&node_arena);
+      arena_off(&ast_arena);
       continue;
     }
 
     if (attr.strg & SC_TYPEDEF) {
       chk_inline(&attr, tok);
       parse_typedef(&tok, tok, basety, &attr);
-      arena_off(&node_arena);
+      arena_off(&ast_arena);
       continue;
     }
 
     global_declaration(&tok, tok, basety, &attr);
-    arena_off(&node_arena);
+    arena_off(&ast_arena);
   }
 
   return glb_head->next;
