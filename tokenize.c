@@ -498,7 +498,7 @@ static Token *asm_string_literal(const char *p, char end) {
     p++;
   }
   Token *tok = new_token(TK_ASM_STR, start, p + is_closed);
-  tok->str = strndup(start + 1, p - start - 1);
+  tok->str = arena_strndup(&pp_arena, start + 1, p - start - 1);
   return tok;
 }
 

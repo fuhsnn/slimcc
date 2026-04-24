@@ -116,6 +116,13 @@ char *arena_strdup(Arena *arena, const char *str) {
   return memcpy(arena_malloc(arena, len), str, len);
 }
 
+char *arena_strndup(Arena *arena, const char *str, size_t maxlen) {
+  size_t len = 1 + strnlen(str, maxlen);
+  char *p = memcpy(arena_malloc(arena, len), str, len);
+  p[len - 1] = '\0';
+  return p;
+}
+
 void arena_on(Arena *arena) {
   arena->head = arena->cur = new_pool();
   arena->used = 0;

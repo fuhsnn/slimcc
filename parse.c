@@ -742,10 +742,10 @@ static DeferStmt *new_defr(DeferKind kind) {
   return defr;
 }
 
-static char *get_ident(Token *tok) {
+static char *get_ident(Arena *arena, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected an identifier");
-  return strndup(tok->loc, tok->len);
+  return arena_strndup(arena, tok->loc, tok->len);
 }
 
 static VarScope *find_typedef(Token *tok) {
@@ -1312,7 +1312,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     Obj *cur = &head;
     while (comma_list(rest, &tok, ")", tok != start)) {
       Token *name = ident_tok(&tok, tok);
-      cur = cur->param_next = new_param(get_ident(name), NULL);
+      cur = cur->param_next = new_param(get_ident(&ast_arena, name), NULL);
     }
     fn_ty->param_list = head.param_next;
     leave_scope();
@@ -5723,7 +5723,7 @@ static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name) {
     if (fn->ty->is_oldstyle && !ty->is_oldstyle)
       fn->ty = ty;
   } else {
-    fn = ent->val = new_gvar(get_ident(name), ty);
+    fn = ent->val = new_gvar(get_ident(&cc1_arena, name), ty);
     fn->is_static = attr->strg & SC_STATIC;
 
     if (strstr(fn->name, "setjmp") ||
@@ -5947,7 +5947,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;
     } else {
-      var = ent->val = new_gvar(get_ident(name), ty);
+      var = ent->val = new_gvar(get_ident(&cc1_arena, name), ty);
       var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
       var->is_tls = attr->strg & SC_THREAD;
     }

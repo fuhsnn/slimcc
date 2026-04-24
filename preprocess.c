@@ -67,6 +67,7 @@ static bool is_supported_attr(Token *tok);
 static const char *supported_c_attr(Token **rest, Token *tok);
 static void newline_to_space(Token *tok);
 static Token *pragma_macro(Token *start);
+static void undef_macro2(Token *tok);
 
 static bool is_hash(Token *tok) {
   return tok->at_bol && equal(tok, "#");
@@ -483,7 +484,7 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
 static Macro *read_macro_name(Token **rest, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "macro name must be an identifier");
-  char *name = strndup(tok->loc, tok->len);
+  char *name = arena_strndup(&pp_arena, tok->loc, tok->len);
   tok = tok->next;
 
   Macro *m;
@@ -1099,7 +1100,7 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
     // For example, "\f" in "C:\foo" is not a formfeed character but
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
-    filename = strndup(tok->loc + 1, tok->len - 2);
+    filename = arena_strndup(&cc1_arena, tok->loc + 1, tok->len - 2);
     *dir = (tok->origin ? tok->origin : tok)->file->name;
   } else if (equal(tok, "<")) {
     // Pattern 2: #include <foo.h>
@@ -1112,7 +1113,7 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
         error_tok(tok, "expected '>'");
 
     if (!is_expanded && start->file == tok->file && start->loc < tok->loc)
-      filename = strndup(start->loc + 1, tok->loc - start->loc - 1);
+      filename = arena_strndup(&cc1_arena, start->loc + 1, tok->loc - start->loc - 1);
     else
       filename = join_tokens(start->next, tok, false);
   }
@@ -1373,7 +1374,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     tok = tok->next;
     if (tok->kind != TK_IDENT)
       error_tok(tok, "macro name must be an identifier");
-    undef_macro(strndup(tok->loc, tok->len));
+    undef_macro2(tok);
     return skip_line(tok->next);
   }
 
@@ -1463,7 +1464,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
 
     if (tok->is_incl_guard && cond->tok->is_incl_guard && tok->file == cond->tok->file) {
       Token *name_tok = cond->tok->next;
-      char *guard_name = strndup(name_tok->loc, name_tok->len);
+      char *guard_name = arena_strndup(&pp_arena, name_tok->loc, name_tok->len);
       hashmap_put(&include_guards, tok->file->name, guard_name);
     }
 
@@ -1552,6 +1553,10 @@ void define_macro(const char *name, const char *buf) {
 
 void undef_macro(const char *name) {
   hashmap_delete(&macros, name);
+}
+
+static void undef_macro2(Token *tok) {
+  hashmap_delete2(&macros, tok->loc, tok->len);
 }
 
 static void add_builtin(const char *name, macro_handler_fn *fn, bool align) {

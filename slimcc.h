@@ -149,6 +149,7 @@ typedef struct {
 
 char *arena_format(Arena *arena, const char *fmt, ...);
 char *arena_strdup(Arena *arena, const char *str);
+char *arena_strndup(Arena *arena, const char *str, size_t maxlen);
 void arena_on(Arena *arena);
 void arena_off(Arena *arena);
 void *arena_calloc(Arena *a, size_t sz);
