@@ -45,20 +45,13 @@ void run_assembler(StringArray *as_args, const char *input, const char *output) 
   run_assembler_gnustyle(as_args, input, output);
 }
 
-void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
+void run_linker(StringArray *paths, StringArray *args, const char *output) {
   StringArray arr = {0};
   const bool opt_pg = false;
 
-  strarray_push(&arr, "ld");
-  strarray_push(&arr, "-o");
-  strarray_push(&arr, output);
-  strarray_push(&arr, "-m");
-  strarray_push(&arr, "elf_x86_64");
+  ldarg_gnu_base(&arr, output);
 
-  if (opt_s)
-    strarray_push(&arr, "-s");
-
-  if (!(opt_nostartfiles || opt_shared)) {
+  if (!opt_nostartfiles && !opt_shared && !opt_r) {
     strarray_push(&arr, "-e");
     strarray_push(&arr, "__start");
   }
@@ -86,7 +79,7 @@ void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
   if (opt_nopie || opt_pg)
     strarray_push(&arr, "-nopie");
 
-  if (!(opt_nostartfiles || opt_r)) {
+  if (!opt_nostartfiles && !opt_r) {
     if (!opt_shared) {
       if (opt_pg)
         strarray_push(&arr, format("/usr/lib/gcrt0.o"));
@@ -101,13 +94,7 @@ void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
     }
   }
 
-  for (int i = 0; i < paths->len; i++) {
-    strarray_push(&arr, "-L");
-    strarray_push(&arr, paths->data[i]);
-  }
-
-  for (int i = 0; i < inputs->len; i++)
-    strarray_push(&arr, inputs->data[i]);
+  ldarg_gnu_inputs(&arr, paths, args);
 
   if (opt_r)
     strarray_push(&arr, "-r");
@@ -131,7 +118,7 @@ void run_linker(StringArray *paths, StringArray *inputs, const char *output) {
     strarray_push(&arr, "-lcompiler_rt");
   }
 
-  if (!(opt_nostartfiles || opt_r)) {
+  if (!opt_nostartfiles && !opt_r) {
     if (!opt_shared)
       strarray_push(&arr, format("/usr/lib/crtend.o"));
     else

@@ -3,9 +3,9 @@ testcc=$1
 tmp=`mktemp -d /tmp/testcc-test-XXXXXX`
 trap 'rm -rf $tmp' INT TERM HUP EXIT
 
-"$FILE" --help | grep astron -q
+FILE=${FILE:-file}
 
-if [ ! $? -eq 0 ]; then
+if ! `$FILE --help 2>/dev/null | grep -q astron`; then
     echo 'please set FILE to Fine Free File Command from https://www.darwinsys.com/file'
     exit 1
 fi
@@ -17,13 +17,28 @@ check() {
         echo "testing $1 ... failed"
         exit 1
     fi
+
+    if [ -s $tmp/warn ]; then
+        echo "warning detected:"
+        cat $tmp/warn
+        exit 1
+    fi
 }
 
-echo 'extern int bar; int foo() { return bar; }' > $tmp/foo.c
-echo 'int foo(); int bar=3; int main() { foo(); }' > $tmp/bar.c
+cat << 'EOF' > $tmp/foo.c
+extern int bar;
+extern int printf(const char *, ...);
+void foo() { printf("%d\n", bar); }
+EOF
+
+cat << 'EOF' > $tmp/bar.c
+void foo();
+int bar=42;
+int main() { foo(); }
+EOF
 
 test_obj() {
-    $testcc $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c
+    $testcc $1 -o $tmp/foo $tmp/foo.c $tmp/bar.c 2>$tmp/warn -Wno-unused-command-line-argument
     check "$1 build"
 
     STR=`$FILE $tmp/foo`
@@ -37,12 +52,19 @@ test_obj() {
       echo "$STR" | grep -q "$3"
       check "$1 linkage"
     fi
+
+    if echo "$2" | grep -q 'executable'; then
+      $tmp/foo | grep -q '^42$'
+      check "$1 run"
+    fi
 }
 
-if [ `uname` = 'OpenBSD' ]; then
-    test_obj '-fPIE -static' 'pie executable,' 'static-pie linked'
-elif [ `uname` = 'Linux' ]; then
+if [ `uname` = 'Linux' ]; then
     test_obj '-fPIE -static-pie' 'pie executable,' 'static-pie linked'
+elif  [ `uname` = 'NetBSD' ]; then
+    test_obj '-fPIE -static -pie' 'pie executable,' 'static-pie linked'
+elif  [ `uname` = 'OpenBSD' ]; then
+    test_obj '-fPIE -static' 'pie executable,' 'static-pie linked'
 fi
 
 test_obj '-fPIE -pie' 'pie executable,' 'dynamically linked'
@@ -56,4 +78,3 @@ test_obj '-fPIC -shared' 'shared object,' 'dynamically linked'
 test_obj '-r' 'relocatable'
 
 echo OK
-

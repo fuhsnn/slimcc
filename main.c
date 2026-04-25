@@ -9,15 +9,6 @@ typedef enum {
 } FileType;
 
 typedef enum {
-  LT_RELO,
-  LT_SHARED,
-  LT_DYNAMIC,
-  LT_STATIC_PIE,
-  LT_STATIC,
-  LT_PIE,
-} LinkType;
-
-typedef enum {
   PR_NORMAL = 0,
   PR_NOFORK,
   PR_PIPE,
@@ -1195,7 +1186,7 @@ bool file_exists(const char *path) {
   return !stat(path, &st);
 }
 
-static LinkType get_link_type(void) {
+LinkType link_type_gnustyle(void) {
   if (opt_r)
     return LT_RELO;
   if (opt_shared)
@@ -1209,22 +1200,32 @@ static LinkType get_link_type(void) {
   return LT_DYNAMIC;
 }
 
-static LinkType link_type(StringArray *arr, const char *ldso_path) {
-  LinkType type = get_link_type();
+void ldarg_gnu_base(StringArray *arr, const char *output) {
+  strarray_push(arr, opt_use_ld ? opt_use_ld : default_ld);
+  strarray_push(arr, "-o");
+  strarray_push(arr, output);
+  strarray_push(arr, "-m");
+  strarray_push(arr, "elf_x86_64");
+  strarray_push(arr, "--eh-frame-hdr");
 
-  switch (type) {
-  case LT_RELO:   strarray_push(arr, "-r"); break;
-  case LT_SHARED: strarray_push(arr, "-shared"); break;
-  case LT_STATIC_PIE:
-    strarray_push(arr, "-static");
-    strarray_push(arr, "-pie");
-    break;
-  case LT_STATIC: strarray_push(arr, "-static"); break;
-  case LT_PIE:    strarray_push(arr, "-pie"); break;
+  if (opt_s)
+    strarray_push(arr, "-s");
+}
+
+void ldarg_gnu_linktype(StringArray *arr, LinkType lt, const char *ldso_path) {
+  switch (lt) {
+  case LT_RELO:       strarray_push(arr, "-r"); break;
+  case LT_SHARED:     strarray_push(arr, "-shared"); break;
+  case LT_STATIC:     strarray_push(arr, "-static"); break;
+  case LT_STATIC_PIE: strarray_push(arr, "-static");
+  case LT_PIE:        strarray_push(arr, "-pie"); break;
   }
 
-  switch (type) {
-  case LT_STATIC_PIE: strarray_push(arr, "-no-dynamic-linker"); break;
+  switch (lt) {
+  case LT_STATIC_PIE: {
+    strarray_push(arr, "-no-dynamic-linker");
+    break;
+  }
   case LT_DYNAMIC:
   case LT_SHARED:
   case LT_PIE:
@@ -1236,11 +1237,32 @@ static LinkType link_type(StringArray *arr, const char *ldso_path) {
       strarray_push(arr, ldso_path);
     }
   }
-  return type;
 }
 
-static void link_libgcc(StringArray *arr, bool link_libgcc, bool is_static) {
-  if (!link_libgcc)
+void ldarg_gnu_crtbegin(StringArray *arr, LinkType lt, const char *gcc_libpath) {
+  if (gcc_libpath) {
+    switch (lt) {
+    case LT_STATIC_PIE:
+    case LT_SHARED:
+    case LT_PIE:        strarray_push(arr, format("%s/crtbeginS.o", gcc_libpath)); break;
+    case LT_STATIC:     strarray_push(arr, format("%s/crtbeginT.o", gcc_libpath)); break;
+    case LT_DYNAMIC:    strarray_push(arr, format("%s/crtbegin.o", gcc_libpath)); break;
+    }
+  }
+}
+
+void ldarg_gnu_inputs(StringArray *arr, StringArray *paths, StringArray *args) {
+  for (int i = 0; i < paths->len; i++) {
+    strarray_push(arr, "-L");
+    strarray_push(arr, paths->data[i]);
+  }
+
+  for (int i = 0; i < args->len; i++)
+    strarray_push(arr, args->data[i]);
+}
+
+static void link_libgcc(StringArray *arr, bool has_libgcc, bool is_static) {
+  if (!has_libgcc)
     return;
   strarray_push(arr, "-lgcc");
 
@@ -1266,22 +1288,41 @@ static void link_libc(StringArray *arr) {
   }
 }
 
+void ldarg_gnu_lc_lgcc(StringArray *arr, LinkType lt, bool has_libgcc) {
+  if (lt == LT_STATIC_PIE || lt == LT_STATIC) {
+    strarray_push(arr, "--start-group");
+    link_libgcc(arr, has_libgcc, true);
+    link_libc(arr);
+    strarray_push(arr, "--end-group");
+  } else {
+    link_libgcc(arr, has_libgcc, opt_static_libgcc);
+    link_libc(arr);
+    link_libgcc(arr, has_libgcc, opt_static_libgcc);
+  }
+}
+
+void ldarg_gnu_crtend(StringArray *arr, LinkType lt, const char *gcc_libpath) {
+  if (gcc_libpath) {
+    switch (lt) {
+    case LT_STATIC_PIE:
+    case LT_SHARED:
+    case LT_PIE:        strarray_push(arr, format("%s/crtendS.o", gcc_libpath)); break;
+    case LT_STATIC:
+    case LT_DYNAMIC:    strarray_push(arr, format("%s/crtend.o", gcc_libpath)); break;
+    }
+  }
+}
+
 void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *output,
                          const char *ldso_path, const char *libpath,
                          const char *gcc_libpath) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_ld ? opt_use_ld : default_ld);
-  strarray_push(&arr, "-o");
-  strarray_push(&arr, output);
-  strarray_push(&arr, "-m");
-  strarray_push(&arr, "elf_x86_64");
-  strarray_push(&arr, "--eh-frame-hdr");
+  ldarg_gnu_base(&arr, output);
 
-  if (opt_s)
-    strarray_push(&arr, "-s");
+  LinkType lt = link_type_gnustyle();
 
-  LinkType lt = link_type(&arr, ldso_path);
+  ldarg_gnu_linktype(&arr, lt, ldso_path);
 
   if (!opt_nostartfiles && lt != LT_RELO) {
     switch (lt) {
@@ -1292,50 +1333,19 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *outp
     }
     strarray_push(&arr, format("%s/crti.o", libpath));
 
-    if (gcc_libpath) {
-      switch (lt) {
-      case LT_STATIC_PIE:
-      case LT_SHARED:
-      case LT_PIE:        strarray_push(&arr, format("%s/crtbeginS.o", gcc_libpath)); break;
-      case LT_STATIC:     strarray_push(&arr, format("%s/crtbeginT.o", gcc_libpath)); break;
-      case LT_DYNAMIC:    strarray_push(&arr, format("%s/crtbegin.o", gcc_libpath)); break;
-      }
-    }
+    ldarg_gnu_crtbegin(&arr, lt, gcc_libpath);
   }
 
-  for (int i = 0; i < paths->len; i++) {
-    strarray_push(&arr, "-L");
-    strarray_push(&arr, paths->data[i]);
-  }
-
-  for (int i = 0; i < args->len; i++)
-    strarray_push(&arr, args->data[i]);
-
-  if (!opt_nodefaultlibs && lt != LT_RELO) {
-    if (lt == LT_STATIC_PIE || lt == LT_STATIC) {
-      strarray_push(&arr, "--start-group");
-      link_libgcc(&arr, gcc_libpath, true);
-      link_libc(&arr);
-      strarray_push(&arr, "--end-group");
-    } else {
-      link_libgcc(&arr, gcc_libpath, opt_static_libgcc);
-      link_libc(&arr);
-      link_libgcc(&arr, gcc_libpath, opt_static_libgcc);
-    }
-  }
+  ldarg_gnu_inputs(&arr, paths, args);
 
   if (!opt_nostartfiles && lt != LT_RELO) {
-    if (gcc_libpath) {
-      switch (lt) {
-      case LT_STATIC_PIE:
-      case LT_SHARED:
-      case LT_PIE:        strarray_push(&arr, format("%s/crtendS.o", gcc_libpath)); break;
-      case LT_STATIC:
-      case LT_DYNAMIC:    strarray_push(&arr, format("%s/crtend.o", gcc_libpath)); break;
-      }
-    }
+    ldarg_gnu_lc_lgcc(&arr, lt, gcc_libpath);
+
+    ldarg_gnu_crtend(&arr, lt, gcc_libpath);
+
     strarray_push(&arr, format("%s/crtn.o", libpath));
   }
+
   strarray_push(&arr, NULL);
 
   run_subprocess(arr.data);

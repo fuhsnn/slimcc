@@ -7,6 +7,12 @@ if [ "$CC" = /work/slimcc/slimcc ]; then
  MUON=muon
 fi
 
+if `sed --version 2>/dev/null | grep -q 'GNU sed'`; then
+  GSED=sed
+else
+  GSED=gsed
+fi
+
 test_ag() {
  git_fetch https://github.com/aswild/the_silver_searcher 7b571a8a94d0e22a06e3313cb0d9672b416fb2c1 ag
  sh autogen.sh
@@ -2206,9 +2212,9 @@ cctest_wacc() {
 # utilities
 
 fix_configure() {
- find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_wl=$|lt_prog_compiler_wl=-Wl,|g' {} +
- find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_pic=$|lt_prog_compiler_pic=-fPIC|g' {} +
- find . -name 'configure' -exec sed -i 's|^\s*lt_prog_compiler_static=$|lt_prog_compiler_static=-static|g' {} +
+ find . -name 'configure' -exec $GSED -i 's|^\s*lt_prog_compiler_wl=$|lt_prog_compiler_wl=-Wl,|g' {} +
+ find . -name 'configure' -exec $GSED -i 's|^\s*lt_prog_compiler_pic=$|lt_prog_compiler_pic=-fPIC|g' {} +
+ find . -name 'configure' -exec $GSED -i 's|^\s*lt_prog_compiler_static=$|lt_prog_compiler_static=-static|g' {} +
 }
 
 fix_and_configure() {

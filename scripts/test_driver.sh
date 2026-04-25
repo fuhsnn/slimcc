@@ -432,7 +432,12 @@ void x(void)__attribute__((constructor(111)));
 void __attribute__((destructor)) x(void){putchar('x');}
 EOF
 $testcc $tmp/foo.c -o $tmp/foo
-$tmp/foo | grep -q '^xzmxz$'
+
+if [ `uname` = 'NetBSD' ]; then
+  $tmp/foo | grep -q '^xzmzx$'
+else
+  $tmp/foo | grep -q '^xzmxz$'
+fi
 check '__attribute__((constructor,destructor))'
 
 echo OK

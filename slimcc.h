@@ -950,13 +950,22 @@ void platform_init_driver(void);
 void platform_stdinc_paths(StringArray *paths);
 void platform_search_dirs(StringArray *paths);
 void run_assembler(StringArray *as_args, const char *input, const char *output);
-void run_linker(StringArray *paths, StringArray *inputs, const char *output);
+void run_linker(StringArray *paths, StringArray *args, const char *output);
 
 //
 // main.c
 //
 
 typedef enum { STD_C89, STD_C94, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
+
+typedef enum {
+  LT_RELO,
+  LT_SHARED,
+  LT_DYNAMIC,
+  LT_STATIC_PIE,
+  LT_STATIC,
+  LT_PIE,
+} LinkType;
 
 void cleanup_exit(int status) NORETURN;
 bool file_exists(const char *path);
@@ -966,6 +975,14 @@ void add_dep_file(const char *path, bool is_sys);
 char *find_dir_w_file(const char *pattern);
 void run_subprocess(const char **argv);
 void add_include_path(StringArray *arr, const char *s);
+
+LinkType link_type_gnustyle(void);
+void ldarg_gnu_base(StringArray *arr, const char *output);
+void ldarg_gnu_linktype(StringArray *arr, LinkType lt, const char *ldso_path);
+void ldarg_gnu_crtbegin(StringArray *arr, LinkType lt, const char *gcc_libpath);
+void ldarg_gnu_inputs(StringArray *arr, StringArray *paths, StringArray *args);
+void ldarg_gnu_lc_lgcc(StringArray *arr, LinkType lt, bool has_libgcc);
+void ldarg_gnu_crtend(StringArray *arr, LinkType lt, const char *gcc_libpath);
 void run_assembler_gnustyle(StringArray *as_args, const char *input, const char *output);
 void run_linker_gnustyle(StringArray *paths, StringArray *inputs, const char *output,
                          const char *ldso_path, const char *libpath,
