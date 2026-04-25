@@ -3779,6 +3779,52 @@ static bool gen_if_stmt_const(Node *node, bool cond, const char *else_label) {
   return gen_skip_unreachable_stmt(node->ctrl.then, is_reach, else_label);
 }
 
+static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
+  int64_t val;
+  if (is_const_expr(mul, &val)) {
+    int64_t ofs = 0;
+    gen_deref_opt(lhs, &ofs);
+    load2(ty, ofs + val, "%rax");
+    return true;
+  }
+
+  int sz = 0;
+  switch (mul->m.lhs->num.val) {
+  case 1:  sz = 1; break;
+  case 2:  sz = 2; break;
+  case 4:  sz = 4; break;
+  case 8:  sz = 8; break;
+  default: {
+    return false;
+  }
+  }
+
+  const char *ptr;
+  char ofs[STRBUF_SZ];
+  char op[STRBUF_SZ2];
+
+  if (is_memop(lhs, ofs, &ptr, true)) {
+    gen_expr(mul->m.rhs);
+    Printftn("movq %s(%s), %%rdx", ofs, ptr);
+    snprintf(op, STRBUF_SZ2, "(%%rdx, %%rax, %d)", sz);
+  } else if (is_memop_ptr(lhs, ofs, &ptr) && ptr != rip) {
+    gen_expr(mul->m.rhs);
+    snprintf(op, STRBUF_SZ2, "%s(%s, %%rax, %d)", ofs, ptr, sz);
+  } else {
+    gen_expr(lhs);
+    push();
+    gen_expr(mul->m.rhs);
+    const char *reg = pop_inreg(tmpreg64[0]);
+    snprintf(op, STRBUF_SZ2, "(%s, %%rax, %d)", reg, sz);
+  }
+
+  if (ty->size == 8)
+    Printftn("movq %s, %%rax", op);
+  else
+    cast_extend_int32(ty, op, "%eax");
+  return true;
+}
+
 static bool gen_if_stmt(Node *node, bool is_reach) {
   int64_t c = count();
   char else_label[STRBUF_SZ];
@@ -3917,8 +3963,17 @@ static bool gen_expr_opt(Node *node) {
   if (gen_bool_opt(node))
     return true;
 
-  if (is_gp_ty(ty) && gen_gp_opt(node))
-    return true;
+  if (is_gp_ty(ty)) {
+    if (gen_gp_opt(node))
+      return true;
+
+    if (kind == ND_DEREF && lhs->kind == ND_ADD && lhs->m.rhs->kind == ND_MUL) {
+      Node *mul = lhs->m.rhs;
+      if (mul->m.lhs->kind == ND_NUM)
+        if (gen_scaled_idx_load(ty, lhs->m.lhs, mul))
+          return true;
+    }
+  }
 
   if (is_int_to_int_cast(node)) {
     if (ty->size == 4 && lhs->ty->size == 8) {
