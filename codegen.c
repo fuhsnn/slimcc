@@ -3920,9 +3920,26 @@ static bool gen_expr_opt(Node *node) {
   if (is_gp_ty(ty) && gen_gp_opt(node))
     return true;
 
-  if (is_int_to_int_cast(node) && ty->size == 4 && lhs->ty->size == 8)
-    if (gen_arith_opt_gp(lhs, ty->size))
+  if (is_int_to_int_cast(node)) {
+    if (ty->size == 4 && lhs->ty->size == 8) {
+      if (gen_arith_opt_gp(lhs, ty->size))
+        return true;
+    }
+    if (lhs->kind == ND_VAR && ty->size == 8 && ty->size >= lhs->ty->size) {
+      gen_addr(lhs);
+      if (!lhs->ty->is_unsigned && ty->size > lhs->ty->size)
+        load_extend_int64(lhs->ty, "0", "%rax", "%rax");
+      else
+        load_extend_int(lhs->ty, "0", "%rax", regop_ax(lhs->ty));
       return true;
+    }
+    if (lhs->kind == ND_DEREF && ty->size == lhs->ty->size && ty->kind != TY_BOOL) {
+      int64_t ofs = 0;
+      gen_deref_opt(lhs->m.lhs, &ofs);
+      load2(ty, ofs, "%rax");
+      return true;
+    }
+  }
 
   if (ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE)
     if (gen_arith_opt_fp(node))
