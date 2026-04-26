@@ -3622,7 +3622,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
 
 static void gen_deref_opt(Node *node, int64_t *ofs) {
   for (;; node = node->m.lhs) {
-    if (node->kind == ND_CAST && node->ty->base)
+    if (node->kind == ND_CAST && node->ty->base && node->m.lhs->ty->base)
       continue;
 
     if (node->kind == ND_DEREF && node->ty->kind == TY_ARRAY)
