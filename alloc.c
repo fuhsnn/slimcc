@@ -116,10 +116,9 @@ char *arena_strdup(Arena *arena, const char *str) {
   return memcpy(arena_malloc(arena, len), str, len);
 }
 
-char *arena_strndup(Arena *arena, const char *str, size_t maxlen) {
-  size_t len = 1 + strnlen(str, maxlen);
-  char *p = memcpy(arena_malloc(arena, len), str, len);
-  p[len - 1] = '\0';
+char *arena_copy_string(Arena *arena, const char *src, size_t slen) {
+  char *p = memcpy(arena_malloc(arena, slen + 1), src, slen);
+  p[slen] = '\0';
   return p;
 }
 

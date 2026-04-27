@@ -484,7 +484,7 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
 static Macro *read_macro_name(Token **rest, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "macro name must be an identifier");
-  char *name = arena_strndup(&pp_arena, tok->loc, tok->len);
+  char *name = arena_copy_string(&pp_arena, tok->loc, tok->len);
   tok = tok->next;
 
   Macro *m;
@@ -1100,7 +1100,7 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
     // For example, "\f" in "C:\foo" is not a formfeed character but
     // just two non-control characters, backslash and f.
     // So we don't want to use token->str.
-    filename = arena_strndup(&cc1_arena, tok->loc + 1, tok->len - 2);
+    filename = arena_copy_string(&cc1_arena, tok->loc + 1, tok->len - 2);
     *dir = (tok->origin ? tok->origin : tok)->file->name;
   } else if (equal(tok, "<")) {
     // Pattern 2: #include <foo.h>
@@ -1113,7 +1113,7 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
         error_tok(tok, "expected '>'");
 
     if (!is_expanded && start->file == tok->file && start->loc < tok->loc)
-      filename = arena_strndup(&cc1_arena, start->loc + 1, tok->loc - start->loc - 1);
+      filename = arena_copy_string(&cc1_arena, start->loc + 1, tok->loc - start->loc - 1);
     else
       filename = join_tokens(start->next, tok, false);
   }
@@ -1464,7 +1464,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
 
     if (tok->is_incl_guard && cond->tok->is_incl_guard && tok->file == cond->tok->file) {
       Token *name_tok = cond->tok->next;
-      char *guard_name = arena_strndup(&pp_arena, name_tok->loc, name_tok->len);
+      char *guard_name = arena_copy_string(&pp_arena, name_tok->loc, name_tok->len);
       hashmap_put(&include_guards, tok->file->name, guard_name);
     }
 

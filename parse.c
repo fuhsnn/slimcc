@@ -746,7 +746,7 @@ static DeferStmt *new_defr(DeferKind kind) {
 static char *get_ident(Arena *arena, Token *tok) {
   if (tok->kind != TK_IDENT)
     error_tok(tok, "expected an identifier");
-  return arena_strndup(arena, tok->loc, tok->len);
+  return arena_copy_string(arena, tok->loc, tok->len);
 }
 
 static VarScope *find_typedef(Token *tok) {
