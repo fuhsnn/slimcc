@@ -723,9 +723,10 @@ void add_type_chk_const(Node *node) {
     error_tok(node->tok, "operand is const");
 }
 
-void add_type(Node *node) {
-  if (!node || node->ty)
-    return;
+void _add_type(Node *node) {
+  // Done in wrapper macro
+  // if (node->ty)
+  // return;
 
   switch (node->kind) {
   case ND_NUM: {
@@ -862,15 +863,19 @@ void add_type(Node *node) {
     node->ty = node->m.lhs->ty->base;
     return;
   case ND_FOR:
-    add_type(node->ctrl.cond);
+    if (node->ctrl.cond)
+      add_type(node->ctrl.cond);
     add_type(node->ctrl.then);
-    add_type(node->ctrl.for_init);
-    add_type(node->ctrl.for_inc);
+    if (node->ctrl.for_init)
+      add_type(node->ctrl.for_init);
+    if (node->ctrl.for_inc)
+      add_type(node->ctrl.for_inc);
     return;
   case ND_IF:
     add_type(node->ctrl.cond);
     add_type(node->ctrl.then);
-    add_type(node->ctrl.els);
+    if (node->ctrl.els)
+      add_type(node->ctrl.els);
     return;
   case ND_DO:
   case ND_SWITCH:
