@@ -945,13 +945,19 @@ Type *vla_of(Type *base, Node *expr, int64_t arr_len);
 Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
 void add_type_chk_const(Node *node);
-void add_type(Node *node);
 Type *unqual(Type *ty);
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok);
 Type *qual_type(QualMask msk, Type *ty, Token *tok);
 void cvqual_type(Type **ty_p, Type *ty2);
 bool mem_iter(Member **mem);
 Node *assign_cast(Type *to, Node *expr);
+
+void _add_type(Node *node);
+#define add_type(_n) \
+  do {               \
+    if (!(_n)->ty)   \
+      _add_type(_n); \
+  } while (0)
 
 //
 // codegen.c
