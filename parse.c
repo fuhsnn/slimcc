@@ -184,6 +184,7 @@ static bool *eval_recover;
 static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
 static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool skip_comma);
+static bool braced_list(Token **rest, Token **tok_rest, bool skip_comma);
 static Type *typename(Token **rest, Token *tok);
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
@@ -568,7 +569,7 @@ static void prepare_array_init(Initializer *init, Type *ty) {
     init->list.data = calloc(init->list.cnt, sizeof(Initializer));
 
     int32_t i = 0;
-    for (; comma_list(&t, &t, "}", i); i++) {
+    for (; braced_list(&t, &t, i); i++) {
       if (i >= init->list.cnt)
         break;
       init->list.data[i].kind = INIT_TOK;
@@ -790,12 +791,20 @@ static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool ski
   Token *tok = *tok_rest;
   if (consume(rest, tok, end))
     return false;
+  if (skip_comma)
+    *tok_rest = skip(tok, ",");
+  return true;
+}
+
+static bool braced_list(Token **rest, Token **tok_rest, bool skip_comma) {
+  Token *tok = *tok_rest;
+  if (consume(rest, tok, "}"))
+    return false;
 
   if (skip_comma) {
     tok = skip(tok, ",");
 
-    // curly brackets allow trailing comma
-    if (!strcmp(end, "}") && consume(rest, tok, "}"))
+    if (consume(rest, tok, "}"))
       return false;
 
     *tok_rest = tok;
@@ -1612,7 +1621,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   bool is_neg = false;
   bool is_ovf = false;
   bool first = true;
-  for (; comma_list(&tok, &tok, "}", !first); first = false) {
+  for (; braced_list(&tok, &tok, !first); first = false) {
     Token *name = ident_tok(&tok, tok);
 
     if (!consume(&tok, tok, "=")) {
@@ -2081,7 +2090,8 @@ static int count_array_init_elements(Token *tok, Type *ty, int i) {
 
   Initializer dummy = {.ty = ty->base};
   int max = i;
-  while (comma_list(&tok, &tok, "}", i)) {
+
+  while (braced_list(&tok, &tok, i)) {
     if (equal(tok, "[")) {
       i = const_expr(&tok, tok->next);
       if (equal(tok, "..."))
@@ -2120,7 +2130,7 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, N
   }
 
   if (has_brace) {
-    while (comma_list(&tok, &tok, "}", start != tok)) {
+    while (braced_list(&tok, &tok, start != tok)) {
       if (equal(tok, ".") || equal(tok, "[")) {
         designation(&tok, tok, init, false, NULL);
         continue;
@@ -2586,7 +2596,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
     Initializer tmp = {.kind = INIT_TOK, .ty = init->ty->base};
     int sz = init->ty->base->size;
     int64_t cnt = 0;
-    for (Token *t = init->numseq.start; comma_list(&t, &t, "}", cnt); t = t->next) {
+    for (Token *t = init->numseq.start; braced_list(&t, &t, cnt); t = t->next) {
       if (cnt >= init->ty->array_len)
         break;
       tmp.tok = t;
