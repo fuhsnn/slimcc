@@ -113,7 +113,7 @@ test_blake2() {
 }
 
 test_blake3() {
- github_tar BLAKE3-team BLAKE3 1.8.4
+ github_tar BLAKE3-team BLAKE3 1.8.5
  sed -i 's|C CXX ASM|C ASM|g' c/CMakeLists.txt
  sed -i 's|#undef IS_X86||g' c/blake3_dispatch.c
  sed -i 's|-fstack-protector-strong||g' c/cmake/BLAKE3/ContinuousIntegration.cmake
@@ -205,7 +205,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 4cc4adc205e98d39a17402563436a4fea0b19b3a c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 1b0a0f01f580abd76847fbe185676d09af696f99 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -325,7 +325,7 @@ test_cpio() {
 test_cproc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_cproc.bash
 
- git_fetch https://github.com/michaelforney/cproc 666088f244d0d0c49da4cea356f0320360c88c57 cproc
+ git_fetch https://github.com/michaelforney/cproc 057381e07c8fa7663c294f75322396795d4f44be cproc
  ./configure --host=x86_64-linux-gnu
  make CFLAGS=-std=c99 check
 
@@ -1124,7 +1124,7 @@ test_nginx() {
  auto/configure
  make
  cd ../
- git_fetch https://github.com/nginx/nginx-tests 0f72f59c40de9977bd8f3deff5d200e761b8b683 nginx-tests
+ git_fetch https://github.com/nginx/nginx-tests c11519c283eb37c21b9a065aa3c8d5802e4216bd nginx-tests
  prove .
 }
 
@@ -1147,7 +1147,7 @@ test_noplate() {
 }
 
 test_nqp() {
- github_clone MoarVM MoarVM 2026.03
+ github_clone MoarVM MoarVM 2026.04
  use_stdbit '#include "moar.h"' src/core/coerce.c
  use_stdbit '#include "moar.h"' src/core/interp.c
  use_stdbit '#include "moar.h"' src/math/bigintops.c
@@ -1155,7 +1155,7 @@ test_nqp() {
  make install
  cd ../
 
- github_clone Raku nqp 2026.03
+ github_clone Raku nqp 2026.04
  perl Configure.pl --with-moar=$PWD/../MoarVM/install/bin/moar
  make test
 }
@@ -1300,7 +1300,7 @@ test_python() {
 }
 
 test_qbe() {
- git_fetch git://c9x.me/qbe.git b58e2e695b4567083b383779dfca5e153a31fa57 qbe
+ git_fetch git://c9x.me/qbe.git 504a2012f43f26b8b1be6a7d851d95e584fbf3a6 qbe
  make CC="$CC" check
 }
 
@@ -1400,7 +1400,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 2ae1b765fdfb81d9678e4d474b2ebee695ae3903 rvvm
+ git_fetch https://github.com/LekKit/RVVM f9270363c99258b6cb131367cd92466e96374137 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -1473,7 +1473,7 @@ test_sqlite() {
  github_tar sqlite sqlite version-3.53.0
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
- make test
+ make fuzztest tcltest
 }
 
 test_tcl() {
@@ -1926,7 +1926,7 @@ build_nano() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260418
+ github_tar ThomasDickey ncurses-snapshots v6_6_20260425
  ./configure
  make V=1
 }
@@ -2044,7 +2044,7 @@ build_raylib_raygui() {
 build_simplecc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_simplecc.bash
 
- git_fetch git://git.simple-cc.org/scc 764460714dd32c054823f22c86308c6b096c1e4d simplecc
+ git_fetch git://git.simple-cc.org/scc c6e47d620ccb3d0882fcdb938ec8e8d3c5c817b4 simplecc
  make CC="$CC" HOSTCC="$CC" NOCARET=
  echo 'int puts(const char*); int main(){ puts("hello_world"); return 0; }' > hello.c
  ./bin/scc hello.c -o hello
@@ -2135,7 +2135,7 @@ bootstrap_uclibcng() {
  make ARCH=x86_64 prefix= DESTDIR=$PWD/../linuxhdr/ install
  cd ../
 
- git_fetch https://github.com/wbx-github/uclibc-ng 0171f2ee405e49dfd1b91301c417455fb9846909 uclibcng
+ git_fetch https://github.com/wbx-github/uclibc-ng 139bb70c28cd99dcce3fa56739ff619973cd998f uclibcng
  sed -i 's|dN|dM|g' extra/scripts/gen_bits_syscall_h.sh
  sed -i 's|:$(DEVEL_PREFIX)|:$(PREFIX)$(DEVEL_PREFIX)|g' Makefile.in
  sed -i 's|:$(RUNTIME_PREFIX)|:$(PREFIX)$(RUNTIME_PREFIX)|g' Makefile.in
