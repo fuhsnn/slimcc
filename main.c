@@ -1446,8 +1446,6 @@ int main(int argc, char **argv) {
       continue;
     }
 
-    assert(type == FILE_C);
-
     if (opt_E || opt_M) {
       run_cc1(input, (opt_o ? opt_o : "-"), false);
       continue;

@@ -788,11 +788,6 @@ void add_type(Node *node) {
       return;
     usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
-  case ND_FUNCALL:
-  case ND_STMT_EXPR: {
-    assert(!!node->ty);
-    return;
-  }
   case ND_NOT:
     add_type(node->m.lhs);
     node->ty = ty_int;
@@ -935,6 +930,11 @@ void add_type(Node *node) {
   case ND_THREAD_FENCE:
   case ND_UNREACHABLE: {
     node->ty = ty_void;
+    return;
+  }
+  case ND_FUNCALL:
+  case ND_STMT_EXPR: {
+    internal_error();
     return;
   }
   }

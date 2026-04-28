@@ -486,7 +486,6 @@ static Slot *push_tmpstack(SlotKind kind) {
 
 static Slot *pop_tmpstack(int sz) {
   tmp_stack.depth--;
-  assert(tmp_stack.depth >= 0);
 
   Slot *sl = &tmp_stack.data[tmp_stack.depth];
   if ((sl->kind == SL_GP && sl->gp_depth >= GP_SLOTS) ||
@@ -1571,7 +1570,8 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
   int gp = *gp_count, fp = *fp_count;
   for (; var; var = var->param_next) {
     Type *ty = var->ty;
-    assert(ty->size != 0);
+    if (ty->size <= 0)
+      internal_error();
 
     switch (ty->kind) {
     case TY_BITINT:
@@ -5383,9 +5383,11 @@ void emit_text(Obj *fn) {
     Printstn("ret");
   }
 
-  assert(tmp_stack.depth == 0);
   peak_stk_usage += tmpbuf_sz;
   if (peak_stk_usage) {
+    if (tmp_stack.depth != 0)
+      internal_error();
+
     peak_stk_usage = align_to(peak_stk_usage, 16);
     insrtln(".set __BUF, -%d; sub $%d, %%rsp", stack_alloc_loc, peak_stk_usage,
             peak_stk_usage);
