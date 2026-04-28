@@ -60,7 +60,7 @@ struct tm *cur_time;
 
 static Token *preprocess3(Token *tok);
 static bool has_macro(Token *tok);
-static bool expand_macro(Token **rest, Token *tok, bool is_root);
+static bool expand_macro(Token **rest, Token *tok, Macro *m, bool is_root);
 static Token *directives(Token **cur, Token *start, bool is_root);
 static Token *subst(Token *tok, MacroContext *ctx);
 static bool is_supported_attr(Token *tok);
@@ -353,8 +353,11 @@ static Token *read_const_expr(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok, false))
-      continue;
+    if (tok->kind == TK_IDENT && !tok->dont_expand) {
+      Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
+      if (m && expand_macro(&tok, tok, m, false))
+        continue;
+    }
 
     switch (tok->kind) {
     case TK_IDENT:
@@ -575,8 +578,11 @@ static Token *expand_tok(Token *tok) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok, false))
-      continue;
+    if (tok->kind == TK_IDENT && !tok->dont_expand) {
+      Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
+      if (m && expand_macro(&tok, tok, m, false))
+        continue;
+    }
 
     cur = cur->next = copy_token(tok);
     tok = tok->next;
@@ -946,14 +952,7 @@ static void free_funclike_args(Token *tok, Token *stop_tok) {
   }
 }
 
-static bool expand_macro(Token **rest, Token *tok, bool is_root) {
-  if (tok->kind != TK_IDENT || tok->dont_expand)
-    return false;
-
-  Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
-  if (!m)
-    return false;
-
+static bool expand_macro(Token **rest, Token *tok, Macro *m, bool is_root) {
   if (m->is_locked) {
     tok->dont_expand = true;
     return false;
@@ -1289,8 +1288,11 @@ void preprocess2(Token *tok, Token **cur) {
   Macro *start_m = locked_macros;
 
   for (; tok->kind != TK_EOF; pop_macro_lock(tok)) {
-    if (expand_macro(&tok, tok, true))
-      continue;
+    if (tok->kind == TK_IDENT && !tok->dont_expand) {
+      Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
+      if (m && expand_macro(&tok, tok, m, true))
+        continue;
+    }
 
     if (is_hash(tok) && !locked_macros) {
       tok = directives(cur, tok, true);
@@ -1652,8 +1654,12 @@ static Token *pragma_macro(Token *start) {
       error_tok(start, "unterminated _Pragma sequence");
 
     pop_macro_lock(tok);
-    if (expand_macro(&tok, tok, false))
-      continue;
+
+    if (tok->kind == TK_IDENT && !tok->dont_expand) {
+      Macro *m = hashmap_get2(&macros, tok->loc, tok->len);
+      if (m && expand_macro(&tok, tok, m, false))
+        continue;
+    }
 
     switch (progress++) {
     case 0: {
