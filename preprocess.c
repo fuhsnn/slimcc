@@ -95,7 +95,7 @@ static Token *get_line(Token **cur, Token *tok) {
   return tok;
 }
 
-#if USE_ASAN || defined(__FILC__)
+#if EAGER_FREE
 # define to_freelist(first, last) \
    do {                           \
      Token *x = first;            \
@@ -2170,8 +2170,10 @@ Token *prepare_parse(Token *tok) {
     tok = head;
   }
 
+#if !EAGER_FREE
   if (!(free_alloc = check_mem_usage()))
     return preprocess3(tok);
+#endif
 
   Token *t = tok;
   for (t = last_alloc_tok; t;) {

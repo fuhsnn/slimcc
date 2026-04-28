@@ -23,18 +23,83 @@
 #include <time.h>
 #include <unistd.h>
 
-#if defined(__has_builtin) && (__SIZEOF_LONG_LONG__ == 8)
-# if __has_builtin(__builtin_popcountll)
+#if defined(__has_builtin)
+# define SLIMCC_HAS_BUILTIN(x) __has_builtin(x)
+#else
+# define SLIMCC_HAS_BUILTIN(x) 0
+#endif
+
+#if defined(__has_attribute)
+# define SLIMCC_HAS_ATTR(x) __has_attribute(x)
+#else
+# define SLIMCC_HAS_ATTR(x) 0
+#endif
+
+#if defined(__has_c_attribute)
+# define SLIMCC_HAS_C_ATTR(x) __has_c_attribute(x)
+#else
+# define SLIMCC_HAS_C_ATTR(x) 0
+#endif
+
+#if defined(__has_feature)
+# define SLIMCC_HAS_FEAT(x) __has_feature(x)
+#else
+# define SLIMCC_HAS_FEAT(x) 0
+#endif
+
+#if SLIMCC_HAS_FEAT(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+# define USE_ASAN
+# include <sanitizer/asan_interface.h>
+#endif
+
+#if SLIMCC_HAS_FEAT(undefined_behavior_sanitizer) || defined(__SANITIZE_UNDEFINED__)
+# define USE_UBSAN
+#endif
+
+#if SLIMCC_HAS_FEAT(type_sanitizer) || defined(__SANITIZE_TYPE__)
+# define USE_TYSAN
+#endif
+
+#if defined(USE_ASAN) || defined(__FILC__)
+# define EAGER_FREE 1
+#else
+# define EAGER_FREE 0
+#endif
+
+#if (defined(__GNUC__) && __GNUC__ >= 3) || SLIMCC_HAS_ATTR(format)
+# define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
+#else
+# define FMTCHK(x, y)
+#endif
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+# define NORETURN _Noreturn
+#elif __GNUC__ >= 3 || SLIMCC_HAS_ATTR(noreturn)
+# define NORETURN __attribute__((noreturn))
+#elif SLIMCC_HAS_C_ATTR(noreturn)
+# define NORETURN [[noreturn]]
+#else
+# define NORETURN
+#endif
+
+#if defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8
+# if SLIMCC_HAS_BUILTIN(__builtin_popcountll)
 #  define Pop64(x) __builtin_popcountll((uint64_t)(x))
 # endif
-# if __has_builtin(__builtin_ctzll)
+# if SLIMCC_HAS_BUILTIN(__builtin_ctzll)
 #  define Ctz64(x) __builtin_ctzll((uint64_t)(x))
 # endif
-#elif defined(__has_include)
+#endif
+
+#if defined(__has_include)
 # if __has_include(<stdbit.h>)
 #  include <stdbit.h>
-#  define Pop64(x) (int)stdc_count_ones((uint64_t)(x))
-#  define Ctz64(x) (int)stdc_trailing_zeros((uint64_t)(x))
+#  ifndef Pop64
+#   define Pop64(x) (int)stdc_count_ones((uint64_t)(x))
+#  endif
+#  ifndef Ctz64
+#   define Ctz64(x) (int)stdc_trailing_zeros((uint64_t)(x))
+#  endif
 # endif
 #endif
 
@@ -55,45 +120,8 @@ static inline int _ctz64_impl(uint64_t v) {
 }
 #endif
 
-#if defined(__SANITIZE_ADDRESS__)
-# define USE_ASAN 1
-#elif defined(__has_feature)
-# if __has_feature(address_sanitizer)
-#  define USE_ASAN 1
-# endif
-#endif
-
 #ifdef __clang__
 # pragma clang diagnostic ignored "-Wswitch"
-#endif
-
-#define MAX(x, y) ((x) < (y) ? (y) : (x))
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
-#define Ucast(c) (unsigned int)(unsigned char)(c)
-#define Inrange(c, x, y) ((Ucast(c) - Ucast(x)) <= (Ucast(y) - Ucast(x)))
-#define Isdigit(c) Inrange(c, '0', '9')
-#define Isalnum(c) (Inrange((c) | 0x20, 'a', 'z') || Isdigit(c))
-#define Isxdigit(c) (Isdigit(c) || Inrange((c) | 0x20, 'a', 'f'))
-#define Casecmp(c, a) (((c) | 0x20) == a)
-
-#if defined(__GNUC__) && (__GNUC__ >= 3)
-# define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
-# define NORETURN __attribute__((noreturn))
-#elif defined(__has_attribute)
-# if __has_attribute(format)
-#  define FMTCHK(x, y) __attribute__((format(printf, (x), (y))))
-# endif
-# if __has_attribute(noreturn)
-#  define NORETURN __attribute__((noreturn))
-# endif
-#endif
-
-#ifndef FMTCHK
-# define FMTCHK(x, y)
-#endif
-#ifndef NORETURN
-# define NORETURN
 #endif
 
 #if defined(__GNUC__)
@@ -109,13 +137,13 @@ static inline int _ctz64_impl(uint64_t v) {
 # define BUFF_CAST(_t, _ptr) (*((_t *)(_ptr)))
 #endif
 
-#ifdef BOOTSTRAP_NO_LDOUBLE
-typedef double long_double_t;
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+# define S_ASSERT(x) static_assert((x), "");
 #else
-typedef long double long_double_t;
+# define S_ASSERT(x)
 #endif
 
-#if __STDC_VERSION__ >= 201112L
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 # define ANON_UNION_START union {
 # define ANON_UNION_END \
    }                    \
@@ -123,6 +151,22 @@ typedef long double long_double_t;
 #else
 # define ANON_UNION_START
 # define ANON_UNION_END
+#endif
+
+#define MAX(x, y) ((x) < (y) ? (y) : (x))
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
+
+#define Ucast(c) (unsigned int)(unsigned char)(c)
+#define Inrange(c, x, y) ((Ucast(c) - Ucast(x)) <= (Ucast(y) - Ucast(x)))
+#define Isdigit(c) Inrange(c, '0', '9')
+#define Isalnum(c) (Inrange((c) | 0x20, 'a', 'z') || Isdigit(c))
+#define Isxdigit(c) (Isdigit(c) || Inrange((c) | 0x20, 'a', 'f'))
+#define Casecmp(c, a) (((c) | 0x20) == a)
+
+#ifdef BOOTSTRAP_NO_LDOUBLE
+typedef double long_double_t;
+#else
+typedef long double long_double_t;
 #endif
 
 typedef struct Type Type;
@@ -326,10 +370,10 @@ struct Token {
   ANON_UNION_END
 };
 
-void error(const char *fmt, ...) FMTCHK(1, 2) NORETURN;
-void error_ice(const char *file, int32_t line) NORETURN;
-void error_at(const char *loc, const char *fmt, ...) FMTCHK(2, 3) NORETURN;
-void error_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3) NORETURN;
+NORETURN void error_ice(const char *file, int32_t line);
+NORETURN void error(const char *fmt, ...) FMTCHK(1, 2);
+NORETURN void error_at(const char *loc, const char *fmt, ...) FMTCHK(2, 3);
+NORETURN void error_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
 void warn_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
 void notice_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
 void verror_at_tok(Token *tok, const char *fmt, va_list ap);
@@ -967,7 +1011,7 @@ typedef enum {
   LT_PIE,
 } LinkType;
 
-void cleanup_exit(int status) NORETURN;
+NORETURN void cleanup_exit(int status);
 bool file_exists(const char *path);
 bool in_sysincl_path(int idx);
 bool ignore_missing_dep(const char *path, const char *filename, Token *tok);

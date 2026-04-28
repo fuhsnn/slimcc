@@ -105,6 +105,18 @@ char *argv0;
 
 static void cc1(const char *input_file, const char *output, bool is_asm_pp);
 
+#if defined(USE_ASAN)
+__attribute__((visibility("default"))) const char *__asan_default_options(void) {
+  return "detect_leaks=0";
+}
+#endif
+
+#if defined(USE_UBSAN)
+__attribute__((visibility("default"))) const char *__ubsan_default_options(void) {
+  return "print_stacktrace=1";
+}
+#endif
+
 static void version(void) {
   puts("slimcc version 0.0");
 }
