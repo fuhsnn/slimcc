@@ -208,8 +208,8 @@ typedef struct {
 
 typedef struct {
   HashEntry *buckets;
-  int capacity;
-  int used;
+  int32_t capacity;
+  int32_t used;
 } HashMap;
 
 HashEntry *hashmap_get_or_insert(HashMap *map, const char *key, int keylen);

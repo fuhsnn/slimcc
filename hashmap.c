@@ -5,11 +5,9 @@
 // Initial hash bucket size
 #define INIT_SIZE 16
 
-// Rehash if the usage exceeds 70%.
-#define HIGH_WATERMARK 70
+#define SHOULD_REHASH(_used, _cap) ((_used) * 11 / 8 >= _cap)
 
-// We'll keep the usage below 50% after rehashing.
-#define LOW_WATERMARK 50
+S_ASSERT(INIT_SIZE > 0 && SHOULD_REHASH(INIT_SIZE - 1, INIT_SIZE))
 
 // Represents a deleted hash entry
 #define TOMBSTONE ((void *)-1)
@@ -28,15 +26,17 @@ static uint64_t fnv_hash(const char *s, int len) {
 // tombstones and possibly extending the bucket size.
 static void rehash(HashMap *map) {
   // Compute the size of the new hashmap.
-  int nkeys = 0;
-  for (int i = 0; i < map->capacity; i++)
+  int32_t nkeys = 0;
+  for (int32_t i = 0; i < map->capacity; i++)
     if (map->buckets[i].key && map->buckets[i].key != TOMBSTONE)
       nkeys++;
 
-  int cap = map->capacity;
-  while ((nkeys * 100) / cap >= LOW_WATERMARK)
-    cap = cap * 2;
-  assert(cap > 0);
+  int64_t cap = map->capacity;
+  if ((int64_t)nkeys * 2 > cap) {
+    cap *= 2;
+    if (cap * sizeof(HashEntry) > 0x4000000)
+      internal_error();
+  }
 
   // Create a new hashmap and copy all key-values.
   HashMap map2 = {0};
@@ -83,7 +83,7 @@ HashEntry *hashmap_get_or_insert(HashMap *map, const char *key, int keylen) {
   if (!map->buckets) {
     map->buckets = calloc(INIT_SIZE, sizeof(HashEntry));
     map->capacity = INIT_SIZE;
-  } else if ((map->used * 100) / map->capacity >= HIGH_WATERMARK) {
+  } else if (SHOULD_REHASH((int64_t)map->used, map->capacity)) {
     rehash(map);
   }
 
