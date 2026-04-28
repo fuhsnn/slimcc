@@ -270,6 +270,24 @@ static Token *split_paren(Token **rest, Token *tok) {
   return split_paren2(rest, tok, NULL);
 }
 
+static Token *split_comma(Token **rest, Token *tok, Token *next) {
+  Token head = {0};
+  Token *cur = &head;
+  while (!equal(tok, ","))
+  {
+    cur = cur->next = tok;
+    tok = tok->next;
+  }
+  
+  if(next)
+    cur->next = next;
+  else
+    cur->next = new_eof(tok);
+  
+  *rest = tok;
+  return head.next;
+}
+
 static Token *split_bracket(Token **rest, Token *tok) {
   Token *start = tok;
   Token head = {0};
@@ -802,6 +820,122 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       continue;
     }
 
+    if (equal(tok, "__VA_SLICE_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      MacroArg *start_arg = find_arg(&tok, tok, ctx);
+      Token *start_tok = read_const_expr(start_arg->tok);
+      int64_t start = eval_const_expr(start_tok);
+      
+      tok = skip(tok, ",");
+      
+      MacroArg *len_arg = find_arg(&tok, tok, ctx);
+      Token *len_tok = read_const_expr(len_arg->tok);
+      int64_t len = eval_const_expr(len_tok);
+      
+      if (start <= 0)
+      {
+        error_tok(start_tok, "__VA_SLICE__ Non-positive start");
+      }
+      if(len < 0)
+      {
+        error_tok(start_tok, "__VA_SLICE__ Negative length");
+      }
+      
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg))
+      {
+        continue;
+      }
+      
+      Token *arg_iter = vaarg->tok;
+      int level = 0;
+      for(int64_t i = 1 ; i < start && arg_iter->kind != TK_EOF ; i++)
+      {
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          arg_iter = arg_iter->next;
+        }
+        
+        if(arg_iter->kind != TK_EOF)
+        {
+          arg_iter = arg_iter->next; // skip comma
+        }
+      }
+      
+      int64_t len_it = 0;
+      level = 0;
+      while(arg_iter->kind != TK_EOF && len_it < len)
+      {
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next;
+        }
+        len_it += 1;
+        if(arg_iter->kind != TK_EOF && len_it < len)
+        {
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next; // comma
+        }
+      }
+      
+      tok = tok->next; // skip final )
+      continue;
+    }
+    if(equal(tok, "__VA_COUNT_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      tok = skip(tok, ")");
+      
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg))
+      {
+        cur = cur->next = new_num_token(0, tok, tok->next);
+        continue;
+      }
+      Token *arg_iter = vaarg->tok;
+      int64_t count = 0;
+      int level = 0;
+      while(arg_iter->kind != TK_EOF)
+      {
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          arg_iter = arg_iter->next;
+        }
+        if(arg_iter->kind != TK_EOF)
+          arg_iter = arg_iter->next; // skip comma
+        
+        count += 1;
+      }
+      
+      cur = cur->next = new_num_token(count, tok, tok->next);
+      
+      continue;
+    }
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
       Token *rparen = NULL;
@@ -1818,6 +1952,9 @@ void init_macros(void) {
   define_macro("__x86_64", "1");
   define_macro("__x86_64__", "1");
 
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_SLICE__(s,l,...) __VA_SLICE_INTERNAL__(s,l)\n"), NULL, NULL));
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_COUNT__(...) __VA_COUNT_INTERNAL__()\n"), NULL, NULL));
+  
   add_builtin("__DATE__", date_macro, true);
   add_builtin("__TIME__", time_macro, true);
   add_builtin("__FILE__", file_macro, true);
