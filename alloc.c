@@ -1,13 +1,5 @@
 #include "slimcc.h"
 
-#if USE_ASAN
-# include <sanitizer/asan_interface.h>
-
-__attribute__((visibility("default"))) const char *__asan_default_options(void) {
-  return "detect_leaks=0";
-}
-#endif
-
 #define FREE_THRESHOLD (100 * 1024)
 #define ARENA_POOL_SIZE 8160
 
@@ -24,7 +16,7 @@ bool free_alloc;
 static Pool *pool_freelist;
 
 bool check_mem_usage(void) {
-#if USE_ASAN || defined(__FILC__)
+#if defined(USE_ASAN) || defined(__FILC__)
   return true;
 #else
   struct rusage stat;
@@ -42,7 +34,7 @@ static Pool *new_pool(void) {
     p = malloc(sizeof(Pool));
   }
 
-#if USE_ASAN
+#if defined(USE_ASAN)
   __asan_poison_memory_region(&p->buf, ARENA_POOL_SIZE);
 #endif
   p->next = NULL;
@@ -64,7 +56,7 @@ static void *allocate(Arena *arena, size_t sz, bool clear) {
     arena->used = aligned_sz;
   }
 
-#if USE_ASAN
+#if defined(USE_ASAN)
   __asan_unpoison_memory_region(ptr, aligned_sz);
 #endif
   if (clear)
@@ -76,7 +68,7 @@ char *arena_format(Arena *arena, const char *fmt, ...) {
   void *ptr = &arena->cur->buf[arena->used];
   size_t n = ARENA_POOL_SIZE - arena->used;
 
-#if USE_ASAN
+#if defined(USE_ASAN)
   __asan_unpoison_memory_region(ptr, n);
 #endif
 
@@ -89,7 +81,7 @@ char *arena_format(Arena *arena, const char *fmt, ...) {
   if (aligned_sz <= n) {
     va_end(ap);
     arena->used += aligned_sz;
-#if USE_ASAN
+#if defined(USE_ASAN)
     __asan_poison_memory_region(ptr + aligned_sz, ARENA_POOL_SIZE - arena->used);
 #endif
     return ptr;
@@ -101,7 +93,7 @@ char *arena_format(Arena *arena, const char *fmt, ...) {
   ptr = &arena->cur->buf;
   arena->used = aligned_sz;
 
-#if USE_ASAN
+#if defined(USE_ASAN)
   __asan_unpoison_memory_region(ptr, aligned_sz);
 #endif
 

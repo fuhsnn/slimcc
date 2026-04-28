@@ -6,9 +6,10 @@ TEST_FLAGS=-Itest -std=gnu23
 
 STG2_FLAGS=
 
-SAN_FLAGS=-fsanitize=address
+SAN_FLAGS=-fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined
+#SAN_FLAGS=-fsanitize=memory
 
-.SUFFIXES: .exe .stage2.o .stage2.exe .asan.o .asan.exe .filc.o .filc.exe
+.SUFFIXES: .exe .stage2.o .stage2.exe .san.o .san.exe .filc.o .filc.exe
 
 # Stage 1
 
@@ -58,36 +59,36 @@ test-stage2: $(TESTS_S2)
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-stage2 $(CC)
 	./slimcc-stage2 -hashmap-test
 
-# Asan build
+# -fsanitize build
 
-OBJS_ASAN=$(SRCS:.c=.asan.o)
+OBJS_SAN=$(SRCS:.c=.san.o)
 
-$(OBJS_ASAN): slimcc.h
+$(OBJS_SAN): slimcc.h
 
-.c.asan.o:
-	$(CC) $(SAN_FLAGS) -g -o $@ -c $<
+.c.san.o:
+	$(CC) $(SAN_FLAGS) -g -fno-omit-frame-pointer -o $@ -c $<
 
-slimcc-asan: $(OBJS_ASAN)
-	$(CC) $(SAN_FLAGS) -g -o $@ $(OBJS_ASAN) $(LDFLAGS)
+slimcc-san: $(OBJS_SAN)
+	$(CC) $(SAN_FLAGS) -g -fno-omit-frame-pointer -o $@ $(OBJS_SAN)
 
-TESTS_ASAN=$(TEST_SRCS:.c=.asan.exe)
+TESTS_SAN=$(TEST_SRCS:.c=.san.exe)
 
-$(TESTS_ASAN): slimcc-asan test/host/common.o
+$(TESTS_SAN): slimcc-san test/host/common.o
 
-.c.asan.exe:
-	./slimcc-asan $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+.c.san.exe:
+	./slimcc-san $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
 
-test-asan: $(TESTS_ASAN)
-	for i in $(TESTS_ASAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
-	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-asan $(CC)
-	./slimcc-asan scripts/amalgamation.c -c -o/dev/null
-	./slimcc-asan -hashmap-test
+test-san: $(TESTS_SAN)
+	for i in $(TESTS_SAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-san $(CC)
+	./slimcc-san scripts/amalgamation.c -c -o/dev/null
+	./slimcc-san -hashmap-test
 
-test-misc: slimcc-asan test/host/common.o
-	$(SHELL) scripts/test_abi.sh $(PWD)/slimcc-asan $(CC)
-	$(SHELL) scripts/test_abi.sh $(CC) $(PWD)/slimcc-asan
-	$(SHELL) scripts/test_include_next.sh $(PWD)/slimcc-asan
-	FILE=file $(SHELL) scripts/test_linker.sh $(PWD)/slimcc-asan
+test-misc: slimcc-san test/host/common.o
+	$(SHELL) scripts/test_abi.sh $(PWD)/slimcc-san $(CC)
+	$(SHELL) scripts/test_abi.sh $(CC) $(PWD)/slimcc-san
+	$(SHELL) scripts/test_include_next.sh $(PWD)/slimcc-san
+	FILE=file $(SHELL) scripts/test_linker.sh $(PWD)/slimcc-san
 
 # Fil-C build
 
@@ -96,10 +97,10 @@ OBJS_FILC=$(SRCS:.c=.filc.o)
 $(OBJS_FILC): slimcc.h
 
 .c.filc.o:
-	$(FILC) $(CFLAGS) -g -o $@ -c $<
+	$(FILC) -g -o $@ -c $<
 
 slimcc-filc: $(OBJS_FILC)
-	$(FILC) $(CFLAGS) -g -o $@ $(OBJS_FILC) $(LDFLAGS)
+	$(FILC) -g -o $@ $(OBJS_FILC)
 
 TESTS_FILC=$(TEST_SRCS:.c=.filc.exe)
 
@@ -132,7 +133,7 @@ format:
 	perl -i -p0e 's|\:[ ]+\{\n|: {\n|g' $(SRCS) slimcc.h platform/*.c
 
 clean:
-	rm -f slimcc slimcc-stage2 slimcc-asan slimcc-filc slimcc-lto*
+	rm -f slimcc slimcc-stage2 slimcc-san slimcc-filc slimcc-lto*
 	rm -f *.o test/*.o test/*.exe test/host/*.o test/abi/*.o
 
-.PHONY: clean test test-stage2 test-all test-asan test-filc
+.PHONY: clean test test-stage2 test-all test-san test-filc
