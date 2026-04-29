@@ -45,6 +45,7 @@ jobs:
           - { vm: interop, proj: build_wayst }
           - { vm: interop, proj: build_wlroots_sway }
           - { vm: interop, proj: build_yquake2 }
+          - { vm: interop, proj: test_blosc2 }
           - { vm: interop, proj: test_box2d }
           - { vm: interop, proj: test_c3 }
           - { vm: interop, proj: test_cmark }
@@ -57,6 +58,7 @@ jobs:
           - { vm: interop, proj: test_inih }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
+          - { vm: interop, proj: test_libflac }
           - { vm: interop, proj: test_libxo_chimerautils }
           - { vm: interop, proj: test_miniz }
           - { vm: interop, proj: test_msgpack }
@@ -111,7 +113,6 @@ jobs:
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_blake3 }
-          - { vm: main, proj: test_blosc2 }
           - { vm: main, proj: test_brieflz }
           - { vm: main, proj: test_brotli }
           - { vm: main, proj: test_bubblewrap }
@@ -221,7 +222,6 @@ jobs:
           - { vm: main, proj: test_munit }
           - { vm: main, proj: test_ncompress }
           - { vm: main, proj: test_neovim }
-          - { vm: main, proj: test_nettle }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -233,11 +233,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_nettle }
           - { vm: main, proj: test_nginx }
           - { vm: main, proj: test_njs }
           - { vm: main, proj: test_noplate }
           - { vm: main, proj: test_nqp }
           - { vm: main, proj: test_ocaml }
+          - { vm: main, proj: test_ogg_vorbis }
           - { vm: main, proj: test_oniguruma }
           - { vm: main, proj: test_openrc }
           - { vm: main, proj: test_openssh }

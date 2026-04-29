@@ -16,7 +16,7 @@ COPY . /work/slimcc
 WORKDIR /work/slimcc
 
 RUN ln -s platform/linux-ci.c platform.c \
- && gcc -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address scripts/amalgamation.c -o slimcc
+ && gcc -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -o slimcc
 
 ENV CC=/work/slimcc/slimcc
 
