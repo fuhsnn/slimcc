@@ -370,7 +370,7 @@ static Token *read_const_expr(Token *tok) {
         cur = cur->next = start;
         tok = tok->next;
         if (has_paren)
-          tok = skip(tok, ")");
+          tok = skip_tk(tok, TK_RPAREN);
         continue;
       }
       to_int_token(tok, equal(tok, "true") && opt_std >= STD_C23);
@@ -463,17 +463,18 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
 
   while (!consume(rest, tok, ")")) {
     if (m->arg_cnt++)
-      tok = skip(tok, ",");
+      tok = skip_tk(tok, TK_COMMA);
 
     if (tok->kind != TK_IDENT) {
-      *rest = skip(skip(tok, "..."), ")");
+      tok = skip_tk(tok, TK_DOT3);
+      *rest = skip_tk(tok, TK_RPAREN);
       static Token va_args = {.loc = "__VA_ARGS__", .len = 11};
       add_macro_param(&cur, head.next, &va_args);
       m->has_va_arg = true;
       break;
     }
     if (tok->next->kind == TK_DOT3) {
-      *rest = skip(tok->next->next, ")");
+      *rest = skip_tk(tok->next->next, TK_RPAREN);
       add_macro_param(&cur, head.next, tok);
       m->has_va_arg = true;
       break;
@@ -565,12 +566,12 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
     if (is_va_arg && tok->kind == TK_RPAREN)
       ctx.omit_comma = !(is_iso_std && idx == 0);
     else if (idx)
-      tok = skip(tok, ",");
+      tok = skip_tk(tok, TK_COMMA);
 
     ap->tok = read_macro_arg_one(&tok, tok, is_va_arg);
   }
 
-  skip(tok, ")");
+  skip_tk(tok, TK_RPAREN);
   return ctx;
 }
 
@@ -820,7 +821,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       } else if (tok->kind == TK_IDENT) {
         tail_m = hashmap_get2(&macros, tok->loc, tok->len);
         rparen = tok->next;
-        tok = skip(tok->next, ")");
+        tok = skip_tk(tok->next, TK_RPAREN);
       }
       if (!(tail_m && tail_m->arg_cnt))
         error_tok(start,
@@ -1183,13 +1184,13 @@ static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start
 
   for (;;) {
     if (equal(tok, "limit"))
-      tok = skip_paren(limit_seq = skip(tok->next, "("));
+      tok = skip_paren(limit_seq = skip_tk(tok->next, TK_LPAREN));
     else if (equal(tok, "if_empty"))
-      tok = skip_paren(if_empty_seq = skip(tok->next, "("));
+      tok = skip_paren(if_empty_seq = skip_tk(tok->next, TK_LPAREN));
     else if (equal(tok, "prefix"))
-      tok = skip_paren(prefix_seq = skip(tok->next, "("));
+      tok = skip_paren(prefix_seq = skip_tk(tok->next, TK_LPAREN));
     else if (equal(tok, "suffix"))
-      tok = skip_paren(suffix_seq = skip(tok->next, "("));
+      tok = skip_paren(suffix_seq = skip_tk(tok->next, TK_LPAREN));
     else
       break;
   }
@@ -1665,7 +1666,7 @@ static Token *pragma_macro(Token *start) {
 
     switch (progress++) {
     case 0: {
-      tok = skip(tok, "(");
+      tok = skip_tk(tok, TK_LPAREN);
       continue;
     }
     case 1:
@@ -1675,7 +1676,7 @@ static Token *pragma_macro(Token *start) {
       tok = tok->next;
       continue;
     case 2: {
-      tok = skip(tok, ")");
+      tok = skip_tk(tok, TK_RPAREN);
       tok->at_bol = true;
     }
     }
@@ -1691,7 +1692,7 @@ static Token *pragma_macro(Token *start) {
 }
 
 static Token *has_include_macro(Token *start) {
-  Token *tok = skip(start->next, "(");
+  Token *tok = skip_tk(start->next, TK_LPAREN);
 
   const char *dir = NULL;
   char *filename = read_include_filename(split_paren(&tok, tok), &dir);
@@ -1702,7 +1703,7 @@ static Token *has_include_macro(Token *start) {
 }
 
 static Token *has_include_next_macro(Token *start) {
-  Token *file_tok = skip(start->next, "(");
+  Token *file_tok = skip_tk(start->next, TK_LPAREN);
   InclIdx idx = file_tok->file->incl_idx + 1;
   const char *dir = NULL;
   Token *end;
@@ -1714,7 +1715,7 @@ static Token *has_include_next_macro(Token *start) {
 }
 
 static Token *has_embed_macro(Token *start) {
-  Token *tok = skip(start->next, "(");
+  Token *tok = skip_tk(start->next, TK_LPAREN);
   Token *end;
 
   const char *dir = NULL;
@@ -1728,27 +1729,27 @@ static Token *has_embed_macro(Token *start) {
 }
 
 static Token *has_attribute_macro(Token *start) {
-  Token *tok = skip(start->next, "(");
+  Token *tok = skip_tk(start->next, TK_LPAREN);
 
   bool val = is_supported_attr(tok);
 
-  tok = skip(tok->next, ")");
+  tok = skip_tk(tok->next, TK_RPAREN);
   pop_macro_lock_until(start, tok);
   return new_bool_int_token(val, start, tok);
 }
 
 static Token *has_c_attribute_macro(Token *start) {
-  Token *tok = skip(start->next, "(");
+  Token *tok = skip_tk(start->next, TK_LPAREN);
 
   const char *str = supported_c_attr(&tok, tok);
 
-  tok = skip(tok->next, ")");
+  tok = skip_tk(tok->next, TK_RPAREN);
   pop_macro_lock_until(start, tok);
   return make_token(str ? str : "0", start, tok);
 }
 
 static Token *has_builtin_macro(Token *start) {
-  Token *tok = skip(start->next, "(");
+  Token *tok = skip_tk(start->next, TK_LPAREN);
 
   bool has_it = equal(tok, "__builtin_alloca") ||
                 equal(tok, "__builtin_constant_p") ||
@@ -1769,13 +1770,13 @@ static Token *has_builtin_macro(Token *start) {
                 equal(tok, "__builtin_va_end") ||
                 equal(tok, "__builtin_va_arg");
 
-  tok = skip(tok->next, ")");
+  tok = skip_tk(tok->next, TK_RPAREN);
   pop_macro_lock_until(start, tok);
   return new_bool_int_token(has_it, start, tok);
 }
 
 static Token *has_extension_macro(Token *start) {
-  Token *tok = skip(start->next, "(");
+  Token *tok = skip_tk(start->next, TK_LPAREN);
 
   // Check clang/include/clang/Basic/Features.def, gcc/c/c-objc-common.cc
   bool has_it = equal(tok, "c_alignas") ||
@@ -1791,7 +1792,7 @@ static Token *has_extension_macro(Token *start) {
                 equal(tok, "gnu_asm_goto_with_outputs") ||
                 equal(tok, "gnu_asm_goto_with_outputs_full");
 
-  tok = skip(tok->next, ")");
+  tok = skip_tk(tok->next, TK_RPAREN);
   pop_macro_lock_until(start, tok);
   return new_bool_int_token(has_it, start, tok);
 }
@@ -2054,13 +2055,13 @@ static Token *preprocess3(Token *tok) {
   while (tok->kind != TK_EOF) {
     Token *start = tok;
     if (equal(tok, "__attribute__") || equal(tok, "__attribute")) {
-      tok = skip(tok->next, "(");
-      tok = skip(tok, "(");
+      tok = skip_tk(tok->next, TK_LPAREN);
+      tok = skip_tk(tok, TK_LPAREN);
       Token *list = split_paren(&tok, tok);
       filter_attr(list, &attr_cur, false);
 
       Token *free_end = tok;
-      tok = skip(tok, ")");
+      tok = skip_tk(tok, TK_RPAREN);
       to_freelist(start, free_end);
       continue;
     }
@@ -2070,7 +2071,7 @@ static Token *preprocess3(Token *tok) {
       filter_attr(list, &attr_cur, true);
 
       Token *free_end = tok;
-      tok = skip(tok, "]");
+      tok = skip_tk(tok, TK_RBRACK);
       to_freelist(start, free_end);
       continue;
     }

@@ -432,7 +432,7 @@ void notice_tok(Token *tok, const char *fmt, ...) FMTCHK(2, 3);
 void verror_at_tok(Token *tok, const char *fmt, va_list ap);
 bool equal(Token *tok, const char *op);
 bool equal_ext(Token *tok, const char *op);
-Token *skip(Token *tok, const char *op);
+Token *skip_tk(Token *tok, TokenKind);
 bool consume(Token **rest, Token *tok, const char *str);
 Token *tokenize_file(const char *path, Token *tok, Token **end);
 File *new_file(const char *name, const char *contents);
