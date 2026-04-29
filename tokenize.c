@@ -209,43 +209,83 @@ static int from_hex(char c) {
   return c - 'A' + 10;
 }
 
-// Read a punctuator token from p and returns its length.
-static int read_punct(const char *p) {
-  bool is_repeat = p[1] == *p;
-  bool is_assign = p[1] == '=';
-
+static int read_punct(const char *p, TokenKind *k) {
   switch (*p) {
-  case '-':
-    if (p[1] == '>')
-      return 2;
-  case '&':
-  case '+':
-  case '=':
-  case '|': return (is_repeat | is_assign) + 1;
-  case '<':
-  case '>':
-    if (is_repeat)
-      return (p[2] == '=') + 2;
-  case '!':
-  case '%':
-  case '*':
-  case '/':
-  case '^': return is_assign + 1;
-  case '#':
-  case ':': return is_repeat + 1;
-  case '.': return (is_repeat && p[2] == *p) ? 3 : 1;
-  case '(':
-  case ')':
-  case ',':
-  case ';':
-  case '?':
+  case '(': return *k = TK_LPAREN, 1;
+  case ')': return *k = TK_RPAREN, 1;
+  case ',': return *k = TK_COMMA, 1;
+  case ';': return *k = TK_SEMI, 1;
+  case '?': return *k = TK_QMARK, 1;
+  case '[': return *k = TK_LBRACK, 1;
+  case ']': return *k = TK_RBRACK, 1;
+  case '{': return *k = TK_LCURLY, 1;
+  case '}': return *k = TK_RCURLY, 1;
+  case '~': return *k = TK_BITNOT, 1;
   case '@':
-  case '[':
-  case ']':
-  case '`':
-  case '{':
-  case '}':
-  case '~': return 1;
+  case '`': return *k = TK_PUNCT, 1;
+  case '!': return (p[1] == '=') ? (*k = TK_NOT_EQ, 2) : (*k = TK_NOT, 1);
+  case '*': return (p[1] == '=') ? (*k = TK_MUL_EQ, 2) : (*k = TK_MUL, 1);
+  case '/': return (p[1] == '=') ? (*k = TK_DIV_EQ, 2) : (*k = TK_DIV, 1);
+  case '^': return (p[1] == '=') ? (*k = TK_XOR_EQ, 2) : (*k = TK_XOR, 1);
+  case '=': return (p[1] == '=') ? (*k = TK_EQ2, 2) : (*k = TK_EQ, 1);
+  case '#': return (p[1] == '#') ? (*k = TK_HASH2, 2) : (*k = TK_HASH, 1);
+  case '.': return Startswith2(p + 1, '.', '.') ? (*k = TK_DOT3, 3) : (*k = TK_DOT, 1);
+  case '&':
+    switch (p[1]) {
+    case '&': return *k = TK_AND2, 2;
+    case '=': return *k = TK_AND_EQ, 2;
+    default:  return *k = TK_AND, 1;
+    }
+  case '+':
+    switch (p[1]) {
+    case '+': return *k = TK_ADD2, 2;
+    case '=': return *k = TK_ADD_EQ, 2;
+    default:  return *k = TK_ADD, 1;
+    }
+  case '-':
+    switch (p[1]) {
+    case '>': return *k = TK_ARROW, 2;
+    case '-': return *k = TK_SUB2, 2;
+    case '=': return *k = TK_SUB_EQ, 2;
+    default:  return *k = TK_SUB, 1;
+    }
+  case '|':
+    switch (p[1]) {
+    case '|': return *k = TK_OR2, 2;
+    case '=': return *k = TK_OR_EQ, 2;
+    default:  return *k = TK_OR, 1;
+    }
+  case ':':
+    if (opt_std >= STD_C94 && p[1] == '>')
+      return *k = TK_RBRACK, 2;
+    return (p[1] == ':') ? (*k = TK_COLON2, 2) : (*k = TK_COLON, 1);
+  case '%':
+    if (opt_std >= STD_C94) {
+      switch (p[1]) {
+      case '>': return *k = TK_RCURLY, 2;
+      case ':':
+        return Startswith2(p + 2, '%', ':') ? (*k = TK_HASH2, 4) : (*k = TK_HASH, 2);
+      }
+    }
+    return (p[1] == '=') ? (*k = TK_REM_EQ, 2) : (*k = TK_REM, 1);
+  case '<':
+    if (opt_std >= STD_C94) {
+      switch (p[1]) {
+      case '%': return *k = TK_LCURLY, 2;
+      case ':': return *k = TK_LBRACK, 2;
+      }
+    }
+    switch (p[1]) {
+    case '<': return (p[2] == '=') ? (*k = TK_LANGLE2_EQ, 3) : (*k = TK_LANGLE2, 2);
+    case '=': return *k = TK_LANGLE_EQ, 2;
+    default:  return *k = TK_LANGLE, 1;
+    }
+  case '>':
+    switch (p[1]) {
+    case '>': return (p[2] == '=') ? (*k = TK_RANGLE2_EQ, 3) : (*k = TK_RANGLE2, 2);
+    case '=': return *k = TK_RANGLE_EQ, 2;
+    default:  return *k = TK_RANGLE, 1;
+    }
   }
   return 0;
 }
@@ -1047,11 +1087,14 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     }
 
     // Punctuators
-    int punct_len = read_punct(p);
-    if (punct_len) {
-      cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
-      p += cur->len;
-      continue;
+    if (!Isalpha(*p)) {
+      TokenKind k;
+      int len = read_punct(p, &k);
+      if (len) {
+        cur = cur->next = new_token(k, p, p + len);
+        p += len;
+        continue;
+      }
     }
 
     if (opt_cc1_asm_pp) {

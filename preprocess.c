@@ -376,11 +376,13 @@ static Token *read_const_expr(Token *tok) {
       to_int_token(tok, equal(tok, "true") && opt_std >= STD_C23);
       break;
     case TK_INT_NUM:
-    case TK_PP_NUM:
-    case TK_PUNCT: {
+    case TK_PP_NUM: {
       break;
     }
-    default: error_tok(tok, "invalid token in preprocessor expression");
+    default:
+      if (tok->kind >= TK_PUNCT && tok->kind < TK_PUNCT_END)
+        break;
+      error_tok(tok, "invalid token in preprocessor expression");
     }
 
     cur = cur->next = tok;
