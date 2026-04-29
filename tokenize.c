@@ -129,18 +129,41 @@ bool equal_ext(Token *tok, const char *op) {
   return equal(tok, op) || equal(tok, buf);
 }
 
-Token *skip(Token *tok, const char *op) {
-  if (!equal(tok, op))
-    error_tok(tok, "expected '%s'", op);
-  return tok->next;
-}
-
 bool consume(Token **rest, Token *tok, const char *str) {
   if (equal(tok, str)) {
     *rest = tok->next;
     return true;
   }
   return false;
+}
+
+Token *skip_tk(Token *tok, TokenKind kind) {
+  if (tok->kind == kind)
+    return tok->next;
+
+  static const char *const tbl[] = {
+    // clang-format off
+    [TK_LPAREN] = "(",
+    [TK_RPAREN] = ")",
+    [TK_COMMA] = ",",
+    [TK_SEMI] = ";",
+    [TK_COLON] = ":",
+    [TK_DOT3] = "...",
+    [TK_EQ] = "=",
+    [TK_LCURLY] = "{",
+    [TK_RCURLY] = "}",
+    [TK_LBRACK] = "[",
+    [TK_RBRACK] = "]",
+    [TK_while] = "while",
+    // clang-format on
+  };
+
+  if (kind < sizeof(tbl) / sizeof(*tbl)) {
+    const char *str = tbl[kind];
+    if (str)
+      error_tok(tok, "expected '%s'", str);
+  }
+  error_tok(tok, "expected 'TokenKind %d'", kind);
 }
 
 static Token *new_token(TokenKind kind, const char *start, const char *end) {
