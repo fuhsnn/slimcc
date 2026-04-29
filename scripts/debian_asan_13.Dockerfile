@@ -68,7 +68,7 @@ COPY . /work/slimcc
 WORKDIR /work/slimcc
 
 RUN ln -s platform/linux-ci-debian13.c platform.c \
- && gcc-14 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address scripts/amalgamation.c -o slimcc
+ && gcc-14 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -o slimcc
 RUN apt-get -y autoremove gcc-14 && rm -rf /var/cache/apt/*
 
 RUN ! command -v cc

@@ -16,9 +16,6 @@ skip_files=(
  jira/PCC-177.c
  pcclist/builtin002.c
 
- # trigraph
- c99/digraph001.c
-
  # __PRETTY_FUNCTION__
  jira/PCC-154.c
 
