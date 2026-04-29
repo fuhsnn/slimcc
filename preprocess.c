@@ -364,7 +364,7 @@ static Token *read_const_expr(Token *tok) {
       if (equal(tok, "defined")) {
         Token *start = tok;
         tok = tok->next;
-        bool has_paren = consume(&tok, tok, "(");
+        bool has_paren = consume_tk(&tok, tok, TK_LPAREN);
 
         to_int_token(start, has_macro(tok));
         cur = cur->next = start;
@@ -461,7 +461,7 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
   Token *cur = &head;
   Macro *m = new_macro(name, false);
 
-  while (!consume(rest, tok, ")")) {
+  while (!consume_tk(rest, tok, TK_RPAREN)) {
     if (m->arg_cnt++)
       tok = skip_tk(tok, TK_COMMA);
 
@@ -811,7 +811,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       continue;
     }
 
-    if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
+    if (equal(tok, "__VA_TAIL__") && consume_tk(&tok, tok->next, TK_LPAREN)) {
       Macro *tail_m = NULL;
       Token *rparen = NULL;
       if (tok->kind == TK_RPAREN) {
@@ -1533,7 +1533,7 @@ void define_macro_cli(const char *str) {
   Token *cur = &head;
   bool has_eq = false;
   for (; tok->kind != TK_EOF;) {
-    if (!has_eq && consume(&tok, tok, "=")) {
+    if (!has_eq && consume_tk(&tok, tok, TK_EQ)) {
       tok->has_space = true;
       has_eq = true;
       continue;
@@ -2004,7 +2004,7 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
   bool first = true;
   for (;; first = false) {
     bool has_comma = false;
-    while (consume(&tok, tok, ","))
+    while (consume_tk(&tok, tok, TK_COMMA))
       has_comma = true;
 
     if (tok->kind == TK_EOF)
@@ -2019,7 +2019,7 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
       is_supported = is_supported_attr(tok);
 
     Token *start = tok;
-    if (consume(&tok, tok->next, "("))
+    if (consume_tk(&tok, tok->next, TK_LPAREN))
       tok = skip_paren(tok);
     else
       tok = tok->next;
@@ -2066,7 +2066,7 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (tok->kind == TK_LBRACK && consume(&tok, tok->next, "[")) {
+    if (tok->kind == TK_LBRACK && consume_tk(&tok, tok->next, TK_LBRACK)) {
       Token *list = split_bracket(&tok, tok);
       filter_attr(list, &attr_cur, true);
 

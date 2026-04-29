@@ -183,7 +183,7 @@ static bool *eval_recover;
 
 static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
-static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool skip_comma);
+static bool comma_list(Token **rest, Token **tok_rest, TokenKind end, bool skip_comma);
 static bool braced_list(Token **rest, Token **tok_rest, bool skip_comma);
 static Type *typename(Token **rest, Token *tok);
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
@@ -787,9 +787,9 @@ static void chain_expr(Node **lhs, Node *rhs) {
     *lhs = !*lhs ? rhs : new_binary(ND_CHAIN, *lhs, rhs, rhs->tok);
 }
 
-static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool skip_comma) {
+static bool comma_list(Token **rest, Token **tok_rest, TokenKind end, bool skip_comma) {
   Token *tok = *tok_rest;
-  if (consume(rest, tok, end))
+  if (consume_tk(rest, tok, end))
     return false;
   if (skip_comma)
     *tok_rest = skip_tk(tok, TK_COMMA);
@@ -798,13 +798,13 @@ static bool comma_list(Token **rest, Token **tok_rest, const char *end, bool ski
 
 static bool braced_list(Token **rest, Token **tok_rest, bool skip_comma) {
   Token *tok = *tok_rest;
-  if (consume(rest, tok, "}"))
+  if (consume_tk(rest, tok, TK_RCURLY))
     return false;
 
   if (skip_comma) {
     tok = skip_tk(tok, TK_COMMA);
 
-    if (consume(rest, tok, "}"))
+    if (consume_tk(rest, tok, TK_RCURLY))
       return false;
 
     *tok_rest = tok;
@@ -852,7 +852,7 @@ static bool pragma_pack(Token **rest, Token *tok) {
     }
     if (equal(tok, "push")) {
       pragma_pack_push();
-      if (consume(&tok, tok->next, ")")) {
+      if (consume_tk(&tok, tok->next, TK_RPAREN)) {
         *rest = skip_line(tok);
         return true;
       }
@@ -879,7 +879,7 @@ static void attr_aligned(Token *loc, TokenKind kind, int *align) {
       continue;
     if (equal_ext(tok, "aligned")) {
       Token *tok2;
-      if (consume(&tok2, tok->next, "(")) {
+      if (consume_tk(&tok2, tok->next, TK_LPAREN)) {
         int align2 = align_expr(&tok2, tok2);
         *align = MAX(*align, align2);
         continue;
@@ -1179,7 +1179,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_volatile: qual |= Q_VOLATILE; continue;
     case TK_Atomic:
       qual |= Q_ATOMIC;
-      if (consume(&tok, tok, "(")) {
+      if (consume_tk(&tok, tok, TK_LPAREN)) {
         if (ty)
           error_tok(tok, "invalid type");
         ty = typename(&tok, tok);
@@ -1292,14 +1292,14 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Type *fn_ty = func_type(rtn_ty, tok);
 
-  if (tok->kind == TK_DOT3 && consume(rest, tok->next, ")")) {
+  if (tok->kind == TK_DOT3 && consume_tk(rest, tok->next, TK_RPAREN)) {
     fn_ty->is_variadic = true;
     return fn_ty;
   }
-  if (tok->kind == TK_void && consume(rest, tok->next, ")"))
+  if (tok->kind == TK_void && consume_tk(rest, tok->next, TK_RPAREN))
     return fn_ty;
 
-  if (consume(rest, tok, ")")) {
+  if (consume_tk(rest, tok, TK_RPAREN)) {
     if (opt_std < STD_C23)
       fn_ty->is_oldstyle = true;
     return fn_ty;
@@ -1311,7 +1311,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
 
     Token *start = tok;
     if (!is_def) {
-      while (comma_list(rest, &tok, ")", tok != start))
+      while (comma_list(rest, &tok, TK_RPAREN, tok != start))
         ident_tok(&tok, tok);
       return fn_ty;
     }
@@ -1319,7 +1319,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
 
     Obj head = {0};
     Obj *cur = &head;
-    while (comma_list(rest, &tok, ")", tok != start)) {
+    while (comma_list(rest, &tok, TK_RPAREN, tok != start)) {
       Token *name = ident_tok(&tok, tok);
       cur = cur->param_next = new_param(get_ident(&ast_arena, name), NULL);
     }
@@ -1334,7 +1334,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Obj *cur = &head;
   Node *expr = NULL;
 
-  while (comma_list(rest, &tok, ")", cur != &head)) {
+  while (comma_list(rest, &tok, TK_RPAREN, cur != &head)) {
     if (tok->kind == TK_DOT3) {
       fn_ty->is_variadic = true;
       *rest = skip_tk(tok->next, TK_RPAREN);
@@ -1367,7 +1367,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
 
 static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
   Node *expr;
-  if (consume(&tok, tok, "]")) {
+  if (consume_tk(&tok, tok, TK_RBRACK)) {
     expr = NULL;
   } else if (tok->kind == TK_MUL && tok->next->kind == TK_RBRACK) {
     if (!ctx->let_star)
@@ -1423,16 +1423,16 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
   if (tok->kind == TK_LPAREN)
     return func_params(rest, tok->next, ty, NULL);
 
-  if (consume(&tok, tok, "[")) {
+  if (consume_tk(&tok, tok, TK_LBRACK)) {
     QualMask qual = 0;
     bool has_static = false;
 
     if (ctx->is_param) {
-      has_static = consume(&tok, tok, "static");
+      has_static = consume_tk(&tok, tok, TK_static);
       if (is_type_kw(tok->kind)) {
         qual = pointer_qualifiers(&tok, tok);
         if (!has_static)
-          has_static = consume(&tok, tok, "static");
+          has_static = consume_tk(&tok, tok, TK_static);
       }
     }
     Type *ty2 = array_dimensions(rest, tok, ty, ctx);
@@ -1449,7 +1449,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
 }
 
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
-  while (consume(&tok, tok, "*")) {
+  while (consume_tk(&tok, tok, TK_MUL)) {
     QualMask q = pointer_qualifiers(&tok, tok);
     ty = qual_type(q, pointer_to(ty), tok);
   }
@@ -1481,7 +1481,7 @@ static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
                          DeclContext *ctx) {
   ty = pointers(&tok, tok, ty);
 
-  if (consume(&tok, tok, "(")) {
+  if (consume_tk(&tok, tok, TK_LPAREN)) {
     if (is_typename(tok) || tok->kind == TK_DOT3 || tok->kind == TK_RPAREN)
       return func_params(rest, tok, ty, NULL);
 
@@ -1497,7 +1497,7 @@ static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
     *name_tok = tok;
     tok = tok->next;
   }
-  if (consume(&tok, tok, "("))
+  if (consume_tk(&tok, tok, TK_LPAREN))
     return func_params(rest, tok, ty, &ctx->end);
 
   return type_suffix(rest, tok, ty, ctx);
@@ -1624,7 +1624,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   for (; braced_list(&tok, &tok, !first); first = false) {
     Token *name = ident_tok(&tok, tok);
 
-    if (!consume(&tok, tok, "=")) {
+    if (!consume_tk(&tok, tok, TK_EQ)) {
       if (is_ovf)
         error_tok(tok, "enum value overflowed");
     } else {
@@ -1828,7 +1828,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);
 
-    if (consume(&tok, tok, "=")) {
+    if (consume_tk(&tok, tok, TK_EQ)) {
       if (attr->strg & SC_CONSTEXPR)
         constexpr_initializer(&tok, tok, var, var);
       else
@@ -1919,12 +1919,12 @@ static Node *cond_declaration(Token **rest, Token *tok, TokenKind stopper, int c
     Obj *var = NULL;
     chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
 
-    while (consume(&tok, tok, ",")) {
+    while (consume_tk(&tok, tok, TK_COMMA)) {
       chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
       var = NULL;
     }
 
-    if (clause == 0 && consume(&tok, tok, ";"))
+    if (clause == 0 && consume_tk(&tok, tok, TK_SEMI))
       continue;
 
     if (!var)
@@ -1961,7 +1961,7 @@ static Node *declaration(Token **rest, Token *tok) {
 
   do {
     chain_expr(&expr, declaration2(&tok, tok, basety, &attr, &(Obj *){0}));
-  } while (comma_list(rest, &tok, ";", true));
+  } while (comma_list(rest, &tok, TK_SEMI, true));
 
   return expr;
 }
@@ -2079,7 +2079,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
   }
 
   if (post_bracket)
-    consume(&tok, tok, "=");
+    consume_tk(&tok, tok, TK_EQ);
   else
     tok = skip_tk(tok, TK_EQ);
 
@@ -2166,13 +2166,13 @@ static bool is_num_seq(Token **rest, Token *tok, int32_t *val) {
       cnt++;
       tok = tok->next;
 
-      if (consume(rest, tok, "}") ||
-          (tok->kind == TK_COMMA && consume(rest, tok->next, "}"))) {
+      if (consume_tk(rest, tok, TK_RCURLY) ||
+          (tok->kind == TK_COMMA && consume_tk(rest, tok->next, TK_RCURLY))) {
         *val = cnt;
         return true;
       }
 
-      if (consume(&tok, tok, ","))
+      if (consume_tk(&tok, tok, TK_COMMA))
         continue;
     }
     return false;
@@ -2180,8 +2180,8 @@ static bool is_num_seq(Token **rest, Token *tok, int32_t *val) {
 }
 
 static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr) {
-  bool has_brace = !expr && consume(&tok, tok, "{");
-  if (has_brace && consume(rest, tok, "}")) {
+  bool has_brace = !expr && consume_tk(&tok, tok, TK_LCURLY);
+  if (has_brace && consume_tk(rest, tok, TK_RCURLY)) {
     if (init->kind == INIT_FLEX)
       init->ty = array_of(init->ty->base, 0);
     set_init(init, INIT_NONE);
@@ -2216,7 +2216,11 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
         expr = assign(&tok, tok);
       if (expr->kind == ND_VAR && expr->m.var->is_string_lit) {
         string_initializer(expr->tok, init);
-        *rest = has_brace ? (consume(&tok, tok, ","), skip_tk(tok, TK_RCURLY)) : tok;
+        if (has_brace) {
+          consume_tk(&tok, tok, TK_COMMA);
+          tok = skip_tk(tok, TK_RCURLY);
+        }
+        *rest = tok;
         return;
       }
     }
@@ -2259,7 +2263,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     tok = tok->next;
   } else {
     int64_t cnt = 0;
-    while (consume(&tok, tok, "{"))
+    while (consume_tk(&tok, tok, TK_LCURLY))
       cnt++;
 
     init->kind = INIT_EXPR;
@@ -2268,7 +2272,11 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     while (cnt--)
       tok = skip_tk(tok, TK_RCURLY);
   }
-  *rest = has_brace ? (consume(&tok, tok, ","), skip_tk(tok, TK_RCURLY)) : tok;
+  if (has_brace) {
+    consume_tk(&tok, tok, TK_COMMA);
+    tok = skip_tk(tok, TK_RCURLY);
+  }
+  *rest = tok;
 }
 
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
@@ -2781,7 +2789,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
 
     cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
 
-    if (consume(&tok, tok, "[")) {
+    if (consume_tk(&tok, tok, TK_LBRACK)) {
       cur->name = tok;
       tok = skip_tk(tok->next, TK_RBRACK);
     }
@@ -2846,9 +2854,9 @@ static Node *asm_stmt(Token **rest, Token *tok) {
     Token *start = tok;
 
     int inc = 0;
-    if (consume(&tok, tok, ":"))
+    if (consume_tk(&tok, tok, TK_COLON))
       inc = 1;
-    else if (consume(&tok, tok, "::"))
+    else if (consume_tk(&tok, tok, TK_COLON2))
       inc = 2;
 
     if (inc) {
@@ -2890,7 +2898,7 @@ static void push_goto(Node *node) {
 static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
   int64_t lo = const_expr(&tok, tok);
   int64_t hi;
-  if (consume(&tok, tok, "..."))
+  if (consume_tk(&tok, tok, TK_DOT3))
     hi = const_expr(&tok, tok);
   else
     hi = lo;
@@ -3075,7 +3083,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     Node *node = new_node(ND_RETURN, tok);
     node->dfr_from = fnctx->defr;
-    if (consume(rest, tok->next, ";"))
+    if (consume_tk(rest, tok->next, TK_SEMI))
       return node;
 
     Node *n = expression(&tok, tok->next);
@@ -3137,7 +3145,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       node->ctrl.for_init = expr_stmt(&tok, tok);
     }
 
-    if (!consume(&tok, tok, ";")) {
+    if (!consume_tk(&tok, tok, TK_SEMI)) {
       node->dfr_dest = fnctx->defr;
       node->ctrl.cond = cond_cast(cond_declaration(&tok, tok, TK_SEMI, 1));
       node->dfr_from = fnctx->defr;
@@ -3239,7 +3247,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 static void local_labels(Token **rest, Token *tok) {
   while (consume(&tok, tok, "__label__")) {
     bool first = true;
-    for (; comma_list(&tok, &tok, ";", !first); first = false) {
+    for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
       LocalLabel *ll = arena_calloc(&ast_arena, sizeof(LocalLabel));
       ll->name = ident_tok(&tok, tok);
       ll->next = scope->labels;
@@ -3263,7 +3271,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
 
     if (tok->kind == TK_RCURLY)
       break;
-    if (consume(&tok, tok, ";"))
+    if (consume_tk(&tok, tok, TK_SEMI))
       continue;
     if (pragma_pack(&tok, tok))
       continue;
@@ -3316,7 +3324,7 @@ static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind) {
 }
 
 static Node *expr_stmt(Token **rest, Token *tok) {
-  if (consume(rest, tok, ";"))
+  if (consume_tk(rest, tok, TK_SEMI))
     return new_node(ND_NULL_STMT, tok);
 
   Node *n = expression(&tok, tok);
@@ -4166,7 +4174,7 @@ static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
   Node *obj = new_unary(ND_DEREF, assign(&tok, tok), start);
   tok = skip_tk(tok, TK_COMMA);
   Node *val = assign(&tok, tok);
-  if (consume(&tok, tok, ","))
+  if (consume_tk(&tok, tok, TK_COMMA))
     ident_tok(&tok, tok);
   *rest = skip_tk(tok, TK_RPAREN);
 
@@ -4314,7 +4322,7 @@ static Node *conditional(Token **rest, Token *tok) {
   Node *node = new_node(ND_COND, tok);
   node->is_nonlval = true;
 
-  if (!consume(&tok, tok->next, ":")) {
+  if (!consume_tk(&tok, tok->next, TK_COLON)) {
     node->ctrl.then = expression(&tok, tok->next);
     tok = skip_tk(tok, TK_COLON);
   }
@@ -4735,7 +4743,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   HashMap names = {0};
 
   while (tok->kind != TK_RCURLY) {
-    if (consume(&tok, tok, ";"))
+    if (consume_tk(&tok, tok, TK_SEMI))
       continue;
     if (pragma_pack(&tok, tok))
       continue;
@@ -4766,7 +4774,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 
     // Regular struct members
     bool first = true;
-    for (; comma_list(&tok, &tok, ";", !first); first = false) {
+    for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = declarator(&tok, tok, basety, &mem->name);
       if (mem->name) {
@@ -4776,7 +4784,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       if (is_vm_ty(mem->ty) || mem->ty->kind == TY_FUNC || mem->ty->kind == TY_VOID)
         error_tok(tok, "invalid member type");
 
-      if (consume(&tok, tok, ":")) {
+      if (consume_tk(&tok, tok, TK_COLON)) {
         if (!is_int_class(mem->ty))
           error_tok(tok, "bit-field not integer");
 
@@ -5131,7 +5139,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
 
   enter_tmp_scope();
 
-  while (comma_list(rest, &tok, ")", cur != &head)) {
+  while (comma_list(rest, &tok, TK_RPAREN, cur != &head)) {
     Node *arg = assign(&tok, tok);
     add_type(arg);
 
@@ -5189,7 +5197,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Node *ret = NULL;
   Node *def = NULL;
 
-  while (comma_list(rest, &tok, ")", true)) {
+  while (comma_list(rest, &tok, TK_RPAREN, true)) {
     if (tok->kind == TK_default) {
       tok = skip_tk(tok->next, TK_COLON);
       def = assign(&tok, tok);
@@ -5650,7 +5658,7 @@ static Node *primary(Token **rest, Token *tok) {
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   Node *node = NULL;
   bool first = true;
-  for (; comma_list(rest, &tok, ";", !first); first = false) {
+  for (; comma_list(rest, &tok, TK_SEMI, !first); first = false) {
     Token *name = NULL;
     Type *ty = declarator(&tok, tok, basety, &name);
 
@@ -5848,7 +5856,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
           rhs = new_binary(ND_BITAND, rhs, new_num(1, name), name);
         chain_expr(&expr, new_binary(ND_ASSIGN, lhs, rhs, name));
       }
-    } while (comma_list(&tok, &tok, ";", true));
+    } while (comma_list(&tok, &tok, TK_SEMI, true));
   }
 
   if (def_ty->is_oldstyle) {
@@ -5942,7 +5950,7 @@ static void func_exportness(Obj *fn, VarAttr *attr, bool is_def) {
 
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
-  for (; comma_list(&tok, &tok, ";", !first); first = false) {
+  for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
     Token *name = NULL;
     Type *ty = declarator2(&tok, tok, basety, &name,
                            &(DeclContext){.is_glob = !scope->parent});
@@ -6037,7 +6045,7 @@ Obj *parse(Token *tok) {
     if (free_alloc)
       free_head = free_parsed_tok(free_head, tok);
 
-    if (consume(&tok, tok, ";"))
+    if (consume_tk(&tok, tok, TK_SEMI))
       continue;
 
     if (tok->kind == TK_asm) {
