@@ -4182,7 +4182,8 @@ static void asm_prepare_clobbers(Token *tok, int *x87_clobber) {
     return;
 
   Token *start = tok;
-  for (; !equal(tok, ":") && !equal(tok, ")"); tok = tok->next) {
+  for (; tok->kind != TK_COLON && tok->kind != TK_COLON2 && tok->kind != TK_RPAREN;
+       tok = tok->next) {
     if (tok != start)
       tok = skip(tok, ",");
 

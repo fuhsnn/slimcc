@@ -371,7 +371,7 @@ static bool is_vm_ty(Type *ty) {
 }
 
 static bool is_func_def(Token *end_tok) {
-  return equal(end_tok, "{") || is_typename(end_tok);
+  return end_tok->kind == TK_LCURLY || is_typename(end_tok);
 }
 
 bool equal_tok(Token *a, Token *b) {
@@ -858,7 +858,7 @@ static bool pragma_pack(Token **rest, Token *tok) {
       }
       tok = skip(tok->next, ",");
     }
-    pragma_pack_set(equal(tok, ")") ? 0 : align_expr(&tok, tok));
+    pragma_pack_set(tok->kind == TK_RPAREN ? 0 : align_expr(&tok, tok));
     *rest = skip_line(skip(tok, ")"));
     return true;
   }
@@ -866,7 +866,7 @@ static bool pragma_pack(Token **rest, Token *tok) {
 }
 
 static bool get_attr_val(Token *tok, int64_t *val) {
-  if (equal(tok, "(")) {
+  if (tok->kind == TK_LPAREN) {
     *val = const_expr(&tok, tok);
     return true;
   }
@@ -1279,7 +1279,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
   }
 
   if (ty->kind == TY_AUTO)
-    if (tok->kind != TK_IDENT || !equal(tok->next, "="))
+    if (tok->kind != TK_IDENT || tok->next->kind != TK_EQ)
       error_tok(tok, "unsupported form for type inference");
 
   if (ty->kind == TY_BITINT)
@@ -1292,7 +1292,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Type *fn_ty = func_type(rtn_ty, tok);
 
-  if (equal(tok, "...") && consume(rest, tok->next, ")")) {
+  if (tok->kind == TK_DOT3 && consume(rest, tok->next, ")")) {
     fn_ty->is_variadic = true;
     return fn_ty;
   }
@@ -1335,7 +1335,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Node *expr = NULL;
 
   while (comma_list(rest, &tok, ")", cur != &head)) {
-    if (equal(tok, "...")) {
+    if (tok->kind == TK_DOT3) {
       fn_ty->is_variadic = true;
       *rest = skip(tok->next, ")");
       break;
@@ -1369,7 +1369,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
   Node *expr;
   if (consume(&tok, tok, "]")) {
     expr = NULL;
-  } else if (equal(tok, "*") && equal(tok->next, "]")) {
+  } else if (tok->kind == TK_MUL && tok->next->kind == TK_RBRACK) {
     if (!ctx->let_star)
       error_tok(tok, "`[*]` not allowed here");
     expr = new_unknown(ty_size_t, tok);
@@ -1381,7 +1381,7 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
     tok = skip(tok, "]");
   }
 
-  if (equal(tok, "["))
+  if (tok->kind == TK_LBRACK)
     ty = array_dimensions(&tok, tok->next, ty, ctx);
 
   if (ty->size < 0 || ty->kind == TY_VOID || ty->kind == TY_FUNC)
@@ -1420,7 +1420,7 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok) {
 }
 
 static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
-  if (equal(tok, "("))
+  if (tok->kind == TK_LPAREN)
     return func_params(rest, tok->next, ty, NULL);
 
   if (consume(&tok, tok, "[")) {
@@ -1461,15 +1461,15 @@ Token *skip_paren(Token *tok) {
   int level = 0;
   Token *start = tok;
   for (;;) {
-    if (level == 0 && equal(tok, ")"))
+    if (level == 0 && tok->kind == TK_RPAREN)
       break;
 
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
 
-    if (equal(tok, "("))
+    if (tok->kind == TK_LPAREN)
       level++;
-    else if (equal(tok, ")"))
+    else if (tok->kind == TK_RPAREN)
       level--;
 
     tok = tok->next;
@@ -1482,7 +1482,7 @@ static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
   ty = pointers(&tok, tok, ty);
 
   if (consume(&tok, tok, "(")) {
-    if (is_typename(tok) || equal(tok, "...") || equal(tok, ")"))
+    if (is_typename(tok) || tok->kind == TK_DOT3 || tok->kind == TK_RPAREN)
       return func_params(rest, tok, ty, NULL);
 
     ty = type_suffix(rest, skip_paren(tok), ty, ctx);
@@ -1563,7 +1563,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   }
 
   Type *ty = NULL;
-  if (equal(tok, ":") && is_typename(tok->next)) {
+  if (tok->kind == TK_COLON && is_typename(tok->next)) {
     Token *start = tok;
     ty = typename(&tok, tok->next);
 
@@ -1571,10 +1571,10 @@ static Type *enum_specifier(Token **rest, Token *tok) {
       error_tok(start, "invalid enum underlying type");
     if (ty->kind == TY_BITINT && ty->bit_cnt > 64)
       error_tok(start, "large _BitInt unsupported here");
-    if (!equal(tok, "{"))
+    if (tok->kind != TK_LCURLY)
       skip(tok, ";");
   }
-  if (tag && !equal(tok, "{")) {
+  if (tag && tok->kind != TK_LCURLY) {
     *rest = tok;
 
     Type *tag_ty = ty ? find_tag_in_scope(tag) : find_tag(tag);
@@ -1854,7 +1854,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     aligned_attr(name, tok, attr, &var->alt_align);
     cleanup_attr(name, tok, attr, var);
 
-    if (equal(tok, "=")) {
+    if (tok->kind == TK_EQ) {
       tok = skip(skip(tok->next, "{"), "}");
       node->kind = ND_ALLOCA_ZINIT;
       *cond_var = var;
@@ -1877,7 +1877,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     *rest = tok;
     return expr;
   }
-  if (equal(tok, "=")) {
+  if (tok->kind == TK_EQ) {
     chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
     *cond_var = var;
   }
@@ -1946,7 +1946,7 @@ static Node *declaration(Token **rest, Token *tok) {
 
   Node *expr = calc_vla2(basety, tok, &attr);
 
-  if (equal(tok, ";")) {
+  if (tok->kind == TK_SEMI) {
     chk_inline(&attr, tok);
     *rest = tok->next;
     return expr;
@@ -1966,7 +1966,7 @@ static Node *declaration(Token **rest, Token *tok) {
 }
 
 static Token *skip_excess_element(Token *tok) {
-  if (equal(tok, "{")) {
+  if (tok->kind == TK_LCURLY) {
     tok = skip_excess_element(tok->next);
     return skip(tok, "}");
   }
@@ -1992,7 +1992,7 @@ static void array_designator(Token **rest, Token *tok, Type *ty, int *begin, int
   if (*begin >= ty->array_len)
     error_tok(tok, "array designator index exceeds array bounds");
 
-  if (equal(tok, "...")) {
+  if (tok->kind == TK_DOT3) {
     *end = const_expr(&tok, tok->next);
     if (*end >= ty->array_len)
       error_tok(tok, "array designator index exceeds array bounds");
@@ -2019,7 +2019,7 @@ static Member *struct_designator(Token **rest, Token *tok, Type *ty) {
 
 static void designation(Token **rest, Token *tok, Initializer *init, bool post_bracket,
                         DesgContext *ctx) {
-  if (equal(tok, "[")) {
+  if (tok->kind == TK_LBRACK) {
     if (init->ty->kind != TY_ARRAY)
       error_tok(tok, "array index not in array initializer");
 
@@ -2060,7 +2060,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
     return;
   }
 
-  if (equal(tok, ".")) {
+  if (tok->kind == TK_DOT) {
     if (!(init->ty->kind == TY_STRUCT || init->ty->kind == TY_UNION))
       error_tok(tok, "field designator not in struct or union initializer");
 
@@ -2092,9 +2092,9 @@ static int count_array_init_elements(Token *tok, Type *ty, int i) {
   int max = i;
 
   while (braced_list(&tok, &tok, i)) {
-    if (equal(tok, "[")) {
+    if (tok->kind == TK_LBRACK) {
       i = const_expr(&tok, tok->next);
-      if (equal(tok, "..."))
+      if (tok->kind == TK_DOT3)
         i = const_expr(&tok, tok->next);
       tok = skip(tok, "]");
       designation(&tok, tok, &dummy, true, NULL);
@@ -2131,7 +2131,7 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, N
 
   if (has_brace) {
     while (braced_list(&tok, &tok, start != tok)) {
-      if (equal(tok, ".") || equal(tok, "[")) {
+      if (tok->kind == TK_DOT || tok->kind == TK_LBRACK) {
         designation(&tok, tok, init, false, NULL);
         continue;
       }
@@ -2142,10 +2142,10 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, N
 }
 
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int idx) {
-  for (; idx < init->list.cnt && !equal(tok, "}"); idx++) {
+  for (; idx < init->list.cnt && tok->kind != TK_RCURLY; idx++) {
     Token *tok2 = (idx == 0) ? tok : skip(tok, ",");
 
-    if (equal(tok2, "}") || equal(tok2, "[") || equal(tok2, "."))
+    if (tok2->kind == TK_RCURLY || tok2->kind == TK_LBRACK || tok2->kind == TK_DOT)
       break;
 
     initializer2(&tok, tok2, &init->list.data[idx]);
@@ -2165,7 +2165,8 @@ static bool is_num_seq(Token **rest, Token *tok, int32_t *val) {
       cnt++;
       tok = tok->next;
 
-      if (consume(rest, tok, "}") || (equal(tok, ",") && consume(rest, tok->next, "}"))) {
+      if (consume(rest, tok, "}") ||
+          (tok->kind == TK_COMMA && consume(rest, tok->next, "}"))) {
         *val = cnt;
         return true;
       }
@@ -2208,7 +2209,8 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
 
     if (is_integer(init->ty->base) &&
         init->ty->base->kind != TY_BOOL &&
-        (expr || !(equal(tok, "[") || equal(tok, ".") || equal(tok, "{")))) {
+        (expr ||
+         !(tok->kind == TK_LBRACK || tok->kind == TK_DOT || tok->kind == TK_LCURLY))) {
       if (!expr)
         expr = assign(&tok, tok);
       if (expr->kind == ND_VAR && expr->m.var->is_string_lit) {
@@ -2248,7 +2250,9 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
 
   if (!expr &&
       (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) &&
-      (equal(tok->next, ",") || equal(tok->next, "}") || equal(tok->next, ";"))) {
+      (tok->next->kind == TK_COMMA ||
+       tok->next->kind == TK_RCURLY ||
+       tok->next->kind == TK_SEMI)) {
     init->kind = INIT_TOK;
     init->tok = tok;
     tok = tok->next;
@@ -2733,7 +2737,9 @@ static bool is_typename(Token *tok) {
 }
 
 static bool is_typename_paren(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
-  if (equal(tok, "(") && is_typename(tok->next) && !equal(skip_paren(tok->next->next), "{")) {
+  if (tok->kind == TK_LPAREN &&
+      is_typename(tok->next) &&
+      skip_paren(tok->next->next)->kind != TK_LCURLY) {
     *ty = typename2(&tok, tok->next, attr);
     *rest = skip(tok, ")");
     return true;
@@ -2756,7 +2762,7 @@ static void eval_static_assert(Token **rest, Token *tok) {
   if (!res)
     error_tok(tok, "static assertion failed");
 
-  if (equal(tok, ",")) {
+  if (tok->kind == TK_COMMA) {
     if (tok->next->kind != TK_STR)
       error_tok(tok, "expected string literal");
     tok = tok->next->next;
@@ -2768,7 +2774,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
   AsmParam head = {0};
   AsmParam *cur = &head;
 
-  while (!equal(tok, ":") && !equal(tok, "::") && !equal(tok, ")")) {
+  while (tok->kind != TK_COLON && tok->kind != TK_COLON2 && tok->kind != TK_RPAREN) {
     if (cur != &head)
       tok = skip(tok, ",");
 
@@ -2789,7 +2795,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
 static Token *asm_clobbers(Token **rest, Token *tok) {
   Token *first = NULL;
 
-  while (!equal(tok, ":") && !equal(tok, "::") && !equal(tok, ")")) {
+  while (tok->kind != TK_COLON && tok->kind != TK_COLON2 && tok->kind != TK_RPAREN) {
     if (!first) {
       first = str_tok(&tok, tok);
       continue;
@@ -2805,7 +2811,7 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
   AsmParam head = {0};
   AsmParam *cur = &head;
 
-  while (!equal(tok, ")")) {
+  while (tok->kind != TK_RPAREN) {
     if (cur != &head)
       tok = skip(tok, ",");
 
@@ -2950,7 +2956,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
   Token *cur = &head;
 
   for (;;) {
-    if (tok->kind == TK_IDENT && equal(tok->next, ":")) {
+    if (tok->kind == TK_IDENT && tok->next->kind == TK_COLON) {
       Token *start = tok;
       cur = cur->label_next = tok;
       tok = tok->next->next;
@@ -3013,7 +3019,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
 }
 
 static Node *secondary_block(Token **rest, Token *tok) {
-  if (equal(tok, "{"))
+  if (tok->kind == TK_LCURLY)
     return compound_stmt(rest, tok, ND_BLOCK);
 
   DeferStmt *dfr = enter_stmt_scope();
@@ -3133,7 +3139,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       node->dfr_from = fnctx->defr;
     }
 
-    if (!equal(tok, ")"))
+    if (tok->kind != TK_RPAREN)
       node->ctrl.for_inc = expression(&tok, tok);
     tok = skip(tok, ")");
 
@@ -3182,7 +3188,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_goto) {
-    if (equal(tok->next, "*")) {
+    if (tok->next->kind == TK_MUL) {
       // [GNU] `goto *ptr` jumps to the address specified by `ptr`.
       Node *node = new_node(ND_GOTO_EXPR, tok);
       node->m.lhs = expression(&tok, tok->next->next);
@@ -3219,7 +3225,7 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     return new_node(ND_NULL_STMT, tok);
   }
 
-  if (equal(tok, "{"))
+  if (tok->kind == TK_LCURLY)
     return compound_stmt(rest, tok, ND_BLOCK);
 
   return expr_stmt(rest, tok);
@@ -3250,7 +3256,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   for (;;) {
     Token *label_list = label_stmt(&tok, tok, &cur);
 
-    if (equal(tok, "}"))
+    if (tok->kind == TK_RCURLY)
       break;
     if (consume(&tok, tok, ";"))
       continue;
@@ -3322,7 +3328,7 @@ static Node *expr_stmt(Token **rest, Token *tok) {
 static Node *expression(Token **rest, Token *tok) {
   Node *node = assign(&tok, tok);
 
-  if (equal(tok, ",")) {
+  if (tok->kind == TK_COMMA) {
     node = new_binary(ND_COMMA, node, expression(&tok, tok->next), tok);
     node->is_nonlval = true;
   }
@@ -4194,7 +4200,7 @@ static Node *to_assign(Node *binary) {
 }
 
 static Node *assign2(Token **rest, Token *tok, Node *node) {
-  if (equal(tok, "=")) {
+  if (tok->kind == TK_EQ) {
     // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
     if (node->ty->qual & Q_ATOMIC) {
       Node *rhs = assign(rest, tok->next);
@@ -4209,34 +4215,34 @@ static Node *assign2(Token **rest, Token *tok, Node *node) {
     return new_binary(ND_ASSIGN, node, assign(rest, tok->next), tok);
   }
 
-  if (equal(tok, "+="))
+  if (tok->kind == TK_ADD_EQ)
     return to_assign(new_add(node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "-="))
+  if (tok->kind == TK_SUB_EQ)
     return to_assign(new_sub(node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "*="))
+  if (tok->kind == TK_MUL_EQ)
     return to_assign(new_binary(ND_MUL, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "/="))
+  if (tok->kind == TK_DIV_EQ)
     return to_assign(new_binary(ND_DIV, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "%="))
+  if (tok->kind == TK_REM_EQ)
     return to_assign(new_binary(ND_MOD, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "&="))
+  if (tok->kind == TK_AND_EQ)
     return to_assign(new_binary(ND_BITAND, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "|="))
+  if (tok->kind == TK_OR_EQ)
     return to_assign(new_binary(ND_BITOR, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "^="))
+  if (tok->kind == TK_XOR_EQ)
     return to_assign(new_binary(ND_BITXOR, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, "<<="))
+  if (tok->kind == TK_LANGLE2_EQ)
     return to_assign(new_binary(ND_SHL, node, assign(rest, tok->next), tok));
 
-  if (equal(tok, ">>=")) {
+  if (tok->kind == TK_RANGLE2_EQ) {
     if (node->ty->is_unsigned)
       return to_assign(new_binary(ND_SHR, node, assign(rest, tok->next), tok));
     else
@@ -4296,7 +4302,7 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
 static Node *conditional(Token **rest, Token *tok) {
   Node *cond = binary(&tok, tok, PCD_LOGOR);
 
-  if (!equal(tok, "?")) {
+  if (tok->kind != TK_QMARK) {
     *rest = tok;
     return cond;
   }
@@ -4335,15 +4341,15 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "*")) {
+    if (tok->kind == TK_MUL) {
       node = new_binary(ND_MUL, node, unary(&tok, tok->next), start);
       continue;
     }
-    if (equal(tok, "/")) {
+    if (tok->kind == TK_DIV) {
       node = new_binary(ND_DIV, node, unary(&tok, tok->next), start);
       continue;
     }
-    if (equal(tok, "%")) {
+    if (tok->kind == TK_REM) {
       node = new_binary(ND_MOD, node, unary(&tok, tok->next), start);
       continue;
     }
@@ -4354,11 +4360,11 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "+")) {
+    if (tok->kind == TK_ADD) {
       node = new_add(node, binary(&tok, tok->next, PCD_MUL), start);
       continue;
     }
-    if (equal(tok, "-")) {
+    if (tok->kind == TK_SUB) {
       node = new_sub(node, binary(&tok, tok->next, PCD_MUL), start);
       continue;
     }
@@ -4369,11 +4375,11 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "<<")) {
+    if (tok->kind == TK_LANGLE2) {
       node = new_binary(ND_SHL, node, binary(&tok, tok->next, PCD_ADD), start);
       continue;
     }
-    if (equal(tok, ">>")) {
+    if (tok->kind == TK_RANGLE2) {
       add_type(node);
       if (node->ty->is_unsigned)
         node = new_binary(ND_SHR, node, binary(&tok, tok->next, PCD_ADD), start);
@@ -4388,19 +4394,19 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "<")) {
+    if (tok->kind == TK_LANGLE) {
       node = new_binary(ND_LT, node, binary(&tok, tok->next, PCD_SHFT), start);
       continue;
     }
-    if (equal(tok, "<=")) {
+    if (tok->kind == TK_LANGLE_EQ) {
       node = new_binary(ND_LE, node, binary(&tok, tok->next, PCD_SHFT), start);
       continue;
     }
-    if (equal(tok, ">")) {
+    if (tok->kind == TK_RANGLE) {
       node = new_binary(ND_GT, node, binary(&tok, tok->next, PCD_SHFT), start);
       continue;
     }
-    if (equal(tok, ">=")) {
+    if (tok->kind == TK_RANGLE_EQ) {
       node = new_binary(ND_GE, node, binary(&tok, tok->next, PCD_SHFT), start);
       continue;
     }
@@ -4411,11 +4417,11 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "==")) {
+    if (tok->kind == TK_EQ2) {
       node = new_binary(ND_EQ, node, binary(&tok, tok->next, PCD_CMP), start);
       continue;
     }
-    if (equal(tok, "!=")) {
+    if (tok->kind == TK_NOT_EQ) {
       node = new_binary(ND_NE, node, binary(&tok, tok->next, PCD_CMP), start);
       continue;
     }
@@ -4426,7 +4432,7 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "&")) {
+    if (tok->kind == TK_AND) {
       node = new_binary(ND_BITAND, node, binary(&tok, tok->next, PCD_EQ), start);
       continue;
     }
@@ -4437,7 +4443,7 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "^")) {
+    if (tok->kind == TK_XOR) {
       node = new_binary(ND_BITXOR, node, binary(&tok, tok->next, PCD_BITAND), start);
       continue;
     }
@@ -4448,7 +4454,7 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "|")) {
+    if (tok->kind == TK_OR) {
       node = new_binary(ND_BITOR, node, binary(&tok, tok->next, PCD_XOR), start);
       continue;
     }
@@ -4459,7 +4465,7 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "&&")) {
+    if (tok->kind == TK_AND2) {
       node = new_binary(ND_LOGAND, cond_cast(node),
                         cond_cast(binary(&tok, tok->next, PCD_BITOR)), start);
       continue;
@@ -4471,7 +4477,7 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
 
   for (;;) {
     Token *start = tok;
-    if (equal(tok, "||")) {
+    if (tok->kind == TK_OR2) {
       node = new_binary(ND_LOGOR, cond_cast(node),
                         cond_cast(binary(&tok, tok->next, PCD_LOGAND)), start);
       continue;
@@ -4564,13 +4570,13 @@ static Node *unary(Token **rest, Token *tok) {
     }
   }
 
-  if (equal(tok, "+"))
+  if (tok->kind == TK_ADD)
     return new_unary(ND_POS, unary(rest, tok->next), tok);
 
-  if (equal(tok, "-"))
+  if (tok->kind == TK_SUB)
     return new_unary(ND_NEG, unary(rest, tok->next), tok);
 
-  if (equal(tok, "&")) {
+  if (tok->kind == TK_AND) {
     Node *lhs = unary(rest, tok->next);
     add_type(lhs);
     if (is_bitfield(lhs))
@@ -4578,7 +4584,7 @@ static Node *unary(Token **rest, Token *tok) {
     return new_unary(ND_ADDR, lhs, tok);
   }
 
-  if (equal(tok, "*")) {
+  if (tok->kind == TK_MUL) {
     // [https://www.sigbus.info/n1570#6.5.3.2p4] This is an oddity
     // in the C spec, but dereferencing a function shouldn't do
     // anything. If foo is a function, `*foo`, `**foo` or `*****foo`
@@ -4596,28 +4602,28 @@ static Node *unary(Token **rest, Token *tok) {
     return node;
   }
 
-  if (equal(tok, "!"))
+  if (tok->kind == TK_NOT)
     return new_unary(ND_NOT, cond_cast(unary(rest, tok->next)), tok);
 
-  if (equal(tok, "~"))
+  if (tok->kind == TK_BITNOT)
     return new_unary(ND_BITNOT, unary(rest, tok->next), tok);
 
   // Read ++i as i+=1
-  if (equal(tok, "++")) {
+  if (tok->kind == TK_ADD2) {
     Node *node = unary(rest, tok->next);
     add_type_chk_const(node);
     return to_assign(new_add(node, new_num(1, tok), tok));
   }
 
   // Read --i as i-=1
-  if (equal(tok, "--")) {
+  if (tok->kind == TK_SUB2) {
     Node *node = unary(rest, tok->next);
     add_type_chk_const(node);
     return to_assign(new_sub(node, new_num(1, tok), tok));
   }
 
   // [GNU] labels-as-values
-  if (equal(tok, "&&")) {
+  if (tok->kind == TK_AND2) {
     Node *node = new_node(ND_LABEL_VAL, ident_tok(rest, tok->next));
     push_goto(node);
     fnctx->dont_dealloc_vla = true;
@@ -4723,7 +4729,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Token *flex_tok = NULL;
   HashMap names = {0};
 
-  while (!equal(tok, "}")) {
+  while (tok->kind != TK_RCURLY) {
     if (consume(&tok, tok, ";"))
       continue;
     if (pragma_pack(&tok, tok))
@@ -4738,7 +4744,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     Type *basety = declspec(&tok, tok, &attr, SC_NONE);
 
     // Anonymous struct member
-    if (equal(tok, ";") && (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
+    if (tok->kind == TK_SEMI && (basety->kind == TY_STRUCT || basety->kind == TY_UNION)) {
       if (basety->size < 0)
         error_tok(tok, "member has incomplete type");
       if (basety->tag && !opt_ms_anon_struct)
@@ -4803,7 +4809,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 
 static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat_ty) {
   Type *tag_ty;
-  if (equal(tok, "{") || equal(tok, ";"))
+  if (tok->kind == TK_LCURLY || tok->kind == TK_SEMI)
     tag_ty = find_tag_in_scope(tag);
   else
     tag_ty = find_tag(tag);
@@ -4817,7 +4823,7 @@ static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat
   if (tag_ty->kind != kind)
     error_tok(tag, "conflict of tag type");
 
-  if (equal(tok, "{")) {
+  if (tok->kind == TK_LCURLY) {
     if (tag_ty->is_constructing)
       error_tok(tag, "nested redefinition");
 
@@ -4853,7 +4859,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   } else {
     ty = struct_tag(kind, tag, tok, &tag_compat_ty);
 
-    if (!equal(tok, "{")) {
+    if (tok->kind != TK_LCURLY) {
       *rest = tok;
       return ty;
     }
@@ -5051,12 +5057,12 @@ static Node *new_inc_dec(Node *node, Token *tok, int addend) {
 
 static Node *postfix(Node *node, Token **rest, Token *tok) {
   for (;;) {
-    if (equal(tok, "(")) {
+    if (tok->kind == TK_LPAREN) {
       node = funcall(&tok, tok->next, node);
       continue;
     }
 
-    if (equal(tok, "[")) {
+    if (tok->kind == TK_LBRACK) {
       // x[y] is short for *(x+y)
       Token *start = tok;
       Node *idx = expression(&tok, tok->next);
@@ -5071,13 +5077,13 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
       continue;
     }
 
-    if (equal(tok, ".")) {
+    if (tok->kind == TK_DOT) {
       node = struct_ref(node, tok->next);
       tok = tok->next->next;
       continue;
     }
 
-    if (equal(tok, "->")) {
+    if (tok->kind == TK_ARROW) {
       // x->y is short for (*x).y
       add_type(node);
       Type *ty = node->ty;
@@ -5090,13 +5096,13 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
       continue;
     }
 
-    if (equal(tok, "++")) {
+    if (tok->kind == TK_ADD2) {
       node = new_inc_dec(node, tok, 1);
       tok = tok->next;
       continue;
     }
 
-    if (equal(tok, "--")) {
+    if (tok->kind == TK_SUB2) {
       node = new_inc_dec(node, tok, -1);
       tok = tok->next;
       continue;
@@ -5422,7 +5428,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     Node *node = new_node(ND_VA_START, tok);
     tok = skip(tok->next, "(");
     node->m.lhs = conditional(&tok, tok);
-    if (equal(tok, ","))
+    if (tok->kind == TK_COMMA)
       assign(&tok, tok->next);
     *rest = skip(tok, ")");
     return node;
@@ -5532,11 +5538,11 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 }
 
 static Node *primary(Token **rest, Token *tok) {
-  if (equal(tok, "(")) {
+  if (tok->kind == TK_LPAREN) {
     if (is_typename(tok->next))
       return compound_literal(rest, tok);
 
-    if (equal(tok->next, "{")) {
+    if (tok->next->kind == TK_LCURLY) {
       if (!fnctx)
         error_tok(tok, "statement expression not in a function");
 
@@ -5574,7 +5580,7 @@ static Node *primary(Token **rest, Token *tok) {
       }
     }
 
-    if (equal(tok->next, "(")) {
+    if (tok->next->kind == TK_LPAREN) {
       Node *node = builtin_functions(rest, tok);
       if (node)
         return node;
@@ -5955,7 +5961,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       if (is_vm_ty(ty))
         error_tok(tok, "variably-modified type cannot be 'extern'");
 
-      if (equal(tok, "=")) {
+      if (tok->kind == TK_EQ) {
         if (scope->parent)
           error_tok(tok, "extern variable cannot be initialized");
         is_definition = true;
@@ -5989,7 +5995,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
 
     if (attr->strg & SC_CONSTEXPR)
       constexpr_initializer(&tok, skip(tok, "="), var, var);
-    else if (equal(tok, "="))
+    else if (tok->kind == TK_EQ)
       gvar_initializer(&tok, tok->next, var);
   }
   *rest = tok;
@@ -6064,7 +6070,7 @@ Obj *parse(Token *tok) {
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr, SC_ALL | SC_INLINE);
 
-    if (equal(tok, ";")) {
+    if (tok->kind == TK_SEMI) {
       chk_inline(&attr, tok);
       tok = tok->next;
       arena_off(&ast_arena);
