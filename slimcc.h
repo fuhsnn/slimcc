@@ -148,8 +148,9 @@ static inline int _ctz64_impl(uint64_t v) {
 
 #define Ucast(c) (unsigned int)(unsigned char)(c)
 #define Inrange(c, x, y) ((Ucast(c) - Ucast(x)) <= (Ucast(y) - Ucast(x)))
-#define Isdigit(c) Inrange(c, '0', '9')
-#define Isalnum(c) (Inrange((c) | 0x20, 'a', 'z') || Isdigit(c))
+#define Isdigit(c) Inrange((c), '0', '9')
+#define Isalpha(c) Inrange((c) | 0x20, 'a', 'z')
+#define Isalnum(c) (Isalpha(c) || Isdigit(c))
 #define Isxdigit(c) (Isdigit(c) || Inrange((c) | 0x20, 'a', 'f'))
 #define Casecmp(c, a) (((c) | 0x20) == a)
 
@@ -240,7 +241,6 @@ char *format(const char *fmt, ...) FMTCHK(1, 2);
 
 typedef enum {
   TK_IDENT,   // Identifiers
-  TK_PUNCT,   // Punctuators
   TK_KEYWORD, // Keywords
   TK_STR,     // String literals
   TK_ASM_STR,
@@ -252,6 +252,59 @@ typedef enum {
   TK_BATTR,   // C23 attribute
   TK_EOF,     // End-of-file markers
   TK_INVALID,
+
+  // Punctuators
+  TK_PUNCT,
+  TK_LPAREN,
+  TK_RPAREN,
+  TK_COMMA,
+  TK_SEMI,
+  TK_QMARK,
+  TK_LBRACK,
+  TK_RBRACK,
+  TK_LCURLY,
+  TK_RCURLY,
+  TK_BITNOT,
+  TK_LANGLE,
+  TK_LANGLE_EQ,
+  TK_LANGLE2,
+  TK_LANGLE2_EQ,
+  TK_RANGLE,
+  TK_RANGLE_EQ,
+  TK_RANGLE2,
+  TK_RANGLE2_EQ,
+  TK_NOT,
+  TK_NOT_EQ,
+  TK_REM,
+  TK_REM_EQ,
+  TK_MUL,
+  TK_MUL_EQ,
+  TK_DIV,
+  TK_DIV_EQ,
+  TK_XOR,
+  TK_XOR_EQ,
+  TK_EQ,
+  TK_EQ2,
+  TK_HASH,
+  TK_HASH2,
+  TK_DOT,
+  TK_DOT3,
+  TK_COLON,
+  TK_COLON2,
+  TK_AND,
+  TK_AND_EQ,
+  TK_AND2,
+  TK_ADD,
+  TK_ADD_EQ,
+  TK_ADD2,
+  TK_SUB,
+  TK_SUB_EQ,
+  TK_SUB2,
+  TK_OR,
+  TK_OR_EQ,
+  TK_OR2,
+  TK_ARROW,
+  TK_PUNCT_END,
 
   TK_return,
   TK_if,
