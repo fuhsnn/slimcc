@@ -434,6 +434,7 @@ bool equal(Token *tok, const char *op);
 bool equal_ext(Token *tok, const char *op);
 Token *skip_tk(Token *tok, TokenKind);
 bool consume(Token **rest, Token *tok, const char *str);
+bool consume_tk(Token **rest, Token *tok, TokenKind kind);
 Token *tokenize_file(const char *path, Token *tok, Token **end);
 File *new_file(const char *name, const char *contents);
 int add_display_file(const char *path);

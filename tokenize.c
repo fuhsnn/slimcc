@@ -137,6 +137,14 @@ bool consume(Token **rest, Token *tok, const char *str) {
   return false;
 }
 
+bool consume_tk(Token **rest, Token *tok, TokenKind kind) {
+  if (tok->kind == kind) {
+    *rest = tok->next;
+    return true;
+  }
+  return false;
+}
+
 Token *skip_tk(Token *tok, TokenKind kind) {
   if (tok->kind == kind)
     return tok->next;
