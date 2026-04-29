@@ -70,7 +70,7 @@ static Token *pragma_macro(Token *start);
 static void undef_macro2(Token *tok);
 
 static bool is_hash(Token *tok) {
-  return tok->at_bol && equal(tok, "#");
+  return tok->at_bol && tok->kind == TK_HASH;
 }
 
 bool is_pragma(Token **rest, Token *tok) {
@@ -247,10 +247,10 @@ static Token *split_paren2(Token **rest, Token *tok, Token *next) {
   Token *cur = &head;
 
   int level = 0;
-  while (!(level == 0 && equal(tok, ")"))) {
-    if (equal(tok, "("))
+  while (!(level == 0 && tok->kind == TK_RPAREN)) {
+    if (tok->kind == TK_LPAREN)
       level++;
-    else if (equal(tok, ")"))
+    else if (tok->kind == TK_RPAREN)
       level--;
     else if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
@@ -276,10 +276,10 @@ static Token *split_bracket(Token **rest, Token *tok) {
   Token *cur = &head;
 
   int level = 0;
-  while (!(level == 0 && equal(tok, "]"))) {
-    if (equal(tok, "["))
+  while (!(level == 0 && tok->kind == TK_RBRACK)) {
+    if (tok->kind == TK_LBRACK)
       level++;
-    else if (equal(tok, "]"))
+    else if (tok->kind == TK_RBRACK)
       level--;
     else if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
@@ -472,7 +472,7 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
       m->has_va_arg = true;
       break;
     }
-    if (equal(tok->next, "...")) {
+    if (tok->next->kind == TK_DOT3) {
       *rest = skip(tok->next->next, ")");
       add_macro_param(&cur, head.next, tok);
       m->has_va_arg = true;
@@ -493,7 +493,7 @@ static Macro *read_macro_name(Token **rest, Token *tok) {
   tok = tok->next;
 
   Macro *m;
-  if (!tok->has_space && equal(tok, "("))
+  if (!tok->has_space && tok->kind == TK_LPAREN)
     m = new_funclike_macro(name, &tok, tok->next);
   else
     m = new_macro(name, true);
@@ -533,14 +533,14 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
   Token *start = tok;
 
   for (;;) {
-    if (level == 0 && equal(tok, ")"))
+    if (level == 0 && tok->kind == TK_RPAREN)
       break;
-    if (level == 0 && !read_rest && equal(tok, ","))
+    if (level == 0 && !read_rest && tok->kind == TK_COMMA)
       break;
 
-    if (equal(tok, "("))
+    if (tok->kind == TK_LPAREN)
       level++;
-    else if (equal(tok, ")"))
+    else if (tok->kind == TK_RPAREN)
       level--;
 
     if (tok->kind == TK_EOF)
@@ -562,7 +562,7 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
     bool is_va_arg = m->has_va_arg && (idx == m->arg_cnt - 1);
 
     MacroArg *ap = &ctx.args[idx];
-    if (is_va_arg && equal(tok, ")"))
+    if (is_va_arg && tok->kind == TK_RPAREN)
       ctx.omit_comma = !(is_iso_std && idx == 0);
     else if (idx)
       tok = skip(tok, ",");
@@ -627,7 +627,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
     idx++;
   }
 
-  if (equal(tok, "__VA_OPT__") && equal(tok->next, "(")) {
+  if (equal(tok, "__VA_OPT__") && tok->next->kind == TK_LPAREN) {
     MacroArg *arg = arena_malloc(&pp_arena, sizeof(MacroArg));
     arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
 
@@ -742,7 +742,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
   while (tok->kind != TK_EOF) {
     Token *start = tok;
 
-    if (equal(tok, "#")) {
+    if (tok->kind == TK_HASH) {
       MacroArg *arg = find_arg(&tok, tok->next, ctx);
       if (!arg)
         error_tok(tok->next, "'#' is not followed by a macro parameter");
@@ -751,7 +751,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       continue;
     }
 
-    if (equal(tok, ",") && equal(tok->next, "##") && ctx->m->has_va_arg) {
+    if (tok->kind == TK_COMMA && tok->next->kind == TK_HASH2 && ctx->m->has_va_arg) {
       MacroArg *arg = find_arg(NULL, tok->next->next, ctx);
       if (arg && (arg == &ctx->args[ctx->m->arg_cnt - 1])) {
         if (ctx->omit_comma) {
@@ -764,7 +764,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       }
     }
 
-    if (equal(tok, "##")) {
+    if (tok->kind == TK_HASH2) {
       if (cur == &head)
         error_tok(tok, "'##' cannot appear at start of macro expansion");
 
@@ -795,7 +795,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
 
     MacroArg *arg = find_arg(&tok, tok, ctx);
     if (arg) {
-      Token *t = equal(tok, "##") ? arg->tok : expand_arg(arg);
+      Token *t = tok->kind == TK_HASH2 ? arg->tok : expand_arg(arg);
 
       if (t->kind == TK_EOF) {
         cur = cur->next = new_pmark(t);
@@ -813,7 +813,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
       Token *rparen = NULL;
-      if (equal(tok, ")")) {
+      if (tok->kind == TK_RPAREN) {
         tail_m = ctx->m;
         rparen = tok;
         tok = tok->next;
@@ -860,7 +860,7 @@ static Token *insert_objlike(Token *tok, Token *stop_tok, Token *orig) {
     orig = orig->origin;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
-    if (equal(tok, "##")) {
+    if (tok->kind == TK_HASH2) {
       if (cur == &head || tok->next->kind == TK_EOF)
         error_tok(tok, "'##' cannot appear at either end of macro expansion");
 
@@ -924,12 +924,12 @@ static Token *prepare_funclike_args(Token *start) {
     cur = cur->next = tok;
     newline_to_space(cur);
 
-    if (lvl == 0 && equal(tok, ")"))
+    if (lvl == 0 && tok->kind == TK_RPAREN)
       break;
 
-    if (equal(tok, "("))
+    if (tok->kind == TK_LPAREN)
       lvl++;
-    else if (equal(tok, ")"))
+    else if (tok->kind == TK_RPAREN)
       lvl--;
 
     tok = tok->next;
@@ -973,7 +973,7 @@ static bool expand_macro(Token **rest, Token *tok, Macro *m, bool is_root) {
 
   // If a funclike macro token is not followed by an argument list,
   // treat it as a normal identifier.
-  if (!m->is_objlike && !equal(tok->next, "("))
+  if (!m->is_objlike && tok->next->kind != TK_LPAREN)
     return false;
 
   if (!m->is_objlike && m->body->kind == TK_EOF && equal(tok, "__attribute__")) {
@@ -1103,13 +1103,13 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
     // So we don't want to use token->str.
     filename = arena_copy_string(&cc1_arena, tok->loc + 1, tok->len - 2);
     *dir = (tok->origin ? tok->origin : tok)->file->name;
-  } else if (equal(tok, "<")) {
+  } else if (tok->kind == TK_LANGLE) {
     // Pattern 2: #include <foo.h>
     // Reconstruct a filename from between "<" and ">".
     Token *start = tok;
 
     // Find closing ">".
-    for (; !equal(tok, ">"); tok = tok->next)
+    for (; tok->kind != TK_RANGLE; tok = tok->next)
       if (tok->kind == TK_EOF)
         error_tok(tok, "expected '>'");
 
@@ -1981,7 +1981,7 @@ static bool is_supported_attr(Token *tok) {
 
 static const char *supported_c_attr(Token **rest, Token *tok) {
   Token *vendor = NULL;
-  if (tok->kind == TK_IDENT && equal(tok->next, "::")) {
+  if (tok->kind == TK_IDENT && tok->next->kind == TK_COLON2) {
     vendor = tok;
     tok = tok->next->next;
   }
@@ -2065,7 +2065,7 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (equal(tok, "[") && consume(&tok, tok->next, "[")) {
+    if (tok->kind == TK_LBRACK && consume(&tok, tok->next, "[")) {
       Token *list = split_bracket(&tok, tok);
       filter_attr(list, &attr_cur, true);
 
