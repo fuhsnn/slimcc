@@ -69,13 +69,7 @@ static void newline_to_space(Token *tok);
 static Token *pragma_macro(Token *start);
 static void undef_macro2(Token *tok);
 
-static bool is_hash(Token *tok) {
-  return tok->at_bol && tok->kind == TK_HASH;
-}
-
-bool is_pragma(Token **rest, Token *tok) {
-  return is_hash(tok) && consume(rest, tok->next, "pragma");
-}
+#define Is_hash(tok) ((tok)->kind == TK_HASH && (tok)->at_bol)
 
 Token *skip_line(Token *tok) {
   if (tok->at_bol)
@@ -188,7 +182,7 @@ static Token *skip_cond_incl(Token *tok) {
   Token *last = NULL;
   int lvl = 0;
   for (; tok->kind != TK_EOF; last = tok, tok = tok->next) {
-    if (is_hash(tok)) {
+    if (Is_hash(tok)) {
       if ((equal(tok->next, "if") ||
            equal(tok->next, "ifdef") ||
            equal(tok->next, "ifndef"))) {
@@ -517,7 +511,7 @@ static void read_macro_definition2(Token **rest, Token *tok) {
   for (;; tok = tok->next) {
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
-    if (is_hash(tok) && equal(tok->next, "enddef"))
+    if (Is_hash(tok) && equal(tok->next, "enddef"))
       break;
     cur = cur->next = tok;
     newline_to_space(cur);
@@ -909,7 +903,7 @@ static Token *prepare_funclike_args(Token *start) {
       error_tok(start, "unterminated list");
 
     if (!locked_macros) {
-      if (is_hash(tok)) {
+      if (Is_hash(tok)) {
         tok = directives(&cur, tok, false);
         continue;
       }
@@ -1161,7 +1155,7 @@ static Token *include_file(Token *tok, const char *path, Token *filename_tok, In
     return tok;
   }
 
-  if (is_hash(start) &&
+  if (Is_hash(start) &&
       equal(start->next, "ifndef") &&
       start->next->next->kind == TK_IDENT &&
       equal(end, "endif"))
@@ -1297,7 +1291,7 @@ void preprocess2(Token *tok, Token **cur) {
         continue;
     }
 
-    if (is_hash(tok) && !locked_macros) {
+    if (Is_hash(tok) && !locked_macros) {
       tok = directives(cur, tok, true);
       continue;
     }
@@ -2050,7 +2044,6 @@ static Token *preprocess3(Token *tok) {
 
   Token attr_head = {0};
   Token *attr_cur = &attr_head;
-  bool add_newline = false;
 
   while (tok->kind != TK_EOF) {
     Token *start = tok;
@@ -2076,13 +2069,17 @@ static Token *preprocess3(Token *tok) {
       continue;
     }
 
-    if (is_pragma(&tok, tok)) {
+    if (Is_hash(tok) && consume(&tok, tok->next, "pragma")) {
       if (equal(tok, "pack")) {
-        tok = get_line(&cur, start);
-        for (Token *t = start; t != tok; t = t->next)
+        tok->kind = TK_PRAGMA;
+        tok->at_bol = true;
+        stash_attr(tok, &attr_head, &attr_cur);
+
+        Token *end = get_line(&cur, tok);
+        for (Token *t = tok; t != end; t = t->next)
           t->alloc_next = NULL;
-        stash_attr(start, &attr_head, &attr_cur);
-        add_newline = true;
+        tok = end;
+        to_freelist(start, start->next);
         continue;
       }
       if (equal(tok, "message"))
@@ -2113,11 +2110,6 @@ static Token *preprocess3(Token *tok) {
     stash_attr(tok, &attr_head, &attr_cur);
     cur = cur->next = tok;
     tok = tok->next;
-
-    if (add_newline) {
-      add_newline = false;
-      cur->at_bol = true;
-    }
     continue;
   }
   cur->next = tok;
