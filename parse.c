@@ -843,27 +843,27 @@ static void pragma_pack_set(int val) {
   pack_stk.data[pack_stk.cnt - 1] = val;
 }
 
-static bool pragma_pack(Token **rest, Token *tok) {
-  if (is_pragma(&tok, tok) && consume(&tok, tok, "pack")) {
+static void pragma_pack(Token **rest, Token *tok) {
+  if (consume(&tok, tok, "pack")) {
     tok = skip_tk(tok, TK_LPAREN);
     if (equal(tok, "pop")) {
       pragma_pack_pop(tok);
       *rest = skip_line(skip_tk(tok->next, TK_RPAREN));
-      return true;
+      return;
     }
     if (equal(tok, "push")) {
       pragma_pack_push();
       if (consume_tk(&tok, tok->next, TK_RPAREN)) {
         *rest = skip_line(tok);
-        return true;
+        return;
       }
       tok = skip_tk(tok->next, TK_COMMA);
     }
     pragma_pack_set(tok->kind == TK_RPAREN ? 0 : align_expr(&tok, tok));
     *rest = skip_line(skip_tk(tok, TK_RPAREN));
-    return true;
+    return;
   }
-  return false;
+  internal_error();
 }
 
 static bool get_attr_val(Token *tok, int64_t *val) {
@@ -3273,8 +3273,10 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
       break;
     if (consume_tk(&tok, tok, TK_SEMI))
       continue;
-    if (pragma_pack(&tok, tok))
+    if (tok->kind == TK_PRAGMA) {
+      pragma_pack(&tok, tok);
       continue;
+    }
 
     Node *node;
     if (is_typename(tok)) {
@@ -4761,8 +4763,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   while (tok->kind != TK_RCURLY) {
     if (consume_tk(&tok, tok, TK_SEMI))
       continue;
-    if (pragma_pack(&tok, tok))
+    if (tok->kind == TK_PRAGMA) {
+      pragma_pack(&tok, tok);
       continue;
+    }
     if (tok->kind == TK_static_assert) {
       eval_static_assert(&tok, tok->next);
       tok = skip_tk(tok, TK_SEMI);
@@ -6056,7 +6060,8 @@ Obj *parse(Token *tok) {
 
     arena_on(&ast_arena);
 
-    if (pragma_pack(&tok, tok)) {
+    if (tok->kind == TK_PRAGMA) {
+      pragma_pack(&tok, tok);
       arena_off(&ast_arena);
       continue;
     }

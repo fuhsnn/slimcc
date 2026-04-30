@@ -260,6 +260,7 @@ typedef enum {
   TK_PMARK,   // Placermarkers
   TK_ATTR,    // GNU attribute
   TK_BATTR,   // C23 attribute
+  TK_PRAGMA,  // #pragma's
   TK_EOF,     // End-of-file markers
   TK_INVALID,
 
@@ -460,7 +461,6 @@ void dump_defines(FILE *out);
 Token *preprocess(const char *file, StringArray *incls, StringArray *macros);
 Token *prepare_parse(Token *tok);
 Token *skip_line(Token *tok);
-bool is_pragma(Token **rest, Token *tok);
 extern Token *last_alloc_tok;
 extern Token *tok_freelist;
 
