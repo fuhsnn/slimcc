@@ -61,7 +61,7 @@ typedef enum {
   REG_X64_END
 } Reg;
 
-static const char *regs[REG_X64_XMM0][4] = {
+static const char *const regs[REG_X64_XMM0][4] = {
   [REG_X64_NULL] = {"null", "null", "null", "null"},
   [REG_X64_SP] = {"%spl", "%sp", "%esp", "%rsp"},
   [REG_X64_BP] = {"%bpl", "%bp", "%ebp", "%rbp"},
@@ -83,18 +83,18 @@ static const char *regs[REG_X64_XMM0][4] = {
 
 static FILE *output_file;
 
-static const char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
-static const char *argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
+static const char *const argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
+static const char *const argreg64[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 
-static Reg argreg[] = {REG_X64_DI, REG_X64_SI, REG_X64_DX,
-                       REG_X64_CX, REG_X64_R8, REG_X64_R9};
+static const Reg argreg[] = {REG_X64_DI, REG_X64_SI, REG_X64_DX,
+                             REG_X64_CX, REG_X64_R8, REG_X64_R9};
 
-static const char *tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
-static const char *tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
+static const char *const tmpreg32[] = {"%edi", "%esi", "%r8d", "%r9d", "%r10d", "%r11d"};
+static const char *const tmpreg64[] = {"%rdi", "%rsi", "%r8", "%r9", "%r10", "%r11"};
 
-static const char *rip = "%rip";
-static const char *rbp = "%rbp";
-static const char *rbx = "%rbx";
+static const char rip[] = "%rip";
+static const char rbp[] = "%rbp";
+static const char rbx[] = "%rbx";
 
 static Obj *codegen_fn;
 static const char *lvar_ptr;
@@ -166,7 +166,7 @@ struct FuncObj {
 
 static void load2(Type *ty, int sofs, const char *sptr);
 static void store2(Type *ty, int dofs, const char *dptr);
-static void store_gp2(const char **r, int sz, int dofs, const char *dptr);
+static void store_gp2(const char *const *r, int sz, int dofs, const char *dptr);
 
 static void gen_asm(Node *node);
 static void gen_expr(Node *node);
@@ -836,7 +836,7 @@ static void gen_bitint_builtin_call2(const char *fn) {
 }
 
 static void gen_bitint_builtin_call(NodeKind kind) {
-  static const char *fn[] = {
+  static const char *const fn[] = {
     [ND_NEG] = "__slimcc_bitint_neg",       [ND_BITNOT] = "__slimcc_bitint_bitnot",
     [ND_BITAND] = "__slimcc_bitint_bitand", [ND_BITOR] = "__slimcc_bitint_bitor",
     [ND_BITXOR] = "__slimcc_bitint_bitxor", [ND_SHL] = "__slimcc_bitint_shl",
@@ -1259,54 +1259,55 @@ static int getTypeId(Type *ty) {
   return U64;
 }
 
-static char i32i8[] = "movsbl %al, %eax";
-static char i32u8[] = "movzbl %al, %eax";
-static char i32i16[] = "movswl %ax, %eax";
-static char i32u16[] = "movzwl %ax, %eax";
-static char i32f32[] = "cvtsi2ssl %eax, %xmm0";
-static char i32i64[] = "movslq %eax, %rax";
-static char i32f64[] = "cvtsi2sdl %eax, %xmm0";
+static const char i32i8[] = "movsbl %al, %eax";
+static const char i32u8[] = "movzbl %al, %eax";
+static const char i32i16[] = "movswl %ax, %eax";
+static const char i32u16[] = "movzwl %ax, %eax";
+static const char i32f32[] = "cvtsi2ssl %eax, %xmm0";
+static const char i32i64[] = "movslq %eax, %rax";
+static const char i32f64[] = "cvtsi2sdl %eax, %xmm0";
 
-static char u32f32[] = "mov %eax, %eax; cvtsi2ssq %rax, %xmm0";
-static char u32i64[] = "mov %eax, %eax";
-static char u32f64[] = "mov %eax, %eax; cvtsi2sdq %rax, %xmm0";
+static const char u32f32[] = "mov %eax, %eax; cvtsi2ssq %rax, %xmm0";
+static const char u32i64[] = "mov %eax, %eax";
+static const char u32f64[] = "mov %eax, %eax; cvtsi2sdq %rax, %xmm0";
 
-static char i64f32[] = "cvtsi2ssq %rax, %xmm0";
-static char i64f64[] = "cvtsi2sdq %rax, %xmm0";
+static const char i64f32[] = "cvtsi2ssq %rax, %xmm0";
+static const char i64f64[] = "cvtsi2sdq %rax, %xmm0";
 
-static char u64f32[] = "test %rax,%rax; js 1f; cvtsi2ss %rax,%xmm0; jmp 2f; "
-                       "1: mov %rax,%rdx; and $1,%eax; shr $1, %rdx; "
-                       "or %rax,%rdx; cvtsi2ss %rdx,%xmm0; addss %xmm0,%xmm0; 2:";
-static char u64f64[] = "test %rax,%rax; js 1f; cvtsi2sd %rax,%xmm0; jmp 2f; "
-                       "1: mov %rax,%rdx; and $1,%eax; shr $1, %rdx; "
-                       "or %rax,%rdx; cvtsi2sd %rdx,%xmm0; addsd %xmm0,%xmm0; 2:";
+static const char u64f32[] = "test %rax,%rax; js 1f; cvtsi2ss %rax,%xmm0; jmp 2f; "
+                             "1: mov %rax,%rdx; and $1,%eax; shr $1, %rdx; "
+                             "or %rax,%rdx; cvtsi2ss %rdx,%xmm0; addss %xmm0,%xmm0; 2:";
+static const char u64f64[] = "test %rax,%rax; js 1f; cvtsi2sd %rax,%xmm0; jmp 2f; "
+                             "1: mov %rax,%rdx; and $1,%eax; shr $1, %rdx; "
+                             "or %rax,%rdx; cvtsi2sd %rdx,%xmm0; addsd %xmm0,%xmm0; 2:";
 
-static char f32i8[] = "cvttss2sil %xmm0, %eax; movsbl %al, %eax";
-static char f32u8[] = "cvttss2sil %xmm0, %eax; movzbl %al, %eax";
-static char f32i16[] = "cvttss2sil %xmm0, %eax; movswl %ax, %eax";
-static char f32u16[] = "cvttss2sil %xmm0, %eax; movzwl %ax, %eax";
-static char f32i32[] = "cvttss2sil %xmm0, %eax";
-static char f32u32[] = "cvttss2siq %xmm0, %rax";
-static char f32i64[] = "cvttss2siq %xmm0, %rax";
-static char f32u64[] = "movl $0x5F000000, %eax; movd %eax, %xmm1; comiss %xmm0, %xmm1; "
-                       "setbe %al; ja 1f; subss %xmm1, %xmm0; 1: "
-                       "cvttss2siq %xmm0, %rdx; shlq $63, %rax; orq %rdx, %rax";
-static char f32f64[] = "cvtss2sd %xmm0, %xmm0";
+static const char f32i8[] = "cvttss2sil %xmm0, %eax; movsbl %al, %eax";
+static const char f32u8[] = "cvttss2sil %xmm0, %eax; movzbl %al, %eax";
+static const char f32i16[] = "cvttss2sil %xmm0, %eax; movswl %ax, %eax";
+static const char f32u16[] = "cvttss2sil %xmm0, %eax; movzwl %ax, %eax";
+static const char f32i32[] = "cvttss2sil %xmm0, %eax";
+static const char f32u32[] = "cvttss2siq %xmm0, %rax";
+static const char f32i64[] = "cvttss2siq %xmm0, %rax";
+static const char f32u64[] =
+  "movl $0x5F000000, %eax; movd %eax, %xmm1; comiss %xmm0, %xmm1; "
+  "setbe %al; ja 1f; subss %xmm1, %xmm0; 1: "
+  "cvttss2siq %xmm0, %rdx; shlq $63, %rax; orq %rdx, %rax";
+static const char f32f64[] = "cvtss2sd %xmm0, %xmm0";
 
-static char f64i8[] = "cvttsd2sil %xmm0, %eax; movsbl %al, %eax";
-static char f64u8[] = "cvttsd2sil %xmm0, %eax; movzbl %al, %eax";
-static char f64i16[] = "cvttsd2sil %xmm0, %eax; movswl %ax, %eax";
-static char f64u16[] = "cvttsd2sil %xmm0, %eax; movzwl %ax, %eax";
-static char f64i32[] = "cvttsd2sil %xmm0, %eax";
-static char f64u32[] = "cvttsd2siq %xmm0, %rax";
-static char f64i64[] = "cvttsd2siq %xmm0, %rax";
-static char f64u64[] =
+static const char f64i8[] = "cvttsd2sil %xmm0, %eax; movsbl %al, %eax";
+static const char f64u8[] = "cvttsd2sil %xmm0, %eax; movzbl %al, %eax";
+static const char f64i16[] = "cvttsd2sil %xmm0, %eax; movswl %ax, %eax";
+static const char f64u16[] = "cvttsd2sil %xmm0, %eax; movzwl %ax, %eax";
+static const char f64i32[] = "cvttsd2sil %xmm0, %eax";
+static const char f64u32[] = "cvttsd2siq %xmm0, %rax";
+static const char f64i64[] = "cvttsd2siq %xmm0, %rax";
+static const char f64u64[] =
   "mov $0x43e0000000000000, %rax; movq %rax, %xmm1; comisd %xmm0, %xmm1; "
   "setbe %al; ja 1f; subsd %xmm1, %xmm0; 1: "
   "cvttsd2siq %xmm0, %rdx; shlq $63, %rax; orq %rdx, %rax";
-static char f64f32[] = "cvtsd2ss %xmm0, %xmm0";
+static const char f64f32[] = "cvtsd2ss %xmm0, %xmm0";
 
-static const char *cast_table[][10] = {
+static const char *const cast_table[][10] = {
   // clang-format off
   // i8   i16     i32     i64     u8     u16     u32     u64     f32     f64
   {NULL,  NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i8
@@ -2025,8 +2026,8 @@ static void gen_logical(Node *node, bool flip) {
   gen_cond(node->m.lhs, short_cond, short_label);
   gen_cond(node->m.rhs, short_cond, short_label);
 
-  static const char *set_zero = "xor %eax, %eax";
-  static const char *set_one = "movl $1, %eax";
+  static const char set_zero[] = "xor %eax, %eax";
+  static const char set_one[] = "movl $1, %eax";
 
   short_cond ^= flip;
   Printftn("%s", short_cond ? set_zero : set_one);
@@ -4126,7 +4127,7 @@ static bool is_x87_reg(Reg reg) {
 static const char *gcc_reg_id(const char *loc, Token *tok) {
   // FIXED_REGISTERS in gcc/config/i386/i386.h
   // LLVM call these GCCRegNames
-  static const char *names[] = {"ax", "dx", "cx", "bx", "si", "di"};
+  static const char *const names[] = {"ax", "dx", "cx", "bx", "si", "di"};
 
   unsigned long idx = strtoul(loc, NULL, 10);
   if (idx >= 6)
@@ -5193,7 +5194,7 @@ static void store_fp(int r, int sz, int ofs, const char *ptr) {
   internal_error();
 }
 
-static void store_gp2(const char **r, int sz, int dofs, const char *dptr) {
+static void store_gp2(const char *const *r, int sz, int dofs, const char *dptr) {
   for (int ofs = 0;;) {
     int rem = sz - ofs;
     int p2 = (rem >= 8) ? 8 : (rem >= 4) ? 4 : (rem >= 2) ? 2 : 1;

@@ -1602,7 +1602,7 @@ static Token *date_macro(Token *start) {
     if (!cur_time)
       cur_time = localtime(&(time_t){time(NULL)});
 
-    static char mon[][4] = {
+    static const char mon[][4] = {
       "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
     str = arena_format(&cc1_arena, "\"%s %2d %d\"", mon[cur_time->tm_mon],
