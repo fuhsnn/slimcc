@@ -341,10 +341,10 @@ TokenKind ident_keyword(Token *tok) {
     hashmap_put(&map, "_Generic", (void *)TK_Generic);
     hashmap_put(&map, "_Countof", (void *)TK_Countof);
 
-    hashmap_put(&map, "__label__", (void *)TK_KEYWORD);
-
     hashmap_put(&map, "__func__", (void *)TK_FUNCTION);
     hashmap_put(&map, "__FUNCTION__", (void *)TK_FUNCTION);
+
+    hashmap_put(&map, "__label__", (void *)TK_GNU_label);
 
     if (opt_std >= STD_C23)
       hashmap_put(&map, "alignof", (void *)TK_alignof);

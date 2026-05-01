@@ -3034,7 +3034,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
 
 static Node *secondary_block(Token **rest, Token *tok) {
   if (tok->kind == TK_LCURLY)
-    return compound_stmt(rest, tok, ND_BLOCK);
+    return compound_stmt(rest, tok->next, ND_BLOCK);
 
   DeferStmt *dfr = enter_stmt_scope();
 
@@ -3244,13 +3244,16 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
   }
 
   if (tok->kind == TK_LCURLY)
-    return compound_stmt(rest, tok, ND_BLOCK);
+    return compound_stmt(rest, tok->next, ND_BLOCK);
 
   return expr_stmt(rest, tok);
 }
 
-static void local_labels(Token **rest, Token *tok) {
-  while (consume(&tok, tok, "__label__")) {
+static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
+  Node *node = new_node(kind, tok);
+  node->dfr_dest = fnctx->defr;
+
+  while (consume_tk(&tok, tok, TK_GNU_label)) {
     bool first = true;
     for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
       LocalLabel *ll = arena_calloc(&ast_arena, sizeof(LocalLabel));
@@ -3259,14 +3262,6 @@ static void local_labels(Token **rest, Token *tok) {
       scope->labels = ll;
     }
   }
-  *rest = tok;
-}
-
-static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
-  Node *node = new_node(kind, tok);
-  node->dfr_dest = fnctx->defr;
-
-  local_labels(&tok, tok->next);
 
   Node head = {0};
   Node *cur = &head;
@@ -4718,7 +4713,7 @@ static Node *unary(Token **rest, Token *tok) {
       if (!fnctx)
         error_tok(tok, "statement expression not in a function");
 
-      Node *node = compound_stmt(&tok, tok, ND_STMT_EXPR);
+      Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
       return postfix(node, rest, skip_tk(tok, TK_RPAREN));
     }
 
@@ -5903,7 +5898,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     }
   }
 
-  fn->body = compound_stmt2(rest, tok, ND_BLOCK);
+  fn->body = compound_stmt2(rest, skip_tk(tok, TK_LCURLY), ND_BLOCK);
 
   if (precalc) {
     precalc = new_unary(ND_EXPR_STMT, precalc, tok);
