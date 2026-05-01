@@ -225,6 +225,7 @@ static Node *postfix(Node *node, Token **rest, Token *tok);
 static Node *funcall(Token **rest, Token *tok, Node *node);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
+static Node *compound_literal(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name);
 static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr);
@@ -2745,14 +2746,18 @@ static bool is_typename(Token *tok) {
   return is_type_kw(tok->kind) || find_typedef(tok);
 }
 
-static bool is_typename_paren(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
-  if (tok->kind == TK_LPAREN &&
-      is_typename(tok->next) &&
-      skip_paren(tok->next->next)->kind != TK_LCURLY) {
-    *ty = typename2(&tok, tok->next, attr);
+static bool is_typename_paren2(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
+  if (skip_paren(tok->next)->kind != TK_LCURLY) {
+    *ty = typename2(&tok, tok, attr);
     *rest = skip_tk(tok, TK_RPAREN);
     return true;
   }
+  return false;
+}
+
+static bool is_typename_paren(Token **rest, Token *tok, Type **ty, VarAttr *attr) {
+  if (tok->kind == TK_LPAREN && is_typename(tok->next))
+    return is_typename_paren2(rest, tok->next, ty, attr);
   return false;
 }
 
@@ -4568,21 +4573,6 @@ static Type *sizeof_arg(Token **rest, Token *tok, Node **expr) {
 }
 
 static Node *unary(Token **rest, Token *tok) {
-  // Casts
-  {
-    Type *ty;
-    VarAttr attr = {0};
-    if (is_typename_paren(&tok, tok, &ty, &attr)) {
-      Node *calc = calc_vla2(ty, tok, &attr);
-
-      Node *node = new_cast(unary(rest, tok), ty);
-      node->is_nonlval = true;
-      if (calc)
-        return new_binary(ND_COMMA, calc, node, tok);
-      return node;
-    }
-  }
-
   if (tok->kind == TK_ADD)
     return new_unary(ND_POS, unary(rest, tok->next), tok);
 
@@ -4703,6 +4693,37 @@ static Node *unary(Token **rest, Token *tok) {
   if (tok->kind == TK_static_assert) {
     eval_static_assert(rest, tok->next);
     return new_node(ND_NULL_EXPR, tok);
+  }
+
+  if (tok->kind == TK_LPAREN) {
+    tok = tok->next;
+    Type *ty;
+    VarAttr attr = {0};
+    if (is_typename(tok)) {
+      if (is_typename_paren2(&tok, tok, &ty, &attr)) {
+        // Casts
+        Node *calc = calc_vla2(ty, tok, &attr);
+        Node *node = new_cast(unary(rest, tok), ty);
+        node->is_nonlval = true;
+        if (calc)
+          return new_binary(ND_COMMA, calc, node, tok);
+        return node;
+      }
+
+      Node *node = compound_literal(&tok, tok);
+      return postfix(node, rest, tok);
+    }
+
+    if (tok->kind == TK_LCURLY) {
+      if (!fnctx)
+        error_tok(tok, "statement expression not in a function");
+
+      Node *node = compound_stmt(&tok, tok, ND_STMT_EXPR);
+      return postfix(node, rest, skip_tk(tok, TK_RPAREN));
+    }
+
+    Node *node = expression(&tok, tok);
+    return postfix(node, rest, skip_tk(tok, TK_RPAREN));
   }
 
   Node *node = primary(&tok, tok);
@@ -5254,8 +5275,7 @@ static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
 static Node *compound_literal(Token **rest, Token *tok) {
   Token *start = tok;
   VarAttr attr = {0};
-  Type *ty = declspec(&tok, tok->next, &attr,
-                      SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
+  Type *ty = declspec(&tok, tok, &attr, SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
 
   ty = declarator(&tok, tok, ty, NULL);
   tok = skip_tk(tok, TK_RPAREN);
@@ -5553,24 +5573,6 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 }
 
 static Node *primary(Token **rest, Token *tok) {
-  if (tok->kind == TK_LPAREN) {
-    if (is_typename(tok->next))
-      return compound_literal(rest, tok);
-
-    if (tok->next->kind == TK_LCURLY) {
-      if (!fnctx)
-        error_tok(tok, "statement expression not in a function");
-
-      Node *node = compound_stmt(&tok, tok->next, ND_STMT_EXPR);
-      *rest = skip_tk(tok, TK_RPAREN);
-      return node;
-    }
-
-    Node *node = expression(&tok, tok->next);
-    *rest = skip_tk(tok, TK_RPAREN);
-    return node;
-  }
-
   if (tok->kind == TK_Generic)
     return generic_selection(rest, tok->next);
 
