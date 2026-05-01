@@ -339,6 +339,7 @@ typedef enum {
   TK_nullptr,
   TK_defer,
   TK_FUNCTION,
+  TK_GNU_label,
 
   TK_TYPEKW,
   TK_void,
