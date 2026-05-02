@@ -118,21 +118,12 @@ test-filc: $(TESTS_FILC)
 
 test-all: test test-stage2
 
-slimcc-lto: $(SRCS) slimcc.h
-	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@
-
-slimcc-lto-je: $(SRCS) slimcc.h
-	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@ -ljemalloc
-
-slimcc-lto-mi: $(SRCS) slimcc.h
-	$(CC) -O2 -flto=auto -fvisibility=hidden scripts/amalgamation.c -o $@ -lmimalloc
-
 format:
 	$(CLANG_FORMAT) -i $(SRCS) slimcc.h platform/*.c
 	perl -i -p0e 's|\:[ ]+\{\n|: {\n|g' $(SRCS) slimcc.h platform/*.c
 
 clean:
-	rm -f slimcc slimcc-stage2 slimcc-san slimcc-filc slimcc-lto*
+	rm -f slimcc slimcc-stage2 slimcc-san slimcc-filc
 	rm -f *.o test/*.o test/*.exe test/host/*.o test/abi/*.o
 
 .PHONY: clean test test-stage2 test-all test-san test-filc
