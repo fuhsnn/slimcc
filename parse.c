@@ -1544,7 +1544,7 @@ static bool enum_chk_ty_range(Type *ty, int64_t min, uint64_t max) {
   if (min) {
     if (ty->is_unsigned)
       return true;
-    if (min != (min << lbits) >> lbits)
+    if (min != (int64_t)((uint64_t)min << lbits) >> lbits)
       return true;
   }
   lbits += !ty->is_unsigned;
@@ -2636,7 +2636,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
           if (mem->is_aligned_bitfield) {
             int sz = next_pow_of_two(mem->bit_offset + mem->bit_width) / 8;
             uint64_t oldval = read_buf(loc, sz);
-            uint64_t mask = (1L << mem->bit_width) - 1;
+            uint64_t mask = ((uint64_t)1 << mem->bit_width) - 1;
             uint64_t combined = oldval | ((val & mask) << mem->bit_offset);
             memcpy(loc, &combined, sz);
             continue;
@@ -3523,9 +3523,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   Node *rhs = node->m.rhs;
 
   switch (node->kind) {
-  case ND_ADD: return eval_sign_extend(ty, eval2(lhs, ctx) + eval2(rhs, ctx));
-  case ND_SUB: return eval_sign_extend(ty, eval2(lhs, ctx) - eval(rhs));
-  case ND_MUL: return eval_sign_extend(ty, eval(lhs) * eval(rhs));
+  case ND_ADD: return eval_sign_extend(ty, (uint64_t)eval2(lhs, ctx) + eval2(rhs, ctx));
+  case ND_SUB: return eval_sign_extend(ty, (uint64_t)eval2(lhs, ctx) - eval(rhs));
+  case ND_MUL: return eval_sign_extend(ty, (uint64_t)eval(lhs) * eval(rhs));
   case ND_DIV: {
     int64_t lval = eval(lhs);
     int64_t rval = eval(rhs);
@@ -3549,19 +3549,35 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     return lval % rval;
   }
   case ND_POS:    return eval(lhs);
-  case ND_NEG:    return eval_sign_extend(ty, -eval(lhs));
+  case ND_NEG:    return eval_sign_extend(ty, -(uint64_t)eval(lhs));
   case ND_BITAND: return eval(lhs) & eval(rhs);
   case ND_BITOR:  return eval(lhs) | eval(rhs);
   case ND_BITXOR: return eval(lhs) ^ eval(rhs);
-  case ND_SHL:    return eval_sign_extend(ty, eval(lhs) << eval(rhs));
-  case ND_SHR:
+  case ND_SHL: {
+    int64_t lval = eval(lhs);
+    int64_t rval = eval(rhs);
+    if (rval < 0 || rval >= ty->size * 8)
+      return 0;
+    return eval_sign_extend(ty, (uint64_t)lval << rval);
+  }
+  case ND_SHR: {
+    int64_t lval = eval(lhs);
+    int64_t rval = eval(rhs);
+    if (rval < 0 || rval >= ty->size * 8)
+      return 0;
     if (ty->size == 4)
-      return (uint32_t)eval(lhs) >> eval(rhs);
-    return (uint64_t)eval(lhs) >> eval(rhs);
-  case ND_SAR:
+      return (uint32_t)lval >> rval;
+    return (uint64_t)lval >> rval;
+  }
+  case ND_SAR: {
+    int64_t lval = eval(lhs);
+    int64_t rval = eval(rhs);
+    if (rval < 0 || rval >= ty->size * 8)
+      return 0;
     if (ty->size == 4)
-      return (int32_t)eval(lhs) >> eval(rhs);
-    return eval(lhs) >> eval(rhs);
+      return (int32_t)lval >> rval;
+    return lval >> rval;
+  }
   case ND_EQ:
   case ND_NE:
   case ND_LT:
@@ -3594,9 +3610,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       if (lhs->ty->bit_cnt < ty->size * 8) {
         int shft = 64 - lhs->ty->bit_cnt;
         if (lhs->ty->is_unsigned)
-          ival = (uint64_t)(ival << shft) >> shft;
+          ival = ((uint64_t)ival << shft) >> shft;
         else
-          ival = (int64_t)(ival << shft) >> shft;
+          ival = (int64_t)((uint64_t)ival << shft) >> shft;
       }
       return eval_sign_extend(ty, ival);
     }

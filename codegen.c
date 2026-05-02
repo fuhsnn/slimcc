@@ -2780,7 +2780,7 @@ static void gen_stmt(Node *node) {
       }
       Printftn("mov %s, %s", ax, cx);
       imm_sub(cx, dx, cr->lo);
-      imm_cmp(cx, dx, cr->hi - cr->lo);
+      imm_cmp(cx, dx, (uint64_t)cr->hi - cr->lo);
       Printftn("jbe .L.case.%" PRIi64 ".%" PRIi64, c, case_cnt);
     }
 
@@ -3345,7 +3345,7 @@ static bool imm_divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
         Printftn("shr $%d, %s", Ctz64(val), ax);
         return true;
       }
-      uint64_t msk = val - 1;
+      uint64_t msk = (uint64_t)val - 1;
       if (msk == UINT32_MAX) {
         Printstn("movl %%eax, %%eax");
         return true;
@@ -3362,7 +3362,7 @@ static bool imm_divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
       gen_expr(expr);
 
       if (kind == ND_DIV) {
-        Printftn("lea %" PRIi32 "(%s), %s", (int32_t)(val - 1), ax, dx);
+        Printftn("lea %" PRIi32 "(%s), %s", (int32_t)((uint64_t)val - 1), ax, dx);
         Printftn("test %s, %s", ax, ax);
         Printftn("cmovs %s, %s", dx, ax);
         Printftn("sar $%d, %s", Ctz64(val), ax);
@@ -3371,7 +3371,7 @@ static bool imm_divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
       Printftn("%s", ty->size == 8 ? "cqto" : "cltd");
       Printftn("shr $%d, %s", (int)(ty->size * 8 - Ctz64(val)), dx);
       Printftn("add %s, %s", dx, ax);
-      imm_and(ax, NULL, (int32_t)(val - 1));
+      imm_and(ax, NULL, (int32_t)((uint64_t)val - 1));
       Printftn("sub %s, %s", dx, ax);
       return true;
     }
