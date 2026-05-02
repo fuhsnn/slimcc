@@ -3399,6 +3399,7 @@ static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile
       *ofs = 0;
       return node->m.var;
     }
+    return NULL;
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     int64_t offset;
@@ -3437,7 +3438,17 @@ static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
 
 static char *eval_constexpr_data(Node *node) {
   int32_t ofs;
-  Obj *var = eval_var(node, &ofs, false);
+  Obj *var = NULL;
+
+  if (node->kind == ND_CHAIN && node->m.rhs->kind == ND_VAR) {
+    Obj *v = node->m.rhs->m.var;
+    if (v->is_compound_lit && v->constexpr_data) {
+      ofs = 0;
+      var = v;
+    }
+  }
+  if (!var)
+    var = eval_var(node, &ofs, false);
 
   if (!var || !(var->constexpr_data ||
                 var->is_string_lit ||
