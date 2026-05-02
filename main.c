@@ -623,7 +623,18 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
     }
 
     if (startswith(argv[i], &arg, "-O")) {
-      opt_optimize = strcmp(arg, "0");
+      switch (*arg) {
+      case 's':
+      case 'z': {
+        opt_fn_align = 1;
+        break;
+      }
+      case '2':
+      case '3':
+        if (opt_fn_align == 1)
+          opt_fn_align = 16;
+        break;
+      }
       continue;
     }
 
