@@ -1375,7 +1375,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *outp
 }
 
 static FileType get_file_type(const char *filename) {
-  if (endswith(filename, ".c"))
+  if (endswith(filename, ".c") || endswith(filename, ".i"))
     return FILE_C;
   if (endswith(filename, ".s"))
     return FILE_ASM;
