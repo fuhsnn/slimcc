@@ -74,7 +74,6 @@ static char *regs[REG_XMM0][4] = {
   [REG_R15] = {"%r15b", "%r15w", "%r15d", "%r15"},
 };
 
-static FILE *output_file;
 static char *argreg8[] = {"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"};
 static char *argreg16[] = {"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"};
 static char *argreg32[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
@@ -158,33 +157,25 @@ static void imm_and(char *op, char *tmp, int64_t val);
 static void imm_cmp(char *op, char *tmp, int64_t val);
 static char *arith_ins(NodeKind kind);
 
-#define Prints(str) fprintf(output_file, str)
-#define Printsts(str) fprintf(output_file, "\t" str)
-#define Printssn(str) fprintf(output_file, str "\n")
-#define Printstn(str) fprintf(output_file, "\t" str "\n")
+#define Prints(str) fprintf(stdout, str)
+#define Printsts(str) fprintf(stdout, "\t" str)
+#define Printssn(str) fprintf(stdout, str "\n")
+#define Printstn(str) fprintf(stdout, "\t" str "\n")
 
-#define Printf(str, ...) fprintf(output_file, str, __VA_ARGS__)
-#define Printfts(str, ...) fprintf(output_file, "\t" str, __VA_ARGS__)
-#define Printfsn(str, ...) fprintf(output_file, str "\n", __VA_ARGS__)
-#define Printftn(str, ...) fprintf(output_file, "\t" str "\n", __VA_ARGS__)
-
-static long resrvln(void) {
-  long loc = ftell(output_file) + 1;
-  fprintf(output_file, "\t                                                      \n");
-  return loc;
-}
+#define Printf(str, ...) fprintf(stdout, str, __VA_ARGS__)
+#define Printfts(str, ...) fprintf(stdout, "\t" str, __VA_ARGS__)
+#define Printfsn(str, ...) fprintf(stdout, str "\n", __VA_ARGS__)
+#define Printftn(str, ...) fprintf(stdout, "\t" str "\n", __VA_ARGS__)
 
 FMTCHK(1,3)
 static void insrtln(char *fmt, long loc, ...) {
-  long cur_loc = ftell(output_file);
-  fseek(output_file, loc, SEEK_SET);
+  ftell(stdout);
+  fseek(stdout, 0, SEEK_SET);
 
   va_list ap;
   va_start(ap, loc);
-  vfprintf(output_file, fmt, ap);
+  vfprintf(stdout, fmt, ap);
   va_end(ap);
-
-  fseek(output_file, cur_loc, SEEK_SET);
 }
 
 static char *asm_name(Obj *var) {
@@ -335,7 +326,7 @@ static Slot *push_tmpstack(SlotKind kind) {
     tmp_stack.data = realloc(tmp_stack.data, sizeof(Slot) * tmp_stack.capacity);
   }
 
-  long loc = resrvln();
+  long loc = 0;
   Slot *sl = &tmp_stack.data[tmp_stack.depth++];
   *sl = (Slot){.kind = kind, .loc = loc};
   return sl;
@@ -3684,14 +3675,14 @@ static void asm_body(Node *node) {
   for (;;) {
     size_t spn = strcspn(p, "%");
     if (spn) {
-      fwrite(p, 1, spn, output_file);
+      fwrite(p, 1, spn, stdout);
       p += spn;
     }
     if (*p == '\0')
       break;
 
     if (p[1] == '%') {
-      fputc('%', output_file);
+      fputc('%', stdout);
       p += 2;
       continue;
     }
@@ -3730,7 +3721,7 @@ static void asm_body(Node *node) {
         continue;
       case ASMOP_SYMBOLIC:{
         if (ap->arg->kind == ND_VAR && ap->arg->var->ty->kind == TY_FUNC && use_rip(ap->arg->var)) {
-          fprintf(output_file, "%s\"%s\"", punct, asm_name(ap->arg->var));
+          fprintf(stdout, "%s\"%s\"", punct, asm_name(ap->arg->var));
           continue;
         }
         char ofs[STRBUF_SZ], *ptr;
@@ -3780,7 +3771,7 @@ static void asm_body(Node *node) {
     }
     error_tok(node->asm_str, "unknown modifier \"%c\"", *p);
   }
-  fputc('\n', output_file);
+  fputc('\n', stdout);
 }
 
 static void asm_push_clobbers(Node *node) {
@@ -4121,7 +4112,7 @@ void emit_text(Obj *fn) {
     Printstn("mov %%rsp, %%rbx");
   }
 
-  long stack_alloc_loc = resrvln();
+  long stack_alloc_loc = 0;
 
   lvar_stk_sz = 0;
 
@@ -4213,7 +4204,7 @@ void emit_text(Obj *fn) {
   if (!strcmp(fn->name, "main"))
     Printstn("xor %%eax, %%eax");
 
-  pre_epilog_pos = ftell(output_file);
+  pre_epilog_pos = ftell(stdout);
 
   // Epilogue
   Printfsn(".L.rtn.%"PRIi64":", rtn_label);
@@ -4262,65 +4253,6 @@ void prepare_funcall(Node *node, Scope *scope) {
   }
 }
 
-typedef struct {
-  char *buf;
-  size_t buflen;
-} FuncObj;
-
-void *prepare_funcgen(void) {
-  FuncObj *obj = malloc(sizeof(FuncObj));
-  output_file = open_memstream(&obj->buf, &obj->buflen);
-  return obj;
-}
-
-void end_funcgen(void) {
-  fclose(output_file);
-  output_file = NULL;
-
-  {
-    char fmtbuf[STRBUF_SZ];
-    int len;
-    if (!strcmp(current_fn->name, "main"))
-      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n\txor %%eax, %%eax\n", rtn_label);
-    else
-      len = snprintf(fmtbuf, STRBUF_SZ, "\n\tjmp .L.rtn.%"PRIi64"\n", rtn_label);
-
-    if (len < MIN(pre_epilog_pos, STRBUF_SZ)) {
-      char *p = &((FuncObj *)current_fn->output)->buf[pre_epilog_pos - len];
-      if (!strncmp(p, fmtbuf, len))
-        memset(p, ' ', len - 1);
-    }
-  }
-  current_fn = NULL;
-}
-
 int codegen(Obj *prog, FILE *out) {
-  output_file = out;
-
-  if (opt_g) {
-    File **files = get_input_files();
-    for (int i = 0; files[i]; i++)
-      Printftn(".file %d \"%s\"", files[i]->file_no, files[i]->name);
-  }
-
-  for (Obj *var = prog; var; var = var->next) {
-    if (var->asm_str) {
-      Printfsn("%s", var->asm_str->str);
-      continue;
-    }
-    if (!var->is_definition) {
-      if (var->is_weak || var->alias_name)
-        emit_symbol(var);
-      continue;
-    }
-    if (var->ty->kind == TY_FUNC) {
-      if (var->is_live)
-        fwrite(((FuncObj *)var->output)->buf, 1, ((FuncObj *)var->output)->buflen, out);
-      continue;
-    }
-    emit_data(var);
-    continue;
-  }
-  Printstn(".section  .note.GNU-stack,\"\",@progbits");
   return 0;
 }
