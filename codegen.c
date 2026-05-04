@@ -56,7 +56,6 @@ static struct {
   int capacity;
   int depth;
 } tmp_stack;
-FMTCHK(1,3)
 static void insrtln(char *fmt, long loc, ...) {
   ftell(stdout);
   fseek(stdout, 0, SEEK_SET);
