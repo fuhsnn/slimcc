@@ -778,28 +778,29 @@ static Token *new_pp_number(const char *start, const char *p) {
   return new_token(TK_PP_NUM, start, p);
 }
 
-static void push_digit(uint32_t **data, size_t *limb_cnt, int base, int digit) {
-  uint32_t *buf = *data;
-  size_t cnt = *limb_cnt;
+static void push_digit(BitBuf **_data, size_t *_cnt32, int base, int digit) {
+  size_t cnt32 = *_cnt32;
+  BitBuf *data = *_data;
 
   uint64_t accum = digit;
-  for (size_t i = 0; i < cnt; i++) {
-    accum += (uint64_t)base * buf[i];
-    buf[i] = (uint32_t)accum;
+  for (size_t i = 0; i < cnt32; i++) {
+    accum += (uint64_t)base * (&data->as32)[i];
+    (&data->as32)[i] = (uint32_t)accum;
     accum >>= 32;
   }
   if (accum) {
-    buf = realloc(buf, (cnt + 1) * sizeof(uint32_t));
-    buf[cnt++] = (uint32_t)accum;
+    if ((cnt32 & 1) == 0)
+      data = realloc(data, (cnt32 / 2 + 1) * sizeof(BitBuf));
+    (&data->as32)[cnt32++] = (uint32_t)accum;
   }
-  *data = buf;
-  *limb_cnt = cnt;
+  *_data = data;
+  *_cnt32 = cnt32;
 }
 
 static bool convert_pp_bitint(const char *begin, const char *end, Node *node, int base,
                               bool is_unsigned) {
-  uint32_t *data = calloc(2, sizeof(uint32_t));
-  size_t limb32 = 1;
+  BitBuf *data = calloc(1, sizeof(BitBuf));
+  size_t cnt32 = 1;
 
   for (const char *p = begin; p != end; p++) {
     int digit;
@@ -813,22 +814,20 @@ static bool convert_pp_bitint(const char *begin, const char *end, Node *node, in
     if (digit >= base)
       return false;
 
-    push_digit(&data, &limb32, base, digit);
+    push_digit(&data, &cnt32, base, digit);
   }
 
   int64_t bit_width = 0;
   for (int i = 0; i < 32; i++)
-    if (data[limb32 - 1] & (1ULL << i))
+    if ((&data->as32)[cnt32 - 1] & (1ULL << i))
       bit_width = i + 1;
-  bit_width += (limb32 - 1) * 32;
+  bit_width += (cnt32 - 1) * 32;
   bit_width = MAX(bit_width, 1) + !is_unsigned;
 
-  size_t limb64 = (bit_width + 63) / 64;
-  if (limb64 * 2 != limb32) {
-    data = realloc(data, limb64 * sizeof(uint64_t));
-    data[limb32] = 0;
-  }
-  node->num.bitint_data = (uint64_t *)data;
+  if ((cnt32 & 1) == 1)
+    (&data->as32)[cnt32] = 0;
+
+  node->num.bitint_data = data;
   node->ty = new_bitint(bit_width, node->tok);
   node->ty->is_unsigned = is_unsigned;
   return true;
