@@ -217,10 +217,10 @@ static Slot *pop_tmpstack(int sz) {
   return sl;
 }
 static void push(void) {
-  push_tmpstack(SL_GP);
+  push_tmpstack(SL_ST);
 }
 static void push_from(char *reg) {
-  Slot *sl = push_tmpstack(SL_GP);
+  Slot *sl = push_tmpstack(SL_ST);
   sl->push_reg = reg;
 }
 static char *pop_gp(bool is_r64, char *dest_reg, bool must_be_dest) {
