@@ -1200,12 +1200,12 @@ static void load_fval(Node *node) {
   load_fval2(node->ty, &fval);
 }
 
-static void load_bitint_val(Type *ty, uint64_t *buf) {
+static void load_bitint_val(Type *ty, BitBuf *buf) {
   char memop[STRBUF_SZ];
   int32_t cnt = (ty->bit_cnt + 63) / 64;
   for (int32_t i = 0; i < cnt; i++) {
     snprintf(memop, STRBUF_SZ, "%" PRIi32 "+%s(%s)", i * 8, tmpbuf(ty->size), lvar_ptr);
-    imm_tmpl("movq", memop, buf[i]);
+    imm_tmpl("movq", memop, (&buf->as64)[i]);
   }
 }
 

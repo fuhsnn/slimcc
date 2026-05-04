@@ -662,6 +662,12 @@ struct CaseRange {
   int64_t hi;
 };
 
+typedef union {
+  uint64_t as64;
+  uint32_t as32;
+  uint8_t as8;
+} BitBuf;
+
 // AST node type
 struct Node {
   Node *next;
@@ -688,7 +694,7 @@ struct Node {
   // Numeric literal
   struct {
     int64_t val;
-    uint64_t *bitint_data;
+    BitBuf *bitint_data;
     long_double_t fval;
     enum {
       MATH_CONSTANT_NOT = 0,
@@ -808,25 +814,26 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
 // bitint.c
 //
 
-int32_t eval_bitint_first_set(int32_t bits, void *lp);
-bool eval_bitint_to_bool(int32_t bits, void *lp);
-void eval_bitint_sign_ext(int32_t bits, void *lp, int32_t bits2, bool is_unsigned);
-void eval_bitint_neg(int32_t bits, void *lp);
-void eval_bitint_bitnot(int32_t bits, void *lp);
-void eval_bitint_bitand(int32_t bits, void *lp, void *rp);
-void eval_bitint_bitor(int32_t bits, void *lp, void *rp);
-void eval_bitint_bitxor(int32_t bits, void *lp, void *rp);
-void eval_bitint_shl(int32_t bits, void *sp, void *dp, int32_t amount);
-void eval_bitint_shr(int32_t bits, void *sp, void *dp, int32_t amount, bool is_unsigned);
-void *eval_bitint_bitfield_load(int32_t bits, void *sp, void *dp, int32_t width,
+int32_t eval_bitint_first_set(int32_t bits, BitBuf *op);
+bool eval_bitint_to_bool(int32_t bits, BitBuf *op);
+void eval_bitint_sign_ext(int32_t bits, BitBuf *op, int32_t bits2, bool is_unsigned);
+void eval_bitint_neg(int32_t bits, BitBuf *op);
+void eval_bitint_bitnot(int32_t bits, BitBuf *op);
+void eval_bitint_bitand(int32_t bits, BitBuf *lh, BitBuf *rh);
+void eval_bitint_bitor(int32_t bits, BitBuf *lh, BitBuf *rh);
+void eval_bitint_bitxor(int32_t bits, BitBuf *lh, BitBuf *rh);
+void eval_bitint_shl(int32_t bits, BitBuf *src, BitBuf *dst, int32_t amount);
+void eval_bitint_shr(int32_t bits, BitBuf *src, BitBuf *dst, int32_t amount,
+                     bool is_unsigned);
+void *eval_bitint_bitfield_load(int32_t bits, BitBuf *src, BitBuf *dst, int32_t width,
                                 int32_t ofs, bool is_unsigned);
-void eval_bitint_bitfield_save(int32_t bits, void *sp, void *dp, int32_t width,
+void eval_bitint_bitfield_save(int32_t bits, BitBuf *src, BitBuf *dst, int32_t width,
                                int32_t ofs);
-void eval_bitint_add(int32_t bits, void *lp, void *rp);
-void eval_bitint_sub(int32_t bits, void *lp, void *rp);
-void eval_bitint_mul(int32_t bits, void *lp, void *rp);
-void eval_bitint_div(int32_t bits, void *lp, void *rp, bool is_unsigned, bool is_div);
-int eval_bitint_cmp(int32_t bits, void *lp, void *rp, bool is_unsigned);
+void eval_bitint_add(int32_t bits, BitBuf *lh, BitBuf *rh);
+void eval_bitint_sub(int32_t bits, BitBuf *lh, BitBuf *rh);
+void eval_bitint_mul(int32_t bits, BitBuf *lh, BitBuf *rh);
+void eval_bitint_div(int32_t bits, BitBuf *lh, BitBuf *rh, bool is_unsigned, bool is_div);
+int eval_bitint_cmp(int32_t bits, BitBuf *lh, BitBuf *rh, bool is_unsigned);
 
 //
 // type.c
