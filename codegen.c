@@ -1,4 +1,3 @@
-#include "slimcc.h"
 
 static char *regs[REG_XMM0][4] = {
   [REG_NULL] = {"null", "null", "null", "null"},
