@@ -494,9 +494,12 @@ static Slot *pop_tmpstack(int sz) {
 
   if (tmp_stack.depth > 0) {
     Slot *sl2 = &tmp_stack.data[tmp_stack.depth - 1];
-    sl2->gp_depth = MAX(sl2->gp_depth, sl->gp_depth + (sl->kind == SL_GP));
-    sl2->fp_depth = MAX(sl2->fp_depth, sl->fp_depth + (sl->kind == SL_FP));
-    sl2->st_depth = MAX(sl2->st_depth, sl->st_depth + (sl->kind == SL_ST) * sz);
+    int gp_depth = sl->gp_depth + (sl->kind == SL_GP);
+    int fp_depth = sl->fp_depth + (sl->kind == SL_FP);
+    int st_depth = sl->st_depth + (sl->kind == SL_ST) * sz;
+    sl2->gp_depth = MAX(sl2->gp_depth, gp_depth);
+    sl2->fp_depth = MAX(sl2->fp_depth, fp_depth);
+    sl2->st_depth = MAX(sl2->st_depth, st_depth);
   }
 
   if (sl->kind == SL_ST) {
@@ -2411,8 +2414,10 @@ static void gen_expr2(Node *node, bool is_void) {
     Type *res_ty = node->m.target->ty->base;
     int32_t chk_bits = res_ty->is_unsigned + bit_size(res_ty);
     int32_t bits = MAX(chk_bits, res_ty->size * 8);
-    bits = MAX(bits, ovf_headroom(node->m.lhs->ty, node->arith_kind));
-    bits = MAX(bits, ovf_headroom(node->m.rhs->ty, node->arith_kind));
+    int32_t l_hdr = ovf_headroom(node->m.lhs->ty, node->arith_kind);
+    int32_t r_hdr = ovf_headroom(node->m.rhs->ty, node->arith_kind);
+    bits = MAX(bits, l_hdr);
+    bits = MAX(bits, r_hdr);
     bits = align_to(bits, 64);
     int32_t sz = bits / 8;
 
@@ -5006,14 +5011,17 @@ static void gen_asm(Node *node) {
   }
 }
 
-static int get_lvar_align(Scope *scp, int align) {
+static int get_lvar_align(Scope *scp, int32_t align) {
   for (Obj *var = scp->locals; var; var = var->next) {
     if (var->pass_by_stack)
       continue;
-    align = MAX(align, get_align(var));
+    int32_t a2 = get_align(var);
+    align = MAX(align, a2);
   }
-  for (Scope *sub = scp->children; sub; sub = sub->sibling_next)
-    align = MAX(align, get_lvar_align(sub, align));
+  for (Scope *sub = scp->children; sub; sub = sub->sibling_next) {
+    int32_t a2 = get_lvar_align(sub, align);
+    align = MAX(align, a2);
+  }
   return align;
 }
 
