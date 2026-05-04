@@ -681,3 +681,76 @@ extern bool opt_werror;
 extern char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
+
+
+#define GP_MAX 6
+#define FP_MAX 8
+
+#define GP_SLOTS 6
+#define FP_SLOTS 6
+
+#define STRBUF_SZ 192
+#define STRBUF_SZ2 208
+
+typedef enum {
+  REG_NULL = 0,
+  REG_AX,
+  REG_CX,
+  REG_DX,
+  REG_SI,
+  REG_DI,
+  REG_R8,
+  REG_R9,
+  REG_R10,
+  REG_R11,
+  REG_R12,
+  REG_R13,
+  REG_R14,
+  REG_R15,
+  REG_BX,
+  REG_BP,
+  REG_SP,
+  REG_XMM0,
+  REG_XMM1,
+  REG_XMM2,
+  REG_XMM3,
+  REG_XMM4,
+  REG_XMM5,
+  REG_XMM6,
+  REG_XMM7,
+  REG_XMM8,
+  REG_XMM9,
+  REG_XMM10,
+  REG_XMM11,
+  REG_XMM12,
+  REG_XMM13,
+  REG_XMM14,
+  REG_XMM15,
+  REG_X87_ST0,
+  REG_X87_ST1,
+  REG_X87_ST2,
+  REG_X87_ST3,
+  REG_X87_ST4,
+  REG_X87_ST5,
+  REG_X87_ST6,
+  REG_X87_ST7,
+  REG_END
+} Reg;
+
+typedef enum {
+  SL_GP,
+  SL_FP,
+  SL_ST,
+} SlotKind;
+
+typedef struct {
+  SlotKind kind;
+  int gp_depth;
+  int fp_depth;
+  int st_depth;
+  int st_ofs;
+  char *push_reg;
+  long loc;
+} Slot;
+
+enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
