@@ -97,7 +97,7 @@ static int peak_stk_usage;
 static int64_t rtn_label;
 static long pre_epilog_pos;
 
-bool dont_reuse_stack;
+static bool dont_reuse_stack;
 
 static struct {
   bool in[REG_END];

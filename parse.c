@@ -177,6 +177,10 @@ static Token *global_declaration(Token *tok, Type *basety, VarAttr *attr);
 static Node *compute_vla_size(Type *ty, Token *tok);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 
+static int align_to(int n, int align) {
+  return (n + align - 1) / align * align;
+}
+
 static int align_down(int n, int align) {
   return align_to(n - align + 1, align);
 }
@@ -1373,7 +1377,6 @@ static void defr_cleanup(Obj *var, Obj *fn, Token *tok) {
 
   n->args = new_var(NULL, arg->ty, ast_arena_calloc(sizeof(Obj)));
   n->args->arg_expr = arg;
-  prepare_funcall(n, scope);
 
   DeferStmt *defr2 = new_defr(DF_CLEANUP_FN);
   defr2->cleanup_fn = n;
@@ -2487,7 +2490,6 @@ static Node *stmt(Token **rest, Token *tok, bool is_labeled) {
     Node *node = asm_stmt(&tok, tok);
 
     enter_tmp_scope();
-    prepare_inline_asm(node);
     leave_scope();
 
     *rest = skip(tok, ";");
@@ -4011,7 +4013,6 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   node->ty = ty->return_ty;
   node->args = head.param_next;
 
-  prepare_funcall(node, scope);
   leave_scope();
 
   // If a function returns a struct, it is caller's responsibility
@@ -4301,9 +4302,6 @@ static Node *primary(Token **rest, Token *tok) {
     tok = skip(tok, ",");
 
     Type *ty = typename(&tok, tok);
-    if (va_arg_need_copy(ty))
-      node->var = new_lvar(NULL, ty);
-
     node->ty = pointer_to(ty);
     *rest = skip(tok, ")");
     return new_unary(ND_DEREF, node, tok);
@@ -4346,10 +4344,6 @@ static Node *primary(Token **rest, Token *tok) {
       char *name = sc->var->name;
       if (!strcmp(name, "alloca"))
         dont_dealloc_vla = true;
-
-      if (strstr(name, "setjmp") || strstr(name, "savectx") ||
-          strstr(name, "vfork") || strstr(name, "getcontext"))
-        dont_reuse_stack = true;
     }
 
     if (sc) {
@@ -4530,7 +4524,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
     fn->body->body = calc;
   }
 
-  if (fn_use_vla && !dont_dealloc_vla && !dont_reuse_stack)
+  if (fn_use_vla && !dont_dealloc_vla)
     fn->dealloc_vla = true;
 
   leave_scope();

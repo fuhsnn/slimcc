@@ -427,11 +427,6 @@ static int parse_args(int argc, char **argv) {
       set_bool(argv[i], true, "-funsigned-char", &ty_pchar->is_unsigned))
       continue;
 
-    if (startswith(argv[i], &arg, "-fstack-reuse=")) {
-      dont_reuse_stack = strcmp(arg, "all");
-      continue;
-    }
-
     if (startswith(argv[i], &arg, "-fvisibility=")) {
       opt_visibility = arg;
       continue;

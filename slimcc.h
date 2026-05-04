@@ -638,11 +638,6 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic);
 //
 
 int codegen(Obj *prog, FILE *out);
-void prepare_funcall(Node *node, Scope *scope);
-void prepare_inline_asm(Node *node);
-int align_to(int n, int align);
-bool va_arg_need_copy(Type *ty);
-extern bool dont_reuse_stack;
 void emit_text(Obj *fn);
 void *prepare_funcgen(void);
 void end_funcgen(void);
