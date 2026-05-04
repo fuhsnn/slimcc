@@ -755,5 +755,24 @@ typedef struct {
 
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
 
+static void load2(Type *ty, int sofs, char *sptr);
+static void store2(Type *ty, int dofs, char *dptr);
+static void store_gp2(char **reg, int sz, int ofs, char *ptr);
+static void gen_asm(Node *node);
+static void gen_expr(Node *node);
+static void gen_stmt(Node *node);
+static void gen_void_expr(Node *node);
+static void gen_void_assign(Node *node);
+static bool gen_expr_opt(Node *node);
+static bool gen_addr_opt(Node *node);
+static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
+static bool gen_load_opt_gp(Node *node, Reg r);
+static Node *bool_expr_opt(Node *node, bool *flip);
+static void imm_add(char *op, char *tmp, int64_t val);
+static void imm_sub(char *op, char *tmp, int64_t val);
+static void imm_and(char *op, char *tmp, int64_t val);
+static void imm_cmp(char *op, char *tmp, int64_t val);
+static char *arith_ins(NodeKind kind);
+
 #define MAIN_CULPRIT static char *rip = "%rip";
 #define CRITICAL_BREAK_POINT do{exit(10 + (ptr != rip));}while(0)

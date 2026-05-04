@@ -56,24 +56,6 @@ static struct {
   int capacity;
   int depth;
 } tmp_stack;
-static void load2(Type *ty, int sofs, char *sptr);
-static void store2(Type *ty, int dofs, char *dptr);
-static void store_gp2(char **reg, int sz, int ofs, char *ptr);
-static void gen_asm(Node *node);
-static void gen_expr(Node *node);
-static void gen_stmt(Node *node);
-static void gen_void_expr(Node *node);
-static void gen_void_assign(Node *node);
-static bool gen_expr_opt(Node *node);
-static bool gen_addr_opt(Node *node);
-static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
-static bool gen_load_opt_gp(Node *node, Reg r);
-static Node *bool_expr_opt(Node *node, bool *flip);
-static void imm_add(char *op, char *tmp, int64_t val);
-static void imm_sub(char *op, char *tmp, int64_t val);
-static void imm_and(char *op, char *tmp, int64_t val);
-static void imm_cmp(char *op, char *tmp, int64_t val);
-static char *arith_ins(NodeKind kind);
 FMTCHK(1,3)
 static void insrtln(char *fmt, long loc, ...) {
   ftell(stdout);
