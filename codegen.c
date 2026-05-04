@@ -2894,9 +2894,8 @@ static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
     gen_expr(mul->rhs);
     Printftn("movq %s(%s), %%rdx", ofs, ptr);
     snprintf(op, STRBUF_SZ2, "(%%rdx, %%rax, %d)", sz);
-  } else if (is_memop_ptr(lhs, ofs, &ptr) && ptr != rip) {
-    gen_expr(mul->rhs);
-    snprintf(op, STRBUF_SZ2, "%s(%s, %%rax, %d)", ofs, ptr, sz);
+  } else if (is_memop_ptr(lhs, ofs, &ptr)) {
+    exit(10 + (ptr != rip));
   } else {
     gen_expr(lhs);
     push();
