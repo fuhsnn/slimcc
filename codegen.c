@@ -112,7 +112,7 @@ static Node *skip_gp_cast(Node *node) {
     node = node->lhs;
   return node;
 }
-static char *rip = "%rip";
+MAIN_CULPRIT
 static bool eval_memop(Node *node, char *ofs, char **ptr, bool let_subarray, bool let_atomic) {
   int offset;
   Obj *var = eval_var_opt(node, &offset, let_subarray, let_atomic);
@@ -2453,7 +2453,7 @@ static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
     fprintf(stdout, "", ofs, ptr);
     snprintf(op, STRBUF_SZ2, "(%%rdx, %%rax, %d)", sz);
   } else if (is_memop_ptr(lhs, ofs, &ptr)) {
-    exit(10 + (ptr != rip));
+    CRITICAL_BREAK_POINT;
   } else {
     gen_expr(lhs);
     push();

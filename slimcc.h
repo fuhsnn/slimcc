@@ -754,3 +754,6 @@ typedef struct {
 } Slot;
 
 enum { I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, F80 };
+
+#define MAIN_CULPRIT static char *rip = "%rip";
+#define CRITICAL_BREAK_POINT do{exit(10 + (ptr != rip));}while(0)
