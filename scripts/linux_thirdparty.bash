@@ -1528,7 +1528,8 @@ test_tinycbor() {
 test_tinycc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_tinycc.bash
 
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 98765e5ebc04ea464195fa80ea5e4bbdc70a29cc tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository 30afb50e6436175e0eacf4b6d407d2eb867b265a tinycc
+ sed -i 's|CC_\$cc_name|CC_gcc|g' configure # for 'make test' with gcc
  ./configure && make
  if gcc --version; then
   make CC=gcc test

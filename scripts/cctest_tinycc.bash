@@ -18,6 +18,11 @@ skip_files=(
  # tcc specific
  112_backtrace.c
  126_bound_global.c
+
+ # arm64
+ 138_arm64_encoding.c
+ 139_arm64_errors.c
+ 140_arm64_extasm.c
 )
 
 dt_files=(
