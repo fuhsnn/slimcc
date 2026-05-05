@@ -802,6 +802,155 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       continue;
     }
 
+    if (equal(tok, "__VA_SLICE_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      MacroArg *start_arg = find_arg(&tok, tok, ctx);
+      Token *start_tok = read_const_expr(start_arg->tok);
+      int64_t start = eval_const_expr(start_tok);
+      
+      tok = skip(tok, ",");
+      
+      MacroArg *len_arg = find_arg(&tok, tok, ctx);
+      Token *len_tok = read_const_expr(len_arg->tok);
+      int64_t len = eval_const_expr(len_tok);
+      
+      if (start <= 0)
+      {
+        error_tok(start_tok, "__VA_SLICE__ Non-positive start");
+      }
+      if(len < 0)
+      {
+        error_tok(start_tok, "__VA_SLICE__ Negative length");
+      }
+      
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg))
+      {
+        continue;
+      }
+      
+      Token *arg_iter = vaarg->tok;
+      int level = 0;
+      for(int64_t i = 1 ; i < start && arg_iter->kind != TK_EOF ; i++)
+      {
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          arg_iter = arg_iter->next;
+        }
+        
+        if(arg_iter->kind != TK_EOF)
+        {
+          arg_iter = arg_iter->next; // skip comma
+        }
+      }
+      
+      int64_t len_it = 0;
+      level = 0;
+      while(arg_iter->kind != TK_EOF && len_it < len)
+      {
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next;
+        }
+        len_it += 1;
+        if(arg_iter->kind != TK_EOF && len_it < len)
+        {
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next; // comma
+        }
+      }
+      
+      tok = tok->next; // skip final )
+      continue;
+    }
+    if(equal(tok, "__VA_COUNT_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      tok = skip(tok, ")");
+      
+      MacroArg *vaarg;
+      if (!has_non_empty_va_arg(ctx, &vaarg))
+      {
+        cur = cur->next = new_num_token(0, tok, tok->next);
+        continue;
+      }
+      Token *arg_iter = vaarg->tok;
+      int64_t count = 0;
+      int level = 0;
+      while(arg_iter->kind != TK_EOF)
+      {
+        while(!(level == 0 && equal(arg_iter, ",")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          arg_iter = arg_iter->next;
+        }
+        if(arg_iter->kind != TK_EOF)
+          arg_iter = arg_iter->next; // skip comma
+        
+        count += 1;
+      }
+      
+      cur = cur->next = new_num_token(count, tok, tok->next);
+      
+      continue;
+    }
+    if(equal(tok, "__REPEAT_INTERNAL__") && consume(&tok, tok->next, "("))
+    {
+      MacroArg *n_arg = find_arg(&tok, tok, ctx);
+      Token *n_tok = read_const_expr(n_arg->tok);
+      int64_t n = eval_const_expr(n_tok);
+      
+      tok = skip(tok, ")");
+      
+      MacroArg *vaarg = &ctx->args[ctx->m->arg_cnt - 1];
+      
+      int level = 0;
+      for(int64_t i = 0; i < n ; i++)
+      {
+        Token *arg_iter = vaarg->tok;
+        while(!(level == 0 && equal(arg_iter, ")")) && arg_iter->kind != TK_EOF)
+        {
+          if(equal(arg_iter, "("))
+          {
+            level += 1;
+          }
+          if(equal(arg_iter, ")"))
+          {
+            level -= 1;
+          }
+          
+          cur = cur->next = copy_token(arg_iter);
+          arg_iter = arg_iter->next;
+        }
+      }
+      
+      continue;
+    }
+    
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
       Token *rparen = NULL;
@@ -1788,6 +1937,79 @@ static Token *has_extension_macro(Token *start) {
   return new_bool_int_token(has_it, start, tok);
 }
 
+static void iter_interp_str(const char *str, int len, void(*on_found_interp)(const char *, int len, void *arg), void *arg)
+{
+  for(int i = 0 ; i < len - 1 ; i++)
+  {
+    if(str[i] == '{')
+    {
+      if(str[i + 1] == '{')
+      {
+        i++;
+      }
+      else
+      {
+        // probably should tokenize_until_unbalanced_closing_curly_brace
+        int interp_len = 0;
+        int single_quote = 0; // open brace adds 1
+        int double_quote = 0;
+        while(balance)
+        {
+          if(str[i] == '{')
+            balance += 1;
+          else if(str[i] == '}')
+            balance -= 1;
+        }
+        
+        on_found_interp(str, );
+      }
+    }
+  }
+}
+
+static Token *interp_count_macro(Token *start)
+{
+  Token *tok = skip(start, "(");
+  if(!equal(tok, "$"))
+  {
+    return new_num_token(0, start, tok);
+  }
+  tok = skip(tok, "$");
+  if(tok->kind != TK_STR)
+    return new_eof(start);
+  
+  const char *str = tok->loc + 1; // skip first quote
+  int len = tok->len - 2; // don't include first and last quotes
+  
+  int count = 0;
+  for(int i = 0 ; i < len - 1 ; i++)
+  {
+    if(str[i] == '{')
+    {
+      if(str[i + 1] == '{')
+      {
+        i++;
+      }
+      else
+      {
+        count += 1;
+        
+      }
+    }
+  }
+}
+
+static Token *interp_at_macro(Token *start)
+{
+  
+}
+
+static Token *base_str_at_macro(Token *start)
+{
+  
+}
+
+
 void init_macros(void) {
   define_macro("__slimcc__", "1");
   macro_head = macro_defs;
@@ -1818,6 +2040,10 @@ void init_macros(void) {
   define_macro("__x86_64", "1");
   define_macro("__x86_64__", "1");
 
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_SLICE__(s,l,...) __VA_SLICE_INTERNAL__(s,l)\n"), NULL, NULL));
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__VA_COUNT__(...) __VA_COUNT_INTERNAL__()\n"), NULL, NULL));
+  read_macro_definition(&(Token*){}, tokenize(new_file("<built-in>", "__REPEAT__(n, ...) __REPEAT_INTERNAL__(n)\n"), NULL, NULL));
+
   add_builtin("__DATE__", date_macro, true);
   add_builtin("__TIME__", time_macro, true);
   add_builtin("__FILE__", file_macro, true);
@@ -1835,6 +2061,10 @@ void init_macros(void) {
   add_builtin("__has_include", has_include_macro, true);
   add_builtin("__has_include_next", has_include_next_macro, true);
   add_builtin("__has_embed", has_embed_macro, true);
+  
+  add_builtin("__INTERP_COUNT__", interp_count_macro, true);
+  add_builtin("__INTERP_AT__", interp_at_macro, true);
+  add_builtin("__BASE_STR_AT__", base_str_at_macro, true);
 }
 
 void dump_defines(FILE *out) {
