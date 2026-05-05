@@ -204,7 +204,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler c3ce45a2fe2d05cbf6e29f51df59091c1c75fbc6 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 4926ab7c15bf16792f4f8d05666ce1b262bf1f7e c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -264,7 +264,7 @@ test_cfitsio() {
 }
 
 test_cgit() {
- github_tar zx2c4 cgit v1.3
+ github_tar zx2c4 cgit v1.3.1
  make get-git
  make CC=$CC test
 }
@@ -662,7 +662,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh f0cd1192533b913fd77db81f5b41c9808aff3fb2 ksh93
+ git_fetch https://github.com/ksh93/ksh 1ff975050ad41035a85a36532a0c57bbeed2a216 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -741,7 +741,7 @@ test_libgc() {
 }
 
 test_libgit2(){
- github_tar libgit2 libgit2 v1.9.2
+ github_tar libgit2 libgit2 v1.9.3
  use_stdatomic '#ifdef GIT_THREADS' src/util/thread.h
  sed -i 's|defined(GIT_BUILTIN_ATOMIC)|1|g' src/util/thread.h
  sed -i 's|__atomic_exchange(ptr, &newval, &foundval,|return atomic_exchange_explicit(ptr, newval,|g' src/util/thread.h
@@ -1329,7 +1329,7 @@ test_python() {
 }
 
 test_qbe() {
- git_fetch git://c9x.me/qbe.git de6fdc1b8c41da56f4dbebfb276c5694218ea1c1 qbe
+ git_fetch git://c9x.me/qbe.git adab20908f4f5b922b23a045b99520b2a4e65dee qbe
  make CC="$CC" check
 }
 
@@ -1340,7 +1340,7 @@ test_quickjs() {
 }
 
 test_redis() {
- github_tar redis redis 8.6.2
+ github_tar redis redis 8.6.3
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -1499,7 +1499,7 @@ test_sokol() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.53.0
+ github_tar sqlite sqlite version-3.53.1
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make fuzztest tcltest
@@ -1679,7 +1679,7 @@ test_wren() {
 }
 
 test_wuffs() {
- git_fetch https://github.com/google/wuffs d534b7968a26aaa17a828a0001f0d7b172fbee6d wuffs
+ git_fetch https://github.com/google/wuffs 3cea27456c42e123080c1fa34c3bc9e25e05f90f wuffs
  sed -i 's|Building (C)|Build CC:$CC|g' ./build-example.sh
  ./build-example.sh convert-to-nia
  ./build-example.sh gifplayer
