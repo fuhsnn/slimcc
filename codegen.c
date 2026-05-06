@@ -2819,19 +2819,17 @@ static void gen_stmt(Node *node) {
     gen_expr(node->m.lhs);
     Printstn("jmp *%%rax");
     return;
-  case ND_DEFAULT: {
+  case ND_DEFAULT:
     Printfsn(".L.default.%" PRIi64 ":", node->cases.parent_sw->ctrl.id);
     return;
-  }
   case ND_CASE:
     Printfsn(".L.case.%" PRIi64 ".%" PRIi64 ":", node->cases.parent_sw->ctrl.id,
              node->cases.id);
     return;
-  case ND_LABEL: {
+  case ND_LABEL:
     if (node->lbl.id)
       Printfsn(".L.jmp.%" PRIi64 ":", node->lbl.id);
     return;
-  }
   case ND_RETURN: {
     if (codegen_fn->is_noreturn)
       error_tok(node->tok, "function is noreturn");

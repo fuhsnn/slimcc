@@ -5602,7 +5602,7 @@ static Node *primary(Token **rest, Token *tok) {
         if (sc->enum_ty->kind == TY_BITINT) {
           Node *n = new_node(ND_NUM, tok);
           n->num.bitint_data = calloc(1, bitint_buffer_size(sc->enum_ty));
-          n->num.bitint_data[0].as64 = sc->enum_val;
+          n->num.bitint_data->as64 = sc->enum_val;
           n->ty = sc->enum_ty;
           return n;
         }
