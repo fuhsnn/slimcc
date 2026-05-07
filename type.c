@@ -117,18 +117,46 @@ Type *copy_type(Type *ty) {
   return ret;
 }
 
-Type *unqual(Type *ty) {
-  return ty->origin ? ty->origin : ty;
+static Type *copy_array_ty(Type *elem_ty, Type *ty) {
+  if (!is_array(ty))
+    return elem_ty;
+
+  Type *ret = copy_type(ty);
+  ret->base = copy_array_ty(elem_ty, ty->base);
+  return ret;
 }
 
-Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
+static Type *get_elem(Type *ty) {
+  while (is_array(ty))
+    ty = ty->base;
+  return ty;
+}
+
+Type *unqual(Type *ty) {
+  if (!is_array(ty))
+    return ty->origin ? ty->origin : ty;
+
+  Type *elem_ty = get_elem(ty);
+  if ((elem_ty->qual | Q_ATOMIC) == Q_ATOMIC)
+    return ty;
+
+  if (elem_ty->qual & Q_ATOMIC)
+    elem_ty = add_qual(Q_ATOMIC, elem_ty->origin, NULL);
+  else
+    elem_ty = elem_ty->origin;
+
+  ty = copy_array_ty(elem_ty, ty);
+  for (Type *t = ty; is_array(t); t = t->base)
+    t->align = 0;
+  return ty;
+}
+
+Type *new_derived_type(Type *newty, QualMask qual, Type *ty) {
+  if (is_array(ty))
+    return copy_array_ty(new_derived_type(NULL, qual, get_elem(ty)), ty);
+
   int align = ty->align;
   ty = ty->origin ? ty->origin : ty;
-
-  if (tok && ty->kind != TY_AUTO)
-    if (qual & Q_RESTRICT)
-      if (ty->kind != TY_PTR || ty->base->kind == TY_FUNC)
-        error_tok(tok, "type cannot be restrict qualified");
 
   if (!newty)
     newty = arena_malloc(&cc1_arena, sizeof(Type));
@@ -140,7 +168,13 @@ Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok) {
 }
 
 Type *aligned_type(int align, Type *ty) {
-  Type *ret = new_derived_type(NULL, ty->qual, ty, NULL);
+  if (is_array(ty)) {
+    Type *ret = copy_type(ty);
+    ret->align = align;
+    return ret;
+  }
+
+  Type *ret = new_derived_type(NULL, ty->qual, ty);
   ret->align = align;
 
   if (ty->size < 0) {
@@ -150,12 +184,23 @@ Type *aligned_type(int align, Type *ty) {
   return ret;
 }
 
-Type *qual_type(QualMask msk, Type *ty, Token *tok) {
+static Type *add_qual2(QualMask msk, Type *ty, Token *tok) {
   if (msk == (msk & ty->qual))
     return ty;
+  if (tok && chk_qual_type(msk, ty))
+    error_tok(tok, "invalid qualifier for type");
 
-  Type *ret = new_derived_type(NULL, msk | ty->qual, ty, tok);
+  return new_derived_type(NULL, msk | ty->qual, ty);
+}
 
+Type *add_qual(QualMask msk, Type *ty, Token *tok) {
+  if (!msk)
+    return ty;
+
+  if (is_array(ty))
+    return copy_array_ty(add_qual2(msk, get_elem(ty), tok), ty);
+
+  Type *ret = add_qual2(msk, ty, tok);
   if (ty->size < 0) {
     ret->decl_next = ty->decl_next;
     ty->decl_next = ret;
@@ -163,10 +208,16 @@ Type *qual_type(QualMask msk, Type *ty, Token *tok) {
   return ret;
 }
 
-void cvqual_type(Type **ty_p, Type *ty2) {
-  QualMask msk = ty2->qual & (Q_CONST | Q_VOLATILE);
-  if (msk)
-    *ty_p = qual_type(msk, *ty_p, NULL);
+bool chk_qual_type(QualMask qual, Type *ty) {
+  if (ty->kind == TY_AUTO)
+    return false;
+  if (qual & Q_RESTRICT)
+    if (ty->kind != TY_PTR || ty->base->kind == TY_FUNC)
+      return true;
+  if (qual & Q_ATOMIC)
+    if (is_decay_ty(ty))
+      return true;
+  return false;
 }
 
 bool mem_iter(Member **mem) {
@@ -486,11 +537,8 @@ Type *pointer_to(Type *base) {
 }
 
 Type *ptr_decay(Type *ty) {
-  if (is_array(ty)) {
-    Type *pty = pointer_to(ty->base);
-    cvqual_type(&pty->base, ty);
-    return pty;
-  }
+  if (is_array(ty))
+    return pointer_to(ty->base);
   if (ty->kind == TY_FUNC)
     return pointer_to(ty);
   return ty;
@@ -647,7 +695,7 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, int msk, Node **cond, Obj **co
 
     return array_of(base, -1);
   }
-  return qual_type(msk, ty1, NULL);
+  return add_qual(msk, ty1, NULL);
 }
 
 static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
@@ -664,7 +712,7 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
       return ty2;
 
     if (ty1->base->kind == TY_VOID || ty2->base->kind == TY_VOID)
-      return pointer_to(qual_type(ty1->base->qual | ty2->base->qual, ty_void, NULL));
+      return pointer_to(add_qual(ty1->base->qual | ty2->base->qual, ty_void, NULL));
 
     if (is_compatible(ty1->base, ty2->base))
       return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, 0, cond, &(Obj *){0}));

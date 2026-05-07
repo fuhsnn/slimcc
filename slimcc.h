@@ -900,6 +900,7 @@ typedef enum {
 } TypeKind;
 
 typedef enum {
+  Q_NONE = 0,
   Q_CONST = 1,
   Q_VOLATILE = 1 << 1,
   Q_ATOMIC = 1 << 2,
@@ -1028,10 +1029,10 @@ Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
 void add_type_chk_const(Node *node);
 Type *unqual(Type *ty);
-Type *new_derived_type(Type *newty, QualMask qual, Type *ty, Token *tok);
+Type *new_derived_type(Type *newty, QualMask qual, Type *ty);
+bool chk_qual_type(QualMask qual, Type *ty);
 Type *aligned_type(int align, Type *ty);
-Type *qual_type(QualMask msk, Type *ty, Token *tok);
-void cvqual_type(Type **ty_p, Type *ty2);
+Type *add_qual(QualMask msk, Type *ty, Token *tok);
 bool mem_iter(Member **mem);
 Node *assign_cast(Type *to, Node *expr);
 
