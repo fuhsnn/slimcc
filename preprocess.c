@@ -27,12 +27,6 @@ typedef struct {
   bool omit_comma;
 } MacroContext;
 
-typedef struct MacroDef MacroDef;
-struct MacroDef {
-  MacroDef *next;
-  const char *name;
-};
-
 typedef struct {
   Token *tok;
   bool is_else;
@@ -46,8 +40,6 @@ static struct {
 } cond_incl;
 
 static Macro *locked_macros;
-static MacroDef *macro_head;
-static MacroDef *macro_defs = &(MacroDef){0};
 static HashMap macros;
 static HashMap pragma_once;
 static HashMap include_guards;
@@ -437,8 +429,6 @@ static Macro *new_macro(const char *name, bool is_objlike) {
   Macro *m = arena_calloc(&pp_arena, sizeof(Macro));
   m->is_objlike = is_objlike;
   hashmap_put(&macros, name, m);
-  macro_defs = macro_defs->next = arena_calloc(&pp_arena, sizeof(MacroDef));
-  macro_defs->name = name;
   return m;
 }
 
@@ -1793,7 +1783,6 @@ static Token *has_extension_macro(Token *start) {
 
 void init_macros(void) {
   define_macro("__slimcc__", "1");
-  macro_head = macro_defs;
 
   define_macro("__STDC_EMBED_EMPTY__", "2");
   define_macro("__STDC_EMBED_FOUND__", "1");
@@ -1841,12 +1830,16 @@ void init_macros(void) {
 }
 
 void dump_defines(FILE *out) {
-  for (MacroDef *d = macro_head; d; d = d->next) {
-    Macro *m = hashmap_get(&macros, d->name);
-    if (!m || m->is_locked || m->handler)
+  for (int32_t i = 0; i < macros.capacity; i++) {
+    HashEntry *ent = &macros.buckets[i];
+    if (!ent->key || ent->key == TOMBSTONE)
       continue;
 
-    fprintf(out, "#define %s", d->name);
+    Macro *m = ent->val;
+    if (m->handler)
+      continue;
+
+    fprintf(out, "#define %.*s", ent->keylen, ent->key);
     if (!m->is_objlike) {
       fprintf(out, "(");
       for (Token *t = m->params; t; t = t->next) {
@@ -1864,7 +1857,6 @@ void dump_defines(FILE *out) {
       fprintf(out, "%.*s", t->len, t->loc);
     }
     fprintf(out, "\n");
-    m->is_locked = true;
   }
 }
 

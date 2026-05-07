@@ -232,6 +232,10 @@ void hashmap_delete(HashMap *map, const char *key);
 void hashmap_delete2(HashMap *map, const char *key, int keylen);
 void hashmap_test(void);
 
+// Represents a deleted hash entry
+#define TOMBSTONE ((void *)-1)
+#define TOMBSTONE_CASE ((uintptr_t)-1)
+
 //
 // strings.c
 //

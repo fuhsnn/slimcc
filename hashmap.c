@@ -9,10 +9,6 @@
 
 S_ASSERT(INIT_SIZE > 0 && SHOULD_REHASH(INIT_SIZE - 1, INIT_SIZE))
 
-// Represents a deleted hash entry
-#define TOMBSTONE ((void *)-1)
-#define TOMBSTONE_CASE ((uintptr_t)-1)
-
 static uint64_t fnv_hash(const char *s, int len) {
   uint64_t hash = 0xcbf29ce484222325;
   for (int i = 0; i < len; i++) {
