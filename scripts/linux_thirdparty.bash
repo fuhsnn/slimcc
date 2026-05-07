@@ -52,7 +52,7 @@ test_binn() {
 }
 
 test_bfs() {
- github_tar tavianator bfs 4.1.1
+ github_tar tavianator bfs 4.1.2
  ./configure
  make check
 }
@@ -204,7 +204,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 4926ab7c15bf16792f4f8d05666ce1b262bf1f7e c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 54910233331ce64e898b5ece7cf4005540ecd8ac c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -662,7 +662,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 1ff975050ad41035a85a36532a0c57bbeed2a216 ksh93
+ git_fetch https://github.com/ksh93/ksh 7ec4fe133498055d1b6545cd5deb963f1bd2e02c ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -933,7 +933,7 @@ test_libxo_chimerautils() {
 }
 
 test_libyaml() {
- git_fetch https://github.com/yaml/libyaml 840b65c40675e2d06bf40405ad3f12dec7f35923 libyaml
+ github_tar yaml libyaml 0.2.6-rc.1
  cmake_init
  make && make test
 }
@@ -1057,7 +1057,7 @@ test_monocypher() {
 }
 
 test_mpack() {
- git_fetch https://github.com/ludocode/mpack a2d720270329be5d2179cd71aad6c8014d1cc555 mpack
+ git_fetch https://github.com/ludocode/mpack 90716842d49eb4c9e7d62a2b47ad3ba73cba429f mpack
  sed -i 's|compiler != "TinyCC"|False|g' test/unit/configure.py
  sed -i 's|^ninja |& -j1 |g' tools/unit.sh
  tools/unit.sh all
@@ -1263,7 +1263,7 @@ test_perl() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.5
+ github_tar php php-src php-8.5.6
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C) || defined(__TINYC__)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
@@ -1329,7 +1329,7 @@ test_python() {
 }
 
 test_qbe() {
- git_fetch git://c9x.me/qbe.git adab20908f4f5b922b23a045b99520b2a4e65dee qbe
+ git_fetch git://c9x.me/qbe.git fbe3cea2011653434d272fa6643158eeef37a997 qbe
  make CC="$CC" check
 }
 
@@ -1372,7 +1372,7 @@ test_redis() {
 }
 
 test_valkey() {
- github_tar valkey-io valkey 9.0.3
+ github_tar valkey-io valkey 9.0.4
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -2074,7 +2074,7 @@ build_raylib_raygui() {
 build_simplecc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_simplecc.bash
 
- git_fetch git://git.simple-cc.org/scc ff78271fdd08cf88ba3e89fac72a563fd93f12f9 simplecc
+ git_fetch git://git.simple-cc.org/scc 117094fdd583ac0907bef5e80e27f23a84847735 simplecc
  make CC="$CC" HOSTCC="$CC" NOCARET=
  echo 'int puts(const char*); int main(){ puts("hello_world"); return 0; }' > hello.c
  ./bin/scc hello.c -o hello
@@ -2165,7 +2165,7 @@ bootstrap_uclibcng() {
  make ARCH=x86_64 prefix= DESTDIR=$PWD/../linuxhdr/ install
  cd ../
 
- git_fetch https://github.com/wbx-github/uclibc-ng 139bb70c28cd99dcce3fa56739ff619973cd998f uclibcng
+ git_fetch https://github.com/wbx-github/uclibc-ng 1731400fc5a58fea7d82c7063b125b92dd265771 uclibcng
  sed -i 's|dN|dM|g' extra/scripts/gen_bits_syscall_h.sh
  sed -i 's|:$(DEVEL_PREFIX)|:$(PREFIX)$(DEVEL_PREFIX)|g' Makefile.in
  sed -i 's|:$(RUNTIME_PREFIX)|:$(PREFIX)$(RUNTIME_PREFIX)|g' Makefile.in
@@ -2205,7 +2205,7 @@ bootstrap_uclibcng() {
  make test-all
  cd ../
 
- git_fetch https://git.uclibc-ng.org/git/uclibc-ng-test.git e685c50e1dd57e0364ab780a95b0d0e6c6c5243e uclibc-ng-test
+ git_fetch https://github.com/wbx-github/uclibc-ng-test e685c50e1dd57e0364ab780a95b0d0e6c6c5243e uclibc-ng-test
  sed -i 's| strdupa |strdup|g' test/string/tester.c
  cd test/
  rm -r dlopen nptl pthread tls math # pthread/tls/math not built
