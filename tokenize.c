@@ -817,12 +817,16 @@ static bool convert_pp_bitint(const char *begin, const char *end, Node *node, in
     push_digit(&data, &cnt32, base, digit);
   }
 
-  int64_t bit_width;
+  int64_t bit_width = 0;
   uint32_t top_limb = (&data->as32)[cnt32 - 1];
   if (top_limb) {
+#ifndef Clz64
     for (int i = 0; i < 32; i++)
       if (top_limb & (1ULL << i))
         bit_width = i + 1;
+#else
+    bit_width = 64 - Clz64(top_limb);
+#endif
     bit_width += (cnt32 - 1) * 32 + !is_unsigned;
   } else {
     bit_width = (is_unsigned || opt_std > STD_C23) ? 1 : 2;

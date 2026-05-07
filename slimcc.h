@@ -89,6 +89,9 @@
 # if SLIMCC_HAS_BUILTIN(__builtin_ctzll)
 #  define Ctz64(x) __builtin_ctzll((uint64_t)(x))
 # endif
+# if SLIMCC_HAS_BUILTIN(__builtin_clzll)
+#  define Clz64(x) __builtin_clzll((uint64_t)(x))
+# endif
 #endif
 
 #if defined(__has_include)
@@ -99,6 +102,9 @@
 #  endif
 #  ifndef Ctz64
 #   define Ctz64(x) (int)stdc_trailing_zeros((uint64_t)(x))
+#  endif
+#  ifndef Clz64
+#   define Clz64(x) (int)stdc_leading_zeros((uint64_t)(x))
 #  endif
 # endif
 #endif
