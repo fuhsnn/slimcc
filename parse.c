@@ -537,11 +537,6 @@ static Node *cond_cast(Node *expr) {
   return new_cast(expr, ty_bool);
 }
 
-static void apply_cv_qualifier(Node *node, Type *ty2) {
-  add_type(node);
-  cvqual_type(&node->ty, ty2);
-}
-
 static void free_initializers(Initializer *init) {
   if (init->kind == INIT_LIST && init->list.cnt) {
     for (int i = 0; i < init->list.cnt; i++)
@@ -1279,7 +1274,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     if (tok->kind != TK_IDENT || tok->next->kind != TK_EQ)
       error_tok(tok, "unsupported form for type inference");
 
-  return qual_type(qual, ty, tok);
+  return add_qual(qual, ty, tok);
 }
 
 static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
@@ -1342,9 +1337,7 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
     if (is_def)
       chain_expr(&expr, calc_vla2(ty, tok, &attr));
 
-    Type *param_ty = ptr_decay(ty);
-    if (ty->param_qual)
-      param_ty = qual_type(ty->param_qual, param_ty, tok);
+    Type *param_ty = add_qual(ty->param_qual, ptr_decay(ty), tok);
 
     if (param_ty->kind == TY_VOID)
       error_tok(tok, "parameter declared void");
@@ -1444,7 +1437,7 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
   while (consume_tk(&tok, tok, TK_MUL)) {
     QualMask q = pointer_qualifiers(&tok, tok);
-    ty = qual_type(q, pointer_to(ty), tok);
+    ty = add_qual(q, pointer_to(ty), tok);
   }
   *rest = tok;
   return ty;
@@ -2291,7 +2284,10 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     init->kind = INIT_EXPR;
     init->expr = assign(rest, tok);
     ptr_convert(&init->expr);
-    new_derived_type(ty, ty->qual, init->expr->ty, tok);
+
+    if (chk_qual_type(ty->qual, init->expr->ty))
+      error_tok(tok, "invalid qualifier for type");
+    new_derived_type(ty, ty->qual, init->expr->ty);
     init->ty = ty;
     return;
   }
@@ -2305,7 +2301,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   var->ty = init->ty;
 
   if (ty->is_flexible && init->kind == INIT_LIST) {
-    ty = new_derived_type(NULL, ty->qual, ty, tok);
+    ty = new_derived_type(NULL, ty->qual, ty);
 
     Initializer *i = &init->list.data[init->list.cnt - 1];
     if (i->ty->size > 0)
@@ -4605,13 +4601,7 @@ static Node *unary(Token **rest, Token *tok) {
     add_type(node);
     if (node->ty->kind == TY_FUNC)
       return node;
-
-    Type *ty = node->ty;
-    node = new_unary(ND_DEREF, node, tok);
-
-    if (is_array(ty))
-      apply_cv_qualifier(node, ty);
-    return node;
+    return new_unary(ND_DEREF, node, tok);
   }
 
   if (tok->kind == TK_NOT)
@@ -4945,7 +4935,7 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
       t = t->decl_next;
 
       int align = t2->align;
-      new_derived_type(t2, t2->qual, ty, tok);
+      new_derived_type(t2, t2->qual, ty);
       t2->align = MAX(t2->align, align);
     }
   }
@@ -5075,11 +5065,11 @@ static Node *struct_ref(Node *node, Token *tok) {
       error_tok(tok, "no such member");
     node = new_unary(ND_MEMBER, node, tok);
     node->m.member = mem;
-    apply_cv_qualifier(node, ty);
+
+    ty = node->ty = add_qual(ty->qual & (Q_CONST | Q_VOLATILE), mem->ty, NULL);
 
     if (mem->name)
       break;
-    ty = mem->ty;
   }
   node->is_nonlval = is_nonlval;
   return node;
@@ -5117,13 +5107,7 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
       Token *start = tok;
       Node *idx = expression(&tok, tok->next);
       tok = skip_tk(tok, TK_RBRACK);
-
-      add_type(node);
-      Type *ty = node->ty;
       node = new_unary(ND_DEREF, new_add(node, idx, start), start);
-
-      if (is_array(ty))
-        apply_cv_qualifier(node, ty);
       continue;
     }
 
@@ -5135,13 +5119,8 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
 
     if (tok->kind == TK_ARROW) {
       // x->y is short for (*x).y
-      add_type(node);
-      Type *ty = node->ty;
       node = new_unary(ND_DEREF, node, tok);
       node = struct_ref(node, tok->next);
-
-      if (is_array(ty))
-        apply_cv_qualifier(node, ty);
       tok = tok->next->next;
       continue;
     }
@@ -5378,9 +5357,8 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     add_type(node);
     if (node->ty->kind != TY_PTR || node->ty->base->kind == TY_VOID)
       error_tok(tok, "expected pointer to non-void type");
-    Type *base = node->ty->base;
-    if (!(base->qual & Q_ATOMIC))
-      node->ty = pointer_to(qual_type(Q_ATOMIC, base, node->tok));
+
+    node->ty = pointer_to(add_qual(Q_ATOMIC, node->ty->base, node->tok));
     return node;
   }
 
