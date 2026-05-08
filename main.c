@@ -1121,49 +1121,47 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
-  arena_on(&cc1_arena);
-  arena_on(&pp_arena);
-
-  init_macros();
-  platform_init_cc1();
-  cli_macros(is_asm_pp);
-
   FILE *out = open_file(output_file);
+  arena_on(&cc1_arena);
 
-  Token *tok = preprocess(input_file, &opt_include, &opt_imacros);
+  defer {
+    arena_off(&cc1_arena);
+    close_file(out);
+  }
 
-  if (opt_M || opt_MD) {
-    print_dependencies(input_file);
-    if (opt_M) {
-      close_file(out);
+  Token *tok;
+  {
+    arena_on(&pp_arena);
+    defer {
       arena_off(&pp_arena);
-      arena_off(&cc1_arena);
+    }
+
+    init_macros();
+    platform_init_cc1();
+    cli_macros(is_asm_pp);
+
+    tok = preprocess(input_file, &opt_include, &opt_imacros);
+
+    if (opt_M || opt_MD) {
+      print_dependencies(input_file);
+      if (opt_M)
+        return;
+    }
+
+    if (opt_E) {
+      if (opt_dM)
+        dump_defines(out);
+      else
+        print_tokens(tok, out);
       return;
     }
+
+    tok = prepare_parse(tok);
   }
-
-  if (opt_E) {
-    if (opt_dM)
-      dump_defines(out);
-    else
-      print_tokens(tok, out);
-
-    close_file(out);
-    arena_off(&pp_arena);
-    arena_off(&cc1_arena);
-    return;
-  }
-
-  tok = prepare_parse(tok);
-
-  arena_off(&pp_arena);
 
   Obj *prog = parse(tok);
 
   codegen(prog, out);
-
-  close_file(out);
-  arena_off(&cc1_arena);
 }
 
 void run_assembler_gnustyle(StringArray *args, const char *input, const char *output) {
