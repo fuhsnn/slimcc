@@ -1093,7 +1093,7 @@ static void print_dependencies(const char *input) {
   if (opt_MF)
     path = opt_MF;
   else if (opt_MD)
-    path = replace_extn(opt_o ? opt_o : input, ".d");
+    path = replace_extn(opt_o ?: input, ".d");
   else if (opt_o)
     path = opt_o;
   else
@@ -1169,7 +1169,7 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
 void run_assembler_gnustyle(StringArray *args, const char *input, const char *output) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_as ? opt_use_as : default_as);
+  strarray_push(&arr, opt_use_as ?: default_as);
   strarray_push(&arr, input);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
@@ -1224,7 +1224,7 @@ LinkType link_type_gnustyle(void) {
 }
 
 void ldarg_gnu_base(StringArray *arr, const char *output) {
-  strarray_push(arr, opt_use_ld ? opt_use_ld : default_ld);
+  strarray_push(arr, opt_use_ld ?: default_ld);
   strarray_push(arr, "-o");
   strarray_push(arr, output);
   strarray_push(arr, "-m");
@@ -1415,7 +1415,7 @@ int main(int argc, char **argv) {
 
     const char *input = input_args.data[i];
 
-    FileType type = opt_x ? opt_x : get_file_type(input);
+    FileType type = opt_x ?: get_file_type(input);
 
     if (type == FILE_LDARG) {
       strarray_push(&ld_args, input);
@@ -1455,7 +1455,7 @@ int main(int argc, char **argv) {
     // Handle .S
     if (type == FILE_PP_ASM) {
       if (opt_S || opt_E || opt_M) {
-        run_cc1(input, (opt_o ? opt_o : "-"), true);
+        run_cc1(input, (opt_o ?: "-"), true);
         continue;
       }
       if (opt_c) {
@@ -1470,7 +1470,7 @@ int main(int argc, char **argv) {
     }
 
     if (opt_E || opt_M) {
-      run_cc1(input, (opt_o ? opt_o : "-"), false);
+      run_cc1(input, (opt_o ?: "-"), false);
       continue;
     }
 
@@ -1495,7 +1495,7 @@ int main(int argc, char **argv) {
     if (opt_c || opt_S || opt_E || opt_M)
       fprintf(stderr, "linker input unused\n");
     else
-      run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
+      run_linker(&ld_paths, &ld_args, opt_o ?: "a.out");
   }
 
   cleanup();

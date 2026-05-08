@@ -134,7 +134,7 @@ static Type *get_elem(Type *ty) {
 
 Type *unqual(Type *ty) {
   if (!is_array(ty))
-    return ty->origin ? ty->origin : ty;
+    return ty->origin ?: ty;
 
   Type *elem_ty = get_elem(ty);
   if ((elem_ty->qual | Q_ATOMIC) == Q_ATOMIC)
@@ -156,7 +156,7 @@ Type *new_derived_type(Type *newty, QualMask qual, Type *ty) {
     return copy_array_ty(new_derived_type(NULL, qual, get_elem(ty)), ty);
 
   int align = ty->align;
-  ty = ty->origin ? ty->origin : ty;
+  ty = ty->origin ?: ty;
 
   if (!newty)
     newty = arena_malloc(&cc1_arena, sizeof(Type));
