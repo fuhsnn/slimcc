@@ -1,7 +1,7 @@
 #include "slimcc.h"
 
-#define FREE_THRESHOLD (100 * 1024)
-#define ARENA_POOL_SIZE 8160
+constexpr int32_t FREE_THRESHOLD = 100 * 1024;
+constexpr int32_t ARENA_POOL_SIZE = 8160;
 
 struct Pool {
   char buf[ARENA_POOL_SIZE];
