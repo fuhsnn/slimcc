@@ -10,7 +10,7 @@ void strarray_push(StringArray *arr, const char *s) {
     arr->data = realloc(arr->data, sizeof(char *) * arr->capacity * 2);
     arr->capacity *= 2;
     for (int i = arr->len; i < arr->capacity; i++)
-      arr->data[i] = NULL;
+      arr->data[i] = nullptr;
   }
 
   arr->data[arr->len++] = s;

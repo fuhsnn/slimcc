@@ -422,7 +422,7 @@ static Type *bitwidth_to_ty(int width, bool is_unsigned) {
   case 16: return is_unsigned ? ty_ushort : ty_short;
   case 8:  return is_unsigned ? ty_uchar : ty_char;
   }
-  return NULL;
+  return nullptr;
 }
 
 static int32_t ovf_headroom(Type *ty, NodeKind kind) {
@@ -860,9 +860,9 @@ static void gen_bitfield_load(Node *node, int ofs) {
       Printftn("add $%d, %s", ofs, argreg64[1]);
     Printftn("movl $%" PRIi32 ", %s", (int32_t)mem->ty->bit_cnt, argreg32[0]);
     Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[2]);
-    load_val2(ty_int, mem->bit_width, argreg32[3], NULL);
-    load_val2(ty_int, mem->bit_offset, argreg32[4], NULL);
-    load_val2(ty_int, mem->ty->is_unsigned, argreg32[5], NULL);
+    load_val2(ty_int, mem->bit_width, argreg32[3], nullptr);
+    load_val2(ty_int, mem->bit_offset, argreg32[4], nullptr);
+    load_val2(ty_int, mem->ty->is_unsigned, argreg32[5], nullptr);
     gen_bitint_builtin_call2("__slimcc_bitint_bitfield_load");
     Printstn("mov %%rax, %%rcx");
     return;
@@ -976,14 +976,14 @@ static void gen_bitfield_store(Node *node, bool is_void) {
     pop(argreg64[2]);
     Printftn("movl $%" PRIi32 ", %s", (int32_t)mem->ty->bit_cnt, argreg32[0]);
     Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[1]);
-    load_val2(ty_int, mem->bit_width, argreg32[3], NULL);
-    load_val2(ty_int, mem->bit_offset, argreg32[4], NULL);
+    load_val2(ty_int, mem->bit_width, argreg32[3], nullptr);
+    load_val2(ty_int, mem->bit_offset, argreg32[4], nullptr);
     gen_bitint_builtin_call2("__slimcc_bitint_bitfield_save");
     if (!is_void) {
       Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[1]);
       Printftn("movl $%" PRIi32 ", %s", (int32_t)mem->bit_width, argreg32[0]);
       Printftn("movl $%" PRIi32 ", %s", (int32_t)mem->ty->bit_cnt, argreg32[2]);
-      load_val2(ty_int, mem->ty->is_unsigned, argreg32[3], NULL);
+      load_val2(ty_int, mem->ty->is_unsigned, argreg32[3], nullptr);
       gen_bitint_builtin_call2("__slimcc_bitint_sign_ext");
     }
     return;
@@ -1434,7 +1434,7 @@ static void gen_cast(Node *node) {
     Printftn("lea %s(%s), %s", tmpbuf(to_ty->size), lvar_ptr, argreg64[1]);
     Printftn("movl $%" PRIi32 ", %s", (int32_t)from_sz, argreg32[0]);
     Printftn("movl $%" PRIi32 ", %s", (int32_t)to_ty->bit_cnt, argreg32[2]);
-    load_val2(ty_int, from_ty->is_unsigned, argreg32[3], NULL);
+    load_val2(ty_int, from_ty->is_unsigned, argreg32[3], nullptr);
     gen_bitint_builtin_call2("__slimcc_bitint_sign_ext");
     return;
   }
@@ -1750,7 +1750,7 @@ static void gen_defr(Node *node) {
         continue;
       }
 
-      Obj *vla = defr->next ? defr->next->vla : NULL;
+      Obj *vla = defr->next ? defr->next->vla : nullptr;
       if (vla)
         Printftn("mov %d(%s), %%rsp", vla->ofs, vla->ptr);
       else
@@ -2220,8 +2220,8 @@ static void gen_bitint_arith(Node *node) {
   }
   case ND_DIV:
   case ND_MOD:
-    load_val2(ty_int, ty->is_unsigned, argreg32[3], NULL);
-    load_val2(ty_int, node->kind == ND_DIV, argreg32[4], NULL);
+    load_val2(ty_int, ty->is_unsigned, argreg32[3], nullptr);
+    load_val2(ty_int, node->kind == ND_DIV, argreg32[4], nullptr);
     gen_bitint_builtin_call(node->kind);
     return;
   case ND_SHL:
@@ -2229,7 +2229,7 @@ static void gen_bitint_arith(Node *node) {
   case ND_SAR:
     Printftn("movl %%eax, %s", argreg32[3]);
     if (node->kind != ND_SHL)
-      load_val2(ty_int, ty->is_unsigned, argreg32[4], NULL);
+      load_val2(ty_int, ty->is_unsigned, argreg32[4], nullptr);
     gen_bitint_builtin_call(node->kind);
     return;
   case ND_EQ:
@@ -2238,7 +2238,7 @@ static void gen_bitint_arith(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE: {
-    load_val2(ty_int, ty->is_unsigned, argreg32[3], NULL);
+    load_val2(ty_int, ty->is_unsigned, argreg32[3], nullptr);
     gen_bitint_builtin_call2("__slimcc_bitint_cmp");
 
     NodeKind kind;
@@ -2252,7 +2252,7 @@ static void gen_bitint_arith(Node *node) {
     case ND_GE: val = 1, kind = ND_NE; break;
     default:    internal_error();
     }
-    imm_cmp("%eax", NULL, val);
+    imm_cmp("%eax", nullptr, val);
     gen_cmp_setcc(kind, false);
     return;
   }
@@ -2427,7 +2427,7 @@ static void gen_expr2(Node *node, bool is_void) {
     push_bitint(sz);
     gen_cast_to_bitint(bits, node->m.rhs);
 
-    load_val2(ty_int, bits, argreg32[0], NULL);
+    load_val2(ty_int, bits, argreg32[0], nullptr);
     Printftn("lea %d(%s), %s", pop_bitint(sz), lvar_ptr, argreg64[1]);
     Printftn("lea %s(%s), %s", tmpbuf(sz), lvar_ptr, argreg64[2]);
     gen_bitint_builtin_call(node->arith_kind);
@@ -2435,10 +2435,10 @@ static void gen_expr2(Node *node, bool is_void) {
     pop("%rax");
     gen_mem_copy(tmpbuf(sz), lvar_ptr, "0", "%rax", res_ty->size);
 
-    load_val2(ty_int, bits, argreg32[0], NULL);
+    load_val2(ty_int, bits, argreg32[0], nullptr);
     Printftn("lea %s(%s), %s", tmpbuf(sz), lvar_ptr, argreg64[1]);
-    load_val2(ty_int, chk_bits, argreg32[2], NULL);
-    load_val2(ty_int, res_ty->is_unsigned, argreg32[3], NULL);
+    load_val2(ty_int, chk_bits, argreg32[2], nullptr);
+    load_val2(ty_int, res_ty->is_unsigned, argreg32[3], nullptr);
     gen_bitint_builtin_call2("__slimcc_bitint_overflow");
     return;
   }
@@ -2764,7 +2764,7 @@ static void gen_stmt(Node *node) {
       ax = "%eax", cx = "%ecx", dx = "%edx";
 
     int64_t case_cnt = 1;
-    Node *label = NULL;
+    Node *label = nullptr;
     for (CaseRange *cr = node->ctrl.sw_cases; cr; cr = cr->next) {
       if (cr->label == node->ctrl.sw_default)
         continue;
@@ -3375,7 +3375,7 @@ static bool imm_divmod_opt(NodeKind kind, Type *ty, Node *expr, int64_t val) {
       Printftn("%s", ty->size == 8 ? "cqto" : "cltd");
       Printftn("shr $%d, %s", (int)(ty->size * 8 - Ctz64(val)), dx);
       Printftn("add %s, %s", dx, ax);
-      imm_and(ax, NULL, (int32_t)((uint64_t)val - 1));
+      imm_and(ax, nullptr, (int32_t)((uint64_t)val - 1));
       Printftn("sub %s, %s", dx, ax);
       return true;
     }
@@ -3664,7 +3664,7 @@ static void gen_member_opt(Node *node, int64_t *ofs) {
 }
 
 static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void) {
-  Node *boolexpr = NULL;
+  Node *boolexpr = nullptr;
   bool has_not = false;
   *is_void = false;
   bool boolexpr_has_not;
@@ -3710,7 +3710,7 @@ static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void) {
     *flip = boolexpr_has_not;
     return boolexpr;
   }
-  return NULL;
+  return nullptr;
 }
 
 static bool gen_bool_opt(Node *node) {
@@ -4132,7 +4132,7 @@ static const char *gcc_reg_id(const char *loc, Token *tok) {
   // LLVM call these GCCRegNames
   static const char *const names[] = {"ax", "dx", "cx", "bx", "si", "di"};
 
-  unsigned long idx = strtoul(loc, NULL, 10);
+  unsigned long idx = strtoul(loc, nullptr, 10);
   if (idx >= 6)
     error_tok(tok, "unknown gcc register id");
   return names[idx];
@@ -4350,13 +4350,13 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
           continue;
         }
       }
-      ap->match = NULL;
+      ap->match = nullptr;
     }
     if (is_num && is_integer(ap->arg->ty) && is_const_expr(ap->arg, &ap->val)) {
       ap->kind = ASMOP_NUM;
       continue;
     }
-    if (is_symbolic && is_asm_symbolic_arg(ap->arg, NULL)) {
+    if (is_symbolic && is_asm_symbolic_arg(ap->arg, nullptr)) {
       ap->kind = ASMOP_SYMBOLIC;
       continue;
     }
@@ -4499,7 +4499,7 @@ static Reg acquire_out_tmp(Node *node) {
   if (node->gasm.ctx->frame_ptr2 && !asm_use.out[REG_X64_BX])
     return asm_use.out[REG_X64_BX] = true, REG_X64_BX;
 
-  return acquire_gp(asm_use.out, NULL, node->tok);
+  return acquire_gp(asm_use.out, nullptr, node->tok);
 }
 
 static void asm_prepare_regs(Node *node, int tmp_cnt) {
@@ -4606,7 +4606,7 @@ static void asm_gen_ptr(AsmParam *ap, char *ofs, const char **ptr, Reg tmpreg) {
 
 static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
   char ofs[STRBUF_SZ];
-  const char *ptr = NULL;
+  const char *ptr = nullptr;
   asm_gen_ptr(ap, ofs, &ptr, tmpreg);
 
   if (is_gp_reg(ap->reg)) {
@@ -4635,7 +4635,7 @@ static void asm_reg_input(AsmParam *ap, Reg tmpreg) {
 
 static void asm_reg_output(AsmParam *ap, Reg tmpreg) {
   char ofs[STRBUF_SZ];
-  const char *ptr = NULL;
+  const char *ptr = nullptr;
   asm_gen_ptr(ap, ofs, &ptr, tmpreg);
 
   if (is_gp_reg(ap->reg)) {
@@ -4896,7 +4896,7 @@ static void asm_body(Node *node) {
           continue;
         }
         if (is_gp_reg(ap->reg)) {
-          const char *regname = NULL;
+          const char *regname = nullptr;
           switch (mod) {
           case 'h': regname = reg_high_byte(ap->reg); break;
           case 'b': regname = regs[ap->reg][0]; break;
@@ -4964,7 +4964,7 @@ static void gen_asm(Node *node) {
     Printftn("%s", node->gasm.str_tok->str);
     return;
   }
-  asm_alt_ptr.rbp = asm_alt_ptr.rbx = NULL;
+  asm_alt_ptr.rbp = asm_alt_ptr.rbx = nullptr;
   asm_fill_ops(node);
   asm_gen_operands();
 
@@ -5096,7 +5096,7 @@ static void emit_data(Obj *var) {
 
     Obj tmp_var = *var;
     tmp_var.is_tls = false;
-    tmp_var.asm_name = tmp_var.alias_name = NULL;
+    tmp_var.asm_name = tmp_var.alias_name = nullptr;
 
     emit_symbol(&tmp_var, name_v);
     Printstn(".data");
@@ -5269,14 +5269,14 @@ void emit_text(Obj *fn) {
     Printftn(".size \"%s\", .-\"%s\"", fn_name, fn_name);
 
     fclose(output_file);
-    output_file = NULL;
+    output_file = nullptr;
     return;
   }
 
   bool rtn_by_stk = is_mem_class(fn->ty->return_ty);
   int gp_count = rtn_by_stk;
   int fp_count = 0;
-  int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, NULL);
+  int arg_stk_size = calling_convention(fn->ty->param_list, &gp_count, &fp_count, nullptr);
 
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
   lvar_ptr = (lvar_align > 16) ? rbx : rbp;
@@ -5417,23 +5417,23 @@ void emit_text(Obj *fn) {
         }
         cur = cur->next = var;
       }
-      cur->next = NULL;
+      cur->next = nullptr;
     } while (has_change);
   }
 
   if (ext_refs->buckets)
     free(ext_refs->buckets);
-  ext_refs = NULL;
-  codegen_fn = NULL;
+  ext_refs = nullptr;
+  codegen_fn = nullptr;
 
   fclose(output_file);
-  output_file = NULL;
+  output_file = nullptr;
 }
 
 // Logic should be in sync with gen_funcall_args()
 void prepare_funcall(Node *node, Scope *scope) {
   bool rtn_by_stk = is_mem_class(node->ty);
-  calling_convention(node->call.args, &(int){rtn_by_stk}, &(int){0}, NULL);
+  calling_convention(node->call.args, &(int){rtn_by_stk}, &(int){0}, nullptr);
 
   int reg_arg_cnt = 0;
   for (Obj *var = node->call.args; var; var = var->param_next) {
@@ -5447,9 +5447,9 @@ void prepare_funcall(Node *node, Scope *scope) {
       Node *arg_expr = var->arg_expr;
       reg_arg_cnt++;
 
-      if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, NULL))
+      if (is_gp_ty(arg_expr->ty) && is_const_expr(arg_expr, nullptr))
         continue;
-      if (is_flonum(arg_expr->ty) && is_const_fp(arg_expr, NULL))
+      if (is_flonum(arg_expr->ty) && is_const_fp(arg_expr, nullptr))
         continue;
       if (gen_load_opt_gp(arg_expr, REG_X64_NULL))
         continue;
@@ -5529,7 +5529,7 @@ int codegen(Obj *prog, FILE *out) {
         continue;
       }
       var->is_definition = false;
-      var->output = NULL;
+      var->output = nullptr;
       continue;
     }
     if (var->alias_name)

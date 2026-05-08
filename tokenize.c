@@ -222,7 +222,7 @@ static Token *read_ident(const char *p) {
   }
 
   if (p == start)
-    return NULL;
+    return nullptr;
 
   if (invalid)
     return new_token(TK_INVALID, start, p);
@@ -949,7 +949,7 @@ bool is_pp_token_int(Token *tok) {
   int len;
   const char *p = filter_digit_sep(tok, &len);
 
-  return convert_pp_int(p, len, NULL);
+  return convert_pp_int(p, len, nullptr);
 }
 
 void convert_pp_number(Token *tok, Node *node) {
@@ -972,12 +972,12 @@ void convert_pp_number(Token *tok, Node *node) {
   long_double_t val = strtod(p, &end);
   Type *ty;
   if (*end == 'f' || *end == 'F') {
-    val = strtof(p, NULL);
+    val = strtof(p, nullptr);
     ty = ty_float;
     end++;
   } else if (*end == 'l' || *end == 'L') {
 #ifndef BOOTSTRAP_NO_LDOUBLE
-    val = strtold(p, NULL);
+    val = strtold(p, nullptr);
 #endif
     ty = ty_ldouble;
     end++;
@@ -999,7 +999,7 @@ static void add_line_numbers(Token *tok, File *file, SlashDelta *dlt) {
   int n = 1;
 
   const char *delta_pos = (dlt && dlt->sp && !opt_cc1_asm_pp) ? (dlt->sp[0].pos + start)
-                                                              : NULL;
+                                                              : nullptr;
   int delta_cnt = 0;
   int idx = 0;
   do {

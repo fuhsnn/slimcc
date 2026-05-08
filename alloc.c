@@ -33,7 +33,7 @@ static Pool *new_pool(void) {
 #if defined(USE_ASAN)
   __asan_poison_memory_region(&p->buf, ARENA_POOL_SIZE);
 #endif
-  p->next = NULL;
+  p->next = nullptr;
   return p;
 }
 
@@ -131,7 +131,7 @@ void arena_off(Arena *arena) {
     arena->cur->next = pool_freelist;
     pool_freelist = arena->head;
   }
-  arena->cur = NULL;
+  arena->cur = nullptr;
 }
 
 void *arena_malloc(Arena *a, size_t sz) {

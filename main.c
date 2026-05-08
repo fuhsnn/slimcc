@@ -151,7 +151,7 @@ static bool comma_arg(const char *arg, StringArray *arr, const char *str) {
     arg = strtok(strdup(arg), ",");
     while (arg) {
       strarray_push(arr, arg);
-      arg = strtok(NULL, ",");
+      arg = strtok(nullptr, ",");
     }
     return true;
   }
@@ -376,7 +376,7 @@ static void build_ld_paths(const char *opt_B, StringArray *paths) {
 static void parse_args(int argc, char **argv, bool *run_ld) {
   const char *arg;
   int input_cnt = 0;
-  const char *opt_B = NULL;
+  const char *opt_B = nullptr;
   bool opt_pipe = false;
   bool opt_hash_hash_hash = false;
   bool has_wl = false;
@@ -602,7 +602,7 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-MT") || startswith(argv[i], &arg, "-Wp,-MT,")) {
-      if (opt_MT == NULL)
+      if (opt_MT == nullptr)
         opt_MT = arg;
       else
         opt_MT = format("%s %s", opt_MT, arg);
@@ -610,7 +610,7 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-MQ") || startswith(argv[i], &arg, "-Wp,-MQ,")) {
-      if (opt_MT == NULL)
+      if (opt_MT == nullptr)
         opt_MT = quote_makefile(arg);
       else
         opt_MT = format("%s %s", opt_MT, quote_makefile(arg));
@@ -946,7 +946,7 @@ void run_subprocess(const char **argv) {
   extern char **environ;
   pid_t id;
   int status;
-  if (posix_spawnp(&id, argv[0], NULL, NULL, (char *const *)argv, environ) ||
+  if (posix_spawnp(&id, argv[0], nullptr, nullptr, (char *const *)argv, environ) ||
       waitpid(id, &status, 0) <= 0 ||
       status != 0) {
     fprintf(stderr, "exec failed: %s\n", argv[0]);
@@ -1178,15 +1178,15 @@ void run_assembler_gnustyle(StringArray *args, const char *input, const char *ou
   for (int i = 0; i < args->len; i++)
     strarray_push(&arr, args->data[i]);
 
-  strarray_push(&arr, NULL);
+  strarray_push(&arr, nullptr);
 
   run_subprocess(arr.data);
 }
 
 static char *find_file(const char *pattern) {
-  char *path = NULL;
+  char *path = nullptr;
   glob_t buf = {0};
-  glob(pattern, 0, NULL, &buf);
+  glob(pattern, 0, nullptr, &buf);
   if (buf.gl_pathc > 0)
     path = strdup(buf.gl_pathv[buf.gl_pathc - 1]);
   globfree(&buf);
@@ -1198,7 +1198,7 @@ char *find_dir_w_file(const char *pattern) {
   if (!path) {
     path = find_file(pattern);
     if (!path)
-      return NULL;
+      return nullptr;
     path = dirname(path);
   }
   return path;
@@ -1369,7 +1369,7 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *outp
     strarray_push(&arr, format("%s/crtn.o", libpath));
   }
 
-  strarray_push(&arr, NULL);
+  strarray_push(&arr, nullptr);
 
   run_subprocess(arr.data);
 }

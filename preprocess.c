@@ -115,7 +115,7 @@ static Token *copy_token(Token *tok) {
 
 static Token *new_eof(Token *tok) {
   Token *t = copy_token(tok);
-  t->next = NULL;
+  t->next = nullptr;
   t->kind = TK_EOF;
   t->len = 0;
   t->at_bol = true;
@@ -171,7 +171,7 @@ static void pop_macro_lock_until(Token *tok, Token *end) {
 
 static Token *skip_cond_incl(Token *tok) {
   Token *start = tok;
-  Token *last = NULL;
+  Token *last = nullptr;
   int lvl = 0;
   for (; tok->kind != TK_EOF; last = tok, tok = tok->next) {
     if (Is_hash(tok)) {
@@ -253,7 +253,7 @@ static Token *split_paren2(Token **rest, Token *tok, Token *next) {
 }
 
 static Token *split_paren(Token **rest, Token *tok) {
-  return split_paren2(rest, tok, NULL);
+  return split_paren2(rest, tok, nullptr);
 }
 
 static Token *split_bracket(Token **rest, Token *tok) {
@@ -292,8 +292,8 @@ static Token *tokenize_buf(const char *buf, Token *orig, Token **end) {
 
   static File file = {.name = "<generated>", .is_placeholder = true};
   file.contents = buf;
-  Token *tok = tokenize(&file, NULL, end);
-  file.contents = NULL;
+  Token *tok = tokenize(&file, nullptr, end);
+  file.contents = nullptr;
 
   for (Token *t = tok; t->kind != TK_EOF; t = t->next)
     t->origin = orig;
@@ -301,7 +301,7 @@ static Token *tokenize_buf(const char *buf, Token *orig, Token **end) {
 }
 
 static Token *make_token(const char *str, Token *orig, Token *nxt) {
-  Token *tok = tokenize_buf(str, orig, NULL);
+  Token *tok = tokenize_buf(str, orig, nullptr);
   tok->at_bol = false;
   tok->next = nxt;
   return tok;
@@ -466,7 +466,7 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
     add_macro_param(&cur, head.next, tok);
     tok = tok->next;
   }
-  cur->next = NULL;
+  cur->next = nullptr;
   m->params = head.next;
   return m;
 }
@@ -600,7 +600,7 @@ static bool has_non_empty_va_arg(MacroContext *ctx, MacroArg **arg_p) {
 
 static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
   if (tok->kind != TK_IDENT)
-    return NULL;
+    return nullptr;
 
   int idx = 0;
   for (Token *t = ctx->m->params; t; t = t->next) {
@@ -616,7 +616,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
     MacroArg *arg = arena_malloc(&pp_arena, sizeof(MacroArg));
     arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
 
-    if (has_non_empty_va_arg(ctx, NULL))
+    if (has_non_empty_va_arg(ctx, nullptr))
       arg->tok = subst(arg->tok, ctx);
     else
       arg->tok = new_eof(tok);
@@ -626,7 +626,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
       *rest = tok->next;
     return arg;
   }
-  return NULL;
+  return nullptr;
 }
 
 // Concatenates all tokens in `tok` and returns a new string.
@@ -702,7 +702,7 @@ static void newline_to_space(Token *tok) {
 static Token *paste(Token *lhs, Token *rhs) {
   char *buf = arena_format(&cc1_arena, "%.*s%.*s", lhs->len, lhs->loc, rhs->len, rhs->loc);
 
-  Token *tok = tokenize_buf(buf, lhs, NULL);
+  Token *tok = tokenize_buf(buf, lhs, nullptr);
   align_token(tok, lhs);
 
   if (tok->next->kind != TK_EOF) {
@@ -737,7 +737,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
     }
 
     if (tok->kind == TK_COMMA && tok->next->kind == TK_HASH2 && ctx->m->has_va_arg) {
-      MacroArg *arg = find_arg(NULL, tok->next->next, ctx);
+      MacroArg *arg = find_arg(nullptr, tok->next->next, ctx);
       if (arg && (arg == &ctx->args[ctx->m->arg_cnt - 1])) {
         if (ctx->omit_comma) {
           tok = tok->next->next->next;
@@ -796,8 +796,8 @@ static Token *subst(Token *tok, MacroContext *ctx) {
     }
 
     if (equal(tok, "__VA_TAIL__") && consume_tk(&tok, tok->next, TK_LPAREN)) {
-      Macro *tail_m = NULL;
-      Token *rparen = NULL;
+      Macro *tail_m = nullptr;
+      Token *rparen = nullptr;
       if (tok->kind == TK_RPAREN) {
         tail_m = ctx->m;
         rparen = tok;
@@ -925,7 +925,7 @@ static Token *prepare_funclike_args(Token *start) {
 static void free_funclike_args(Token *tok, Token *stop_tok) {
   while (tok != stop_tok) {
     Token *start = tok;
-    Token *last = NULL;
+    Token *last = nullptr;
     while (tok != stop_tok && tok->next->alloc_next == tok) {
       last = tok;
       tok = tok->next;
@@ -1061,7 +1061,7 @@ static const char *search_include_paths2(const char *filename, const char *dir,
     if (file_exists(pathbuf))
       return noalloc ? (void *)1 : arena_strdup(&cc1_arena, pathbuf);
   }
-  return NULL;
+  return nullptr;
 }
 
 static const char *search_include_paths(const char *filename, const char *dir) {
@@ -1078,7 +1078,7 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
     is_expanded = true;
   }
 
-  char *filename = NULL;
+  char *filename = nullptr;
   if (tok->kind == TK_STR || tok->kind == TK_ASM_STR) {
     // Pattern 1: #include "foo.h"
     // A double-quoted filename for #include is a special kind of
@@ -1115,7 +1115,7 @@ static char *read_filename(Token **rest, Token *tok, const char **dir) {
 }
 
 static char *read_include_filename(Token *tok, const char **dir) {
-  return read_filename(NULL, tok, dir);
+  return read_filename(nullptr, tok, dir);
 }
 
 static Token *include_file(Token *tok, const char *path, Token *filename_tok, InclIdx idx) {
@@ -1129,13 +1129,13 @@ static Token *include_file(Token *tok, const char *path, Token *filename_tok, In
   if (guard_name && hashmap_get(&macros, guard_name))
     return tok;
 
-  Token *end = NULL;
+  Token *end = nullptr;
   Token *start = tokenize_file(path, filename_tok, &end);
   start->file->incl_idx = idx;
   start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(idx);
   add_dep_file(path, start->file->is_syshdr);
 
-  Token *fmark = opt_E ? new_fmark(start) : NULL;
+  Token *fmark = opt_E ? new_fmark(start) : nullptr;
 
   if (!end) {
     if (fmark) {
@@ -1161,10 +1161,10 @@ static Token *include_file(Token *tok, const char *path, Token *filename_tok, In
 }
 
 static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start) {
-  Token *limit_seq = NULL;
-  Token *if_empty_seq = NULL;
-  Token *prefix_seq = NULL;
-  Token *suffix_seq = NULL;
+  Token *limit_seq = nullptr;
+  Token *if_empty_seq = nullptr;
+  Token *prefix_seq = nullptr;
+  Token *suffix_seq = nullptr;
 
   for (;;) {
     if (equal(tok, "limit"))
@@ -1181,7 +1181,7 @@ static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start
   Token *dummy;
   int64_t limit = 0;
   if (limit_seq)
-    limit = eval_const_expr(split_paren2(&dummy, limit_seq, NULL));
+    limit = eval_const_expr(split_paren2(&dummy, limit_seq, nullptr));
 
   if (!cont) {
     enum { EMBED_NOT_FOUND = 0, EMBED_FOUND = 1, EMBED_EMPTY = 2 };
@@ -1213,9 +1213,9 @@ static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start
       break;
 
     if (cur != &head)
-      cur = cur->next = make_token(",", start, NULL);
+      cur = cur->next = make_token(",", start, nullptr);
 
-    cur = cur->next = new_num_token(buf, start, NULL);
+    cur = cur->next = new_num_token(buf, start, nullptr);
   }
   fclose(fp);
   if (cur == &head) {
@@ -1317,7 +1317,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
   if (equal(tok, "embed")) {
     Token *file_tok = tok->next;
     Token *cont;
-    const char *dir = NULL;
+    const char *dir = nullptr;
     char *filename = read_filename(&tok, split_line(&cont, file_tok), &dir);
     const char *path = search_include_paths(filename, dir);
     if (ignore_missing_dep(path, filename, file_tok))
@@ -1327,7 +1327,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
 
   if (equal(tok, "include")) {
     Token *file_tok = tok->next;
-    const char *dir = NULL;
+    const char *dir = nullptr;
     char *filename = read_include_filename(split_line(&tok, file_tok), &dir);
 
     InclIdx idx = INCL_REL;
@@ -1339,7 +1339,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
 
   if (equal(tok, "include_next")) {
     Token *file_tok = tok->next;
-    const char *dir = NULL;
+    const char *dir = nullptr;
     char *filename = read_include_filename(split_line(&tok, file_tok), &dir);
 
     InclIdx idx = file_tok->file->incl_idx + 1;
@@ -1508,8 +1508,8 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
 void define_macro_cli(const char *str) {
   static File file = {.name = "<command-line>", .is_placeholder = true};
   file.contents = str;
-  Token *tok = tokenize(&file, NULL, NULL);
-  file.contents = NULL;
+  Token *tok = tokenize(&file, nullptr, nullptr);
+  file.contents = nullptr;
 
   Macro *m = read_macro_name(&tok, tok);
 
@@ -1526,7 +1526,7 @@ void define_macro_cli(const char *str) {
     tok = tok->next;
   }
   if (!has_eq) {
-    cur = cur->next = make_token("1", tok, NULL);
+    cur = cur->next = make_token("1", tok, nullptr);
     cur->has_space = true;
   }
   cur->next = tok;
@@ -1536,8 +1536,8 @@ void define_macro_cli(const char *str) {
 void define_macro(const char *name, const char *buf) {
   static File file = {.name = "<built-in>", .is_placeholder = true};
   file.contents = buf;
-  new_macro(name, true)->body = tokenize(&file, NULL, NULL);
-  file.contents = NULL;
+  new_macro(name, true)->body = tokenize(&file, nullptr, nullptr);
+  file.contents = nullptr;
 }
 
 void undef_macro(const char *name) {
@@ -1584,7 +1584,7 @@ static Token *date_macro(Token *start) {
   static char *str;
   if (!str) {
     if (!cur_time)
-      cur_time = localtime(&(time_t){time(NULL)});
+      cur_time = localtime(&(time_t){time(nullptr)});
 
     static const char mon[][4] = {
       "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -1600,7 +1600,7 @@ static Token *time_macro(Token *start) {
   static char *str;
   if (!str) {
     if (!cur_time)
-      cur_time = localtime(&(time_t){time(NULL)});
+      cur_time = localtime(&(time_t){time(nullptr)});
 
     str = arena_format(&cc1_arena, "\"%02d:%02d:%02d\"", cur_time->tm_hour,
                        cur_time->tm_min, cur_time->tm_sec);
@@ -1634,7 +1634,7 @@ static Token *base_file_macro(Token *start) {
 
 static Token *pragma_macro(Token *start) {
   Token *tok = start->next;
-  Token *str_tok = NULL;
+  Token *str_tok = nullptr;
 
   for (int progress = 0;;) {
     if (tok->kind == TK_EOF)
@@ -1678,7 +1678,7 @@ static Token *pragma_macro(Token *start) {
 static Token *has_include_macro(Token *start) {
   Token *tok = skip_tk(start->next, TK_LPAREN);
 
-  const char *dir = NULL;
+  const char *dir = nullptr;
   char *filename = read_include_filename(split_paren(&tok, tok), &dir);
   bool found = search_include_paths2(filename, dir, &(InclIdx){INCL_REL}, true);
 
@@ -1689,7 +1689,7 @@ static Token *has_include_macro(Token *start) {
 static Token *has_include_next_macro(Token *start) {
   Token *file_tok = skip_tk(start->next, TK_LPAREN);
   InclIdx idx = file_tok->file->incl_idx + 1;
-  const char *dir = NULL;
+  const char *dir = nullptr;
   Token *end;
   char *filename = read_include_filename(split_paren(&end, file_tok), &dir);
   bool found = search_include_paths2(filename, dir, &idx, true);
@@ -1702,10 +1702,10 @@ static Token *has_embed_macro(Token *start) {
   Token *tok = skip_tk(start->next, TK_LPAREN);
   Token *end;
 
-  const char *dir = NULL;
+  const char *dir = nullptr;
   char *filename = read_filename(&tok, split_paren(&end, tok), &dir);
   const char *path = search_include_paths(filename, dir);
-  Token *tok2 = embed_file(NULL, tok, path, start->next->next);
+  Token *tok2 = embed_file(nullptr, tok, path, start->next->next);
 
   pop_macro_lock_until(start, end);
   tok2->next = end;
@@ -1967,7 +1967,7 @@ static bool is_supported_attr(Token *tok) {
 }
 
 static const char *supported_c_attr(Token **rest, Token *tok) {
-  Token *vendor = NULL;
+  Token *vendor = nullptr;
   if (tok->kind == TK_IDENT && tok->next->kind == TK_COLON2) {
     vendor = tok;
     tok = tok->next->next;
@@ -1983,7 +1983,7 @@ static const char *supported_c_attr(Token **rest, Token *tok) {
   if (equal_ext(tok, "noreturn") || equal_ext(tok, "_Noreturn"))
     return "202311L";
 
-  return NULL;
+  return nullptr;
 }
 
 static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
@@ -2019,14 +2019,14 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
 
       *lst = (*lst)->attr_next = preprocess3(head.next);
       (*lst)->kind = is_bracket ? TK_BATTR : TK_ATTR;
-      (*lst)->attr_next = NULL;
+      (*lst)->attr_next = nullptr;
     }
   }
 }
 
 static void stash_attr(Token *tok, Token *head, Token **attr_cur) {
   tok->attr_next = head->attr_next;
-  head->attr_next = NULL;
+  head->attr_next = nullptr;
   *attr_cur = head;
 }
 
@@ -2069,7 +2069,7 @@ static Token *preprocess3(Token *tok) {
 
         Token *end = get_line(&cur, tok);
         for (Token *t = tok; t != end; t = t->next)
-          t->alloc_next = NULL;
+          t->alloc_next = nullptr;
         tok = end;
         to_freelist(start, start->next);
         continue;
@@ -2111,11 +2111,11 @@ static Token *preprocess3(Token *tok) {
 static void include_files_cli(StringArray *arr, Token **cur) {
   for (int i = 0; i < arr->len; i++) {
     const char *path = search_include_paths(arr->data[i], ".");
-    if (ignore_missing_dep(path, arr->data[i], NULL))
+    if (ignore_missing_dep(path, arr->data[i], nullptr))
       continue;
 
     add_dep_file(path, false);
-    preprocess2(tokenize_file(path, NULL, NULL), cur);
+    preprocess2(tokenize_file(path, nullptr, nullptr), cur);
   }
 }
 
@@ -2131,7 +2131,7 @@ Token *preprocess(const char *file, StringArray *incls, StringArray *imacros) {
 
   include_files_cli(incls, &cur);
 
-  preprocess2(tokenize_file(file, NULL, NULL), &cur);
+  preprocess2(tokenize_file(file, nullptr, nullptr), &cur);
 
   cur = cur->next;
   cur->is_root = true;
@@ -2148,12 +2148,12 @@ Token *prepare_parse(Token *tok) {
                                                        "  void *overflow_arg_area;"
                                                        "  void *reg_save_area;"
                                                        "} __builtin_va_list[1];"),
-                           NULL, &cur);
+                           nullptr, &cur);
 
-    const char *path = search_include_paths("bitint_builtins", NULL);
+    const char *path = search_include_paths("bitint_builtins", nullptr);
     if (path) {
       Token *end;
-      cur->next = tokenize_file(path, NULL, &end);
+      cur->next = tokenize_file(path, nullptr, &end);
       cur = end;
     }
     for (Token *t = head; t; t = t->next)
