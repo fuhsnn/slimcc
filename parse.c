@@ -3493,12 +3493,13 @@ static int64_t eval_cmp(Node *node) {
   if (lhs->ty->kind == TY_BITINT) {
     BitBuf *lval = eval_bitint(lhs);
     BitBuf *rval = eval_bitint(rhs);
+    defer {
+      free(lval), free(rval);
+    }
     if (eval_recover && *eval_recover)
-      return free(lval), free(rval), 0;
+      return 0;
 
     int res = eval_bitint_cmp(lhs->ty->bit_cnt, lval, rval, lhs->ty->is_unsigned);
-    free(lval), free(rval);
-
     switch (node->kind) {
     case ND_EQ: return res == 0;
     case ND_NE: return res != 0;
@@ -3625,16 +3626,16 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_CAST: {
     if (lhs->ty->kind == TY_BITINT) {
       BitBuf *data = eval_bitint(lhs);
-      if (eval_recover && *eval_recover)
-        return free(data), 0;
-
-      if (ty->kind == TY_BOOL) {
-        bool res = eval_bitint_to_bool(lhs->ty->bit_cnt, data);
+      defer {
         free(data);
-        return res;
       }
+      if (eval_recover && *eval_recover)
+        return 0;
+
+      if (ty->kind == TY_BOOL)
+        return eval_bitint_to_bool(lhs->ty->bit_cnt, data);
+
       int64_t ival = data->as64;
-      free(data);
       if (lhs->ty->bit_cnt < ty->size * 8) {
         int shft = 64 - lhs->ty->bit_cnt;
         if (lhs->ty->is_unsigned)
@@ -4003,8 +4004,11 @@ static BitBuf *eval_bitint(Node *node) {
   case ND_MOD: {
     BitBuf *lval = eval_bitint(lhs);
     BitBuf *rval = eval_bitint(rhs);
+    defer {
+      free(lval);
+    }
     if (eval_recover && *eval_recover)
-      return free(lval), free(rval), nullptr;
+      return free(rval), nullptr;
 
     switch (node->kind) {
     case ND_BITAND: eval_bitint_bitand(ty->bit_cnt, lval, rval); break;
@@ -4022,7 +4026,7 @@ static BitBuf *eval_bitint(Node *node) {
       break;
     }
     }
-    return free(lval), rval;
+    return rval;
   }
   case ND_SHL:
   case ND_SHR:
