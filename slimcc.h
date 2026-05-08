@@ -210,6 +210,7 @@ typedef enum {
   TK_KEYWORD, // Keywords
   TK_STR,     // String literals
   TK_ASM_STR,
+  TK_ISTR,    // Interpolated string
   TK_INT_NUM, // Integer Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
   TK_FMARK,   // Filemarkers for -E
@@ -315,6 +316,10 @@ struct Token {
   int display_line_no;
   int display_file_no;
   Type *ty; // Used if TK_INT_NUM or TK_STR
+
+  Token *interp_next;
+  Token *interp_str_next;
+
   ANON_UNION_START
   Token *attr_next;
   Token *alloc_next;
@@ -342,6 +347,7 @@ File *new_file(const char *name, const char *contents);
 int add_display_file(const char *path);
 void tokenize_string_literal(Token *tok, Type *basety);
 Token *tokenize(File *file, SlashDelta *delta, Token **end);
+Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*, void*), void *arg);
 void convert_pp_number(Token *tok, Node *node);
 bool is_pp_token_int(Token *tok);
 TokenKind ident_keyword(Token *tok);

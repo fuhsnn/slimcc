@@ -502,10 +502,9 @@ static Token *asm_string_literal(const char *p, char end) {
   return tok;
 }
 
-// Find a closing double-quote.
-static const char *string_literal_end(const char *p) {
+static const char *string_literal_find_end(const char *p, char end_char) {
   const char *start = p;
-  for (; *p != '"'; p++) {
+  for (; *p != end_char; p++) {
     if (*p == '\n' || *p == '\0')
       error_at(start, "unclosed string literal");
     if (*p == '\\')
@@ -514,8 +513,13 @@ static const char *string_literal_end(const char *p) {
   return p;
 }
 
-static Token *read_string_literal(const char *start, const char *quote, Type *ty) {
-  const char *end = string_literal_end(quote + 1);
+// Find a closing double-quote.
+static const char *string_literal_end(const char *p) {
+  return string_literal_find_end(p, '"');
+}
+
+static Token *read_string_literal_given_end(const char *start, const char *quote, const char *end, Type *ty)
+{
   char *buf = calloc(1, end - quote);
   int len = 0;
   bool invalid = false;
@@ -543,6 +547,78 @@ static Token *read_string_literal(const char *start, const char *quote, Type *ty
   tok->ty = array_of(ty, len + 1);
   tok->str = buf;
   return tok;
+}
+
+static Token *read_string_literal(const char *start, const char *quote, Type *ty) {
+  return read_string_literal_given_end(start, quote, string_literal_end(quote + 1), ty);
+}
+
+static bool stop_on_unbalanced_close_curly_brace(Token *tok, void *arg)
+{
+  int *braces_open = arg;
+  
+  if(equal(tok, "{"))
+  {
+    *braces_open += 1;
+  }
+  else if(equal(tok, "}"))
+  {
+    *braces_open -= 1;
+  }
+  
+  if(*braces_open == 0)
+  {
+    return false;
+  }
+  else
+  {
+    return true;
+  }
+}
+
+static const char *interp_string_contains_interp(const char *p)
+{
+  const char *start = p;
+  for (; *p != '"'; p++) {
+    if (*p == '\n' || *p == '\0')
+      error_at(start, "unclosed string literal");
+    if (*p == '\\')
+      p++;
+    if(*p == '$' && p[1] == '$')
+      p += 2;
+    if(*p == '$' && p[1] == '{')
+      return p;
+  }
+  return NULL;
+}
+
+static Token *read_interp_string_literal(const char *start, const char *quote, Type *ty)
+{
+  // find $, if ${}, then parse prev ptr with cur as a string literal, make sure to dup it and replace $$ with $
+  Token strings_start = {};
+  Token interps_start = {};
+  Token *strings = &strings_start;
+  Token *interps = &interps_start;
+  
+  const char *it = quote + 1;
+  
+  while(true)
+  {
+    const char *interp = interp_string_contains_interp(it);
+    
+    if(interp)
+    {
+      int braces_open = 1;
+      Token *end;
+      
+      interps = interps->next = tokenize_cb(new_file("<built-in>", it + 2), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
+      
+      strings = strings->next = read_string_literal_given_end(it - 1, it - 1, it, ty);
+      
+      it = end->loc + end->len;
+      assert(it[-1] == '}');
+    }
+  }
 }
 
 // Read a UTF-8-encoded string literal and transcode it in UTF-16.
@@ -990,6 +1066,32 @@ void convert_ucn_ident(Token *tok) {
 }
 
 Token *tokenize(File *file, SlashDelta *delta, Token **end) {
+  return tokenize_cb(file, delta, end, NULL, NULL);
+}
+
+#define accept_or_break(t) \
+do { \
+  Token *tok_to_check = t; \
+  if(!cb(tok_to_check, arg)) \
+  { \
+    tok_to_check->next = tok_freelist; \
+    tok_freelist = tok_to_check; \
+    goto out; \
+  } \
+  cur = cur->next = tok_to_check; \
+  p += cur->len; \
+  continue; \
+} while(0)
+
+bool tokenize_cb_accept(Token *tok, void *arg)
+{
+  return true;
+}
+
+Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*, void*), void *arg) {
+  if(cb == NULL)
+    cb = tokenize_cb_accept;
+  
   current_file = file;
 
   const char *p = file->contents;
@@ -1041,127 +1143,94 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
     // Numeric literal
     const char *p2 = (*p == '.') ? p + 1 : p;
     if (Isdigit(*p2)) {
-      cur = cur->next = new_pp_number(p, p2 + 1);
-      p += cur->len;
-      continue;
+      accept_or_break(new_pp_number(p, p2 + 1));
     }
 
     // Punctuators
     int punct_len = read_punct(p);
     if (punct_len) {
-      cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
-      p += cur->len;
-      continue;
+      accept_or_break(new_token(TK_PUNCT, p, p + punct_len));
     }
 
     if (opt_cc1_asm_pp) {
       if (*p == '$') {
-        cur = cur->next = new_token(TK_PUNCT, p, p + 1);
-        p++;
-        continue;
+        accept_or_break(new_token(TK_PUNCT, p, p + 1));
       }
       if (*p == '"') {
-        cur = cur->next = asm_string_literal(p, '"');
-        p += cur->len;
-        continue;
+        accept_or_break(asm_string_literal(p, '"'));
       }
       if (*p == '\'') {
-        cur = cur->next = asm_string_literal(p, '\'');
-        p += cur->len;
-        continue;
+        accept_or_break(asm_string_literal(p, '\''));
       }
     } else {
       // String literal
       if (*p == '"') {
-        cur = cur->next = read_string_literal(p, p, ty_pchar);
-        p += cur->len;
-        continue;
+        accept_or_break(read_string_literal(p, p, ty_pchar));
       }
 
       // UTF-8 string literal
       if (Startswith3(p, 'u', '8', '\"')) {
         if (opt_std >= STD_C23)
-          cur = cur->next = read_string_literal(p, p + 2, ty_uchar);
+          accept_or_break(read_string_literal(p, p + 2, ty_uchar));
         else
-          cur = cur->next = read_string_literal(p, p + 2, ty_pchar);
-        p += cur->len;
-        continue;
+          accept_or_break(read_string_literal(p, p + 2, ty_pchar));
       }
 
       // UTF-16 string literal
       if (Startswith2(p, 'u', '\"')) {
-        cur = cur->next = read_utf16_string_literal(p, p + 1);
-        p += cur->len;
-        continue;
+        accept_or_break(read_utf16_string_literal(p, p + 1));
       }
 
       // Wide string literal
       if (Startswith2(p, 'L', '\"')) {
-        cur = cur->next = read_utf32_string_literal(p, p + 1, ty_wchar_t);
-        p += cur->len;
-        continue;
+        accept_or_break(read_utf32_string_literal(p, p + 1, ty_wchar_t));
       }
 
       // UTF-32 string literal
       if (Startswith2(p, 'U', '\"')) {
-        cur = cur->next = read_utf32_string_literal(p, p + 1, ty_char32_t);
-        p += cur->len;
-        continue;
+        accept_or_break(read_utf32_string_literal(p, p + 1, ty_char32_t));
       }
 
       // Character literal
       if (*p == '\'') {
-        cur = cur->next = read_char_literal(p);
-        p += cur->len;
-        continue;
+        accept_or_break(read_char_literal(p));
       }
 
       // UTF-8 character literal
       if (Startswith3(p, 'u', '8', '\'') && opt_std >= STD_C23) {
-        cur = cur->next = read_unicode_char_literal(p, p + 2, ty_uchar);
-        p += cur->len;
-        continue;
+        accept_or_break(read_unicode_char_literal(p, p + 2, ty_uchar));
       }
 
       // UTF-16 character literal
       if (Startswith2(p, 'u', '\'')) {
-        cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char16_t);
-        p += cur->len;
-        continue;
+        accept_or_break(read_unicode_char_literal(p, p + 1, ty_char16_t));
       }
 
       // Wide character literal
       if (Startswith2(p, 'L', '\'')) {
-        cur = cur->next = read_unicode_char_literal(p, p + 1, ty_wchar_t);
-        p += cur->len;
-        continue;
+        accept_or_break(read_unicode_char_literal(p, p + 1, ty_wchar_t));
       }
 
       // UTF-32 character literal
       if (Startswith2(p, 'U', '\'')) {
-        cur = cur->next = read_unicode_char_literal(p, p + 1, ty_char32_t);
-        p += cur->len;
-        continue;
+        accept_or_break(read_unicode_char_literal(p, p + 1, ty_char32_t));
       }
     }
 
     // Identifier or keyword
     Token *ident = read_ident(p);
     if (ident) {
-      cur = cur->next = ident;
-      p += cur->len;
-      continue;
+      accept_or_break(ident);
     }
 
     if (*p == '\\') {
-      cur = cur->next = new_token(TK_PUNCT, p, p + 1);
-      p++;
-      continue;
+      accept_or_break(new_token(TK_PUNCT, p, p + 1));
     }
 
     error_at(p, "invalid token");
   }
 
+  out:
   if (end && cur != &head)
     *end = cur;
   cur->next = new_token(TK_EOF, p, p);

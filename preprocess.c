@@ -1937,31 +1937,33 @@ static Token *has_extension_macro(Token *start) {
   return new_bool_int_token(has_it, start, tok);
 }
 
-static void iter_interp_str(const char *str, int len, void(*on_found_interp)(const char *, int len, void *arg), void *arg)
+static void iter_interp_str(Token *tok, void(*on_found_interp)(Token *start, Token *end, void *arg), void *arg)
 {
+  const char *str = tok->loc + 1;
+  int len = tok->len - 1; // len may be incorrect because string literals are allowed to exist in interpolated string...
+  // the only solution is to tokenize them properly TK_ISTR
+  
   for(int i = 0 ; i < len - 1 ; i++)
   {
-    if(str[i] == '{')
+    if(str[i] == '$')
     {
       if(str[i + 1] == '{')
       {
-        i++;
+        int braces_open = 1;
+        Token *end;
+        Token *start = tokenize_cb(new_file("<built-in>", str + i + 2), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
+        
+        on_found_interp(start, end, arg);
+        
+        str = end->loc + end->len;
+      }
+      else if(str[i + 1] == '$')
+      {
+        i += 1;
       }
       else
       {
-        // probably should tokenize_until_unbalanced_closing_curly_brace
-        int interp_len = 0;
-        int single_quote = 0; // open brace adds 1
-        int double_quote = 0;
-        while(balance)
-        {
-          if(str[i] == '{')
-            balance += 1;
-          else if(str[i] == '}')
-            balance -= 1;
-        }
-        
-        on_found_interp(str, );
+        error_tok(tok, "bad interpolate string");
       }
     }
   }
@@ -1970,13 +1972,13 @@ static void iter_interp_str(const char *str, int len, void(*on_found_interp)(con
 static Token *interp_count_macro(Token *start)
 {
   Token *tok = skip(start, "(");
+    
   if(!equal(tok, "$"))
-  {
     return new_num_token(0, start, tok);
-  }
+  
   tok = skip(tok, "$");
   if(tok->kind != TK_STR)
-    return new_eof(start);
+    error_tok(tok, "expected a string literal");
   
   const char *str = tok->loc + 1; // skip first quote
   int len = tok->len - 2; // don't include first and last quotes
