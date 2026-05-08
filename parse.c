@@ -6054,10 +6054,12 @@ Obj *parse(Token *tok) {
     }
 
     arena_on(&ast_arena);
+    defer {
+      arena_off(&ast_arena);
+    }
 
     if (tok->kind == TK_PRAGMA) {
       pragma_pack(&tok, tok);
-      arena_off(&ast_arena);
       continue;
     }
 
@@ -6074,8 +6076,6 @@ Obj *parse(Token *tok) {
       }
       globals = last;
       last->next = nullptr;
-
-      arena_off(&ast_arena);
       continue;
     }
 
@@ -6085,19 +6085,16 @@ Obj *parse(Token *tok) {
     if (tok->kind == TK_SEMI) {
       chk_inline(&attr, tok);
       tok = tok->next;
-      arena_off(&ast_arena);
       continue;
     }
 
     if (attr.strg & SC_TYPEDEF) {
       chk_inline(&attr, tok);
       parse_typedef(&tok, tok, basety, &attr);
-      arena_off(&ast_arena);
       continue;
     }
 
     global_declaration(&tok, tok, basety, &attr);
-    arena_off(&ast_arena);
   }
 
   return glb_head->next;
