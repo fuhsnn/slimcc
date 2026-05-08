@@ -477,7 +477,7 @@ static bool read_ucn(const char **new_pos, const char *p, uint32_t *val, bool *i
     chk_delimit_end(&p, invalid);
   else if (p != end)
     *invalid = true;
-  if ((c >= 0xD800 && c <= 0xDFFF) || (c > 0x10FFFF))
+  if ((c >= 0xD800 && c <= 0xDFFF) || (c > 0x10'FFFF))
     *invalid = true;
 
   *val = *invalid ? 0 : c;
@@ -636,14 +636,14 @@ static Token *read_utf16_string_literal(const char *start, const char *quote) {
     else
       c = decode_utf8(&p, p);
 
-    if (c < 0x10000) {
+    if (c < 0x1'0000) {
       // Encode a code point in 2 bytes.
       buf[len++] = c;
       continue;
     }
-    if (c <= 0x10ffff) {
+    if (c <= 0x10'ffff) {
       // Encode a code point in 4 bytes.
-      c -= 0x10000;
+      c -= 0x1'0000;
       buf[len++] = 0xd800 + (c >> 10);
       buf[len++] = 0xdc00 + (c & 0x3ff);
       continue;

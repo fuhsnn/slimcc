@@ -10,9 +10,9 @@
 S_ASSERT(INIT_SIZE > 0 && SHOULD_REHASH(INIT_SIZE - 1, INIT_SIZE))
 
 static uint64_t fnv_hash(const char *s, int len) {
-  uint64_t hash = 0xcbf29ce484222325;
+  uint64_t hash = 0xcbf2'9ce4'8422'2325;
   for (int i = 0; i < len; i++) {
-    hash *= 0x100000001b3;
+    hash *= 0x100'0000'01b3;
     hash ^= (unsigned char)s[i];
   }
   return hash;
@@ -30,7 +30,7 @@ static void rehash(HashMap *map) {
   int64_t cap = map->capacity;
   if ((int64_t)nkeys * 2 > cap) {
     cap *= 2;
-    if (cap * sizeof(HashEntry) > 0x4000000)
+    if (cap * sizeof(HashEntry) > 0x400'0000)
       internal_error();
   }
 

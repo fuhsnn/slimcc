@@ -3893,12 +3893,12 @@ static long_double_t eval_fp_cast(long_double_t fval, Type *ty) {
 
 static void build_math_constant(Node *node, FPVal *fval) {
   switch (node->num.constant) {
-  case MATH_CONSTANT_NANF:  fval->chunk[0] = 0x7FC00000; return;
-  case MATH_CONSTANT_INFF:  fval->chunk[0] = 0x7F800000; return;
-  case MATH_CONSTANT_NANSF: fval->chunk[0] = 0x7FA00000; return;
-  case MATH_CONSTANT_NANS:  fval->chunk[0] = 0x7FF4000000000000; return;
+  case MATH_CONSTANT_NANF:  fval->chunk[0] = 0x7FC0'0000; return;
+  case MATH_CONSTANT_INFF:  fval->chunk[0] = 0x7F80'0000; return;
+  case MATH_CONSTANT_NANSF: fval->chunk[0] = 0x7FA0'0000; return;
+  case MATH_CONSTANT_NANS:  fval->chunk[0] = 0x7FF4'0000'0000'0000; return;
   case MATH_CONSTANT_NANSL:
-    fval->chunk[0] = 0xA000000000000000;
+    fval->chunk[0] = 0xA000'0000'0000'0000;
     fval->chunk[1] = 0x7FFF;
     return;
   }
