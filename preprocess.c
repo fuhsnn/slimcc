@@ -203,7 +203,7 @@ static Token *skip_cond_incl(Token *tok) {
 }
 
 static Token *copy_line(Token **rest, Token *tok) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
   for (; !tok->at_bol; tok = tok->next)
@@ -229,7 +229,7 @@ static Token *split_line(Token **rest, Token *tok) {
 
 static Token *split_paren2(Token **rest, Token *tok, Token *next) {
   Token *start = tok;
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
   int level = 0;
@@ -258,7 +258,7 @@ static Token *split_paren(Token **rest, Token *tok) {
 
 static Token *split_bracket(Token **rest, Token *tok) {
   Token *start = tok;
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
   int level = 0;
@@ -334,7 +334,7 @@ static Token *to_int_token(Token *tok, int64_t val) {
 }
 
 static Token *read_const_expr(Token *tok) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   Macro *start_m = locked_macros;
 
@@ -441,7 +441,7 @@ void add_macro_param(Token **cur, Token *params, Token *tok) {
 }
 
 static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   Macro *m = new_macro(name, false);
 
@@ -496,7 +496,7 @@ static void read_macro_definition2(Token **rest, Token *tok) {
   Macro *m = read_macro_name(&tok, tok);
   tok = skip_line(tok);
 
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   for (;; tok = tok->next) {
     if (tok->kind == TK_EOF)
@@ -512,7 +512,7 @@ static void read_macro_definition2(Token **rest, Token *tok) {
 }
 
 static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   int level = 0;
   Token *start = tok;
@@ -560,7 +560,7 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
 }
 
 static Token *expand_tok(Token *tok) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   Macro *start_m = locked_macros;
 
@@ -676,7 +676,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
 }
 
 static Token *stringize(Token *hash, Token *tok) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   for (; tok->kind != TK_EOF; tok = tok->next)
     if (tok->kind != TK_PMARK)
@@ -721,7 +721,7 @@ static Token *paste(Token *lhs, Token *rhs) {
 
 // Replace func-like macro parameters with given arguments.
 static Token *subst(Token *tok, MacroContext *ctx) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
   while (tok->kind != TK_EOF) {
@@ -816,7 +816,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
         cur = cur->next = new_pmark(tok);
         continue;
       }
-      Token *tail_arg_tok = copy_line(&(Token *){0}, vaarg->expanded);
+      Token *tail_arg_tok = copy_line(&(Token *){}, vaarg->expanded);
       find_last_tok(tail_arg_tok)->next = rparen;
 
       MacroContext tail_ctx = read_macro_args(tail_arg_tok, tail_m);
@@ -839,7 +839,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
 }
 
 static Token *insert_objlike(Token *tok, Token *stop_tok, Token *orig) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   if (orig->origin)
     orig = orig->origin;
@@ -862,7 +862,7 @@ static Token *insert_objlike(Token *tok, Token *stop_tok, Token *orig) {
 }
 
 static Token *insert_funclike(Token *tok, Token *stop_tok, Token *orig) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   if (orig->origin)
     orig = orig->origin;
@@ -998,7 +998,7 @@ static bool expand_macro(Token **rest, Token *tok, Macro *m, bool is_root) {
   }
 
   {
-    Token head = {0};
+    Token head = {};
     Token *cur = &head;
 
     for (Token *t = last_alloc_tok; t != free_alloc_end;) {
@@ -1192,7 +1192,7 @@ static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start
     FILE *fp;
     if (!path || !(fp = fopen(path, "r")))
       return to_int_token(start, EMBED_NOT_FOUND);
-    bool is_empty = !fread(&(char){0}, 1, sizeof(char), fp);
+    bool is_empty = !fread(&(char){}, 1, sizeof(char), fp);
     fclose(fp);
     if (is_empty || (limit_seq && limit == 0))
       return to_int_token(start, EMBED_EMPTY);
@@ -1205,7 +1205,7 @@ static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start
   if (!path || !(fp = fopen(path, "r")))
     error_tok(start, "%s: cannot open file: %s", path, strerror(errno));
 
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   for (; !limit_seq || limit > 0; limit--) {
     unsigned char buf;
@@ -1513,7 +1513,7 @@ void define_macro_cli(const char *str) {
 
   Macro *m = read_macro_name(&tok, tok);
 
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
   bool has_eq = false;
   for (; tok->kind != TK_EOF;) {
@@ -2011,7 +2011,7 @@ static void filter_attr(Token *tok, Token **lst, bool is_bracket) {
       tok = tok->next;
 
     if (is_supported) {
-      Token head = {0};
+      Token head = {};
       Token *cur = &head;
       for (Token *t = start; t != tok; t = t->next)
         cur = cur->next = copy_token(t);
@@ -2031,10 +2031,10 @@ static void stash_attr(Token *tok, Token *head, Token **attr_cur) {
 }
 
 static Token *preprocess3(Token *tok) {
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
-  Token attr_head = {0};
+  Token attr_head = {};
   Token *attr_cur = &attr_head;
 
   while (tok->kind != TK_EOF) {
@@ -2123,7 +2123,7 @@ Token *preprocess(const char *file, StringArray *incls, StringArray *imacros) {
   base_file = file;
   add_dep_file(file, false);
 
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
   include_files_cli(imacros, &cur);

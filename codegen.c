@@ -1170,7 +1170,7 @@ static void load_val(Type *ty, int64_t val) {
 }
 
 static void load_f32_f64(Type *ty, FPVal *fval, int reg) {
-  if (!memcmp(&fval, &(int64_t){0}, ty->size)) {
+  if (!memcmp(&fval, &(int64_t){}, ty->size)) {
     Printftn("xorps %%xmm%d, %%xmm%d", reg, reg);
     return;
   }
@@ -1195,7 +1195,7 @@ static void load_fval2(Type *ty, FPVal *fval) {
 }
 
 static void load_fval(Node *node) {
-  FPVal fval = {0};
+  FPVal fval = {};
   eval_fp(node, &fval);
   load_fval2(node->ty, &fval);
 }
@@ -1847,7 +1847,7 @@ static void gen_funcall_args(Node *node) {
         gp++;
         continue;
       }
-      FPVal fval = {0};
+      FPVal fval = {};
       if (is_flonum(arg_expr->ty) && is_const_fp(arg_expr, &fval)) {
         load_f32_f64(arg_expr->ty, &fval, fp++);
         continue;
@@ -3548,7 +3548,7 @@ static bool gen_arith_opt_fp2(NodeKind kind, Node *lhs, Node *rhs, int pass) {
 
   switch (pass) {
   case 0: {
-    FPVal fval = {0};
+    FPVal fval = {};
     if (is_const_fp(rhs, &fval)) {
       gen_expr(lhs);
       load_f32_f64(rhs->ty, &fval, 1);
@@ -3943,7 +3943,7 @@ static bool gen_expr_opt(Node *node) {
       load_val(ty, ival);
       return true;
     }
-    FPVal fval = {0};
+    FPVal fval = {};
     if (is_flonum(ty) && is_const_fp(node, &fval)) {
       load_fval2(ty, &fval);
       return true;
@@ -4391,7 +4391,7 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
 }
 
 static int asm_assign_operands_presort(AsmParam **sorted) {
-  uint8_t counts[REG_X64_END] = {0};
+  uint8_t counts[REG_X64_END] = {};
 
   for (int i = 0; i < asm_ops_cnt; i++) {
     AsmParam *ap = asm_ops[i];
@@ -4687,7 +4687,7 @@ static void asm_gp_inputs(void) {
 }
 
 static int asm_x87_inputs(void) {
-  AsmParam *sort_buf[8] = {0};
+  AsmParam *sort_buf[8] = {};
 
   for (int i = 0; i < asm_ops_cnt; i++) {
     AsmParam *ap = asm_ops[i];
@@ -4725,7 +4725,7 @@ static void asm_save_out_flags(Node *node) {
 }
 
 static void asm_save_out_x87(Node *node, int in_cnt) {
-  AsmParam *sort_buf[8] = {0};
+  AsmParam *sort_buf[8] = {};
   int out_cnt = 0;
   for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG) {
@@ -5281,7 +5281,7 @@ void emit_text(Obj *fn) {
   int lvar_align = get_lvar_align(fn->ty->scopes, 16);
   lvar_ptr = (lvar_align > 16) ? rbx : rbp;
   codegen_fn = fn;
-  ext_refs = &(HashMap){0};
+  ext_refs = &(HashMap){};
   rtn_label = count();
 
   // Prologue
@@ -5433,7 +5433,7 @@ void emit_text(Obj *fn) {
 // Logic should be in sync with gen_funcall_args()
 void prepare_funcall(Node *node, Scope *scope) {
   bool rtn_by_stk = is_mem_class(node->ty);
-  calling_convention(node->call.args, &(int){rtn_by_stk}, &(int){0}, nullptr);
+  calling_convention(node->call.args, &(int){rtn_by_stk}, &(int){}, nullptr);
 
   int reg_arg_cnt = 0;
   for (Obj *var = node->call.args; var; var = var->param_next) {

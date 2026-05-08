@@ -206,7 +206,7 @@ static Token *read_ident(const char *p) {
       p++;
       continue;
     }
-    if (*p == '\\' && read_ucn(&p, p + 1, &(uint32_t){0}, &invalid)) {
+    if (*p == '\\' && read_ucn(&p, p + 1, &(uint32_t){}, &invalid)) {
       has_ucn = true;
       continue;
     }
@@ -1074,7 +1074,7 @@ Token *tokenize(File *file, SlashDelta *delta, Token **end) {
   current_file = file;
 
   const char *p = file->contents;
-  Token head = {0};
+  Token head = {};
   Token *cur = &head;
 
   at_bol = true;
@@ -1298,7 +1298,7 @@ Token *tokenize_file(const char *path, Token *tok, Token **end) {
 
   canonicalize_newline(buf);
 
-  SlashDelta dlt = {0};
+  SlashDelta dlt = {};
   remove_backslash_newline(buf, &dlt);
 
   return tokenize(new_file(path, buf), &dlt, end);
