@@ -1,13 +1,13 @@
 #include "slimcc.h"
 
-#define GP_MAX 6
-#define FP_MAX 8
+constexpr int GP_MAX = 6;
+constexpr int FP_MAX = 8;
 
-#define GP_SLOTS 6
-#define FP_SLOTS 6
+constexpr int GP_SLOTS = 6;
+constexpr int FP_SLOTS = 6;
 
-#define STRBUF_SZ 192
-#define STRBUF_SZ2 208
+constexpr int STRBUF_SZ = 192;
+constexpr int STRBUF_SZ2 = 208;
 
 typedef enum {
   REGSZ_8 = 0,
@@ -117,7 +117,7 @@ static struct {
   bool out[REG_X64_END];
 } asm_use;
 
-#define ASMOP_BUFSZ 32
+constexpr int ASMOP_BUFSZ = 32;
 static int asm_ops_cnt;
 static AsmParam *asm_ops[ASMOP_BUFSZ];
 

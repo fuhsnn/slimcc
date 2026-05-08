@@ -3,7 +3,7 @@
 #include "slimcc.h"
 
 // Initial hash bucket size
-#define INIT_SIZE 16
+constexpr int INIT_SIZE = 16;
 
 #define SHOULD_REHASH(_used, _cap) ((_used) * 11 / 8 >= _cap)
 
