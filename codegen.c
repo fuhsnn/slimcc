@@ -1313,18 +1313,18 @@ static const char f64f32[] = "cvtsd2ss %xmm0, %xmm0";
 static const char *const cast_table[][10] = {
   // clang-format off
   // i8   i16     i32     i64     u8     u16     u32     u64     f32     f64
-  {NULL,  NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i8
-  {i32i8, NULL,   NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i16
-  {i32i8, i32i16, NULL,   i32i64, i32u8, i32u16, NULL,   i32i64, i32f32, i32f64}, // i32
-  {i32i8, i32i16, NULL,   NULL,   i32u8, i32u16, NULL,   NULL,   i64f32, i64f64}, // i64
+  {nullptr, nullptr, nullptr, i32i64,  i32u8,   i32u16,  nullptr, i32i64,  i32f32,  i32f64 }, // i8
+  {i32i8,   nullptr, nullptr, i32i64,  i32u8,   i32u16,  nullptr, i32i64,  i32f32,  i32f64 }, // i16
+  {i32i8,   i32i16,  nullptr, i32i64,  i32u8,   i32u16,  nullptr, i32i64,  i32f32,  i32f64 }, // i32
+  {i32i8,   i32i16,  nullptr, nullptr, i32u8,   i32u16,  nullptr, nullptr, i64f32,  i64f64 }, // i64
 
-  {i32i8, NULL,   NULL,   i32i64, NULL,  NULL,   NULL,   i32i64, i32f32, i32f64}, // u8
-  {i32i8, i32i16, NULL,   i32i64, i32u8, NULL,   NULL,   i32i64, i32f32, i32f64}, // u16
-  {i32i8, i32i16, NULL,   u32i64, i32u8, i32u16, NULL,   u32i64, u32f32, u32f64}, // u32
-  {i32i8, i32i16, NULL,   NULL,   i32u8, i32u16, NULL,   NULL,   u64f32, u64f64}, // u64
+  {i32i8,   nullptr, nullptr, i32i64,  nullptr, nullptr, nullptr, i32i64,  i32f32,  i32f64 }, // u8
+  {i32i8,   i32i16,  nullptr, i32i64,  i32u8,   nullptr, nullptr, i32i64,  i32f32,  i32f64 }, // u16
+  {i32i8,   i32i16,  nullptr, u32i64,  i32u8,   i32u16,  nullptr, u32i64,  u32f32,  u32f64 }, // u32
+  {i32i8,   i32i16,  nullptr, nullptr, i32u8,   i32u16,  nullptr, nullptr, u64f32,  u64f64 }, // u64
 
-  {f32i8, f32i16, f32i32, f32i64, f32u8, f32u16, f32u32, f32u64, NULL,   f32f64}, // f32
-  {f64i8, f64i16, f64i32, f64i64, f64u8, f64u16, f64u32, f64u64, f64f32, NULL  }  // f64
+  {f32i8,   f32i16,  f32i32,  f32i64,  f32u8,   f32u16,  f32u32,  f32u64,  nullptr, f32f64 }, // f32
+  {f64i8,   f64i16,  f64i32,  f64i64,  f64u8,   f64u16,  f64u32,  f64u64,  f64f32,  nullptr}  // f64
   // clang-format on
 };
 
