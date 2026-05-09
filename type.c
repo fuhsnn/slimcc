@@ -132,22 +132,30 @@ static Type *get_elem(Type *ty) {
   return ty;
 }
 
-Type *unqual(Type *ty) {
+Type *tyof_unqual(Type *ty) {
   if (!is_array(ty))
     return ty->origin ? ty->origin : ty;
 
   Type *elem_ty = get_elem(ty);
-  if ((elem_ty->qual | Q_ATOMIC) == Q_ATOMIC)
-    return ty;
+  if ((elem_ty->qual | Q_ATOMIC) == Q_ATOMIC) {
+    bool has_alt_align = false;
+    for (Type *t = ty; is_array(t); t = t->base)
+      if ((has_alt_align = t->align != elem_ty->align))
+        break;
+    if (!has_alt_align)
+      return ty;
+  }
 
-  if (elem_ty->qual & Q_ATOMIC)
-    elem_ty = add_qual(Q_ATOMIC, elem_ty->origin, NULL);
-  else
-    elem_ty = elem_ty->origin;
+  if (elem_ty->origin) {
+    if (elem_ty->qual & Q_ATOMIC)
+      elem_ty = add_qual(Q_ATOMIC, elem_ty->origin, NULL);
+    else
+      elem_ty = elem_ty->origin;
+  }
 
   ty = copy_array_ty(elem_ty, ty);
   for (Type *t = ty; is_array(t); t = t->base)
-    t->align = 0;
+    t->align = elem_ty->align;
   return ty;
 }
 

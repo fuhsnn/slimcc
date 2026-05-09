@@ -475,7 +475,7 @@ static bool invalid_cast(Node *node, Type *to) {
 
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
-  ty = unqual(ty);
+  ty = ty->origin ? ty->origin : ty;
 
   if (invalid_cast(expr, ty))
     error_tok(expr->tok, "invalid cast");
@@ -1187,7 +1187,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
       case TK_union:         ty = struct_union_decl(&tok, tok, TY_UNION); break;
       case TK_enum:          ty = enum_specifier(&tok, tok); break;
       case TK_typeof:        ty = typeof_specifier(&tok, tok, attr); break;
-      case TK_typeof_unqual: ty = unqual(typeof_specifier(&tok, tok, attr)); break;
+      case TK_typeof_unqual: ty = tyof_unqual(typeof_specifier(&tok, tok, attr)); break;
       case TK_auto_type:     ty = new_type(TY_AUTO, -1, 0); break;
       }
       if (ty) {
@@ -1504,7 +1504,7 @@ static Type *typename(Token **rest, Token *tok) {
 
 static void new_enum(Type **ty) {
   if (*ty) {
-    (*ty) = copy_type(unqual(*ty));
+    (*ty) = copy_type((*ty)->origin ? (*ty)->origin : (*ty));
   } else {
     (*ty) = new_type(TY_ENUM, -1, 0);
     (*ty)->is_int_enum = true;
@@ -4821,7 +4821,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       }
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
       mem_attr(mem->name, tok, &attr, mem);
-
       cur = cur->next = mem;
 
       if (mem->ty->size < 0) {
@@ -5208,7 +5207,8 @@ static Node *generic_selection(Token **rest, Token *tok) {
   } else {
     Node *ctrl = assign(&tok, tok);
     add_type(ctrl);
-    t1 = unqual(ptr_decay(ctrl->ty));
+    t1 = ptr_decay(ctrl->ty);
+    t1 = t1->origin ? t1->origin : t1;
   }
   Node *ret = NULL;
   Node *def = NULL;

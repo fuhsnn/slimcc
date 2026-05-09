@@ -300,8 +300,8 @@ int main(int argc, char **argv) {
     ASSERT(0, 4095 & (int)&i1);
     ASSERT(0, 1023 & (int)&i2);
   }
-  {
 #ifdef NOTGCC
+  {
     typedef enum E T1 A2;
     typedef enum E T2;
     typedef enum E T3 A1;
@@ -314,8 +314,23 @@ int main(int argc, char **argv) {
     SASSERT(alignof(e3) == 1024);
     ASSERT(0, 4095 & (int)&e1);
     ASSERT(0, 1023 & (int)&e3);
-#endif
   }
+#endif
 
+#ifdef NOTCLANG
+  {
+    [[gnu::aligned(1024)]] typedef const short A[1];
+
+    struct S {
+      char c1[1];
+      __typeof_unqual(A) a1;
+      char c2[1];
+      __typeof_unqual__(A) a2;
+    };
+    SASSERT(sizeof(struct S) == 8);
+    SASSERT(offsetof(struct S, a1) == 2);
+    SASSERT(offsetof(struct S, a2) == 6);
+  }
+#endif
   printf("OK\n");
 }
