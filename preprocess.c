@@ -807,13 +807,13 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       MacroArg *start_arg = find_arg(&tok, tok, ctx);
       Token *start_tok = read_const_expr(start_arg->tok);
       int64_t start = eval_const_expr(start_tok);
-      
+
       tok = skip(tok, ",");
-      
+
       MacroArg *len_arg = find_arg(&tok, tok, ctx);
       Token *len_tok = read_const_expr(len_arg->tok);
       int64_t len = eval_const_expr(len_tok);
-      
+
       if (start <= 0)
       {
         error_tok(start_tok, "__VA_SLICE__ Non-positive start");
@@ -822,13 +822,13 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       {
         error_tok(start_tok, "__VA_SLICE__ Negative length");
       }
-      
+
       MacroArg *vaarg;
       if (!has_non_empty_va_arg(ctx, &vaarg))
       {
         continue;
       }
-      
+
       Token *arg_iter = vaarg->tok;
       int level = 0;
       for(int64_t i = 1 ; i < start && arg_iter->kind != TK_EOF ; i++)
@@ -845,13 +845,13 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           }
           arg_iter = arg_iter->next;
         }
-        
+
         if(arg_iter->kind != TK_EOF)
         {
           arg_iter = arg_iter->next; // skip comma
         }
       }
-      
+
       int64_t len_it = 0;
       level = 0;
       while(arg_iter->kind != TK_EOF && len_it < len)
@@ -866,7 +866,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           {
             level -= 1;
           }
-          
+
           cur = cur->next = copy_token(arg_iter);
           arg_iter = arg_iter->next;
         }
@@ -877,14 +877,14 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           arg_iter = arg_iter->next; // comma
         }
       }
-      
+
       tok = tok->next; // skip final )
       continue;
     }
     if(equal(tok, "__VA_COUNT_INTERNAL__") && consume(&tok, tok->next, "("))
     {
       tok = skip(tok, ")");
-      
+
       MacroArg *vaarg;
       if (!has_non_empty_va_arg(ctx, &vaarg))
       {
@@ -910,12 +910,12 @@ static Token *subst(Token *tok, MacroContext *ctx) {
         }
         if(arg_iter->kind != TK_EOF)
           arg_iter = arg_iter->next; // skip comma
-        
+
         count += 1;
       }
-      
+
       cur = cur->next = new_num_token(count, tok, tok->next);
-      
+
       continue;
     }
     if(equal(tok, "__REPEAT_INTERNAL__") && consume(&tok, tok->next, "("))
@@ -923,11 +923,11 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       MacroArg *n_arg = find_arg(&tok, tok, ctx);
       Token *n_tok = read_const_expr(n_arg->tok);
       int64_t n = eval_const_expr(n_tok);
-      
+
       tok = skip(tok, ")");
-      
+
       MacroArg *vaarg = &ctx->args[ctx->m->arg_cnt - 1];
-      
+
       int level = 0;
       for(int64_t i = 0; i < n ; i++)
       {
@@ -942,15 +942,15 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           {
             level -= 1;
           }
-          
+
           cur = cur->next = copy_token(arg_iter);
           arg_iter = arg_iter->next;
         }
       }
-      
+
       continue;
     }
-    
+
     if (equal(tok, "__VA_TAIL__") && consume(&tok, tok->next, "(")) {
       Macro *tail_m = NULL;
       Token *rparen = NULL;
@@ -1457,9 +1457,9 @@ void preprocess2(Token *tok, Token **cur) {
   if (get_cond_incl(&cond))
     error_tok(cond->tok, "unterminated conditional directive");
 
-  if (start_m != locked_macros) {
+  if (start_m != locked_macros)
     internal_error();
-  }
+
 }
 
 static Token *pass_line(Token **cur, Token *tok) {
@@ -1941,21 +1941,21 @@ static Token *has_extension_macro(Token *start) {
 static Token *interp_count_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
-  
+
   if(tok->kind != TK_ISTR)
     error_tok(start, "not an interpolated string");
-  
+
   int counter = 0;
   Token *interp = tok->interp_next;
-  
+
   while(interp)
   {
     counter += 1;
     interp = interp->interp_next;
   }
-  
+
   tok = skip(tok->next, ")");
-  
+
   pop_macro_lock_until(start, tok);
   return new_num_token(counter, start, tok);
 }
@@ -1963,21 +1963,21 @@ static Token *interp_count_macro(Token *start)
 static Token *interp_literal_count_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
-  
+
   if(tok->kind != TK_ISTR)
     error_tok(start, "not an interpolated string");
-  
+
   int counter = 0;
   Token *lit = tok->interp_str_next;
-  
+
   while(lit)
   {
     counter += 1;
     lit = lit->interp_str_next;
   }
-  
+
   tok = skip(tok->next, ")");
-  
+
   pop_macro_lock_until(start, tok);
   return new_num_token(counter, start, tok);
 }
@@ -1985,21 +1985,21 @@ static Token *interp_literal_count_macro(Token *start)
 static Token *interp_at_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
-  
+
   if(tok->kind != TK_ISTR)
     error_tok(start, "not an interpolated string");
-  
+
   Token *itok = tok;
   tok = skip(tok->next, ",");
-  
+
   Token *idx_tok = read_macro_arg_one(&tok, tok, false);
-  
+
   int64_t idx = eval_const_expr(idx_tok);
-  
+
   Token *it = itok->interp_next;
   if(it == NULL)
     error_tok(start, "interpolate string does not contain any interpolations");
-  
+
   int64_t count = idx;
   while(count--)
   {
@@ -2007,14 +2007,14 @@ static Token *interp_at_macro(Token *start)
     if(it == NULL)
       error_tok(start, "interpolate index %d out of bounds for %.*s", (int)idx, itok->len, itok->loc);
   }
-  
+
   tok = skip(tok, ")");
 
   pop_macro_lock_until(start, tok);
-  
+
   if(it->kind == TK_EOF)
     return tok;
-  
+
   Token *ret = copy_token(it);
   Token *cur = ret;
   for(Token *t = it->next; t->kind != TK_EOF; t = t->next)
@@ -2026,19 +2026,19 @@ static Token *interp_at_macro(Token *start)
 static Token *interp_literal_at_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
-  
+
   if(tok->kind != TK_ISTR)
     error_tok(start, "not an interpolated string");
-  
+
   Token *itok = tok;
   tok = skip(tok->next, ",");
-  
+
   Token *idx_tok = read_macro_arg_one(&tok, tok, false);
   int64_t idx = eval_const_expr(idx_tok);
-  
+
   Token *it = itok->interp_str_next;
   assert(it); // it being NULL makes no sense
-  
+
   int64_t count = idx;
   while(count--)
   {
@@ -2046,13 +2046,13 @@ static Token *interp_literal_at_macro(Token *start)
     if(it == NULL)
       error_tok(start, "literal index %d out of bounds for %.*s", (int)idx, itok->len, itok->loc);
   }
-  
+
   tok = skip(tok, ")");
-  
+
   char *quoted = strndup(it->loc, it->len);
   quoted[0] = '"';
   quoted[it->len - 1] = '"';
-  
+
   pop_macro_lock_until(start, tok);
   Token *ret = make_token(quoted, it, tok);
   ret->loc = quoted;
@@ -2112,7 +2112,7 @@ void init_macros(void) {
   add_builtin("__has_include", has_include_macro, true);
   add_builtin("__has_include_next", has_include_next_macro, true);
   add_builtin("__has_embed", has_embed_macro, true);
-  
+
   add_builtin("__INTERP_COUNT__", interp_count_macro, true);
   add_builtin("__INTERP_LITERAL_COUNT__", interp_literal_count_macro, true);
   add_builtin("__INTERP_AT__", interp_at_macro, true);
