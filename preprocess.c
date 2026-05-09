@@ -1457,8 +1457,20 @@ void preprocess2(Token *tok, Token **cur) {
   if (get_cond_incl(&cond))
     error_tok(cond->tok, "unterminated conditional directive");
 
-  if (start_m != locked_macros)
+  if (start_m != locked_macros) {
+    Macro *m = locked_macros;
+    while (m != start_m) {
+      fprintf(stderr, "unbalanced macro lock, stop_tok kind=%d at %s:%d, is_locked=%d, macro body starts: %.*s\n",
+              m->stop_tok->kind,
+              m->stop_tok->file ? m->stop_tok->file->name : "<null>",
+              m->stop_tok->line_no,
+              m->is_locked,
+              m->body ? m->body->len : 0,
+              m->body ? m->body->loc : "");
+      m = m->locked_next;
+    }
     internal_error();
+  }
 }
 
 static Token *pass_line(Token **cur, Token *tok) {
@@ -1937,78 +1949,102 @@ static Token *has_extension_macro(Token *start) {
   return new_bool_int_token(has_it, start, tok);
 }
 
-static void iter_interp_str(Token *tok, void(*on_found_interp)(Token *start, Token *end, void *arg), void *arg)
-{
-  const char *str = tok->loc + 1;
-  int len = tok->len - 1; // len may be incorrect because string literals are allowed to exist in interpolated string...
-  // the only solution is to tokenize them properly TK_ISTR
-  
-  for(int i = 0 ; i < len - 1 ; i++)
-  {
-    if(str[i] == '$')
-    {
-      if(str[i + 1] == '{')
-      {
-        int braces_open = 1;
-        Token *end;
-        Token *start = tokenize_cb(new_file("<built-in>", str + i + 2), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
-        
-        on_found_interp(start, end, arg);
-        
-        str = end->loc + end->len;
-      }
-      else if(str[i + 1] == '$')
-      {
-        i += 1;
-      }
-      else
-      {
-        error_tok(tok, "bad interpolate string");
-      }
-    }
-  }
-}
-
 static Token *interp_count_macro(Token *start)
 {
-  Token *tok = skip(start, "(");
-    
-  if(!equal(tok, "$"))
-    return new_num_token(0, start, tok);
+  Token *tok = skip(start->next, "(");
   
-  tok = skip(tok, "$");
-  if(tok->kind != TK_STR)
-    error_tok(tok, "expected a string literal");
+  if(tok->kind != TK_ISTR)
+    error_tok(start, "not an interpolated string");
   
-  const char *str = tok->loc + 1; // skip first quote
-  int len = tok->len - 2; // don't include first and last quotes
+  int counter = 0;
+  Token *interp = tok->interp_next;
   
-  int count = 0;
-  for(int i = 0 ; i < len - 1 ; i++)
+  while(interp)
   {
-    if(str[i] == '{')
-    {
-      if(str[i + 1] == '{')
-      {
-        i++;
-      }
-      else
-      {
-        count += 1;
-        
-      }
-    }
+    counter += 1;
+    interp = interp->interp_next;
   }
+  
+  tok = skip(tok->next, ")");
+  
+  fprintf(stderr, "pop_macro_lock_until: start=%p stop=%p locked_macros=%p locked_macros->stop_tok=%p\n",
+          (void*)start, (void*)tok, (void*)locked_macros,
+          locked_macros ? (void*)locked_macros->stop_tok : NULL);
+  pop_macro_lock_until(start, tok);
+  return new_num_token(counter, start, tok);
 }
 
 static Token *interp_at_macro(Token *start)
 {
+  Token *tok = skip(start->next, "(");
   
+  if(tok->kind != TK_ISTR)
+    error_tok(start, "not an interpolated string");
+  
+  Token *itok = tok;
+  tok = skip(tok->next, ",");
+  
+  Token *idx_tok = read_macro_arg_one(&tok, tok, false);
+  
+  int64_t idx = eval_const_expr(idx_tok);
+  
+  Token *it = itok->interp_next;
+  if(it == NULL)
+    error_tok(start, "interpolate string does not contain any interpolations");
+  
+  int64_t count = idx;
+  while(count--)
+  {
+    it = it->interp_next;
+    if(it == NULL)
+      error_tok(start, "interpolate index %d out of bounds for %.*s", (int)idx, itok->len, itok->loc);
+  }
+  
+  tok = skip(tok, ")");
+  
+  fprintf(stderr, "pop_macro_lock_until: start=%p stop=%p locked_macros=%p locked_macros->stop_tok=%p\n",
+          (void*)start, (void*)tok, (void*)locked_macros,
+          locked_macros ? (void*)locked_macros->stop_tok : NULL);
+  pop_macro_lock_until(start, tok);
+  Token *ret = make_token(strndup(it->loc, it->len), it, tok);
+  return ret;
 }
 
-static Token *base_str_at_macro(Token *start)
+static Token *interp_literal_at_macro(Token *start)
 {
+  Token *tok = skip(start->next, "(");
   
+  if(tok->kind != TK_ISTR)
+    error_tok(start, "not an interpolated string");
+  
+  Token *itok = tok;
+  tok = skip(tok->next, ",");
+  
+  Token *idx_tok = read_macro_arg_one(&tok, tok, false);
+  int64_t idx = eval_const_expr(idx_tok);
+  
+  Token *it = itok->interp_str_next;
+  assert(it); // it being NULL makes no sense
+  
+  int64_t count = idx;
+  while(count--)
+  {
+    it = it->interp_str_next;
+    if(it == NULL)
+      error_tok(start, "literal index %d out of bounds for %.*s", (int)idx, itok->len, itok->loc);
+  }
+  
+  tok = skip(tok, ")");
+  
+  char *quoted = strndup(it->loc, it->len);
+  quoted[0] = '"';
+  quoted[it->len - 1] = '"';
+  
+  pop_macro_lock_until(start, tok);
+  Token *ret = make_token(quoted, it, tok);
+  ret->loc = quoted;
+
+  return ret;
 }
 
 
@@ -2066,7 +2102,7 @@ void init_macros(void) {
   
   add_builtin("__INTERP_COUNT__", interp_count_macro, true);
   add_builtin("__INTERP_AT__", interp_at_macro, true);
-  add_builtin("__BASE_STR_AT__", base_str_at_macro, true);
+  add_builtin("__INTERP_LITERAL_AT__", interp_literal_at_macro, true);
 }
 
 void dump_defines(FILE *out) {

@@ -584,7 +584,7 @@ static const char *interp_string_contains_interp(const char *p)
       error_at(start, "unclosed string literal");
     if (*p == '\\')
       p++;
-    if(*p == '$' && p[1] == '$')
+    if(*p == '\\' && p[1] == '$')
       p += 2;
     if(*p == '$' && p[1] == '{')
       return p;
@@ -599,26 +599,58 @@ static Token *read_interp_string_literal(const char *start, const char *quote, T
   Token interps_start = {};
   Token *strings = &strings_start;
   Token *interps = &interps_start;
-  
-  const char *it = quote + 1;
-  
+
+  const char *it = quote + 2;
+
   while(true)
   {
     const char *interp = interp_string_contains_interp(it);
-    
+
     if(interp)
     {
+      assert(*interp == '$');
+
+      strings = strings->interp_str_next = read_string_literal_given_end(it - 1, it - 1, interp, ty);
+      strings->next = new_token(TK_EOF, strings->loc + strings->len, strings->loc + strings->len);
+
+      it += strings->len - 2;
+
       int braces_open = 1;
-      Token *end;
-      
-      interps = interps->next = tokenize_cb(new_file("<built-in>", it + 2), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
-      
-      strings = strings->next = read_string_literal_given_end(it - 1, it - 1, it, ty);
-      
+      Token *end = NULL;
+
+      interps->interp_next = tokenize_cb(new_file("<built-in>", it + 2), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
+
+      assert(end);
+
       it = end->loc + end->len;
+      Token *last = interps->interp_next;
+      
+      if(last == end)
+      {
+        interps->interp_next = interps->interp_next->next;
+      }
+      else
+      {
+        while(last->next != end)
+          last = last->next;
+        last->next = end->next;
+      }
+      
+      interps = interps->interp_next;
       assert(it[-1] == '}');
     }
+    else
+    {
+      strings = strings->interp_str_next = read_string_literal(it - 1, it - 1, ty);
+      strings->next = new_token(TK_EOF, strings->loc + strings->len, strings->loc + strings->len);
+      break;
+    }
   }
+
+  Token *tok = new_token(TK_ISTR, start, strings->loc + strings->len);
+  tok->interp_str_next = strings_start.interp_str_next;
+  tok->interp_next = interps_start.interp_next;
+  return tok;
 }
 
 // Read a UTF-8-encoded string literal and transcode it in UTF-16.
@@ -1066,21 +1098,21 @@ void convert_ucn_ident(Token *tok) {
 }
 
 Token *tokenize(File *file, SlashDelta *delta, Token **end) {
-  return tokenize_cb(file, delta, end, NULL, NULL);
+  Token *tok = tokenize_cb(file, delta, end, NULL, NULL);
+  add_line_numbers(tok, file, delta);
+  return tok;
 }
 
 #define accept_or_break(t) \
 do { \
   Token *tok_to_check = t; \
-  if(!cb(tok_to_check, arg)) \
-  { \
-    tok_to_check->next = tok_freelist; \
-    tok_freelist = tok_to_check; \
-    goto out; \
-  } \
   cur = cur->next = tok_to_check; \
   p += cur->len; \
-  continue; \
+  if(!cb(tok_to_check, arg)) \
+  { \
+    goto break_loop; \
+  } \
+  goto continue_loop; \
 } while(0)
 
 bool tokenize_cb_accept(Token *tok, void *arg)
@@ -1101,6 +1133,7 @@ Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*,
   at_bol = true;
   has_space = false;
 
+  continue_loop:
   while (*p) {
     // Skip newline.
     if (*p == '\n') {
@@ -1146,12 +1179,6 @@ Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*,
       accept_or_break(new_pp_number(p, p2 + 1));
     }
 
-    // Punctuators
-    int punct_len = read_punct(p);
-    if (punct_len) {
-      accept_or_break(new_token(TK_PUNCT, p, p + punct_len));
-    }
-
     if (opt_cc1_asm_pp) {
       if (*p == '$') {
         accept_or_break(new_token(TK_PUNCT, p, p + 1));
@@ -1166,6 +1193,11 @@ Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*,
       // String literal
       if (*p == '"') {
         accept_or_break(read_string_literal(p, p, ty_pchar));
+      }
+
+      // Interpolated string
+      if(Startswith2(p, '$', '\"')) {
+        accept_or_break(read_interp_string_literal(p, p, ty_pchar));
       }
 
       // UTF-8 string literal
@@ -1217,6 +1249,12 @@ Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*,
       }
     }
 
+    // Punctuators
+    int punct_len = read_punct(p);
+    if (punct_len) {
+      accept_or_break(new_token(TK_PUNCT, p, p + punct_len));
+    }
+
     // Identifier or keyword
     Token *ident = read_ident(p);
     if (ident) {
@@ -1230,12 +1268,11 @@ Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*,
     error_at(p, "invalid token");
   }
 
-  out:
+  break_loop:
   if (end && cur != &head)
     *end = cur;
   cur->next = new_token(TK_EOF, p, p);
   cur->next->at_bol = true;
-  add_line_numbers(head.next, file, delta);
   return head.next;
 }
 
