@@ -1459,7 +1459,6 @@ void preprocess2(Token *tok, Token **cur) {
 
   if (start_m != locked_macros)
     internal_error();
-
 }
 
 static Token *pass_line(Token **cur, Token *tok) {

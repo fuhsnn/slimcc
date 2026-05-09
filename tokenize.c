@@ -505,7 +505,7 @@ static Token *asm_string_literal(const char *p, char end) {
 // Find a closing double-quote.
 static const char *string_literal_end(const char *p) {
   const char *start = p;
-  for (; *p != '\"'; p++) {
+  for (; *p != '"'; p++) {
     if (*p == '\n' || *p == '\0')
       error_at(start, "unclosed string literal");
     if (*p == '\\')
