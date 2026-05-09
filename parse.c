@@ -1078,7 +1078,7 @@ static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
 
 static void chk_inline(VarAttr *attr, Token *tok) {
   if (attr->strg & SC_INLINE)
-    error_tok(tok, "only function delcarations can be 'inline'");
+    error_tok(tok, "only function declarations can be 'inline'");
 }
 
 static bool chk_storage_class(StorageClass msk, StorageClass allow) {
