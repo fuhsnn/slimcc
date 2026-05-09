@@ -1458,17 +1458,6 @@ void preprocess2(Token *tok, Token **cur) {
     error_tok(cond->tok, "unterminated conditional directive");
 
   if (start_m != locked_macros) {
-    Macro *m = locked_macros;
-    while (m != start_m) {
-      fprintf(stderr, "unbalanced macro lock, stop_tok kind=%d at %s:%d, is_locked=%d, macro body starts: %.*s\n",
-              m->stop_tok->kind,
-              m->stop_tok->file ? m->stop_tok->file->name : "<null>",
-              m->stop_tok->line_no,
-              m->is_locked,
-              m->body ? m->body->len : 0,
-              m->body ? m->body->loc : "");
-      m = m->locked_next;
-    }
     internal_error();
   }
 }
@@ -1967,9 +1956,28 @@ static Token *interp_count_macro(Token *start)
   
   tok = skip(tok->next, ")");
   
-  fprintf(stderr, "pop_macro_lock_until: start=%p stop=%p locked_macros=%p locked_macros->stop_tok=%p\n",
-          (void*)start, (void*)tok, (void*)locked_macros,
-          locked_macros ? (void*)locked_macros->stop_tok : NULL);
+  pop_macro_lock_until(start, tok);
+  return new_num_token(counter, start, tok);
+}
+
+static Token *interp_literal_count_macro(Token *start)
+{
+  Token *tok = skip(start->next, "(");
+  
+  if(tok->kind != TK_ISTR)
+    error_tok(start, "not an interpolated string");
+  
+  int counter = 0;
+  Token *lit = tok->interp_str_next;
+  
+  while(lit)
+  {
+    counter += 1;
+    lit = lit->interp_str_next;
+  }
+  
+  tok = skip(tok->next, ")");
+  
   pop_macro_lock_until(start, tok);
   return new_num_token(counter, start, tok);
 }
@@ -2001,12 +2009,17 @@ static Token *interp_at_macro(Token *start)
   }
   
   tok = skip(tok, ")");
-  
-  fprintf(stderr, "pop_macro_lock_until: start=%p stop=%p locked_macros=%p locked_macros->stop_tok=%p\n",
-          (void*)start, (void*)tok, (void*)locked_macros,
-          locked_macros ? (void*)locked_macros->stop_tok : NULL);
+
   pop_macro_lock_until(start, tok);
-  Token *ret = make_token(strndup(it->loc, it->len), it, tok);
+  
+  if(it->kind == TK_EOF)
+    return tok;
+  
+  Token *ret = copy_token(it);
+  Token *cur = ret;
+  for(Token *t = it->next; t->kind != TK_EOF; t = t->next)
+    cur = cur->next = copy_token(t);
+  cur->next = tok;
   return ret;
 }
 
@@ -2101,6 +2114,7 @@ void init_macros(void) {
   add_builtin("__has_embed", has_embed_macro, true);
   
   add_builtin("__INTERP_COUNT__", interp_count_macro, true);
+  add_builtin("__INTERP_LITERAL_COUNT__", interp_literal_count_macro, true);
   add_builtin("__INTERP_AT__", interp_at_macro, true);
   add_builtin("__INTERP_LITERAL_AT__", interp_literal_at_macro, true);
 }

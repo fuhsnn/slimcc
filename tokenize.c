@@ -582,10 +582,10 @@ static const char *interp_string_contains_interp(const char *p)
   for (; *p != '"'; p++) {
     if (*p == '\n' || *p == '\0')
       error_at(start, "unclosed string literal");
-    if (*p == '\\')
-      p++;
     if(*p == '\\' && p[1] == '$')
       p += 2;
+    if (*p == '\\')
+      p++;
     if(*p == '$' && p[1] == '{')
       return p;
   }
