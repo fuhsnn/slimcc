@@ -502,20 +502,16 @@ static Token *asm_string_literal(const char *p, char end) {
   return tok;
 }
 
-static const char *string_literal_find_end(const char *p, char end_char) {
+// Find a closing double-quote.
+static const char *string_literal_end(const char *p) {
   const char *start = p;
-  for (; *p != end_char; p++) {
+  for (; *p != '\"'; p++) {
     if (*p == '\n' || *p == '\0')
       error_at(start, "unclosed string literal");
     if (*p == '\\')
       p++;
   }
   return p;
-}
-
-// Find a closing double-quote.
-static const char *string_literal_end(const char *p) {
-  return string_literal_find_end(p, '"');
 }
 
 static Token *read_string_literal_given_end(const char *start, const char *quote, const char *end, Type *ty)
@@ -556,7 +552,7 @@ static Token *read_string_literal(const char *start, const char *quote, Type *ty
 static bool stop_on_unbalanced_close_curly_brace(Token *tok, void *arg)
 {
   int *braces_open = arg;
-  
+
   if(equal(tok, "{"))
   {
     *braces_open += 1;
@@ -565,7 +561,7 @@ static bool stop_on_unbalanced_close_curly_brace(Token *tok, void *arg)
   {
     *braces_open -= 1;
   }
-  
+
   if(*braces_open == 0)
   {
     return false;
@@ -624,7 +620,7 @@ static Token *read_interp_string_literal(const char *start, const char *quote, T
 
       it = end->loc + end->len;
       Token *last = interps->interp_next;
-      
+
       if(last == end)
       {
         interps->interp_next = interps->interp_next->next;
@@ -635,7 +631,7 @@ static Token *read_interp_string_literal(const char *start, const char *quote, T
           last = last->next;
         last->next = end->next;
       }
-      
+
       interps = interps->interp_next;
       assert(it[-1] == '}');
     }
@@ -1123,7 +1119,7 @@ bool tokenize_cb_accept(Token *tok, void *arg)
 Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*, void*), void *arg) {
   if(cb == NULL)
     cb = tokenize_cb_accept;
-  
+
   current_file = file;
 
   const char *p = file->contents;
