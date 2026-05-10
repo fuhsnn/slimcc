@@ -578,12 +578,15 @@ static const char *interp_string_contains_interp(const char *p)
   for (; *p != '"'; p++) {
     if (*p == '\n' || *p == '\0')
       error_at(start, "unclosed string literal");
-    if(*p == '\\' && p[1] == '$')
+    if(*p == '\\' && p[1] == '{')
+    {
       p += 2;
+      continue;
+    }
+    if(*p == '{')
+      return p;
     if (*p == '\\')
       p++;
-    if(*p == '$' && p[1] == '{')
-      return p;
   }
   return NULL;
 }
@@ -604,17 +607,18 @@ static Token *read_interp_string_literal(const char *start, const char *quote, T
 
     if(interp)
     {
-      assert(*interp == '$');
+      assert(*interp == '{');
 
       strings = strings->interp_str_next = read_string_literal_given_end(it - 1, it - 1, interp, ty);
       strings->next = new_token(TK_EOF, strings->loc + strings->len, strings->loc + strings->len);
 
       it += strings->len - 2;
-
+      assert(*it == '{');
+      
       int braces_open = 1;
       Token *end = NULL;
 
-      interps->interp_next = tokenize_cb(new_file("<built-in>", it + 2), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
+      interps->interp_next = tokenize_cb(new_file("<built-in>", it + 1), NULL, &end, stop_on_unbalanced_close_curly_brace, &braces_open);
 
       assert(end);
 
@@ -1192,7 +1196,7 @@ Token *tokenize_cb(File *file, SlashDelta *delta, Token **end, bool(*cb)(Token*,
       }
 
       // Interpolated string
-      if(Startswith2(p, '$', '\"')) {
+      if(Startswith2(p, 'f', '\"')) {
         accept_or_break(read_interp_string_literal(p, p, ty_pchar));
       }
 
