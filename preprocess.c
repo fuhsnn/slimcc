@@ -2059,6 +2059,79 @@ static Token *interp_literal_at_macro(Token *start)
   return ret;
 }
 
+static Token *interp_list_macro(Token *start)
+{
+  Token *tok = skip(start->next, "(");
+  
+  Token *itok = tok;
+  if(itok->kind != TK_ISTR)
+    error_tok(start, "not an interpolated string");
+  
+  Token *it = itok->interp_next;
+  
+  Token *arg2 = skip(itok->next, ",");
+  
+  Token *macro = split_paren(&tok, arg2);
+  
+  pop_macro_lock_until(start, tok);
+  
+  if(it == NULL || it->kind == TK_EOF)
+    return tok;
+  
+  Token head = {0};
+  Token *cur = &head;
+  while(it && it->kind != TK_EOF)
+  {
+    for(Token *t = macro; t->kind != TK_EOF; t = t->next)
+      cur = cur->next = copy_token(t);
+    cur = cur->next = make_token("(", tok, NULL);
+    for(Token *t = it; t->kind != TK_EOF; t = t->next)
+      cur = cur->next = copy_token(t);
+    cur = cur->next = make_token(")", tok, NULL);
+    it = it->interp_next;
+  }
+  cur->next = tok;
+  return head.next;
+}
+
+static Token *interp_literal_list_macro(Token *start)
+{
+  Token *tok = skip(start->next, "(");
+  
+  Token *itok = tok;
+  if(itok->kind != TK_ISTR)
+    error_tok(start, "not an interpolated string");
+  
+  Token *it = itok->interp_str_next;
+  
+  Token *arg2 = skip(itok->next, ",");
+  
+  Token *macro = split_paren(&tok, arg2);
+  
+  pop_macro_lock_until(start, tok);
+  
+  if(it == NULL || it->kind == TK_EOF)
+    return tok;
+  
+  Token head = {0};
+  Token *cur = &head;
+  while(it && it->kind != TK_EOF)
+  {
+    for(Token *t = macro; t->kind != TK_EOF; t = t->next)
+      cur = cur->next = copy_token(t);
+    
+    cur = cur->next = make_token("(", tok, NULL);
+    
+    char *quoted = strndup(it->loc, it->len);
+    quoted[0] = quoted[it->len - 1] = '"';
+    
+    cur = cur->next = make_token(quoted, it, NULL);
+    cur = cur->next = make_token(")", tok, NULL);
+    it = it->interp_str_next;
+  }
+  cur->next = tok;
+  return head.next;
+}
 
 void init_macros(void) {
   define_macro("__slimcc__", "1");
@@ -2116,6 +2189,8 @@ void init_macros(void) {
   add_builtin("__INTERP_LITERAL_COUNT__", interp_literal_count_macro, true);
   add_builtin("__INTERP_AT__", interp_at_macro, true);
   add_builtin("__INTERP_LITERAL_AT__", interp_literal_at_macro, true);
+  add_builtin("__INTERP_LIST__", interp_list_macro, true);
+  add_builtin("__INTERP_LITERAL_LIST__", interp_literal_list_macro, true);
 }
 
 void dump_defines(FILE *out) {
