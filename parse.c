@@ -375,7 +375,7 @@ static bool is_func_def(Token *end_tok) {
 }
 
 bool equal_tok(Token *a, Token *b) {
-  return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
+  return a ? a->len == b->len && !memcmp(a->loc, b->loc, b->len) : !b;
 }
 
 static bool equal_substr(const char *loc, size_t len, const char *op) {
