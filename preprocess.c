@@ -1981,113 +1981,37 @@ static Token *interp_literal_count_macro(Token *start)
   return new_num_token(counter, start, tok);
 }
 
-static Token *interp_at_macro(Token *start)
-{
-  Token *tok = skip(start->next, "(");
-
-  if(tok->kind != TK_ISTR)
-    error_tok(start, "not an interpolated string");
-
-  Token *itok = tok;
-  tok = skip(tok->next, ",");
-
-  Token *idx_tok = read_macro_arg_one(&tok, tok, false);
-
-  int64_t idx = eval_const_expr(idx_tok);
-
-  Token *it = itok->interp_next;
-  if(it == NULL)
-    error_tok(start, "interpolate string does not contain any interpolations");
-
-  int64_t count = idx;
-  while(count--)
-  {
-    it = it->interp_next;
-    if(it == NULL)
-      error_tok(start, "interpolate index %d out of bounds for %.*s", (int)idx, itok->len, itok->loc);
-  }
-
-  tok = skip(tok, ")");
-
-  pop_macro_lock_until(start, tok);
-
-  if(it->kind == TK_EOF)
-    return tok;
-
-  Token *ret = copy_token(it);
-  Token *cur = ret;
-  for(Token *t = it->next; t->kind != TK_EOF; t = t->next)
-    cur = cur->next = copy_token(t);
-  cur->next = tok;
-  return ret;
-}
-
-static Token *interp_literal_at_macro(Token *start)
-{
-  Token *tok = skip(start->next, "(");
-
-  if(tok->kind != TK_ISTR)
-    error_tok(start, "not an interpolated string");
-
-  Token *itok = tok;
-  tok = skip(tok->next, ",");
-
-  Token *idx_tok = read_macro_arg_one(&tok, tok, false);
-  int64_t idx = eval_const_expr(idx_tok);
-
-  Token *it = itok->interp_str_next;
-  assert(it); // it being NULL makes no sense
-
-  int64_t count = idx;
-  while(count--)
-  {
-    it = it->interp_str_next;
-    if(it == NULL)
-      error_tok(start, "literal index %d out of bounds for %.*s", (int)idx, itok->len, itok->loc);
-  }
-
-  tok = skip(tok, ")");
-
-  char *quoted = strndup(it->loc, it->len);
-  quoted[0] = '"';
-  quoted[it->len - 1] = '"';
-
-  pop_macro_lock_until(start, tok);
-  Token *ret = make_token(quoted, it, tok);
-  ret->loc = quoted;
-
-  return ret;
-}
-
 static Token *interp_list_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
-  
+
   Token *itok = tok;
+
   if(itok->kind != TK_ISTR)
     error_tok(start, "not an interpolated string");
-  
+
+  tok = tok->next;
+  tok = skip(tok, ")");
+
   Token *it = itok->interp_next;
-  
-  Token *arg2 = skip(itok->next, ",");
-  
-  Token *macro = split_paren(&tok, arg2);
-  
+
   pop_macro_lock_until(start, tok);
-  
+
   if(it == NULL || it->kind == TK_EOF)
     return tok;
-  
+
   Token head = {0};
   Token *cur = &head;
   while(it && it->kind != TK_EOF)
   {
-    for(Token *t = macro; t->kind != TK_EOF; t = t->next)
-      cur = cur->next = copy_token(t);
     cur = cur->next = make_token("(", tok, NULL);
     for(Token *t = it; t->kind != TK_EOF; t = t->next)
       cur = cur->next = copy_token(t);
     cur = cur->next = make_token(")", tok, NULL);
+
+    if(it->interp_next && it->interp_next->kind != TK_EOF)
+      cur = cur->next = make_token(",", tok, NULL);
+
     it = it->interp_next;
   }
   cur->next = tok;
@@ -2097,36 +2021,32 @@ static Token *interp_list_macro(Token *start)
 static Token *interp_literal_list_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
-  
+
   Token *itok = tok;
   if(itok->kind != TK_ISTR)
     error_tok(start, "not an interpolated string");
-  
+
+  tok = tok->next;
+  tok = skip(tok, ")");
+
   Token *it = itok->interp_str_next;
-  
-  Token *arg2 = skip(itok->next, ",");
-  
-  Token *macro = split_paren(&tok, arg2);
-  
+
   pop_macro_lock_until(start, tok);
   
   if(it == NULL || it->kind == TK_EOF)
     return tok;
-  
+
   Token head = {0};
   Token *cur = &head;
   while(it && it->kind != TK_EOF)
   {
-    for(Token *t = macro; t->kind != TK_EOF; t = t->next)
-      cur = cur->next = copy_token(t);
-    
-    cur = cur->next = make_token("(", tok, NULL);
-    
     char *quoted = strndup(it->loc, it->len);
     quoted[0] = quoted[it->len - 1] = '"';
-    
+
     cur = cur->next = make_token(quoted, it, NULL);
-    cur = cur->next = make_token(")", tok, NULL);
+
+    if(it->interp_str_next && it->interp_str_next->kind != TK_EOF)
+      cur = cur->next = make_token(",", tok, NULL);
     it = it->interp_str_next;
   }
   cur->next = tok;
@@ -2187,8 +2107,6 @@ void init_macros(void) {
 
   add_builtin("__INTERP_COUNT__", interp_count_macro, true);
   add_builtin("__INTERP_LITERAL_COUNT__", interp_literal_count_macro, true);
-  add_builtin("__INTERP_AT__", interp_at_macro, true);
-  add_builtin("__INTERP_LITERAL_AT__", interp_literal_at_macro, true);
   add_builtin("__INTERP_LIST__", interp_list_macro, true);
   add_builtin("__INTERP_LITERAL_LIST__", interp_literal_list_macro, true);
 }
