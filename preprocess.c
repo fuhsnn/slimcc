@@ -1987,8 +1987,8 @@ static Token *interp_list_macro(Token *start)
 
   Token *itok = tok;
 
-  if(itok->kind != TK_ISTR)
-    error_tok(start, "not an interpolated string");
+  if(itok->kind != TK_ISTR && itok->kind != TK_STR)
+    error_tok(start, "expected a string");
 
   tok = tok->next;
   tok = skip(tok, ")");
@@ -2023,8 +2023,8 @@ static Token *interp_literal_list_macro(Token *start)
   Token *tok = skip(start->next, "(");
 
   Token *itok = tok;
-  if(itok->kind != TK_ISTR)
-    error_tok(start, "not an interpolated string");
+  if(itok->kind != TK_ISTR && itok->kind != TK_STR)
+    error_tok(start, "expected a string");
 
   tok = tok->next;
   tok = skip(tok, ")");
@@ -2033,7 +2033,13 @@ static Token *interp_literal_list_macro(Token *start)
 
   pop_macro_lock_until(start, tok);
   
-  if(it == NULL || it->kind == TK_EOF)
+  if(itok->kind == TK_STR)
+  {
+     Token *cur = copy_token(itok);
+     cur->next = tok;
+     return cur;
+  }
+  else if(it == NULL || it->kind == TK_EOF)
     return tok;
 
   Token head = {0};
