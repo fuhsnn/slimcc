@@ -375,7 +375,7 @@ static bool is_func_def(Token *end_tok) {
 }
 
 bool equal_tok(Token *a, Token *b) {
-  return a->len == b->len && !memcmp(a->loc, b->loc, b->len);
+  return a ? a->len == b->len && !memcmp(a->loc, b->loc, b->len) : !b;
 }
 
 static bool equal_substr(const char *loc, size_t len, const char *op) {
@@ -5355,6 +5355,8 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     Node *node = assign(&tok, tok);
     *rest = skip_tk(tok, TK_RPAREN);
     add_type(node);
+    if (node->ty->kind == TY_ARRAY)
+      ptr_convert(&node);
     if (node->ty->kind != TY_PTR || node->ty->base->kind == TY_VOID)
       error_tok(tok, "expected pointer to non-void type");
 

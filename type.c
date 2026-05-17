@@ -1,4 +1,5 @@
 #include "slimcc.h"
+#include <string.h>
 
 Type *ty_void = &(Type){.kind = TY_VOID, .size = 1, .align = 1};
 Type *ty_bool = &(Type){.kind = TY_BOOL, .size = 1, .align = 1, .is_unsigned = true};
@@ -448,9 +449,8 @@ bool is_record_compat(Type *t1, Type *t2) {
         return false;
 
     if (t1->kind == TY_STRUCT || t1->kind == TY_UNION) {
-      if (!mem1->name != !t1->tag ||
-          !mem2->name != !t2->tag ||
-          (t1->tag && !equal_tok(t1->tag, t2->tag)))
+      if (((mem1->name || mem2->name) && !equal_tok(mem1->name, mem2->name)) ||
+          ((t1->tag || t2->tag) && !equal_tok(t1->tag, t2->tag)))
         return false;
       if (!is_qual_compat(t1, t2) || !is_record_compat(t1, t2))
         return false;
