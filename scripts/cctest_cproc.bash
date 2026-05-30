@@ -1,9 +1,6 @@
 set -u
 
 skip_files=(
- # observing enum value type before the enum type is completed
- enum-large-value
-
  # unimplemented
  builtin-inff
  builtin-nanf
@@ -13,6 +10,8 @@ fix_up() {
   for src in varargs*.c; do
     sed -i 's|__builtin_va_start(ap)|__builtin_c23_va_start(ap)|g' $src
   done
+
+  sed -i 's|C4 = C4|C4_ = C4|g' enum-large-value.c
 
   # overflow'd unicode seq
   sed -i '/char/d' initializer-string-wide.c

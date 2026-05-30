@@ -48,6 +48,7 @@ jobs:
           - { vm: interop, proj: build_yquake2 }
           - { vm: interop, proj: test_blosc2 }
           - { vm: interop, proj: test_box2d }
+          - { vm: interop, proj: test_box3d }
           - { vm: interop, proj: test_c3 }
           - { vm: interop, proj: test_cmark }
           - { vm: interop, proj: test_ffc }
@@ -98,7 +99,6 @@ jobs:
           - { vm: main, proj: build_oksh }
           - { vm: main, proj: build_pcc }
           - { vm: main, proj: build_racket }
-          - { vm: main, proj: build_simplecc }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_tin }
           - { vm: main, proj: build_vedis }
@@ -256,7 +256,7 @@ jobs:
           - { vm: main, proj: test_postgres }
           - { vm: main, proj: test_ptmalloc }
           - { vm: main, proj: test_python }
-          - { vm: main, proj: test_qbe }
+          - { vm: main, proj: test_qbe_simplecc }
           - { vm: main, proj: test_quickjs }
           - { vm: main, proj: test_rsync }
           - { vm: main, proj: test_ruby }

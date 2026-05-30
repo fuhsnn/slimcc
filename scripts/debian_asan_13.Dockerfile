@@ -60,6 +60,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  tidy \
  # cmp
  libcmocka-dev \
+ # libjsonc
+ xxd \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain

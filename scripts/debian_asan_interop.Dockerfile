@@ -35,9 +35,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  libxtst-dev \
  # protobuf-c
  libprotobuf-dev libprotoc-dev \
- && apt-get clean && rm -rf /var/cache/apt/* \
  # c-blosc2
- liblz4-dev
+ liblz4-dev \
+ # box3d
+ libgtk-3-dev \
+ && apt-get clean && rm -rf /var/cache/apt/*
 
 FROM install-deps AS setup-toolchain
 
