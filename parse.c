@@ -3,8 +3,7 @@
 typedef struct {
   Obj *var;
   Type *type_def;
-  Type *enum_ty;
-  int64_t enum_val;
+  EnumVal *enum_val;
 } VarScope;
 
 typedef enum {
@@ -1500,47 +1499,35 @@ static Type *typename(Token **rest, Token *tok) {
   return typename2(rest, tok, &(VarAttr){0});
 }
 
-static void new_enum(Type **ty) {
-  if (*ty) {
-    (*ty) = copy_type((*ty)->origin ? (*ty)->origin : (*ty));
-  } else {
-    (*ty) = new_type(TY_ENUM, -1, 0);
-    (*ty)->is_int_enum = true;
-  }
-  (*ty)->is_enum = true;
+static uint64_t enum_ovf_val(Type *ty) {
+  int64_t shft = bit_size(ty) - !ty->is_unsigned;
+  return shft < 64 ? ((uint64_t)1 << shft) : 0;
 }
 
-static bool chk_enum_tag(Type *tag_ty, Type *fixed_ty, Token *tag) {
-  if (!tag_ty)
-    return false;
-  if (tag_ty->kind == TY_STRUCT || tag_ty->kind == TY_UNION)
-    error_tok(tag, "not an enum tag");
-  if (fixed_ty &&
-      (fixed_ty->kind != tag_ty->kind || fixed_ty->is_unsigned != tag_ty->is_unsigned))
-    error_tok(tag, "enum redeclared with incompatible type");
-  return true;
-}
-
-static bool enum_chk_ty_range(Type *ty, int64_t min, uint64_t max) {
-  int lbits = 64 - bit_size(ty);
-  if (lbits < 0)
-    internal_error();
-  if (min) {
+static bool chk_enum_fixed_range(bool is_neg, Type *ty, uint64_t val, uint64_t ovf_val) {
+  if (is_neg) {
     if (ty->is_unsigned)
       return true;
-    if (min != (int64_t)((uint64_t)min << lbits) >> lbits)
-      return true;
+
+    // ovf_val == 2^(n-1), valid negative range of val is [-2^(n-1), -1]
+    return (int64_t)(ovf_val + val) < 0;
   }
-  if (max) {
-    if (!ty->is_unsigned) {
-      if (ty->bit_cnt == 1)
-        return true;
-      lbits++;
-    }
-    if (max != (max << lbits) >> lbits)
-      return true;
+  return val > (ovf_val - 1);
+}
+
+static Type *enum_ty_tag(Token *tag, Type *tag_ty) {
+  if (tag_ty) {
+    if (!tag_ty->is_enum)
+      error_tok(tag, "mismatched tag type");
+    return tag_ty;
   }
-  return false;
+
+  Type *ty = new_type(TY_ENUM, -1, 0);
+  ty->is_enum = true;
+
+  if (tag)
+    push_tag_scope(tag, ty);
+  return ty;
 }
 
 static Type *enum_specifier(Token **rest, Token *tok) {
@@ -1554,129 +1541,172 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     tok = tok->next;
   }
 
-  Type *ty = NULL;
-  if (tok->kind == TK_COLON && is_typename(tok->next)) {
-    Token *start = tok;
-    ty = typename(&tok, tok->next);
-
-    if (!is_int_class(ty) || ty->is_enum)
-      error_tok(start, "invalid enum underlying type");
-    if (ty->kind == TY_BITINT && ty->bit_cnt > 64)
-      error_tok(start, "large _BitInt unsupported here");
-    if (tok->kind != TK_LCURLY)
-      skip_tk(tok, TK_SEMI);
-  }
-  if (tag && tok->kind != TK_LCURLY) {
-    *rest = tok;
-
-    Type *tag_ty = ty ? find_tag_in_scope(tag) : find_tag(tag);
-    if (chk_enum_tag(tag_ty, ty, tag))
-      return tag_ty;
-
-    new_enum(&ty);
-    push_tag_scope(tag, ty);
-    return ty;
-  }
-  tok = skip_tk(tok, TK_LCURLY);
-
-  EnumVal *tag_enums = NULL;
-  int64_t tag_enum_cnt = 0;
-  int64_t decl_enum_cnt = 0;
+  bool is_fixed = tok->kind == TK_COLON && is_typename(tok->next);
 
   Type *tag_ty = NULL;
-  if (tag)
-    tag_ty = find_tag_in_scope(tag);
-
-  if (chk_enum_tag(tag_ty, ty, tag)) {
-    if (opt_std < STD_C23) {
-      if (!ty && tag_ty->kind != TY_ENUM)
-        error_tok(tag, "enum redeclaration");
-    } else {
-      tag_enums = tag_ty->enums;
-      for (EnumVal *ev = tag_enums; ev; ev = ev->next)
-        tag_enum_cnt++;
+  if (tag) {
+    if (tok->kind != TK_LCURLY && !is_fixed) {
+      *rest = tok;
+      return enum_ty_tag(tag, find_tag(tag));
     }
-    ty = tag_ty;
-  } else {
-    new_enum(&ty);
-    if (tag)
-      push_tag_scope(tag, ty);
+
+    if ((tag_ty = find_tag_in_scope(tag)))
+      if (tag_ty->is_fixed_enum != is_fixed)
+        error_tok(tag, "enum redeclared with%s fixed underlying type",
+                  is_fixed ? "" : "out");
   }
 
-  EnumVal head = {0};
-  EnumVal *cur = &head;
+  Type *ty = enum_ty_tag(tag, tag_ty);
+
+  if (is_fixed) {
+    Type *fixed_ty = typename(&tok, tok->next);
+    fixed_ty = fixed_ty->origin ? fixed_ty->origin : fixed_ty;
+
+    if (fixed_ty->is_enum || !is_int_class(fixed_ty))
+      error_tok(tok, "invalid enum underlying type");
+    if (fixed_ty->kind == TY_BITINT && fixed_ty->bit_cnt > 64)
+      error_tok(tok, "large _BitInt unsupported here");
+
+    if (tag_ty) {
+      if (fixed_ty->kind != tag_ty->kind ||
+          fixed_ty->is_unsigned != tag_ty->is_unsigned ||
+          (fixed_ty->kind == TY_BITINT && fixed_ty->bit_cnt != tag_ty->bit_cnt))
+        error_tok(tag, "enum redeclared with mismatched fixed underlying type");
+    } else {
+      *ty = *fixed_ty;
+      ty->is_enum = ty->is_fixed_enum = true;
+      ty->tag = tag;
+    }
+
+    if (tag && tok->kind == TK_SEMI) {
+      *rest = tok;
+      return ty;
+    }
+  }
+
+  tok = skip_tk(tok, TK_LCURLY);
+
+  bool is_redecl = false;
+  if (tag_ty && tag_ty->kind != TY_ENUM) {
+    if (opt_std < STD_C23)
+      error_tok(tag, "redefinition of '%.*s'", tag->len, tag->loc);
+    else if (tag_ty->enums)
+      is_redecl = true;
+  }
 
   int64_t min_val = 0;
   uint64_t max_val = 0;
+  HashMap redecl_map = {0};
+  EnumVal head = {0};
+  EnumVal *cur = &head;
+
+  Type *dyn_ty;
+  uint64_t ovf_val;
+  if (ty->is_fixed_enum) {
+    dyn_ty = NULL;
+    ovf_val = enum_ovf_val(ty);
+  } else {
+    // assume 32-bit int
+    dyn_ty = ty_int;
+    ovf_val = (uint64_t)INT32_MAX + 1;
+  }
 
   uint64_t val = 0;
   bool is_neg = false;
-  bool is_ovf = false;
   bool first = true;
-  for (; braced_list(&tok, &tok, !first); first = false) {
+  for (; braced_list(&tok, &tok, !first); first = false, val++) {
     Token *name = ident_tok(&tok, tok);
 
-    if (!consume_tk(&tok, tok, TK_EQ)) {
-      if (is_ovf)
-        error_tok(tok, "enum value overflowed");
-    } else {
-      Type *val_ty = NULL;
+    if (consume_tk(&tok, tok, TK_EQ)) {
+      Type *val_ty;
       val = const_expr2(&tok, tok, &val_ty);
 
       is_neg = (!val_ty->is_unsigned && (int64_t)val < 0);
-    }
-    if (is_neg)
-      min_val = MIN(min_val, (int64_t)val);
-    else
-      max_val = MAX(max_val, val);
 
-    int64_t v = val++;
-    is_ovf = !is_neg && val == 0;
-    is_neg = (int64_t)val < 0;
+      if (dyn_ty) {
+        // assume 32-bit int
+        if (is_neg ? (int64_t)val >= INT32_MIN : val <= INT32_MAX) {
+          dyn_ty = ty_int;
+          ovf_val = (uint64_t)INT32_MAX + 1;
+        } else {
+          dyn_ty = val_ty->origin ? val_ty->origin : val_ty;
+          ovf_val = enum_ovf_val(dyn_ty);
+        }
+      } else {
+        if (chk_enum_fixed_range(is_neg, ty, val, ovf_val))
+          error_tok(name, "enum value out of underlying type range");
+      }
+    } else {
+      if (val == 0)
+        is_neg = false;
+
+      if (val == ovf_val) {
+        if (dyn_ty) {
+          // assume 32-bit int
+          if (!dyn_ty->is_unsigned && (ovf_val - 1 < INT64_MAX))
+            dyn_ty = enum_ty[ETY_I64], ovf_val = (uint64_t)INT64_MAX + 1;
+          else if (dyn_ty->is_unsigned && (ovf_val - 1 < UINT64_MAX))
+            dyn_ty = enum_ty[ETY_U64], ovf_val = (uint64_t)UINT64_MAX + 1;
+          else
+            error_tok(name, "enum value overflowed");
+        } else {
+          if (!first)
+            error_tok(name, "enum value overflowed");
+        }
+      }
+    }
 
     HashEntry *ent = hashmap_get_or_insert(&decl_scope()->vars, name->loc, name->len);
     VarScope *vsc = ent->val;
     if (vsc) {
-      if (opt_std >= STD_C23 && tag_enum_cnt && vsc->enum_ty) {
-        if (vsc->enum_val != v)
-          error_tok(tok, "enum redeclared with conflicting value");
-        decl_enum_cnt++;
-        continue;
+      if (is_redecl && vsc->enum_val && vsc->enum_val->ty == ty && vsc->enum_val->val == val) {
+        HashEntry *re_ent = hashmap_get_or_insert(&redecl_map, name->loc, name->len);
+        if (!re_ent->val) {
+          re_ent->val = (void *)1;
+          continue;
+        }
       }
-      error_tok(name, "enum redeclaration");
+      error_tok(name, "redefinition of '%.*s'", name->len, name->loc);
     } else {
-      if (opt_std >= STD_C23) {
-        cur = cur->next = arena_malloc(&cc1_arena, sizeof(EnumVal));
-        cur->val = v;
-        cur->name = name;
-        name->is_live = true;
-      }
+      cur = cur->next = arena_malloc(&cc1_arena, sizeof(EnumVal));
+      cur->val = val;
+      cur->ty = dyn_ty ? dyn_ty : ty;
+      cur->name = name;
+      name->is_live = true;
+
       vsc = ent->val = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(VarScope));
-      vsc->enum_ty = ty;
-      vsc->enum_val = v;
+      vsc->enum_val = cur;
+
+      if (is_neg)
+        min_val = MIN(min_val, (int64_t)val);
+      else
+        max_val = MAX(max_val, val);
     }
   }
-  if (first)
-    error_tok(tok, "empty enum specifier");
+  cur->next = NULL;
 
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   *rest = tok;
 
-  if (opt_std >= STD_C23) {
-    if (tag_enum_cnt) {
-      if (tag_enum_cnt != decl_enum_cnt)
-        error_tok(tag, "enum redeclared with conflicting value");
-      return ty;
-    }
-    cur->next = NULL;
-    ty->enums = head.next;
-  }
+  if (is_redecl) {
+    free(redecl_map.buckets);
 
-  if (ty->kind != TY_ENUM) {
-    if (enum_chk_ty_range(ty, min_val, max_val))
-      error_tok(tok, "enum value out of type range");
+    int64_t cnt = 0;
+    for (EnumVal *ev = ty->enums; ev; ev = ev->next)
+      cnt++;
+    if (cnt != redecl_map.used || head.next)
+      error_tok(tag, "enum redeclaration mismatch");
     return ty;
   }
+
+  if (!(ty->enums = head.next))
+    error_tok(tok, "empty enum specifier");
+
+  if (ty->is_fixed_enum)
+    return ty;
+
+  for (EnumVal *ev = ty->enums; ev; ev = ev->next)
+    ev->ty = ty;
 
   EnumType ety = ETY_I8;
   if (min_val < INT8_MIN) {
@@ -1716,6 +1746,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   }
 
   Type *base_ty = enum_ty[ety];
+
   for (Type *t = ty; t; t = t->decl_next) {
     t->kind = base_ty->kind;
     t->is_unsigned = base_ty->is_unsigned;
@@ -5553,16 +5584,16 @@ static Node *primary(Token **rest, Token *tok) {
     if (sc) {
       if (sc->var)
         return new_var_node(sc->var, tok);
-      if (sc->enum_ty) {
-        if (sc->enum_ty->kind == TY_BITINT) {
+      if (sc->enum_val) {
+        if (sc->enum_val->ty->kind == TY_BITINT) {
           Node *n = new_node(ND_NUM, tok);
-          n->num.bitint_data = calloc(1, bitint_buffer_size(sc->enum_ty));
-          n->num.bitint_data->as64 = sc->enum_val;
-          n->ty = sc->enum_ty;
+          n->num.bitint_data = calloc(1, bitint_buffer_size(sc->enum_val->ty));
+          n->num.bitint_data->as64 = sc->enum_val->val;
+          n->ty = sc->enum_val->ty;
           return n;
         }
-        Node *n = new_num(sc->enum_val, tok);
-        n->ty = (sc->enum_ty->is_int_enum) ? ty_int : sc->enum_ty;
+        Node *n = new_num(sc->enum_val->val, tok);
+        n->ty = (sc->enum_val->ty->is_int_enum) ? ty_int : sc->enum_val->ty;
         return n;
       }
     }

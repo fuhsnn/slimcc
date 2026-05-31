@@ -67,6 +67,47 @@ int extend(void) {
   SASSERT(_Generic(e7_u32max_plus1, FIRST_64BIT_INT:1));
   SASSERT(_Generic((enum e7)0, FIRST_64BIT_INT:1));
 
+  {
+    enum {
+        W,
+        X = INT64_MIN,
+        Y,
+        Z = 0,
+        WS = sizeof(W),
+        XS = sizeof(X),
+        YS = sizeof(Y),
+        ZS = sizeof(Z),
+    };
+    SASSERT(4 == WS);
+    SASSERT(8 == XS);
+    SASSERT(8 == YS);
+    SASSERT(4 == ZS);
+    SASSERT(8 == sizeof(W));
+    SASSERT(8 == sizeof(X));
+    SASSERT(8 == sizeof(Y));
+    SASSERT(8 == sizeof(Z));
+  }
+  {
+    enum E : int64_t;
+    enum {
+        X = (int64_t)UINT32_MAX,
+        _X = _Generic(typeof(X),enum E: 1, default:0),
+    };
+    SASSERT(1 == _X);
+    SASSERT(0 == _Generic(typeof(X),enum E: 1, default:0));
+  }
+  {
+    enum {
+    A = (_BitInt(33))0xFFFF'FFFF,
+    B,
+    X = _Generic(A, _BitInt(33): 1, default: 0),
+    Y = _Generic(B, _BitInt(33): 1, default: 0)
+    };
+    SASSERT(0xFFFFFFFF == A);
+    SASSERT(0x100000000 == B);
+    SASSERT(1 == X);
+    SASSERT(0 == Y);
+  }
   return 1;
 }
 
@@ -221,6 +262,13 @@ static int redecl(void) {
     SASSERT(_Generic(e2, e3:1));
     SASSERT(_Generic(const e1, typeof(e):1));
     SASSERT(_Generic(&e, enum E : long { A } const *:1));
+  }
+  {
+    // llvm-project/issues/70605
+    struct foo { int x; };
+    {
+      //SREJ enum foo : typeof(((struct foo *)0)->x);
+    }
   }
   return 1;
 }

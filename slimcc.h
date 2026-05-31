@@ -863,6 +863,7 @@ struct EnumVal {
   EnumVal *next;
   Token *name;
   int64_t val;
+  Type *ty;
 };
 
 union FPVal {
@@ -911,8 +912,9 @@ struct Type {
   int64_t size;
   int32_t align;
   bool is_unsigned;
-  bool is_int_enum;
   bool is_enum;
+  bool is_int_enum;
+  bool is_fixed_enum;
   QualMask qual;
   Type *origin;
   Type *decl_next; // forward declarations

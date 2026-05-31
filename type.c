@@ -482,11 +482,6 @@ bool is_compatible(Type *t1, Type *t2) {
   if (t1 == t2)
     return true;
 
-  if (t1->is_enum && t2->is_enum)
-    return t1->is_int_enum == t2->is_int_enum &&
-           is_tag_compat(t1, t2) &&
-           is_enum_compat(t1->enums, t2->enums);
-
   if (is_array(t1) && is_array(t2)) {
     int64_t *len1 = get_arr_len(t1);
     int64_t *len2 = get_arr_len(t2);
@@ -500,14 +495,22 @@ bool is_compatible(Type *t1, Type *t2) {
     return false;
 
   switch (t1->kind) {
+  case TY_BITINT:
+    if (t1->bit_cnt != t2->bit_cnt)
+      return false;
   case TY_PCHAR:
   case TY_CHAR:
   case TY_SHORT:
   case TY_INT:
   case TY_LONG:
-  case TY_LONGLONG: return t1->is_unsigned == t2->is_unsigned;
-  case TY_BITINT:
-    return (t1->is_unsigned == t2->is_unsigned) && (t1->bit_cnt == t2->bit_cnt);
+  case TY_LONGLONG:
+    if (t1->is_enum && t2->is_enum) {
+      if (!(t1->is_fixed_enum == t2->is_fixed_enum &&
+            is_tag_compat(t1, t2) &&
+            is_enum_compat(t1->enums, t2->enums)))
+        return false;
+    }
+    return t1->is_unsigned == t2->is_unsigned;
   case TY_FLOAT:
   case TY_DOUBLE:
   case TY_LDOUBLE: return true;
