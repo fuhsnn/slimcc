@@ -260,6 +260,45 @@ int main(int argc, char**argv) {
     ASSERT(17, ({ const A* a = &(A){31,17}; int i = 0; (((i) ? &((a)->b1) : &((a)->b2)))->i;}));
     ASSERT(31, ({ const A* a = &(A){31,17}; int i = 1; (((i) ? &((a)->b1) : &((a)->b2)))->i;}));
   }
+  {
+    volatile int vi;
+    static_assert(_Generic(typeof(vi), volatile int:1));
+    static_assert(_Generic(typeof(*&vi), volatile int:1));
+    static_assert(_Generic(typeof(+vi), int:1));
+    static_assert(_Generic(typeof(~vi), int:1));
+    static_assert(_Generic(typeof(vi+1), int:1));
+    static_assert(_Generic(typeof(1+vi), int:1));
+    static_assert(_Generic(typeof(vi++), int:1));
+    static_assert(_Generic(typeof(++vi), int:1));
+    static_assert(_Generic(typeof(vi=1), int:1));
+    static_assert(_Generic(typeof(vi+=1), int:1));
+    static_assert(_Generic(typeof(vi<<1), int:1));
+    static_assert(_Generic(typeof(vi?vi:vi), int:1));
+    static_assert(_Generic(typeof((0,vi)), int:1));
+    static_assert(_Generic(typeof(({vi;})), int:1));
+  }
+  {
+    int *volatile p = 0;
+    static_assert(_Generic(typeof(p), int *volatile:1));
+    static_assert(_Generic(typeof(p+1), int *:1));
+    static_assert(_Generic(typeof(1+p), int *:1));
+    static_assert(_Generic(typeof(p+=1), int *:1));
+    static_assert(_Generic(typeof(p-=1), int *:1));
+    static_assert(_Generic(typeof(p?p:0), int *:1));
+    static_assert(_Generic(typeof(p?0:p), int *:1));
+    static_assert(_Generic(typeof(p?p:p), int *:1));
+    static_assert(_Generic(typeof(p?p:nullptr), int *:1));
+    static_assert(_Generic(typeof(p?nullptr:p), int *:1));
+  }
+  {
+    struct S const *p1;
+    struct S *p2;
+    struct S { int i; };
+    static_assert(_Generic(typeof(*p1), const struct S:1));
+    static_assert(_Generic(typeof(0?*p1:*p2), struct S:1));
+    static_assert(_Generic(typeof(0?*p2:*p1), struct S:1));
+    static_assert(_Generic(typeof(0?*p1:*p1), struct S:1));
+  }
 
   printf("OK\n");
 }

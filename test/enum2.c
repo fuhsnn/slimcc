@@ -273,6 +273,125 @@ static int redecl(void) {
   return 1;
 }
 
+int decay() {
+#define CHK_DECAY(b, ...) \
+ static_assert(_Generic(typeof(__VA_ARGS__), enum E: b, default:!b)); \
+ static_assert(_Generic((__VA_ARGS__), enum E: b, default:!b))
+  {
+    enum E : int;
+    enum : int { A } a;
+    CHK_DECAY(0, A);
+    CHK_DECAY(1, +A);
+    CHK_DECAY(1, A+1);
+    CHK_DECAY(1, 1+A);
+    CHK_DECAY(1, A<<1);
+    CHK_DECAY(0, (0,A));
+    CHK_DECAY(0, ({A;}));
+
+    CHK_DECAY(0, a);
+    CHK_DECAY(0, a++);
+    CHK_DECAY(0, ++a);
+    CHK_DECAY(0, a=1);
+    CHK_DECAY(0, a+=1);
+    CHK_DECAY(0, *&a);
+    CHK_DECAY(1, +a);
+    CHK_DECAY(1, ~a);
+    CHK_DECAY(1, a+1);
+    CHK_DECAY(1, 1+a);
+    CHK_DECAY(1, a<<1);
+    CHK_DECAY(0, (0,a));
+    CHK_DECAY(0, ({a;}));
+
+    CHK_DECAY(0, (*({&a;})));
+    CHK_DECAY(1, (+*(&a)));
+    CHK_DECAY(0, (++(*(&a))));
+    CHK_DECAY(0, ((*(&a))++));
+    CHK_DECAY(1, (*(&a) + 1));
+  }
+  {
+    enum E : unsigned;
+    enum { A } a;
+    CHK_DECAY(0, a);
+    CHK_DECAY(0, a++);
+    CHK_DECAY(0, ++a);
+    CHK_DECAY(0, a=1);
+    CHK_DECAY(0, a+=1);
+    CHK_DECAY(0, *&a);
+    CHK_DECAY(1, +a);
+    CHK_DECAY(1, ~a);
+    CHK_DECAY(1, a+1);
+    CHK_DECAY(1, 1+a);
+    CHK_DECAY(1, a<<1);
+    CHK_DECAY(0, (0,a));
+    CHK_DECAY(0, ({a;}));
+  }
+  {
+    enum E : int;
+    _Atomic(enum : int { A }) a;
+    CHK_DECAY(0, a);
+    CHK_DECAY(0, a++);
+    CHK_DECAY(0, ++a);
+    CHK_DECAY(0, a=1);
+    CHK_DECAY(0, a+=1);
+    CHK_DECAY(0, *&a);
+    CHK_DECAY(1, +a);
+    CHK_DECAY(1, ~a);
+    CHK_DECAY(1, a+1);
+    CHK_DECAY(1, 1+a);
+    CHK_DECAY(1, a<<1);
+    CHK_DECAY(0, (0,a));
+    CHK_DECAY(0, ({a;}));
+  }
+  {
+    enum E : int;
+    struct { enum : int {A} j : 3; } s;
+    static_assert(_Generic(s.j, enum E: 0, default:1));
+    static_assert(_Generic(+s.j, enum E: 1, default:0));
+  }
+  {
+    const enum E : uint64_t { X, Y = UINT64_MAX } a;
+    enum {
+      B = X,
+      Bty = _Generic(B, enum E:1, default: 0),
+      Bqual = _Generic(typeof(B), const int: 1, int: 0),
+      C = Y,
+      Cty = _Generic(C, enum E:1, default: 0),
+      Cqual = _Generic(typeof(C), const uint64_t: 1, uint64_t: 0)
+    };
+    static_assert(_Generic(typeof(a), const uint64_t: 1));
+    static_assert(Bty == 0);
+    static_assert(Bqual == 0);
+    static_assert(Cty == 1);
+    static_assert(Cqual == 0);
+  }
+  {
+    enum E : _BitInt(33) { E };
+    enum : _BitInt(33) { A } a;
+    CHK_DECAY(0, A);
+    CHK_DECAY(1, +A);
+    CHK_DECAY(1, A+1);
+    CHK_DECAY(1, 1+A);
+    CHK_DECAY(1, A<<1);
+    CHK_DECAY(0, (0,A));
+    CHK_DECAY(0, ({A;}));
+
+    CHK_DECAY(0, a);
+    CHK_DECAY(0, a++);
+    CHK_DECAY(0, ++a);
+    CHK_DECAY(0, a=1);
+    CHK_DECAY(0, a+=1);
+    CHK_DECAY(0, *&a);
+    CHK_DECAY(1, +a);
+    CHK_DECAY(1, ~a);
+    CHK_DECAY(1, a+1);
+    CHK_DECAY(1, 1+a);
+    CHK_DECAY(1, a<<1);
+    CHK_DECAY(0, (0,a));
+    CHK_DECAY(0, ({a;}));
+  }
+  return 1;
+}
+
 int main(void) {
   enum E1;
   typedef enum E1 const C2;
@@ -307,6 +426,7 @@ int main(void) {
   ASSERT(1, extend());
   ASSERT(1, compat());
   ASSERT(1, redecl());
+  ASSERT(1, decay());
 
   printf("OK\n");
 }

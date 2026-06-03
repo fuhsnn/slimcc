@@ -4290,12 +4290,10 @@ static Node *assign(Token **rest, Token *tok) {
     case TK_EQ:
       // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
       if (node->ty->qual & Q_ATOMIC) {
-        add_type(rhs);
-        Obj *tmp = new_lvar(rhs->ty);
-        Node *expr = new_binary(ND_ASSIGN, new_var_node(tmp, tok), rhs, tok);
-        chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok),
-                                     new_var_node(tmp, tok), tok));
-        chain_expr(&expr, new_var_node(tmp, tok));
+        Node *tmp = new_var_node(new_lvar(node->ty->origin), tok);
+        Node *expr = new_binary(ND_ASSIGN, tmp, rhs, tok);
+        chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok), tmp, tok));
+        chain_expr(&expr, tmp);
         expr->is_nonlval = true;
         return expr;
       }

@@ -132,6 +132,10 @@ static Type *get_elem(Type *ty) {
   return ty;
 }
 
+Type *unqual(Type *ty) {
+  return ty->origin ? ty->origin : ty;
+}
+
 Type *tyof_unqual(Type *ty) {
   if (!is_array(ty))
     return ty->origin ? ty->origin : ty;
@@ -793,8 +797,23 @@ static Type *get_common_type(Node **lhs, Node **rhs) {
   internal_error();
 }
 
+static Type *unenum(Type *ty) {
+  if (ty->is_enum) {
+    switch (ty->kind) {
+    case TY_INT:      return ty->is_unsigned ? ty_uint : ty_int;
+    case TY_LONG:     return ty->is_unsigned ? ty_ulong : ty_long;
+    case TY_LONGLONG: return ty->is_unsigned ? ty_ullong : ty_llong;
+    default: {
+      ty = copy_type(ty);
+      ty->is_enum = false;
+    }
+    }
+  }
+  return ty;
+}
+
 static Type *usual_arith_conv(Node **lhs, Node **rhs) {
-  Type *ty = get_common_type(lhs, rhs);
+  Type *ty = unenum(unqual(get_common_type(lhs, rhs)));
   cast_if_not(ty, lhs);
   cast_if_not(ty, rhs);
   return ty;
@@ -817,7 +836,7 @@ void _add_type(Node *node) {
     Node *ptr = node->m.lhs->ty->base ? node->m.lhs
                                       : (node->m.rhs->ty->base ? node->m.rhs : NULL);
     if (ptr)
-      node->ty = ptr->ty;
+      node->ty = unqual(ptr->ty);
     else
       node->ty = usual_arith_conv(&node->m.lhs, &node->m.rhs);
     return;
@@ -843,13 +862,13 @@ void _add_type(Node *node) {
       error_tok(node->m.lhs->tok, "invalid operand");
     if (is_integer(node->m.lhs->ty))
       int_promotion(&node->m.lhs);
-    node->ty = node->m.lhs->ty;
+    node->ty = unenum(unqual(node->m.lhs->ty));
     return;
   case ND_ASSIGN:
     add_type(node->m.lhs);
     add_type(node->m.rhs);
     node->m.rhs = assign_cast(node->m.lhs->ty, node->m.rhs);
-    node->ty = node->m.lhs->ty;
+    node->ty = unqual(node->m.lhs->ty);
     return;
   case ND_EQ:
   case ND_NE:
@@ -879,7 +898,7 @@ void _add_type(Node *node) {
   case ND_BITNOT:
     add_int_type(node->m.lhs);
     int_promotion(&node->m.lhs);
-    node->ty = node->m.lhs->ty;
+    node->ty = unenum(unqual(node->m.lhs->ty));
     return;
   case ND_SHL:
   case ND_SHR:
@@ -889,7 +908,7 @@ void _add_type(Node *node) {
     if (node->m.rhs->ty->kind == TY_BITINT)
       node->m.rhs = new_cast(node->m.rhs, ty_ullong);
     int_promotion(&node->m.lhs);
-    node->ty = node->m.lhs->ty;
+    node->ty = unenum(unqual(node->m.lhs->ty));
     return;
   case ND_VAR: {
     node->ty = node->m.var->ty;
@@ -905,11 +924,11 @@ void _add_type(Node *node) {
     if ((*lhs)->ty->kind == TY_VOID || (*rhs)->ty->kind == TY_VOID)
       node->ty = ty_void;
     else if (is_ptr((*lhs)->ty) || is_ptr((*rhs)->ty))
-      node->ty = cond_ptr_conv(lhs, rhs, &node->ctrl.cond);
+      node->ty = unqual(cond_ptr_conv(lhs, rhs, &node->ctrl.cond));
     else if (!is_numeric((*lhs)->ty) &&
              (*lhs)->ty->size >= 0 &&
              is_compatible((*lhs)->ty, (*rhs)->ty))
-      node->ty = (*lhs)->ty;
+      node->ty = unqual((*lhs)->ty);
     else
       node->ty = usual_arith_conv(lhs, rhs);
     return;
@@ -922,7 +941,7 @@ void _add_type(Node *node) {
   case ND_COMMA:
     add_type(node->m.lhs);
     add_type(node->m.rhs);
-    node->ty = ptr_decay(node->m.rhs->ty);
+    node->ty = unqual(ptr_decay(node->m.rhs->ty));
     return;
   case ND_MEMBER:
     add_type(node->m.lhs);
@@ -1016,14 +1035,14 @@ void _add_type(Node *node) {
   }
   case ND_POST_INCDEC:
   case ND_ARITH_ASSIGN: {
-    node->ty = ptr_decay(node->m.lhs->ty);
+    node->ty = unqual(node->m.lhs->ty);
     return;
   }
   case ND_STMT_EXPR:
     for (Node *n = node->blk.body; n; n = n->next)
       add_type(n);
     if (node->blk.result)
-      node->ty = ptr_decay(node->blk.result->m.lhs->ty);
+      node->ty = unqual(ptr_decay(node->blk.result->m.lhs->ty));
     else
       node->ty = ty_void;
     return;
