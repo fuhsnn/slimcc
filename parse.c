@@ -213,6 +213,7 @@ static long_double_t eval_double(Node *node);
 static BitBuf *eval_bitint(Node *node);
 static BitBuf *eval_bitint_clean(Node *node);
 static Node *conditional(Token **rest, Token *tok);
+static bool addsub_overload(Node **lhs, Node **rhs);
 static Node *new_add(Node *lhs, Node *rhs, Token *tok);
 static Node *new_sub(Node *lhs, Node *rhs, Token *tok);
 static Node *binary(Token **rest, Token *tok, Preced stop);
@@ -4115,7 +4116,7 @@ static BitBuf *eval_bitint_clean(Node *node) {
   return val;
 }
 
-static Node *atomic_op(Node *binary, bool return_old) {
+static Node *atomic_op(NodeKind kind, Node *lhs, Node *rhs, Token *tok, bool return_old) {
   // ({
   //   T *addr = &obj; T old = *addr; T new;
   //   do {
@@ -4124,24 +4125,23 @@ static Node *atomic_op(Node *binary, bool return_old) {
   //
   //   return_old ? old : new;
   // })
-  Token *tok = binary->tok;
   Node head = {0};
   Node *cur = &head;
 
-  Obj *addr = new_lvar(pointer_to(binary->m.lhs->ty));
-  Obj *val = new_lvar(binary->m.rhs->ty);
-  Obj *old = new_lvar(binary->m.lhs->ty);
-  Obj *new = new_lvar(binary->m.lhs->ty);
+  add_type(lhs);
+  add_type(rhs);
+  Obj *addr = new_lvar(pointer_to(lhs->ty));
+  Obj *val = new_lvar(rhs->ty);
+  Obj *old = new_lvar(lhs->ty);
+  Obj *new = new_lvar(lhs->ty);
 
   cur = cur->next = new_unary(ND_EXPR_STMT,
                               new_binary(ND_ASSIGN, new_var_node(addr, tok),
-                                         new_unary(ND_ADDR, binary->m.lhs, tok), tok),
+                                         new_unary(ND_ADDR, lhs, tok), tok),
                               tok);
 
   cur = cur->next = new_unary(ND_EXPR_STMT,
-                              new_binary(ND_ASSIGN, new_var_node(val, tok), binary->m.rhs,
-                                         tok),
-                              tok);
+                              new_binary(ND_ASSIGN, new_var_node(val, tok), rhs, tok), tok);
 
   cur = cur->next = new_unary(ND_EXPR_STMT,
                               new_binary(ND_ASSIGN, new_var_node(old, tok),
@@ -4152,7 +4152,7 @@ static Node *atomic_op(Node *binary, bool return_old) {
   Node *loop = new_node(ND_DO, tok);
   loop->ctrl.then = new_unary(ND_EXPR_STMT,
                               new_binary(ND_ASSIGN, new_var_node(new, tok),
-                                         new_binary(binary->kind, new_var_node(old, tok),
+                                         new_binary(kind, new_var_node(old, tok),
                                                     new_var_node(val, tok), tok),
                                          tok),
                               tok);
@@ -4186,104 +4186,113 @@ static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
     ident_tok(&tok, tok);
   *rest = skip_tk(tok, TK_RPAREN);
 
-  Node *binary;
   const char *loc = start->loc + 23;
   int len = start->len - 23;
 
-  if (equal_substr(loc, len, "add"))
-    binary = new_add(obj, val, start);
-  else if (equal_substr(loc, len, "sub"))
-    binary = new_sub(obj, val, start);
+  NodeKind kind;
+  if (equal_substr(loc, len, "add") && addsub_overload(&obj, &val))
+    kind = ND_ADD;
+  else if (equal_substr(loc, len, "sub") && addsub_overload(&obj, &val))
+    kind = ND_SUB;
   else if (equal_substr(loc, len, "and"))
-    binary = new_binary(ND_BITAND, obj, val, start);
+    kind = ND_BITAND;
   else if (equal_substr(loc, len, "or"))
-    binary = new_binary(ND_BITOR, obj, val, start);
+    kind = ND_BITOR;
   else if (equal_substr(loc, len, "xor"))
-    binary = new_binary(ND_BITXOR, obj, val, start);
+    kind = ND_BITXOR;
   else
     error_tok(start, "unsupported atomic op");
 
-  add_type(binary->m.lhs);
-  add_type(binary->m.rhs);
-  return atomic_op(binary, return_old);
+  return atomic_op(kind, obj, val, start, return_old);
 }
 
-static Node *to_assign(Node *binary) {
-  add_type(binary->m.lhs);
-
-  if (binary->m.lhs->ty->qual & Q_ATOMIC)
-    return atomic_op(binary, false);
-
-  binary->arith_kind = binary->kind;
-  binary->kind = ND_ARITH_ASSIGN;
-  binary->ty = binary->m.lhs->ty;
-  return binary;
+static Node *arith_assign(NodeKind kind, Node *lhs, Node *rhs, Token *tok) {
+  if (lhs->ty->qual & Q_ATOMIC) {
+    Node *node = atomic_op(kind, lhs, rhs, tok, false);
+    node->is_nonlval = true;
+    return node;
+  }
+  Node *node = new_binary(ND_ARITH_ASSIGN, lhs, rhs, tok);
+  node->arith_kind = kind;
+  node->is_nonlval = true;
+  return node;
 }
 
-static Node *assign2(Token **rest, Token *tok, Node *node) {
-  if (tok->kind == TK_EQ) {
-    // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
-    if (node->ty->qual & Q_ATOMIC) {
-      Node *rhs = assign(rest, tok->next);
-      add_type(rhs);
-      Obj *tmp = new_lvar(rhs->ty);
-      Node *expr = new_binary(ND_ASSIGN, new_var_node(tmp, tok), rhs, tok);
-      chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok),
-                                   new_var_node(tmp, tok), tok));
-      chain_expr(&expr, new_var_node(tmp, tok));
-      return expr;
-    }
-    return new_binary(ND_ASSIGN, node, assign(rest, tok->next), tok);
+static Node *arith_assign_addsub(NodeKind kind, Node *lhs, Node *rhs, Token *tok) {
+  if (!addsub_overload(&lhs, &rhs))
+    error_tok(rhs->tok, "invalid operand");
+
+  return arith_assign(kind, lhs, rhs, tok);
+}
+
+static Node *new_inc_dec(Node *lhs, Token *tok, int addend) {
+  if (opt_optimize &&
+      !(lhs->ty->qual & Q_ATOMIC) &&
+      lhs->ty->kind != TY_BOOL &&
+      !is_bitfield(lhs) &&
+      !is_flonum(lhs->ty)) {
+    Type *ty = lhs->ty;
+    Node *node = arith_assign_addsub(ND_ADD, lhs, new_num(addend, tok), tok);
+    return new_cast(new_add(node, new_num(-addend, tok), tok), ty);
   }
 
-  if (tok->kind == TK_ADD_EQ)
-    return to_assign(new_add(node, assign(rest, tok->next), tok));
+  Node *rhs = new_num(addend, tok);
+  if (!addsub_overload(&lhs, &rhs))
+    error_tok(tok, "invalid operand");
 
-  if (tok->kind == TK_SUB_EQ)
-    return to_assign(new_sub(node, assign(rest, tok->next), tok));
+  if (lhs->ty->qual & Q_ATOMIC)
+    return atomic_op(ND_ADD, lhs, rhs, tok, true);
 
-  if (tok->kind == TK_MUL_EQ)
-    return to_assign(new_binary(ND_MUL, node, assign(rest, tok->next), tok));
+  return new_binary(ND_POST_INCDEC, lhs, rhs, tok);
+}
 
-  if (tok->kind == TK_DIV_EQ)
-    return to_assign(new_binary(ND_DIV, node, assign(rest, tok->next), tok));
-
-  if (tok->kind == TK_REM_EQ)
-    return to_assign(new_binary(ND_MOD, node, assign(rest, tok->next), tok));
-
-  if (tok->kind == TK_AND_EQ)
-    return to_assign(new_binary(ND_BITAND, node, assign(rest, tok->next), tok));
-
-  if (tok->kind == TK_OR_EQ)
-    return to_assign(new_binary(ND_BITOR, node, assign(rest, tok->next), tok));
-
-  if (tok->kind == TK_XOR_EQ)
-    return to_assign(new_binary(ND_BITXOR, node, assign(rest, tok->next), tok));
-
-  if (tok->kind == TK_LANGLE2_EQ)
-    return to_assign(new_binary(ND_SHL, node, assign(rest, tok->next), tok));
-
-  if (tok->kind == TK_RANGLE2_EQ) {
-    if (node->ty->is_unsigned)
-      return to_assign(new_binary(ND_SHR, node, assign(rest, tok->next), tok));
-    else
-      return to_assign(new_binary(ND_SAR, node, assign(rest, tok->next), tok));
-  }
-
-  return NULL;
+static void chk_assignable(Node *node) {
+  add_type(node);
+  if (node->is_nonlval || (node->ty->qual & Q_CONST) || is_decay_ty(node->ty))
+    error_tok(node->tok, "operand unassignable");
 }
 
 static Node *assign(Token **rest, Token *tok) {
   Node *node = conditional(&tok, tok);
-  add_type(node);
 
-  if (!node->is_nonlval && !(node->ty->qual & Q_CONST) && !is_decay_ty(node->ty)) {
-    Node *n = assign2(&tok, tok, node);
-    if (n) {
-      n->is_nonlval = true;
-      node = n;
+  TokenKind tk = tok->kind;
+  if (TK_EQ <= tk && tk <= TK_RANGLE2_EQ) {
+    chk_assignable(node);
+
+    Node *rhs = assign(rest, tok->next);
+
+    switch (tk) {
+    case TK_EQ:
+      // Convert A = B to (tmp = B, atomic_exchange(&A, tmp), tmp)
+      if (node->ty->qual & Q_ATOMIC) {
+        add_type(rhs);
+        Obj *tmp = new_lvar(rhs->ty);
+        Node *expr = new_binary(ND_ASSIGN, new_var_node(tmp, tok), rhs, tok);
+        chain_expr(&expr, new_binary(ND_EXCH, new_unary(ND_ADDR, node, tok),
+                                     new_var_node(tmp, tok), tok));
+        chain_expr(&expr, new_var_node(tmp, tok));
+        expr->is_nonlval = true;
+        return expr;
+      }
+
+      node = new_binary(ND_ASSIGN, node, rhs, tok);
+      node->is_nonlval = true;
+      return node;
+    case TK_ADD_EQ:     return arith_assign_addsub(ND_ADD, node, rhs, tok);
+    case TK_SUB_EQ:     return arith_assign_addsub(ND_SUB, node, rhs, tok);
+    case TK_MUL_EQ:     return arith_assign(ND_MUL, node, rhs, tok);
+    case TK_DIV_EQ:     return arith_assign(ND_DIV, node, rhs, tok);
+    case TK_REM_EQ:     return arith_assign(ND_MOD, node, rhs, tok);
+    case TK_AND_EQ:     return arith_assign(ND_BITAND, node, rhs, tok);
+    case TK_OR_EQ:      return arith_assign(ND_BITOR, node, rhs, tok);
+    case TK_XOR_EQ:     return arith_assign(ND_BITXOR, node, rhs, tok);
+    case TK_LANGLE2_EQ: return arith_assign(ND_SHL, node, rhs, tok);
+    case TK_RANGLE2_EQ:
+      return arith_assign(node->ty->is_unsigned ? ND_SHR : ND_SAR, node, rhs, tok);
     }
+    internal_error();
   }
+
   *rest = tok;
   return node;
 }
@@ -4509,21 +4518,25 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
   return node;
 }
 
-static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
-  add_type(lhs);
-  add_type(rhs);
+static bool addsub_overload(Node **lhs, Node **rhs) {
+  ptr_convert(lhs);
+  ptr_convert(rhs);
 
-  if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
-    return new_binary(ND_ADD, lhs, rhs, tok);
+  if (is_numeric((*lhs)->ty) && is_numeric((*rhs)->ty))
+    return true;
 
-  ptr_convert(&lhs);
-  ptr_convert(&rhs);
-
-  if (lhs->ty->base && int_or_trunc_bitint(&rhs, false)) {
-    Node *sz = ptr_base_size(lhs->ty, tok);
-    rhs = new_binary(ND_MUL, sz, rhs, tok);
-    return new_binary(ND_ADD, lhs, rhs, tok);
+  if ((*lhs)->ty->base && int_or_trunc_bitint(rhs, false)) {
+    Node *sz = ptr_base_size((*lhs)->ty, (*lhs)->tok);
+    *rhs = new_binary(ND_MUL, sz, *rhs, (*rhs)->tok);
+    return true;
   }
+
+  return false;
+}
+
+static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
+  if (addsub_overload(&lhs, &rhs))
+    return new_binary(ND_ADD, lhs, rhs, tok);
 
   if (int_or_trunc_bitint(&lhs, false) && rhs->ty->base) {
     Node *sz = ptr_base_size(rhs->ty, tok);
@@ -4539,19 +4552,8 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
 }
 
 static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
-  add_type(lhs);
-  add_type(rhs);
-
-  if (is_numeric(lhs->ty) && is_numeric(rhs->ty))
+  if (addsub_overload(&lhs, &rhs))
     return new_binary(ND_SUB, lhs, rhs, tok);
-
-  ptr_convert(&lhs);
-  ptr_convert(&rhs);
-
-  if (lhs->ty->base && int_or_trunc_bitint(&rhs, false)) {
-    Node *sz = ptr_base_size(lhs->ty, tok);
-    return new_binary(ND_SUB, lhs, new_binary(ND_MUL, rhs, sz, tok), tok);
-  }
 
   if (lhs->ty->base && rhs->ty->base && is_compatible(lhs->ty->base, rhs->ty->base)) {
     Node *sz = new_cast(ptr_base_size(lhs->ty, tok), ty_ptrdiff_t);
@@ -4610,15 +4612,15 @@ static Node *unary(Token **rest, Token *tok) {
   // Read ++i as i+=1
   if (tok->kind == TK_ADD2) {
     Node *node = unary(rest, tok->next);
-    add_type_chk_const(node);
-    return to_assign(new_add(node, new_num(1, tok), tok));
+    chk_assignable(node);
+    return arith_assign_addsub(ND_ADD, node, new_num(1, tok), tok);
   }
 
   // Read --i as i-=1
   if (tok->kind == TK_SUB2) {
     Node *node = unary(rest, tok->next);
-    add_type_chk_const(node);
-    return to_assign(new_sub(node, new_num(1, tok), tok));
+    chk_assignable(node);
+    return arith_assign_addsub(ND_SUB, node, new_num(1, tok), tok);
   }
 
   // [GNU] labels-as-values
@@ -5071,26 +5073,6 @@ static Node *struct_ref(Node *node, Token *tok) {
   return node;
 }
 
-static Node *new_inc_dec(Node *node, Token *tok, int addend) {
-  add_type_chk_const(node);
-
-  if (node->ty->qual & Q_ATOMIC)
-    return atomic_op(new_add(node, new_num(addend, tok), tok), true);
-
-  if (opt_optimize && node->ty->kind != TY_BOOL && !is_bitfield(node) && !is_flonum(node->ty)) {
-    Type *ty = node->ty;
-    node = new_add(node, new_num(addend, tok), tok);
-    node = to_assign(node);
-    node = new_add(node, new_num(-addend, tok), tok);
-    return new_cast(node, ty);
-  }
-
-  node = new_add(node, new_num(addend, tok), tok);
-  node->kind = ND_POST_INCDEC;
-  node->ty = node->m.lhs->ty;
-  return node;
-}
-
 static Node *postfix(Node *node, Token **rest, Token *tok) {
   for (;;) {
     if (tok->kind == TK_LPAREN) {
@@ -5122,12 +5104,14 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
     }
 
     if (tok->kind == TK_ADD2) {
+      chk_assignable(node);
       node = new_inc_dec(node, tok, 1);
       tok = tok->next;
       continue;
     }
 
     if (tok->kind == TK_SUB2) {
+      chk_assignable(node);
       node = new_inc_dec(node, tok, -1);
       tok = tok->next;
       continue;

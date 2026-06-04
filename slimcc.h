@@ -289,22 +289,15 @@ typedef enum {
   TK_LANGLE,
   TK_LANGLE_EQ,
   TK_LANGLE2,
-  TK_LANGLE2_EQ,
   TK_RANGLE,
   TK_RANGLE_EQ,
   TK_RANGLE2,
-  TK_RANGLE2_EQ,
   TK_NOT,
   TK_NOT_EQ,
   TK_REM,
-  TK_REM_EQ,
   TK_MUL,
-  TK_MUL_EQ,
   TK_DIV,
-  TK_DIV_EQ,
   TK_XOR,
-  TK_XOR_EQ,
-  TK_EQ,
   TK_EQ2,
   TK_HASH,
   TK_HASH2,
@@ -313,18 +306,27 @@ typedef enum {
   TK_COLON,
   TK_COLON2,
   TK_AND,
-  TK_AND_EQ,
   TK_AND2,
   TK_ADD,
-  TK_ADD_EQ,
   TK_ADD2,
   TK_SUB,
-  TK_SUB_EQ,
   TK_SUB2,
   TK_OR,
-  TK_OR_EQ,
   TK_OR2,
   TK_ARROW,
+
+  TK_EQ,
+  TK_ADD_EQ,
+  TK_SUB_EQ,
+  TK_MUL_EQ,
+  TK_DIV_EQ,
+  TK_REM_EQ,
+  TK_AND_EQ,
+  TK_OR_EQ,
+  TK_XOR_EQ,
+  TK_LANGLE2_EQ,
+  TK_RANGLE2_EQ,
+
   TK_PUNCT_END,
 
   TK_return,
@@ -1027,7 +1029,6 @@ Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr, int64_t arr_len);
 Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
-void add_type_chk_const(Node *node);
 Type *tyof_unqual(Type *ty);
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty);
 bool chk_qual_type(QualMask qual, Type *ty);
