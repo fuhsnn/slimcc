@@ -3205,7 +3205,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
     if (tok->next->kind == TK_MUL) {
       // [GNU] `goto *ptr` jumps to the address specified by `ptr`.
       Node *node = new_node(ND_GOTO_EXPR, tok);
-      node->m.lhs = expression(&tok, tok->next->next);
+      Node *expr = expression(&tok, tok->next->next);
+      add_type(expr);
+      if (expr->ty->kind != TY_PTR)
+        error_tok(node->tok, "expected pointer");
+      node->m.lhs = expr;
       *rest = skip_tk(tok, TK_SEMI);
       return node;
     }
