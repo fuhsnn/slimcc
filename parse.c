@@ -1255,8 +1255,11 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
   }
   *rest = tok;
 
-  if (chk_storage_class(attr->strg, ctx))
+  if (chk_storage_class(attr->strg, ctx)) {
+    if ((attr->strg & SC_INLINE) > (ctx & SC_INLINE))
+      error_tok(tok, "'inline' not allowed here");
     error_tok(tok, "invalid storage class");
+  }
 
   if (!ty) {
     if (opt_std < STD_C99) {
@@ -1733,7 +1736,7 @@ static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr) {
 
   Type *ty;
   if (is_typename(tok)) {
-    ty = declspec(&tok, tok, attr, SC_ALL);
+    ty = declspec(&tok, tok, attr, SC_ALL | SC_INLINE);
     ty = declarator(&tok, tok, ty, NULL);
   } else {
     Node *node = expression(&tok, tok);

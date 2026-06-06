@@ -9,7 +9,7 @@ short incomplete_tentative_arr[];
 
 extern int init_extern = 3;
 
-static inline int static_inline_fn(void);
+static inline typeof(int) static_inline_fn(void);
 int (*static_inline_fn_ptr)(void) = static_inline_fn;
 
 int main(void) {
