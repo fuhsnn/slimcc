@@ -2799,6 +2799,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
     }
     cur->constraint = str_tok(&tok, tok);
     cur->arg = expression(&tok, skip_tk(tok, TK_LPAREN));
+    add_type(cur->arg);
     tok = skip_tk(tok, TK_RPAREN);
   }
   *rest = tok;
@@ -3291,7 +3292,6 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
       node = result = stmt(&tok, tok, label_list);
     }
     cur = cur->next = node;
-    add_type(cur);
   }
 
   if (cur->kind == ND_RETURN || cur->kind == ND_GOTO)
@@ -3302,19 +3302,14 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
   node->blk.local_labels = resolve_local_gotos();
   node->no_label = leave_scope();
 
-  if (kind == ND_STMT_EXPR) {
-    if (result == cur && result->kind == ND_EXPR_STMT) {
-      node->blk.result = result;
-      node->ty = ptr_decay(result->m.lhs->ty);
-
-      if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION) {
-        Obj *var = new_lvar(node->ty);
-        Node *n = new_binary(ND_ASSIGN, new_var_node(var, tok), result->m.lhs, tok);
-        result->m.lhs = new_binary(ND_COMMA, n, new_var_node(var, tok), tok);
-        add_type(result->m.lhs);
-      }
-    } else {
-      node->ty = ty_void;
+  if (kind == ND_STMT_EXPR && result == cur && result->kind == ND_EXPR_STMT) {
+    node->blk.result = result;
+    add_type(result);
+    Type *ty = result->m.lhs->ty;
+    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
+      Obj *var = new_lvar(ty);
+      Node *n = new_binary(ND_ASSIGN, new_var_node(var, tok), result->m.lhs, tok);
+      result->m.lhs = new_binary(ND_COMMA, n, new_var_node(var, tok), tok);
     }
   }
 
@@ -4178,10 +4173,6 @@ static Node *atomic_op(Node *binary, bool return_old) {
   Node *node = new_node(ND_STMT_EXPR, tok);
   node->blk.body = head.next;
   node->blk.result = cur;
-  node->ty = binary->m.lhs->ty;
-
-  for (Node *n = head.next; n; n = n->next)
-    add_type(n);
   return node;
 }
 
@@ -4593,7 +4584,6 @@ static Node *unary(Token **rest, Token *tok) {
 
   if (tok->kind == TK_AND) {
     Node *lhs = unary(rest, tok->next);
-    add_type(lhs);
     if (is_bitfield(lhs))
       error_tok(tok, "cannot take address of bitfield");
     return new_unary(ND_ADDR, lhs, tok);
@@ -5618,9 +5608,7 @@ static Node *primary(Token **rest, Token *tok) {
     var->init_data = tok->str;
     var->is_string_lit = true;
     *rest = tok->next;
-    Node *n = new_var_node(var, tok);
-    add_type(n);
-    return n;
+    return new_var_node(var, tok);
   }
 
   if (tok->kind == TK_true || tok->kind == TK_false) {
@@ -5910,10 +5898,10 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   if (precalc) {
     precalc = new_unary(ND_EXPR_STMT, precalc, tok);
-    add_type(precalc);
     precalc->next = fn->body->blk.body;
     fn->body->blk.body = precalc;
   }
+  add_type(fn->body);
 
   if (fnctx->use_vla &&
       !fnctx->dont_dealloc_vla &&

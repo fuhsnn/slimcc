@@ -1013,8 +1013,20 @@ void _add_type(Node *node) {
     node->ty = ty_void;
     return;
   }
-  case ND_FUNCALL:
-  case ND_STMT_EXPR: {
+  case ND_POST_INCDEC:
+  case ND_ARITH_ASSIGN: {
+    node->ty = ptr_decay(node->m.lhs->ty);
+    return;
+  }
+  case ND_STMT_EXPR:
+    for (Node *n = node->blk.body; n; n = n->next)
+      add_type(n);
+    if (node->blk.result)
+      node->ty = ptr_decay(node->blk.result->m.lhs->ty);
+    else
+      node->ty = ty_void;
+    return;
+  case ND_FUNCALL: {
     internal_error();
     return;
   }
