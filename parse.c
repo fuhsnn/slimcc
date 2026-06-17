@@ -4799,9 +4799,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Regular struct members
     bool first = true;
     for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
-      if (tok->kind == TK_COMMA || tok->kind == TK_SEMI)
-        error_tok(tok, "missing declarator");
-      
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = declarator(&tok, tok, basety, &mem->name);
       if (mem->name) {
@@ -4822,6 +4819,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         mem->bit_width = width;
         mem->is_bitfield = true;
       }
+      else if (!mem->name) {
+        error_tok(tok, "missing declarator");
+      }
+        
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
       mem_attr(mem->name, tok, &attr, mem);
       cur = cur->next = mem;
