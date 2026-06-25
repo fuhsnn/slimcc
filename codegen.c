@@ -5060,7 +5060,7 @@ static void emit_symbol2(Obj *var, const char *name, const char *vis) {
     Printftn(".%s \"%s\"", vis, name);
 
   if (var->alias_name)
-    Printftn(".set \"%s\", \"%s\"", asm_name(var), var->alias_name);
+    Printftn(".set \"%s\", \"%s\"", name, var->alias_name);
 }
 
 static void emit_symbol(Obj *var, const char *name) {
