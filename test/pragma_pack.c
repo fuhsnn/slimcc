@@ -74,6 +74,20 @@ int main(void) {
   static_assert(2048 == sizeof(struct S));
 #endif
 
+  {
+    #pragma pack(push, 1)
+    __attribute__((aligned(512))) typedef struct Stag {
+      int i;
+    } Sdef;
+    #pragma pack(pop)
+    struct Stag s1;
+    Sdef s2;
+    _Static_assert(alignof(struct Stag) == 1);
+    _Static_assert(alignof(Sdef) == 512);
+    _Static_assert(alignof(s1) == 1);
+    _Static_assert(alignof(s2) == 512);
+  }
+
   printf("OK\n");
 }
 

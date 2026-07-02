@@ -843,19 +843,18 @@ static void pragma_pack(Token **rest, Token *tok) {
     tok = skip_tk(tok, TK_LPAREN);
     if (equal(tok, "pop")) {
       pragma_pack_pop(tok);
-      *rest = skip_line(skip_tk(tok->next, TK_RPAREN));
+      *rest = skip_tk(tok->next, TK_RPAREN);
       return;
     }
     if (equal(tok, "push")) {
       pragma_pack_push();
-      if (consume_tk(&tok, tok->next, TK_RPAREN)) {
-        *rest = skip_line(tok);
+      if (consume_tk(rest, tok->next, TK_RPAREN))
         return;
-      }
+
       tok = skip_tk(tok->next, TK_COMMA);
     }
     pragma_pack_set(tok->kind == TK_RPAREN ? 0 : align_expr(&tok, tok));
-    *rest = skip_line(skip_tk(tok, TK_RPAREN));
+    *rest = skip_tk(tok, TK_RPAREN);
     return;
   }
   internal_error();

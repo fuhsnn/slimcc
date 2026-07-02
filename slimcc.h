@@ -472,7 +472,6 @@ void undef_macro(const char *name);
 void dump_defines(FILE *out);
 Token *preprocess(const char *file, StringArray *incls, StringArray *macros);
 Token *prepare_parse(Token *tok);
-Token *skip_line(Token *tok);
 extern Token *last_alloc_tok;
 extern Token *tok_freelist;
 

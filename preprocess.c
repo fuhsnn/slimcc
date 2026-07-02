@@ -63,7 +63,7 @@ static void undef_macro2(Token *tok);
 
 #define Is_hash(tok) ((tok)->kind == TK_HASH && (tok)->at_bol)
 
-Token *skip_line(Token *tok) {
+static Token *skip_line(Token *tok) {
   if (tok->at_bol)
     return tok;
   warn_tok(tok, "extra token");
@@ -2030,6 +2030,14 @@ static void stash_attr(Token *tok, Token *head, Token **attr_cur) {
   *attr_cur = head;
 }
 
+static Token *free_line(Token *start, Token *tok) {
+  while (!tok->next->at_bol)
+    tok = tok->next;
+  Token *nxt = tok->next;
+  to_freelist(start, tok);
+  return nxt;
+}
+
 static Token *preprocess3(Token *tok) {
   Token head = {0};
   Token *cur = &head;
@@ -2065,23 +2073,26 @@ static Token *preprocess3(Token *tok) {
       if (equal(tok, "pack")) {
         tok->kind = TK_PRAGMA;
         tok->at_bol = true;
+
+        Token *end = skip_paren(skip_tk(tok->next, TK_LPAREN));
+        for (Token *t = tok; t != end; t = t->next) {
+          t->attr_next = NULL;
+          cur = cur->next = t;
+        }
         stash_attr(tok, &attr_head, &attr_cur);
 
-        Token *end = get_line(&cur, tok);
-        for (Token *t = tok; t != end; t = t->next)
-          t->alloc_next = NULL;
-        tok = end;
         to_freelist(start, start->next);
+        if (!end->at_bol) {
+          warn_tok(end, "extra token");
+          end = free_line(end, end);
+        }
+        tok = end;
         continue;
       }
       if (equal(tok, "message"))
         notice_tok(tok, "#pragma message");
 
-      while (!tok->next->at_bol)
-        tok = tok->next;
-      Token *free_end = tok;
-      tok = tok->next;
-      to_freelist(start, free_end);
+      tok = free_line(start, tok);
       continue;
     }
 
