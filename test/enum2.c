@@ -246,6 +246,16 @@ int main(void) {
   enum : short unsigned { ANON_E };
   SASSERT(sizeof(ANON_E) == 2);
 
+  {
+    enum : bool {
+      A,
+      B,
+      //SREJ C,
+      //SREJ TWO = 2,
+      //SREJ N1 = -1,
+    } e;
+  }
+
   ASSERT(1, extend());
   ASSERT(1, compat());
   ASSERT(1, redecl());

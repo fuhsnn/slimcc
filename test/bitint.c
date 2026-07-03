@@ -175,7 +175,9 @@ int main() {
   {
     enum E : _BitInt(6) {
       MAX = 31,
-      MIN = -32
+      //SREJ MAX_P1,
+      MIN = -32,
+      //SREJ MIN_M1 = -33,
     };
     static_assert(31 == MAX);
     static_assert(-32 == MIN);
@@ -211,6 +213,9 @@ int main() {
     enum : _BitInt(1) {
       A = -1,
       B = 0,
+      //SREJ C,
+      //SREJ ONE = 1,
+      //SREJ N2 = -2,
     };
 
     static_assert(A == -1);

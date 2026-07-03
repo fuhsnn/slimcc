@@ -251,7 +251,11 @@ int next_pow_of_two(int val) {
 }
 
 int64_t bit_size(Type *ty) {
-  return ty->kind == TY_BITINT ? ty->bit_cnt : ty->size * 8;
+  switch (ty->kind) {
+  case TY_BOOL:   return 1;
+  case TY_BITINT: return ty->bit_cnt;
+  }
+  return ty->size * 8;
 }
 
 int64_t bitint_buffer_size(Type *ty) {

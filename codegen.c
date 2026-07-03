@@ -426,7 +426,7 @@ static Type *bitwidth_to_ty(int width, bool is_unsigned) {
 }
 
 static int32_t ovf_headroom(Type *ty, NodeKind kind) {
-  int32_t bits = (ty->kind == TY_BOOL) ? 1 : bit_size(ty);
+  int32_t bits = bit_size(ty);
 
   if (kind == ND_MUL)
     return bits * 2 + ty->is_unsigned;
