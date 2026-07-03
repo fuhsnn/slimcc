@@ -172,8 +172,6 @@ struct FuncContext {
   Token *defr_ctx;
 };
 
-bool is_redecl_context;
-
 static Obj *globals = &(Obj){0};
 static Scope *scope = &(Scope){0};
 static HashMap symbols;
@@ -4841,34 +4839,18 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   ty->members = head.next;
 }
 
-static Type *struct_tag(TypeKind kind, Token *tag, Token *tok, Type **tag_compat_ty) {
-  Type *tag_ty;
-  if (tok->kind == TK_LCURLY || tok->kind == TK_SEMI)
-    tag_ty = find_tag_in_scope(tag);
-  else
-    tag_ty = find_tag(tag);
+static Type *struct_ty_tag(TypeKind kind, Token *tag, Type *tag_ty) {
+  if (tag_ty) {
+    if (tag_ty->kind != kind)
+      error_tok(tag, "mismatched tag type");
+    return tag_ty;
+  }
 
-  if (!tag_ty) {
-    Type *ty = new_type(kind, -1, 0);
+  Type *ty = new_type(kind, -1, 0);
+
+  if (tag)
     push_tag_scope(tag, ty);
-    return ty;
-  }
-
-  if (tag_ty->kind != kind)
-    error_tok(tag, "conflict of tag type");
-
-  if (tok->kind == TK_LCURLY) {
-    if (tag_ty->is_constructing)
-      error_tok(tag, "nested redefinition");
-
-    if (tag_ty->size >= 0) {
-      if (opt_std < STD_C23)
-        error_tok(tag, "tag redeclaration");
-      *tag_compat_ty = tag_ty;
-      return new_type(kind, -1, 0);
-    }
-  }
-  return tag_ty;
+  return ty;
 }
 
 static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
@@ -4886,21 +4868,44 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
     tok = tok->next;
   }
 
-  Type *tag_compat_ty = NULL;
-  Type *ty;
-  if (!tag) {
-    ty = new_type(kind, -1, 0);
-  } else {
-    ty = struct_tag(kind, tag, tok, &tag_compat_ty);
-
+  Type *tag_ty = NULL;
+  if (tag) {
     if (tok->kind != TK_LCURLY) {
+      if (tok->kind == TK_SEMI)
+        tag_ty = find_tag_in_scope(tag);
+      else
+        tag_ty = find_tag(tag);
+
       *rest = tok;
-      return ty;
+      return struct_ty_tag(kind, tag, tag_ty);
     }
-    ty->is_constructing = true;
+    tag_ty = find_tag_in_scope(tag);
   }
 
-  struct_members(&tok, skip_tk(tok, TK_LCURLY), ty);
+  tok = skip_tk(tok, TK_LCURLY);
+
+  bool is_redecl = false;
+  if (tag_ty) {
+    if (tag_ty->is_constructing)
+      error_tok(tag, "nested redefinition of '%.*s'", tag->len, tag->loc);
+
+    if (tag_ty->size >= 0) {
+      if (opt_std < STD_C23)
+        error_tok(tag, "redefinition of '%.*s'", tag->len, tag->loc);
+      is_redecl = true;
+    }
+  }
+
+  Type *ty;
+  if (is_redecl) {
+    ty = new_type(kind, -1, 0);
+  } else {
+    ty = struct_ty_tag(kind, tag, tag_ty);
+    if (tag)
+      ty->is_constructing = true;
+  }
+
+  struct_members(&tok, tok, ty);
 
   attr_aligned(tok, TK_ATTR, &alt_align);
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
@@ -4913,28 +4918,22 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   else
     ty = union_decl(ty, alt_align, pack_align);
 
-  if (tag) {
+  if (is_redecl) {
+    if (!is_record_compat(ty, tag_ty, true))
+      error_tok(tag, "struct/union redeclaration mismatch");
+    return tag_ty;
+  }
+
+  if (tag)
     ty->is_constructing = false;
 
-    if (tag_compat_ty) {
-      bool prv = is_redecl_context;
-      is_redecl_context = true;
+  for (Type *t = ty->decl_next; t;) {
+    Type *t2 = t;
+    t = t->decl_next;
 
-      if (!is_record_compat(ty, tag_compat_ty))
-        error_tok(tag, "tag redeclaration");
-
-      is_redecl_context = prv;
-      return tag_compat_ty;
-    }
-
-    for (Type *t = ty->decl_next; t;) {
-      Type *t2 = t;
-      t = t->decl_next;
-
-      int align = t2->align;
-      new_derived_type(t2, t2->qual, ty);
-      t2->align = MAX(t2->align, align);
-    }
+    int align = t2->align;
+    new_derived_type(t2, t2->qual, ty);
+    t2->align = MAX(t2->align, align);
   }
   return ty;
 }

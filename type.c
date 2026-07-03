@@ -422,7 +422,7 @@ static bool is_qual_compat(Type *t1, Type *t2) {
   return t1->qual == t2->qual;
 }
 
-bool is_record_compat(Type *t1, Type *t2) {
+bool is_record_compat(Type *t1, Type *t2, bool is_redecl) {
   if (t1->size < 0 ||
       t2->size < 0 ||
       t1->align != t2->align ||
@@ -447,18 +447,18 @@ bool is_record_compat(Type *t1, Type *t2) {
     if (t1->kind != t2->kind)
       return false;
 
-    if (is_redecl_context)
-      if (t1->is_enum != t2->is_enum)
-        return false;
-
     if (t1->kind == TY_STRUCT || t1->kind == TY_UNION) {
       if (!mem1->name != !t1->tag ||
           !mem2->name != !t2->tag ||
           (t1->tag && !equal_tok(t1->tag, t2->tag)))
         return false;
-      if (!is_qual_compat(t1, t2) || !is_record_compat(t1, t2))
+      if (!is_qual_compat(t1, t2) || !is_record_compat(t1, t2, is_redecl))
         return false;
     } else {
+      if (is_redecl)
+        if (t1->is_enum != t2->is_enum)
+          return false;
+
       if (!is_compatible2(t1, t2))
         return false;
     }
@@ -527,7 +527,7 @@ bool is_compatible(Type *t1, Type *t2) {
     return p1 == NULL && p2 == NULL;
   }
   case TY_STRUCT:
-  case TY_UNION:  return is_tag_compat(t1, t2) && is_record_compat(t1, t2);
+  case TY_UNION:  return is_tag_compat(t1, t2) && is_record_compat(t1, t2, false);
   }
   return false;
 }

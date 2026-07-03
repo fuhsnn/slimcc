@@ -803,8 +803,6 @@ struct Scope {
   HashMap tags;
 };
 
-extern bool is_redecl_context;
-
 Node *new_cast(Node *expr, Type *ty);
 int64_t const_expr(Token **rest, Token *tok);
 int64_t eval_sign_extend(Type *ty, int64_t val);
@@ -1010,7 +1008,7 @@ bool is_bitfield(Node *node);
 bool is_redundant_cast(Node *expr, Type *ty);
 bool is_compatible(Type *t1, Type *t2);
 bool is_compatible2(Type *t1, Type *t2);
-bool is_record_compat(Type *t1, Type *t2);
+bool is_record_compat(Type *t1, Type *t2, bool is_redecl);
 bool is_null_ptr_constant(Node *node);
 bool is_ptr(Type *ty);
 int next_pow_of_two(int val);

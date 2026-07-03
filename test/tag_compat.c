@@ -144,6 +144,8 @@ int main(void) {
   {
     struct S1 { enum E1 { A1 } i; };
     struct S2 { enum E2 : unsigned { A2 } i; };
+    //SREJ struct S1 { unsigned i; };
+    //SREJ struct S2 { unsigned i; };
     {
       struct S1 s1;
       static_assert( _Generic(s1, struct S1 { unsigned i; }:1, default: 0) );
