@@ -2,8 +2,6 @@ SRCS=alloc.c bitint.c codegen.c hashmap.c main.c parse.c platform.c preprocess.c
 
 TEST_SRCS!=ls test/*.c
 
-TEST_FLAGS=-Itest -std=gnu23
-
 STG2_FLAGS=
 
 SAN_FLAGS=-fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined
@@ -27,7 +25,7 @@ test/host/common.o: test/host/common.c
 $(TESTS): slimcc test/host/common.o
 
 .c.exe:
-	./slimcc $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+	$(SHELL) scripts/test_helper.sh ./slimcc $< $@
 
 test: $(TESTS)
 	for i in $(TESTS); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
@@ -51,7 +49,7 @@ TESTS_S2=$(TEST_SRCS:.c=.stage2.exe)
 $(TESTS_S2): slimcc-stage2 test/host/common.o
 
 .c.stage2.exe:
-	./slimcc-stage2 $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+	$(SHELL) scripts/test_helper.sh ./slimcc-stage2 $< $@
 
 test-stage2: $(TESTS_S2)
 	for i in $(TESTS_S2); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
@@ -75,7 +73,7 @@ TESTS_SAN=$(TEST_SRCS:.c=.san.exe)
 $(TESTS_SAN): slimcc-san test/host/common.o
 
 .c.san.exe:
-	./slimcc-san $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+	$(SHELL) scripts/test_helper.sh ./slimcc-san $< $@
 
 test-san: $(TESTS_SAN)
 	for i in $(TESTS_SAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
@@ -106,7 +104,7 @@ TESTS_FILC=$(TEST_SRCS:.c=.filc.exe)
 $(TESTS_FILC): slimcc-filc test/host/common.o
 
 .c.filc.exe:
-	./slimcc-filc $(TEST_FLAGS) -o $@ $< test/host/common.o -pthread
+	$(SHELL) scripts/test_helper.sh ./slimcc-filc $< $@
 
 test-filc: $(TESTS_FILC)
 	for i in $(TESTS_FILC); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
