@@ -1090,10 +1090,7 @@ static bool chk_storage_class(StorageClass msk, StorageClass allow) {
     return msk & ~(SC_CONSTEXPR | SC_AUTO | SC_REGISTER | SC_STATIC);
   if (msk & SC_THREAD)
     return msk & ~(SC_THREAD | SC_STATIC | SC_EXTERN);
-  return 1 < ((bool)(msk & SC_EXTERN) +
-              (bool)(msk & SC_REGISTER) +
-              (bool)(msk & SC_STATIC) +
-              (bool)(msk & SC_TYPEDEF));
+  return 1 < Pop64(msk & (SC_EXTERN | SC_REGISTER | SC_STATIC | SC_TYPEDEF));
 }
 
 static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx) {
