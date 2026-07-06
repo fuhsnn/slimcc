@@ -8,13 +8,6 @@ typedef enum {
   FILE_LDARG,
 } FileType;
 
-typedef enum {
-  PR_NORMAL = 0,
-  PR_NOFORK,
-  PR_PIPE,
-  PR_HHH,
-} ProcMode;
-
 typedef struct {
   const char *arg;
   bool is_def;
@@ -61,12 +54,15 @@ static bool opt_P;
 static bool opt_M;
 static bool opt_MM;
 static bool opt_MD;
-static bool opt_MMD;
 static bool opt_MG;
 static bool opt_MP;
 static bool opt_S;
 static bool opt_c;
 static bool opt_verbose;
+static bool opt_verbose_noop;
+static bool opt_pipe;
+static bool nofork;
+
 bool opt_pie;
 bool opt_nopie;
 bool opt_pthread;
@@ -90,7 +86,6 @@ static const char *opt_MT;
 static const char *opt_o;
 
 static StringArray ld_paths;
-static StringArray input_args;
 static StringArray sysincl_paths;
 static StringArray dep_files;
 static StringArray tmpfiles;
@@ -98,7 +93,6 @@ static const char *tmp_folder;
 static StringArray as_args;
 static MacroChangeArr macrodefs;
 static int incl_cnt;
-static ProcMode proc_mode;
 
 static bool is_fork_child;
 char *argv0;
@@ -373,31 +367,28 @@ static void build_ld_paths(const char *opt_B, StringArray *paths) {
   platform_search_dirs(&ld_paths);
 }
 
-static void parse_args(int argc, char **argv, bool *run_ld) {
-  const char *arg;
-  int input_cnt = 0;
+static int parse_args(int argc, char **argv, StringArray *input_args) {
   const char *opt_B = NULL;
-  bool opt_pipe = false;
-  bool opt_hash_hash_hash = false;
-  bool has_wl = false;
-  bool has_gnu_keywords_option = false;
   bool opt_nostdinc = false;
+  bool has_gnu_keywords_option = false;
+  int non_input_cnt = 0;
+
   StringArray libpaths = {0};
   StringArray isystem = {0};
   StringArray idirafter = {0};
 
+  const char *arg;
   for (int i = 1; i < argc; i++) {
     if (*argv[i] == '\0')
       continue;
 
     if (*argv[i] != '-' || argv[i][1] == '\0') {
-      strarray_push(&input_args, argv[i]);
-      input_cnt++;
+      strarray_push(input_args, argv[i]);
       continue;
     }
 
     if (!strcmp(argv[i], "-###")) {
-      opt_hash_hash_hash = true;
+      opt_verbose_noop = opt_verbose = true;
       continue;
     }
 
@@ -512,8 +503,9 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
     }
 
     if (take_arg_s(argv, &i, &arg, "-x")) {
-      strarray_push(&input_args, "-x");
-      strarray_push(&input_args, arg);
+      strarray_push(input_args, "-x");
+      strarray_push(input_args, arg);
+      non_input_cnt += 2;
       continue;
     }
 
@@ -526,26 +518,22 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
       continue;
 
     if (startswith(argv[i], &arg, "-Wl,")) {
-      strarray_push(&input_args, argv[i]);
-      has_wl = true;
+      strarray_push(input_args, argv[i]);
       continue;
     }
 
     if (take_arg_s(argv, &i, &arg, "-l")) {
-      strarray_push(&input_args, format("-Wl,-l%s", arg));
-      has_wl = true;
+      strarray_push(input_args, format("-Wl,-l%s", arg));
       continue;
     }
 
     if (take_arg(argv, &i, &arg, "-Xlinker")) {
-      strarray_push(&input_args, format("-Wl,%s", arg));
-      has_wl = true;
+      strarray_push(input_args, format("-Wl,%s", arg));
       continue;
     }
 
     if (take_arg_s(argv, &i, &arg, "-z")) {
-      strarray_push(&input_args, format("-Wl,-z,%s", arg));
-      has_wl = true;
+      strarray_push(input_args, format("-Wl,-z,%s", arg));
       continue;
     }
 
@@ -570,7 +558,7 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
     }
 
     if (!strcmp(argv[i], "-MMD")) {
-      opt_MD = opt_MMD = true;
+      opt_MD = opt_MM = true;
       continue;
     }
 
@@ -581,7 +569,7 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
     }
 
     if (startswith(argv[i], &arg, "-Wp,-MMD,")) {
-      opt_MD = opt_MMD = true;
+      opt_MD = opt_MM = true;
       opt_MF = arg;
       continue;
     }
@@ -844,29 +832,14 @@ static void parse_args(int argc, char **argv, bool *run_ld) {
   }
 
   build_incl_paths(opt_B, opt_nostdinc, &isystem, &idirafter);
+
   build_ld_paths(opt_B, &libpaths);
 
-  bool no_input = !input_cnt && !has_wl;
-  if (opt_hash_hash_hash || opt_verbose) {
-    version();
-    if (no_input)
-      exit(0);
-  }
-  if (no_input)
-    error("no input files");
-
-  if (opt_hash_hash_hash)
-    proc_mode = PR_HHH;
-  else if (opt_pipe)
-    proc_mode = PR_PIPE;
-  else if (input_cnt == 1)
-    proc_mode = PR_NOFORK;
-
-  *run_ld = has_wl && !(opt_c || opt_S || opt_E);
+  return input_args->len - non_input_cnt;
 }
 
 static FILE *open_file(const char *path) {
-  if (!path || strcmp(path, "-") == 0)
+  if (!strcmp(path, "-"))
     return stdout;
 
   FILE *out = fopen(path, "w");
@@ -880,12 +853,6 @@ static void close_file(FILE *file) {
     fflush(file);
   else
     fclose(file);
-}
-
-static bool endswith(const char *p, const char *q) {
-  int len1 = strlen(p);
-  int len2 = strlen(q);
-  return (len1 >= len2) && !strcmp(p + len1 - len2, q);
 }
 
 // Replace file extension
@@ -934,12 +901,13 @@ static char *create_pipefile(void) {
 }
 
 void run_subprocess(const char **argv) {
-  if (opt_verbose || proc_mode == PR_HHH) {
+  if (opt_verbose) {
     fprintf(stderr, "\"%s\"", argv[0]);
     for (int i = 1; argv[i]; i++)
       fprintf(stderr, " \"%s\"", argv[i]);
     fprintf(stderr, "\n");
-    if (proc_mode == PR_HHH)
+
+    if (opt_verbose_noop)
       return;
   }
 
@@ -965,10 +933,10 @@ static int fork_cc1(const char *input, const char *output, bool is_asm_pp) {
 }
 
 static void run_cc1(const char *input, const char *output, bool is_asm_pp) {
-  if (proc_mode == PR_HHH)
+  if (opt_verbose_noop)
     return;
 
-  if (proc_mode == PR_NOFORK) {
+  if (nofork) {
     cc1(input, output, is_asm_pp);
     return;
   }
@@ -981,13 +949,13 @@ static void run_cc1(const char *input, const char *output, bool is_asm_pp) {
 }
 
 static void run_cc1_as(const char *input, const char *output, bool is_asm_pp) {
-  if (proc_mode == PR_HHH) {
+  if (opt_verbose_noop) {
     char *tmp = create_tmpfile();
     run_assembler(&as_args, tmp, output);
     return;
   }
 
-  if (proc_mode == PR_PIPE) {
+  if (opt_pipe) {
     char *tmp = create_pipefile();
     int id = fork_cc1(input, tmp, is_asm_pp);
     run_assembler(&as_args, tmp, output);
@@ -1068,7 +1036,7 @@ bool ignore_missing_dep(const char *path, const char *filename, Token *tok) {
 
 void add_dep_file(const char *path, bool is_sys) {
   if (opt_M || opt_MD) {
-    if (is_sys && (opt_MM || opt_MMD))
+    if (is_sys && opt_MM)
       return;
 
     static HashMap map;
@@ -1088,18 +1056,15 @@ static const char *skip_dot_slash(const char *p) {
   return p;
 }
 
-static void print_dependencies(const char *input) {
-  const char *path;
+static const char *print_dep_outpath(const char *input) {
   if (opt_MF)
-    path = opt_MF;
-  else if (opt_MD)
-    path = replace_extn(opt_o ? opt_o : input, ".d");
-  else if (opt_o)
-    path = opt_o;
-  else
-    path = "-";
+    return opt_MF;
+  if (opt_MD)
+    return replace_extn(opt_o ? opt_o : input, ".d");
+  return opt_o ? opt_o : "-";
+}
 
-  FILE *out = open_file(path);
+static void print_dependencies(const char *input, FILE *out) {
   if (opt_MT)
     fprintf(out, "%s:", opt_MT);
   else
@@ -1113,11 +1078,9 @@ static void print_dependencies(const char *input) {
   if (opt_MP)
     for (int i = 1; i < dep_files.len; i++)
       fprintf(out, "%s:\n", quote_makefile(skip_dot_slash(dep_files.data[i])));
-
-  close_file(out);
 }
 
-static void cc1(const char *input_file, const char *output_file, bool is_asm_pp) {
+static void cc1(const char *input, const char *output, bool is_asm_pp) {
   if (is_asm_pp)
     opt_E = opt_cc1_asm_pp = true;
 
@@ -1128,18 +1091,25 @@ static void cc1(const char *input_file, const char *output_file, bool is_asm_pp)
   platform_init_cc1();
   cli_macros(is_asm_pp);
 
-  FILE *out = open_file(output_file);
+  FILE *out = open_file(output);
 
-  Token *tok = preprocess(input_file, &opt_include, &opt_imacros);
+  Token *tok = preprocess(input, &opt_include, &opt_imacros);
 
-  if (opt_M || opt_MD) {
-    print_dependencies(input_file);
-    if (opt_M) {
-      close_file(out);
-      arena_off(&pp_arena);
-      arena_off(&cc1_arena);
-      return;
-    }
+  if (opt_M) {
+    print_dependencies(input, out);
+
+    close_file(out);
+    arena_off(&pp_arena);
+    arena_off(&cc1_arena);
+    return;
+  }
+
+  if (opt_MD) {
+    FILE *out2 = open_file(print_dep_outpath(input));
+
+    print_dependencies(input, out2);
+
+    close_file(out2);
   }
 
   if (opt_E) {
@@ -1375,21 +1345,23 @@ void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *outp
 }
 
 static FileType get_file_type(const char *filename) {
-  if (endswith(filename, ".c") || endswith(filename, ".i"))
-    return FILE_C;
-  if (endswith(filename, ".s"))
-    return FILE_ASM;
-  if (endswith(filename, ".S"))
-    return FILE_PP_ASM;
-  if (!strcmp(filename, "-")) {
-    if (!opt_E)
-      error("-E or -x required when input is from standard input");
-    return FILE_C;
-  }
-  if (endswith(filename, ".h")) {
-    if (!opt_E)
+  const char *p = strrchr(filename, '.');
+  if (p && p[1] && !p[2]) {
+    switch (p[1]) {
+    case 'c':
+    case 'i': return FILE_C;
+    case 's': return FILE_ASM;
+    case 'S': return FILE_PP_ASM;
+    case 'h':
+      if (opt_E)
+        return FILE_C;
       error("pch not supported");
-    return FILE_C;
+    }
+  }
+  if (!strcmp(filename, "-")) {
+    if (opt_E)
+      return FILE_C;
+    error("-E or -x required when input is from standard input");
   }
   return FILE_LDARG;
 }
@@ -1398,105 +1370,97 @@ int main(int argc, char **argv) {
   argv0 = argv[0];
   platform_init_driver();
 
-  bool run_ld;
-  parse_args(argc, argv, &run_ld);
+  StringArray input_args = {0};
+  int input_cnt = parse_args(argc, argv, &input_args);
+
+  if (opt_verbose)
+    version();
+
+  if (!input_cnt) {
+    if (opt_verbose)
+      exit(0);
+    error("no input files");
+  }
+
+  if (input_cnt == 1 && (opt_M || opt_E || opt_S))
+    nofork = true;
 
   StringArray ld_args = {0};
   FileType opt_x = FILE_NONE;
-  int src_cnt = 0;
-
   for (int i = 0; i < input_args.len; i++) {
-    if (!strcmp(input_args.data[i], "-x")) {
+    const char *input = input_args.data[i];
+
+    if (!strcmp(input, "-x")) {
       opt_x = parse_opt_x(input_args.data[++i]);
       continue;
     }
-    if (comma_arg(input_args.data[i], &ld_args, "-Wl,"))
+    if (comma_arg(input, &ld_args, "-Wl,"))
       continue;
-
-    const char *input = input_args.data[i];
 
     FileType type = opt_x ? opt_x : get_file_type(input);
 
     if (type == FILE_LDARG) {
       strarray_push(&ld_args, input);
-      run_ld = true;
       continue;
     }
 
-    const char *output;
-    if (opt_o) {
-      if (opt_c || opt_S || opt_E)
-        if (src_cnt++)
-          error("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files");
-      output = opt_o;
-    } else if (opt_S) {
-      output = replace_extn(input, ".s");
-    } else {
-      output = replace_extn(input, ".o");
-    }
-
-    // Handle .s
     if (type == FILE_ASM) {
-      if (opt_S || opt_E || opt_M)
+      if (opt_M || opt_E || opt_S)
         continue;
 
       if (opt_c) {
-        run_assembler(&as_args, input, output);
+        run_assembler(&as_args, input, opt_o ? opt_o : replace_extn(input, ".o"));
         continue;
       }
-
       char *tmp = create_tmpfile();
       run_assembler(&as_args, input, tmp);
       strarray_push(&ld_args, tmp);
-      run_ld = true;
       continue;
     }
 
-    // Handle .S
     if (type == FILE_PP_ASM) {
-      if (opt_S || opt_E || opt_M) {
+      if (opt_M) {
+        run_cc1(input, print_dep_outpath(input), true);
+        continue;
+      }
+      if (opt_E || opt_S) {
         run_cc1(input, (opt_o ? opt_o : "-"), true);
         continue;
       }
       if (opt_c) {
-        run_cc1_as(input, output, true);
+        run_cc1_as(input, (opt_o ? opt_o : replace_extn(input, ".o")), true);
         continue;
       }
       char *tmp = create_tmpfile();
       run_cc1_as(input, tmp, true);
       strarray_push(&ld_args, tmp);
-      run_ld = true;
       continue;
     }
 
-    if (opt_E || opt_M) {
+    if (opt_M) {
+      run_cc1(input, print_dep_outpath(input), false);
+      continue;
+    }
+    if (opt_E) {
       run_cc1(input, (opt_o ? opt_o : "-"), false);
       continue;
     }
-
     if (opt_S) {
-      run_cc1(input, output, false);
+      run_cc1(input, (opt_o ? opt_o : replace_extn(input, ".s")), false);
       continue;
     }
-
     if (opt_c) {
-      run_cc1_as(input, output, false);
+      run_cc1_as(input, (opt_o ? opt_o : replace_extn(input, ".o")), false);
       continue;
     }
-
     char *tmp = create_tmpfile();
     run_cc1_as(input, tmp, false);
     strarray_push(&ld_args, tmp);
-    run_ld = true;
     continue;
   }
 
-  if (run_ld) {
-    if (opt_c || opt_S || opt_E || opt_M)
-      fprintf(stderr, "linker input unused\n");
-    else
-      run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
-  }
+  if (ld_args.len && !(opt_M || opt_E || opt_S || opt_c))
+    run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
 
   cleanup();
 }
