@@ -1131,11 +1131,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     case TK_typedef:      attr->strg |= SC_TYPEDEF; continue;
     case TK_thread_local: attr->strg |= SC_THREAD; continue;
     case TK_inline:       attr->strg |= SC_INLINE; continue;
+    case TK_constexpr:    attr->strg |= SC_CONSTEXPR; continue;
     case TK_Noreturn:     attr->is_noreturn = true; continue;
-    case TK_constexpr:
-      attr->strg |= SC_CONSTEXPR;
-      qual |= Q_CONST;
-      continue;
     case TK_alignas: {
       tok = skip_tk(tok, TK_LPAREN);
       int align;
@@ -1265,6 +1262,12 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
       error_tok(tok, "unsupported form for type inference");
 
   return add_qual(qual, ty, tok);
+}
+
+static Type *qual_constexpr(Type *ty, VarAttr *attr, Token *tok) {
+  if (attr->strg & SC_CONSTEXPR)
+    return add_qual(Q_CONST, ty, tok);
+  return ty;
 }
 
 static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
@@ -1828,6 +1831,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (!name)
     error_tok(tok, "variable name omitted");
   chk_inline(attr, tok);
+  ty = qual_constexpr(ty, attr, tok);
 
   Node *expr = calc_vla(ty, tok);
 
@@ -1843,11 +1847,11 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);
 
-    if (consume_tk(&tok, tok, TK_EQ)) {
-      if (attr->strg & SC_CONSTEXPR)
-        constexpr_initializer(&tok, tok, var, var);
-      else
-        gvar_initializer(&tok, tok, var);
+    if (attr->strg & SC_CONSTEXPR) {
+      constexpr_initializer(&tok, skip_tk(tok, TK_EQ), var, var);
+      *cond_var = var;
+    } else if (tok->kind == TK_EQ) {
+      gvar_initializer(&tok, tok->next, var);
       *cond_var = var;
     }
     *rest = tok;
@@ -1890,10 +1894,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
                                  new_var_node(init_var, tok), tok));
     *cond_var = var;
-    *rest = tok;
-    return expr;
-  }
-  if (tok->kind == TK_EQ) {
+  } else if (tok->kind == TK_EQ) {
     chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
     *cond_var = var;
   }
@@ -5283,7 +5284,6 @@ static Node *compound_literal(Token **rest, Token *tok) {
   Type *ty = declspec(&tok, tok, &attr, SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
 
   ty = declarator(&tok, tok, ty, NULL);
-  tok = skip_tk(tok, TK_RPAREN);
 
   if (ty->kind == TY_VOID ||
       ty->kind == TY_FUNC ||
@@ -5291,9 +5291,12 @@ static Node *compound_literal(Token **rest, Token *tok) {
       (ty->size < 0 && ty->kind != TY_ARRAY))
     error_tok(tok, "invalid compound literal type");
 
+  ty = qual_constexpr(ty, &attr, tok);
+
   Node *expr = NULL;
   if (!is_const_context())
     chain_expr(&expr, calc_vla2(ty, tok, &attr));
+  tok = skip_tk(tok, TK_RPAREN);
 
   if (is_const_context() || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
@@ -5981,7 +5984,6 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     Token *name = NULL;
     Type *ty = declarator2(&tok, tok, basety, &name,
                            &(DeclContext){.is_glob = !scope->parent});
-
     if (ty->kind == TY_FUNC) {
       Obj *fn = func_prototype(&tok, tok, name, ty, attr);
 
@@ -5997,6 +5999,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     if (!name)
       error_tok(tok, "variable name omitted");
     chk_inline(attr, tok);
+    ty = qual_constexpr(ty, attr, tok);
 
     bool is_definition = !(attr->strg & SC_EXTERN);
     if (!is_definition) {
