@@ -107,6 +107,23 @@ int main() {
 
     static_assert((constexpr int){13} + 29 == (const int){42});
   }
+  {
+    constexpr int *p1 = 0;
+    constexpr const int *p2 = p1;
+    static_assert(_Generic(typeof(p1), int *const: 1));
+    static_assert(_Generic(typeof(p2), const int *const: 1));
+
+    static constexpr volatile int *restrict *p3 = 0;
+    static_assert(_Generic(typeof(p3), volatile int *restrict *const: 1));
+
+    static_assert(_Generic(&(constexpr int *){}, int *const *: 1));
+
+    constexpr int(*fnp)(int) = 0;
+    static_assert(_Generic(typeof(fnp), typeof(int(int)) *const: 1));
+
+    //SREJ static constexpr int noinit;
+    //SREJ constexpr int fn();
+  }
 
   printf("OK\n");
   return 0;
