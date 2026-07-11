@@ -2543,16 +2543,16 @@ static void gen_expr2(Node *node, bool is_void) {
     const char *addr = pop_inreg(tmpreg64[1]);
 
     Type *ty = node->cas.addr->ty->base;
+    if (!(is_gp_ty(ty) || ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE))
+      error_tok(node->tok, "unsupported type for atomic CAS");
+
     const char *ax = reg_ax(ty->size);
     const char *dx = reg_dx(ty->size);
 
     switch (ty->kind) {
     case TY_DOUBLE: Printftn("movq %%xmm0, %s", dx); break;
     case TY_FLOAT:  Printftn("movd %%xmm0, %s", dx); break;
-    default:
-      if (!is_gp_ty(ty))
-        error_tok(node->tok, "unsupported type for atomic CAS");
-      Printftn("mov %s, %s", ax, dx);
+    default:        Printftn("mov %s, %s", ax, dx); break;
     }
 
     Printftn("mov (%s), %s", old, ax);
@@ -2570,8 +2570,18 @@ static void gen_expr2(Node *node, bool is_void) {
     gen_expr(node->m.rhs);
     const char *reg = pop_inreg(tmpreg64[0]);
 
-    int sz = node->m.lhs->ty->base->size;
-    Printftn("xchg %s, (%s)", reg_ax(sz), reg);
+    Type *ty = node->ty;
+    if (!(is_gp_ty(ty) || ty->kind == TY_FLOAT || ty->kind == TY_DOUBLE))
+      error_tok(node->tok, "unsupported type for atomic exchange");
+
+    const char *ax = reg_ax(ty->size);
+
+    switch (ty->kind) {
+    case TY_DOUBLE: Printftn("movq %%xmm0, %s", ax); break;
+    case TY_FLOAT:  Printftn("movd %%xmm0, %s", ax); break;
+    }
+
+    Printftn("xchg %s, (%s)", ax, reg);
     return;
   }
   case ND_THREAD_FENCE: {

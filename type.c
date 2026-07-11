@@ -998,19 +998,17 @@ void _add_type(Node *node) {
     add_type(node->cas.addr);
     add_type(node->cas.old_val);
     add_type(node->cas.new_val);
-    node->ty = ty_bool;
+    node->cas.new_val = assign_cast(node->cas.addr->ty->base, node->cas.new_val);
 
-    if (node->cas.addr->ty->kind != TY_PTR)
-      error_tok(node->cas.addr->tok, "pointer expected");
-    if (node->cas.old_val->ty->kind != TY_PTR)
-      error_tok(node->cas.old_val->tok, "pointer expected");
+    if (node->cas.addr->ty->base->size != node->cas.old_val->ty->base->size)
+      error_tok(node->tok, "argument size match");
+    node->ty = ty_bool;
     return;
   case ND_EXCH:
     add_type(node->m.lhs);
     add_type(node->m.rhs);
-    if (node->m.lhs->ty->kind != TY_PTR)
-      error_tok(node->m.lhs->tok, "pointer expected");
-    node->ty = node->m.lhs->ty->base;
+    node->m.rhs = assign_cast(node->m.lhs->ty->base, node->m.rhs);
+    node->ty = unqual(node->m.lhs->ty->base);
     return;
   case ND_VA_START:
     add_type(node->m.lhs);

@@ -4201,10 +4201,18 @@ static Node *atomic_op(NodeKind kind, Node *lhs, Node *rhs, Token *tok, bool ret
   return node;
 }
 
+static Node *nonvoid_ptr(Token **rest, Token *tok) {
+  Node *node = assign(rest, tok);
+  ptr_convert(&node);
+  if (!node->ty->base || node->ty->base->kind == TY_VOID)
+    error_tok(tok, "expected pointer to non-void type");
+  return node;
+}
+
 static Node *atomic_builtin_op(Token **rest, Token *tok, bool return_old) {
   Token *start = tok;
   tok = skip_tk(tok->next, TK_LPAREN);
-  Node *obj = new_unary(ND_DEREF, assign(&tok, tok), start);
+  Node *obj = new_unary(ND_DEREF, nonvoid_ptr(&tok, tok), start);
   tok = skip_tk(tok, TK_COMMA);
   Node *val = assign(&tok, tok);
   if (consume_tk(&tok, tok, TK_COMMA))
@@ -5357,11 +5365,8 @@ static Node *builtin_functions(Token **rest, Token *tok) {
 
   if (equal(tok, "__builtin_atomic_chk")) {
     tok = skip_tk(tok->next, TK_LPAREN);
-    Node *node = assign(&tok, tok);
+    Node *node = nonvoid_ptr(&tok, tok);
     *rest = skip_tk(tok, TK_RPAREN);
-    ptr_convert(&node);
-    if (!node->ty->base || node->ty->base->kind == TY_VOID)
-      error_tok(tok, "expected pointer to non-void type");
     if (!(node->ty->base->qual & Q_ATOMIC))
       node->ty = pointer_to(add_qual(Q_ATOMIC, node->ty->base, node->tok));
     return node;
@@ -5522,9 +5527,9 @@ static Node *builtin_functions(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_compare_and_swap")) {
     Node *node = new_node(ND_CAS, tok);
     tok = skip_tk(tok->next, TK_LPAREN);
-    node->cas.addr = assign(&tok, tok);
+    node->cas.addr = nonvoid_ptr(&tok, tok);
     tok = skip_tk(tok, TK_COMMA);
-    node->cas.old_val = assign(&tok, tok);
+    node->cas.old_val = nonvoid_ptr(&tok, tok);
     tok = skip_tk(tok, TK_COMMA);
     node->cas.new_val = assign(&tok, tok);
     *rest = skip_tk(tok, TK_RPAREN);
@@ -5534,7 +5539,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
   if (equal(tok, "__builtin_atomic_exchange")) {
     Node *node = new_node(ND_EXCH, tok);
     tok = skip_tk(tok->next, TK_LPAREN);
-    node->m.lhs = assign(&tok, tok);
+    node->m.lhs = nonvoid_ptr(&tok, tok);
     tok = skip_tk(tok, TK_COMMA);
     node->m.rhs = assign(&tok, tok);
     *rest = skip_tk(tok, TK_RPAREN);
