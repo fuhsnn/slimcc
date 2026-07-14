@@ -473,7 +473,7 @@ static bool invalid_cast(Node *node, Type *to) {
 
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
-  ty = ty->origin ? ty->origin : ty;
+  ty = unqual(ty);
 
   if (invalid_cast(expr, ty))
     error_tok(expr->tok, "invalid cast");
@@ -1559,8 +1559,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   Type *ty = enum_ty_tag(tag, tag_ty);
 
   if (is_fixed) {
-    Type *fixed_ty = typename(&tok, tok->next);
-    fixed_ty = fixed_ty->origin ? fixed_ty->origin : fixed_ty;
+    Type *fixed_ty = unqual(typename(&tok, tok->next));
 
     if (fixed_ty->is_enum || !is_int_class(fixed_ty))
       error_tok(tok, "invalid enum underlying type");
@@ -1629,7 +1628,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
           dyn_ty = ty_int;
           ovf_val = (uint64_t)INT32_MAX + 1;
         } else {
-          dyn_ty = val_ty->origin ? val_ty->origin : val_ty;
+          dyn_ty = unqual(val_ty);
           ovf_val = enum_ovf_val(dyn_ty);
         }
       } else {
@@ -5220,8 +5219,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   } else {
     Node *ctrl = assign(&tok, tok);
     add_type(ctrl);
-    t1 = ptr_decay(ctrl->ty);
-    t1 = t1->origin ? t1->origin : t1;
+    t1 = unqual(ptr_decay(ctrl->ty));
   }
   Node *ret = NULL;
   Node *def = NULL;

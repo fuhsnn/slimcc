@@ -1028,6 +1028,7 @@ Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr, int64_t arr_len);
 Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
+Type *unqual(Type *ty);
 Type *tyof_unqual(Type *ty);
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty);
 bool chk_qual_type(QualMask qual, Type *ty);
