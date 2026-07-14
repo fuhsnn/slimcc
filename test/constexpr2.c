@@ -4,6 +4,29 @@
 #error
 #endif
 
+#if !(0xFFFFFFFFU + 1)
+#error
+#endif
+
+#if (defined(__STDC_VERSION__) << 33) != (1LL << 33)
+#error
+#endif
+
+#if (!0 << 33) != (1LL << 33)
+#error
+#endif
+
+#if ((1&&1) << 33) != (1LL << 33)
+#error
+#endif
+
+#if ((1==1) << 33) != (1LL << 33)
+#error
+#endif
+
+#if 1 //SREJ + 1.f
+#endif
+
 extern int extarr[55];
 int garr[11];
 static int sgarr[33];

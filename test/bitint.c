@@ -1,6 +1,10 @@
 #include "test.h"
 #include <stdckdint.h>
 
+#if (1uwb << 33) != (1LL << 33)
+#error
+#endif
+
 SASSERT(sizeof(_BitInt(7)) == 1);
 SASSERT(sizeof(_BitInt(15)) == 2);
 SASSERT(sizeof(_BitInt(31)) == 4);

@@ -326,14 +326,13 @@ static Token *new_str_token(const char *str, Token *orig) {
   return make_token(buf, orig, orig->next);
 }
 
-static Token *to_int_token(Token *tok, int64_t val) {
-  tok->kind = TK_INT_NUM;
+static Token *to_pp_eval_int(Token *tok, int64_t val) {
+  tok->kind = TK_INTMAX_NUM;
   tok->ival = val;
-  tok->ty = ty_int;
   return tok;
 }
 
-static Token *read_const_expr(Token *tok) {
+static Token *read_pp_const_expr(Token *tok) {
   Token head = {0};
   Token *cur = &head;
   Macro *start_m = locked_macros;
@@ -352,19 +351,18 @@ static Token *read_const_expr(Token *tok) {
         tok = tok->next;
         bool has_paren = consume_tk(&tok, tok, TK_LPAREN);
 
-        to_int_token(start, has_macro(tok));
+        to_pp_eval_int(start, has_macro(tok));
         cur = cur->next = start;
         tok = tok->next;
         if (has_paren)
           tok = skip_tk(tok, TK_RPAREN);
         continue;
       }
-      to_int_token(tok, equal(tok, "true") && opt_std >= STD_C23);
+      to_pp_eval_int(tok, equal(tok, "true") && opt_std >= STD_C23);
       break;
-    case TK_INT_NUM:
-    case TK_PP_NUM: {
-      break;
-    }
+    case TK_PP_NUM:     tok->kind = TK_PP_NUM_PPEV; break;
+    case TK_CHAR_LIT:   tok->kind = TK_CHAR_LIT_PPEV; break;
+    case TK_INTMAX_NUM: break;
     default:
       if (tok->kind >= TK_PUNCT && tok->kind < TK_PUNCT_END)
         break;
@@ -381,9 +379,9 @@ static Token *read_const_expr(Token *tok) {
   return head.next;
 }
 
-static int64_t eval_const_expr(Token *tok) {
+static int64_t eval_pp_const_expr(Token *tok) {
   Token *start = tok;
-  tok = read_const_expr(tok);
+  tok = read_pp_const_expr(tok);
 
   if (tok->kind == TK_EOF)
     error_tok(start, "no expression");
@@ -637,7 +635,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
     if (t->has_space && len != 1)
       len++;
 
-    if (add_slash && (t->kind == TK_INT_NUM ||
+    if (add_slash && (t->kind == TK_CHAR_LIT ||
                       t->kind == TK_STR ||
                       t->kind == TK_ASM_STR ||
                       t->kind == TK_INVALID))
@@ -656,7 +654,7 @@ static char *join_tokens(Token *tok, Token *end, bool add_slash) {
     if (t->has_space && pos != 0)
       buf[pos++] = ' ';
 
-    if (add_slash && (t->kind == TK_INT_NUM ||
+    if (add_slash && (t->kind == TK_CHAR_LIT ||
                       t->kind == TK_STR ||
                       t->kind == TK_ASM_STR ||
                       t->kind == TK_INVALID)) {
@@ -1181,22 +1179,22 @@ static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start
   Token *dummy;
   int64_t limit = 0;
   if (limit_seq)
-    limit = eval_const_expr(split_paren2(&dummy, limit_seq, NULL));
+    limit = eval_pp_const_expr(split_paren2(&dummy, limit_seq, NULL));
 
   if (!cont) {
     enum { EMBED_NOT_FOUND = 0, EMBED_FOUND = 1, EMBED_EMPTY = 2 };
 
     if (tok->kind != TK_EOF)
-      return to_int_token(start, EMBED_NOT_FOUND);
+      return to_pp_eval_int(start, EMBED_NOT_FOUND);
 
     FILE *fp;
     if (!path || !(fp = fopen(path, "r")))
-      return to_int_token(start, EMBED_NOT_FOUND);
+      return to_pp_eval_int(start, EMBED_NOT_FOUND);
     bool is_empty = !fread(&(char){0}, 1, sizeof(char), fp);
     fclose(fp);
     if (is_empty || (limit_seq && limit == 0))
-      return to_int_token(start, EMBED_EMPTY);
-    return to_int_token(start, EMBED_FOUND);
+      return to_pp_eval_int(start, EMBED_EMPTY);
+    return to_pp_eval_int(start, EMBED_FOUND);
   }
   if (tok->kind != TK_EOF)
     error_tok(start, "unknown embed parameter");
@@ -1368,7 +1366,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
   }
 
   if (equal(tok, "if")) {
-    bool active = eval_const_expr(split_line(&tok, tok->next));
+    bool active = eval_pp_const_expr(split_line(&tok, tok->next));
     push_cond_incl(start, active);
     if (!active)
       return skip_cond_incl(tok);
@@ -1399,7 +1397,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
       error_tok(start, "stray #elif");
     cond->tok->is_incl_guard = false;
 
-    if (!cond->been_active && eval_const_expr(split_line(&tok, tok->next))) {
+    if (!cond->been_active && eval_pp_const_expr(split_line(&tok, tok->next))) {
       cond->been_active = true;
       return tok;
     }
@@ -2131,6 +2129,8 @@ static void include_files_cli(StringArray *arr, Token **cur) {
 }
 
 Token *preprocess(const char *file, StringArray *incls, StringArray *imacros) {
+  ty_eval_int = ty_intmax_t;
+
   base_file = file;
   add_dep_file(file, false);
 

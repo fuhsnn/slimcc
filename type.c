@@ -25,6 +25,10 @@ Type *ty_ldouble = &(Type){.kind = TY_LDOUBLE, .size = 16, .align = 16};
 Type *ty_size_t;
 Type *ty_ptrdiff_t;
 
+Type *ty_intmax_t;
+Type *ty_uintmax_t;
+Type *ty_eval_int;
+
 Type *ty_char16_t;
 Type *ty_char32_t;
 Type *ty_wchar_t;
@@ -65,6 +69,9 @@ void init_ty_lp64(void) {
   ty_size_t = ty_ulong;
   ty_ptrdiff_t = ty_long;
   ty_wchar_t = ty_int;
+
+  ty_intmax_t = ty_long;
+  ty_uintmax_t = ty_ulong;
 
   ty_char16_t = ty_ushort;
   ty_char32_t = ty_uint;
@@ -826,7 +833,7 @@ void _add_type(Node *node) {
 
   switch (node->kind) {
   case ND_NUM: {
-    node->ty = ty_int;
+    node->ty = ty_eval_int;
     return;
   }
   case ND_ADD:
@@ -876,7 +883,7 @@ void _add_type(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-    node->ty = ty_int;
+    node->ty = ty_eval_int;
     ptr_convert(&node->m.lhs);
     ptr_convert(&node->m.rhs);
     if ((is_ptr(node->m.lhs->ty) && is_ptr(node->m.rhs->ty)) ||
@@ -887,13 +894,13 @@ void _add_type(Node *node) {
     return;
   case ND_NOT:
     add_type(node->m.lhs);
-    node->ty = ty_int;
+    node->ty = ty_eval_int;
     return;
   case ND_LOGOR:
   case ND_LOGAND:
     add_type(node->m.lhs);
     add_type(node->m.rhs);
-    node->ty = ty_int;
+    node->ty = ty_eval_int;
     return;
   case ND_BITNOT:
     add_int_type(node->m.lhs);

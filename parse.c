@@ -2184,7 +2184,7 @@ static void list_initializer(Token **rest, Token *tok, Initializer *init, int id
 static bool is_num_seq(Token **rest, Token *tok, int32_t *val) {
   int32_t cnt = 0;
   for (;;) {
-    if (tok->kind == TK_PP_NUM || tok->kind == TK_INT_NUM) {
+    if (tok->kind == TK_PP_NUM || tok->kind == TK_CHAR_LIT) {
       cnt++;
       tok = tok->next;
 
@@ -2276,7 +2276,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
   }
 
   if (!expr &&
-      (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) &&
+      (tok->kind == TK_PP_NUM || tok->kind == TK_CHAR_LIT) &&
       (tok->next->kind == TK_COMMA ||
        tok->next->kind == TK_RCURLY ||
        tok->next->kind == TK_SEMI)) {
@@ -2469,10 +2469,10 @@ static bool promote_int_constexpr(Initializer *init, Type *ty) {
   case INIT_NONE: // C23 "={}"
     return true;
   case INIT_TOK:
-    if (init->tok->kind == TK_INT_NUM)
-      return true;
     if (init->tok->kind == TK_PP_NUM)
       return is_pp_token_int(init->tok);
+    if (init->tok->kind == TK_CHAR_LIT)
+      return true;
     break;
   case INIT_EXPR: {
     Node *exp = init->expr;
@@ -5635,9 +5635,32 @@ static Node *primary(Token **rest, Token *tok) {
     return node;
   }
 
-  if (tok->kind == TK_INT_NUM || tok->kind == TK_PP_NUM) {
+  if (tok->kind == TK_PP_NUM || tok->kind == TK_CHAR_LIT) {
     Node *node = new_node(ND_NUM, tok);
     convert_pp_number(tok, node);
+    *rest = tok->next;
+    return node;
+  }
+
+  if (tok->kind == TK_PP_NUM_PPEV || tok->kind == TK_CHAR_LIT_PPEV) {
+    tok->kind--;
+    Node *node = new_node(ND_NUM, tok);
+    convert_pp_number(tok, node);
+    *rest = tok->next;
+
+    if (is_integer(node->ty))
+      node->ty = node->ty->is_unsigned ? ty_uintmax_t : ty_intmax_t;
+    else if (node->ty->kind == TY_BITINT)
+      int_or_trunc_bitint(&node, true);
+    else
+      error_tok(tok, "non-integer numeric literal in preprocessor expression");
+    return node;
+  }
+
+  if (tok->kind == TK_INTMAX_NUM) {
+    Node *node = new_node(ND_NUM, tok);
+    node->num.val = tok->ival;
+    node->ty = ty_intmax_t;
     *rest = tok->next;
     return node;
   }
@@ -6042,6 +6065,8 @@ static Token *free_parsed_tok(Token *tok, Token *end) {
 }
 
 Obj *parse(Token *tok) {
+  ty_eval_int = ty_int;
+
   Obj *glb_head = globals;
 
   Token *free_head = tok;

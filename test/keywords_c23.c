@@ -24,6 +24,10 @@
 #error
 #endif
 
+#if (true << 33) != (1LL << 33)
+#error
+#endif
+
 static_assert(true == (bool)123);
 
 bool fn() {

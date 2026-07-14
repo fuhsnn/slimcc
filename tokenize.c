@@ -720,7 +720,7 @@ static Token *read_char_literal(const char *start) {
   if (!is_multi && !ty_pchar->is_unsigned)
     val = (uint32_t)(int8_t)val;
 
-  Token *tok = new_token(TK_INT_NUM, start, p + 1);
+  Token *tok = new_token(TK_CHAR_LIT, start, p + 1);
   tok->ival = val;
   tok->ty = ty_int;
   return tok;
@@ -744,7 +744,7 @@ static Token *read_unicode_char_literal(const char *start, const char *quote, Ty
   if (invalid)
     return new_token(TK_INVALID, start, p + 1);
 
-  Token *tok = new_token(TK_INT_NUM, start, p + 1);
+  Token *tok = new_token(TK_CHAR_LIT, start, p + 1);
   tok->ival = c;
   tok->ty = ty;
   return tok;
@@ -953,7 +953,7 @@ bool is_pp_token_int(Token *tok) {
 }
 
 void convert_pp_number(Token *tok, Node *node) {
-  if (tok->kind == TK_INT_NUM) {
+  if (tok->kind == TK_CHAR_LIT) {
     if ((uint64_t)tok->ival >> tok->ty->size * 8)
       error_tok(tok, "character too large for literal type");
     node->num.val = eval_sign_extend(tok->ty, tok->ival);

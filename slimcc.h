@@ -264,14 +264,17 @@ typedef enum {
   TK_KEYWORD, // Keywords
   TK_STR,     // String literals
   TK_ASM_STR,
-  TK_INT_NUM, // Integer Numeric literals
-  TK_PP_NUM,  // Preprocessing numbers
-  TK_FMARK,   // Filemarkers for -E
-  TK_PMARK,   // Placermarkers
-  TK_ATTR,    // GNU attribute
-  TK_BATTR,   // C23 attribute
-  TK_PRAGMA,  // #pragma's
-  TK_EOF,     // End-of-file markers
+  TK_CHAR_LIT, // Character literals
+  TK_CHAR_LIT_PPEV = TK_CHAR_LIT + 1,
+  TK_PP_NUM, // Preprocessing numbers
+  TK_PP_NUM_PPEV = TK_PP_NUM + 1,
+  TK_INTMAX_NUM,
+  TK_FMARK,  // Filemarkers for -E
+  TK_PMARK,  // Placermarkers
+  TK_ATTR,   // GNU attribute
+  TK_BATTR,  // C23 attribute
+  TK_PRAGMA, // #pragma's
+  TK_EOF,    // End-of-file markers
   TK_INVALID,
 
   // Punctuators
@@ -991,6 +994,10 @@ extern Type *ty_ldouble;
 
 extern Type *ty_size_t;
 extern Type *ty_ptrdiff_t;
+
+extern Type *ty_intmax_t;
+extern Type *ty_uintmax_t;
+extern Type *ty_eval_int;
 
 extern Type *ty_char16_t;
 extern Type *ty_char32_t;
