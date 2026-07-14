@@ -171,7 +171,7 @@ JUNK
 FOO
 float
 EOF
-echo 'FOO main(){}' | $testcc -xc - -imacros $tmp/foo.h
+echo 'FOO main(){}' | $testcc -xc - -imacros $tmp/foo.h -o/dev/null
 check -imacros
 
 # -isystem
@@ -369,7 +369,7 @@ grep -q 'md3\.c' $tmp/md3.d &&
 grep -q 'out3\.h' $tmp/md3.d
 check -MD
 
-$testcc -c -MD -MF $tmp/md-mf.d -I. $tmp/md2.c
+$testcc -c -o/dev/null -MD -MF $tmp/md-mf.d -I. $tmp/md2.c
 grep -q '^md2\.o:' $tmp/md-mf.d &&
 grep -q 'md2\.c' $tmp/md-mf.d &&
 grep -q 'out2\.h' $tmp/md-mf.d
