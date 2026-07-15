@@ -39,6 +39,12 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  liblz4-dev \
  # box3d
  libgtk-3-dev \
+ # apexmarkdown
+ libyaml-dev \
+ # nanovg
+ premake4 \
+ # minizip-ng
+ libgmock-dev \
  && apt-get clean && rm -rf /var/cache/apt/*
 
 FROM install-deps AS setup-toolchain
@@ -50,6 +56,7 @@ RUN ln -s platform/linux-ci-debian13.c platform.c \
  && clang -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -o slimcc
 
 ENV CC=/work/slimcc/slimcc
+ENV TERM=xterm
 
 RUN bash scripts/linux_thirdparty.bash ci_libtool_muon
 

@@ -62,6 +62,14 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  libcmocka-dev \
  # libjsonc
  xxd \
+ # packcc
+ bats \
+ # minmea
+ check \
+ # rc
+ byacc \
+ # qman
+ python3-cogapp libcunit1-dev \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain
@@ -79,6 +87,7 @@ RUN ! command -v gcc
 RUN ! command -v gcc-14
 
 ENV CC=/work/slimcc/slimcc
+ENV TERM=xterm
 
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 ENV LANG=en_US.UTF-8
