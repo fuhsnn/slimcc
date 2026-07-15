@@ -4839,11 +4839,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 
         mem->bit_width = width;
         mem->is_bitfield = true;
+      } else if (!mem->name) {
+        error_tok(tok, "expected member name");
       }
-      else if (!mem->name) {
-        error_tok(tok, "missing declarator");
-      }
-        
+
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
       mem_attr(mem->name, tok, &attr, mem);
       cur = cur->next = mem;
@@ -5849,7 +5848,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
       if (!def_ty->is_oldstyle) {
         ty = ptr_decay(ty);
         if (!is_compatible(var->ty, ty))
-          error_tok(name, "incompatible type");
+          error_tok(name, "mismatched parameter type");
         if (ty->kind == TY_VOID || ty->size <= 0)
           error_tok(name, "invalid parameter type");
         var->ty = ty;
@@ -6010,10 +6009,10 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     Obj *var = ent->val;
     if (var) {
       if (!is_compatible2(var->ty, ty))
-        error_tok(tok, "incompatible type");
+        error_tok(name, "incompatible redeclaration");
       if ((!var->is_static && !!(attr->strg & SC_STATIC)) ||
           (var->is_static && !(attr->strg & (SC_STATIC | SC_EXTERN))))
-        error_tok(name, "inconsistent static");
+        error_tok(name, "redeclaration has inconsistent 'static'");
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;
     } else {

@@ -454,7 +454,9 @@ bool is_record_compat(Type *t1, Type *t2, bool is_redecl) {
         mem1->bit_width != mem2->bit_width)
       return false;
 
-    if ((!mem1->name != !mem2->name) || (mem1->name && !equal_tok(mem1->name, mem2->name)))
+    if (!mem1->name != !mem2->name)
+      return false;
+    if (mem1->name && !equal_tok(mem1->name, mem2->name))
       return false;
 
     Type *t1 = mem1->ty;
