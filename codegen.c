@@ -768,7 +768,7 @@ static bool is_int_arith(Node *node) {
   case ND_SUB:
   case ND_MUL:
   case ND_DIV:
-  case ND_MOD:
+  case ND_REM:
   case ND_NEG:
   case ND_BITNOT:
   case ND_BITAND:
@@ -846,7 +846,7 @@ static void gen_bitint_builtin_call(NodeKind kind) {
     [ND_SHR] = "__slimcc_bitint_shr",       [ND_SAR] = "__slimcc_bitint_shr",
     [ND_ADD] = "__slimcc_bitint_add",       [ND_SUB] = "__slimcc_bitint_sub",
     [ND_MUL] = "__slimcc_bitint_mul",       [ND_DIV] = "__slimcc_bitint_div",
-    [ND_MOD] = "__slimcc_bitint_div",
+    [ND_REM] = "__slimcc_bitint_div",
   };
   gen_bitint_builtin_call2(fn[kind]);
 }
@@ -2219,7 +2219,7 @@ static void gen_bitint_arith(Node *node) {
     return;
   }
   case ND_DIV:
-  case ND_MOD:
+  case ND_REM:
     load_val2(ty_int, ty->is_unsigned, argreg32[3], NULL);
     load_val2(ty_int, node->kind == ND_DIV, argreg32[4], NULL);
     gen_bitint_builtin_call(node->kind);
@@ -2311,7 +2311,7 @@ static void gen_gp_arith(Node *node) {
     return;
   }
   case ND_DIV:
-  case ND_MOD:
+  case ND_REM:
     Printftn("xchg %s, %s", op, ax);
     if (node->ty->is_unsigned) {
       Printstn("xor %%edx, %%edx");
@@ -2324,7 +2324,7 @@ static void gen_gp_arith(Node *node) {
       Printftn("idiv %s", op);
     }
 
-    if (node->kind == ND_MOD)
+    if (node->kind == ND_REM)
       Printstn("mov %%rdx, %%rax");
     return;
   case ND_BITAND: Printftn("and %s, %s", op, ax); return;
@@ -3091,7 +3091,7 @@ static void gen_void_expr(Node *node) {
   case ND_SUB:
   case ND_MUL:
   case ND_DIV:
-  case ND_MOD:
+  case ND_REM:
   case ND_BITAND:
   case ND_BITOR:
   case ND_BITXOR:
@@ -3534,7 +3534,7 @@ static bool gen_gp_opt(Node *node) {
     return gen_shift_opt_gp(node);
   }
   case ND_DIV:
-  case ND_MOD: {
+  case ND_REM: {
     int64_t val;
     if (is_const_expr(rhs, &val))
       return imm_divmod_opt(kind, ty, lhs, val);

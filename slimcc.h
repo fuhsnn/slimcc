@@ -605,7 +605,7 @@ typedef enum {
   ND_DIV,       // /
   ND_POS,       // unary +
   ND_NEG,       // unary -
-  ND_MOD,       // %
+  ND_REM,       // %
   ND_BITAND,    // &
   ND_BITOR,     // |
   ND_BITXOR,    // ^

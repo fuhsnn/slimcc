@@ -3584,7 +3584,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return lval;
     return lval / rval;
   }
-  case ND_MOD: {
+  case ND_REM: {
     int64_t lval = eval(lhs);
     int64_t rval = eval(rhs);
     if (!rval)
@@ -4019,7 +4019,7 @@ static BitBuf *eval_bitint(Node *node) {
   case ND_SUB:
   case ND_MUL:
   case ND_DIV:
-  case ND_MOD: {
+  case ND_REM: {
     BitBuf *lval = eval_bitint(lhs);
     BitBuf *rval = eval_bitint(rhs);
     if (eval_recover && *eval_recover)
@@ -4033,7 +4033,7 @@ static BitBuf *eval_bitint(Node *node) {
     case ND_SUB:    eval_bitint_sub(ty->bit_cnt, lval, rval); break;
     case ND_MUL:    eval_bitint_mul(ty->bit_cnt, lval, rval); break;
     case ND_DIV:
-    case ND_MOD: {
+    case ND_REM: {
       bool res = eval_bitint_to_bool(ty->bit_cnt, rval);
       if (!res)
         return (void *)eval_error2(node, "division by zero during constant evaluation");
@@ -4304,7 +4304,7 @@ static Node *assign(Token **rest, Token *tok) {
     case TK_SUB_EQ:     return arith_assign_addsub(ND_SUB, node, rhs, tok);
     case TK_MUL_EQ:     return arith_assign(ND_MUL, node, rhs, tok);
     case TK_DIV_EQ:     return arith_assign(ND_DIV, node, rhs, tok);
-    case TK_REM_EQ:     return arith_assign(ND_MOD, node, rhs, tok);
+    case TK_REM_EQ:     return arith_assign(ND_REM, node, rhs, tok);
     case TK_AND_EQ:     return arith_assign(ND_BITAND, node, rhs, tok);
     case TK_OR_EQ:      return arith_assign(ND_BITOR, node, rhs, tok);
     case TK_XOR_EQ:     return arith_assign(ND_BITXOR, node, rhs, tok);
@@ -4402,7 +4402,7 @@ static Node *binary(Token **rest, Token *tok, Preced stop) {
       continue;
     }
     if (tok->kind == TK_REM) {
-      node = new_binary(ND_MOD, node, unary(&tok, tok->next), start);
+      node = new_binary(ND_REM, node, unary(&tok, tok->next), start);
       continue;
     }
     if (stop == PCD_MUL)
