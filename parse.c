@@ -4840,6 +4840,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         mem->bit_width = width;
         mem->is_bitfield = true;
       }
+      else if (!mem->name) {
+        error_tok(tok, "missing declarator");
+      }
+        
       aligned_attr(mem->name, tok, &attr, &mem->alt_align);
       mem_attr(mem->name, tok, &attr, mem);
       cur = cur->next = mem;
