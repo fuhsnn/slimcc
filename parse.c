@@ -353,14 +353,6 @@ static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
   return lhs <= rhs;
 }
 
-bool is_const_var(Obj *var) {
-  Type *ty = var->ty;
-  for (; ty && ty->kind == TY_ARRAY; ty = ty->base)
-    if (ty->qual & Q_CONST)
-      return true;
-  return ty->qual & Q_CONST;
-}
-
 static bool is_vm_ty(Type *ty) {
   for (; ty->base; ty = ty->base)
     if (ty->kind == TY_VLA)

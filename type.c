@@ -139,6 +139,10 @@ static Type *get_elem(Type *ty) {
   return ty;
 }
 
+bool is_const_var(Obj *var) {
+  return get_elem(var->ty)->qual & Q_CONST;
+}
+
 Type *unqual(Type *ty) {
   return ty->origin ? ty->origin : ty;
 }
