@@ -19,8 +19,16 @@ test_ag() {
  ./configure && make test
 }
 
+test_apexmarkdown() {
+ github_clone ApexMarkdown apex v1.1.17
+ cmake_init
+ make VERBOSE=1
+ ctest --verbose > test.log || true
+ cat test.log | grep Results | grep '0;31m6 failed'
+}
+
 test_apk() {
- github_tar alpinelinux apk-tools v3.0.6
+ github_tar alpinelinux apk-tools v3.0.8
  rm test/user/mkpkg.sh # permission
  muon_init -Dpython=disabled -Dhelp=enabled -Dlua_bin=luajit
  muon_build
@@ -31,6 +39,14 @@ test_argtable3() {
  github_tar argtable argtable3 v3.3.1
  cmake_init
  make && ctest
+}
+
+test_asn1c() {
+ github_tar vlm asn1c v0.9.29
+ libtoolize
+ autoreconf -fi
+ fix_and_configure
+ make check
 }
 
 test_bash() {
@@ -46,15 +62,15 @@ test_bearssl() {
  build/testx509
 }
 
-test_binn() {
- git_fetch https://github.com/liteserver/binn 6867557c9cb322ba173bacb142246c76ce8d0bac binn
- make test
-}
-
 test_bfs() {
  github_tar tavianator bfs 4.1.4
  ./configure
  make check
+}
+
+test_binn() {
+ git_fetch https://github.com/liteserver/binn 301e7ad7670736f7f2623cc1b73adcbc91f7cc68 binn
+ make test
 }
 
 test_binutils() {
@@ -113,7 +129,7 @@ test_blake2() {
 }
 
 test_blake3() {
- github_tar BLAKE3-team BLAKE3 1.8.5
+ github_tar BLAKE3-team BLAKE3 1.8.7
  sed -i 's|C CXX ASM|C ASM|g' c/CMakeLists.txt
  sed -i 's|#undef IS_X86||g' c/blake3_dispatch.c
  sed -i 's|-fstack-protector-strong||g' c/cmake/BLAKE3/ContinuousIntegration.cmake
@@ -121,12 +137,12 @@ test_blake3() {
  sed -i 's|--fresh||g' c/cmake/BLAKE3/ContinuousIntegration.cmake
 
  cd c/
- cmake_init -DCMAKE_C_COMPILE_FEATURES=c_std_99 -DBLAKE3_SIMD_TYPE=none -DBLAKE3_TESTING=ON -DBLAKE3_TESTING_CI=ON
+ cmake_init -DBLAKE3_SIMD_TYPE=none -DBLAKE3_TESTING=ON -DBLAKE3_TESTING_CI=ON
  ctest
 }
 
 test_blosc2() {
- github_tar Blosc c-blosc2 v3.2.3
+ github_tar Blosc c-blosc2 v3.3.3
  replace_line "  #elif (defined(__GNUC__) && __GNUC__ >= 4) || defined(__clang__)" "#elif 1" include/blosc2/blosc2-export.h
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_persistency.c
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_save.c
@@ -147,7 +163,7 @@ test_box2d() {
 }
 
 test_box3d() {
- git_fetch https://github.com/erincatto/box3d d421e45c828f6f853a145f726f0b9425d31146eb box3d
+ git_fetch https://github.com/erincatto/box3d 47d7f7cc7e091142c08d11dc7d2e493c5d34f536 box3d
  use_stdbit '#include <stdint.h>' src/ctz.h
  use_stdatomic '#include <stdint.h>' src/platform.h
  replace_line "#elif defined( __GNUC__ ) || defined( __clang__ )" "#elif 1" src/platform.h
@@ -174,14 +190,14 @@ test_brotli() {
 }
 
 test_bubblewrap() {
- github_tar containers bubblewrap v0.11.2
+ github_tar containers bubblewrap v0.12.0
  muon_init -Dbash_completion=disabled
  muon_build
  muon_test
 }
 
 test_busybox() {
- git_fetch https://github.com/vda-linux/busybox_mirror ec0c5cc142f1f9ea57235df5d093fbe180ad9c7d busybox
+ github_tar vda-linux busybox_mirror 1_38_0
  sed -i 's|LDLIBS += rt|LDLIBS += rt resolv|g' Makefile.flags
  sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha1_hwaccel_x86-64.S
  sed -i 's|&& defined(__GNUC__)||g' libbb/hash_sha256_hwaccel_x86-64.S
@@ -205,7 +221,7 @@ test_bzip2() {
 }
 
 test_bzip3() {
- git_fetch https://github.com/iczelia/bzip3 b9aacb60d124f28f8ca1866005afb06357b2d3c2 bzip3
+ git_fetch https://github.com/iczelia/bzip3 3c60c830d14f51a905fea92c6b9ffe51d7fd3742 bzip3
  libtoolize
  sh ./bootstrap.sh
  fix_and_configure --disable-arch-native
@@ -216,7 +232,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 1ca112dcdee369592c4a3307b7588a923a1865dd c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 42fd7b3dadaf23c05e32412e4b5a8794f1767867 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -229,7 +245,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.8.2
+ github_tar c3lang c3c v0.8.3
  cmake_init
  make
  cd ../test
@@ -254,9 +270,27 @@ test_camgunz_cmp() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 547d923588d870aacf0b0016c67d0f6a92a70f83 cc65
+ git_fetch https://github.com/cc65/cc65 e11fb5c39371046ebe25485f984f644c5a0d65d3 cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
+}
+
+test_ccc() {
+ github_clone SkeletOSS ccc v0.82.0
+ replace_line 'if (CMAKE_C_COMPILER_ID STREQUAL "Clang")' 'if (TRUE)' utility/CMakeLists.txt #enable defer
+ cmake_run --preset=clang-release
+ make -C build/ ccc tests samples
+ make test
+}
+
+test_cdb() {
+ url_tar https://cdn.NetBSD.org/pub/pkgsrc/distfiles/cdb-20251021.tar.gz cdb
+ sed -i 's|^gcc |$CC |g' conf-cc
+ sed -i 's|^gcc |$CC |g' conf-ld
+ sed -i "s|/usr/local|$PWD/install|g" conf-home
+ make install
+ ./rts > rts.out
+ diff rts.exp rts.out
 }
 
 test_cello() {
@@ -265,14 +299,16 @@ test_cello() {
 }
 
 test_cfitsio() {
- github_tar HEASARC cfitsio cfitsio-4.6.4
+ github_tar HEASARC cfitsio cfitsio-4.7.0
  fix_and_configure
+ make check
+}
 
- # from their .github/workflows/ci.yml
- make testprog
- ./testprog > testprog.lis
- diff testprog.lis testprog.out
- cmp testprog.fit testprog.std
+test_cgif() {
+ github_tar dloebl cgif v0.5.4
+ muon_init
+ muon_build
+ muon_test
 }
 
 test_cgit() {
@@ -281,10 +317,35 @@ test_cgit() {
  make CC=$CC test
 }
 
+test_cgltf() {
+ github_tar jkuhlmann cgltf v1.15
+ cd test
+ sed -i 's|-fsanitize=address||g' CMakeLists.txt
+ python3 test_all.py
+}
+
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme 1df334890b0079045550bff70d71d4f118c825fb chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme 8f94a5ea7b724b57a93fcaa81c6eaed2e4f6bbee chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
+}
+
+test_chips() {
+ git_fetch https://github.com/floooh/chips ca7d7ddd3ba77b48685d24120cf413ea53786767 chips
+ git_fetch https://github.com/floooh/chips-test 5203a6178b6691155f6cdf4b980e74623ec0d8c4 chipstest
+ cd tests
+
+ for f in *-test.c; do
+  if [ $f != z80-test.c ]; then
+   if [ $f = chips-test.c ]; then
+    continue
+   fi
+   f+=' chips-test.c'
+  fi
+  rm -f test.exe
+  $CC $f -I ../../ -o test.exe
+  ./test.exe
+ done
 }
 
 test_cjson() {
@@ -295,16 +356,60 @@ test_cjson() {
  make check
 }
 
+test_ckdl() {
+ github_tar tjol ckdl 1.0
+ cmake_init '-DCMAKE_C_FLAGS=-DKDL_DEPRECATED\(...\)= -D_DEFAULT_SOURCE'
+ make && ctest
+}
+
 test_cmark() {
  github_tar commonmark cmark 0.31.2
  cmake_init
- make
+ make VERBOSE=1 && ctest
+}
+
+test_cmarkgfm() {
+ github_tar github cmark-gfm 0.29.0.gfm.13
+ cmake_init
+ make VERBOSE=1 && ctest
+}
+
+test_cmc() {
+ git_fetch https://github.com/LeoVen/C-Macro-Collections 99f08e2b6e446e03fa3c7321b58e40ff3796d747 cmc
+ cmake_init
+ make && ./cmc
 }
 
 test_cmocka() {
  gitlab_tar gitlab.com/cmocka cmocka cmocka-2.0.2
  cmake_init
  make && ctest
+}
+
+test_cmph() {
+ url_tar https://sourceforge.net/projects/cmph/files/v2.0.2/cmph-2.0.2.tar.gz/download cmph
+ replace_line "#ifndef __GNUC__" "#if 0" src/debug.h
+ fix_and_configure
+ make && make -C tests/ check
+}
+
+test_cnbt() {
+ git_fetch https://github.com/chmod222/cNBT 3ff982eff62b01f7a67079a365b8fbf8a4b47423 cnbt
+ sed -i 's|valgrind||g' Makefile
+ make test
+}
+
+test_collectionsc() {
+ git_fetch https://github.com/srdja/Collections-C dbedaf9599716c9aa16c6e955fdc3ef76d5c5cca collectionsc
+ sed -i 's| FORCE_INLINE inline |&static |g' src/include/cc_common.h
+ cmake_init
+ make VERBOSE=1 && ctest
+}
+
+test_convenientcontainers() {
+ github_tar JacksonAllan CC v1.4.3
+ cd tests
+ $CC unit_tests.c -std=c23 && ./a.out
 }
 
 test_coremark() {
@@ -342,8 +447,16 @@ test_cproc() {
  bash $CCTESTSCRIPT
 }
 
+test_croaring() {
+ github_tar RoaringBitmap CRoaring v5.1.1
+ sed -i 's|^#include <x86intrin.h>|//&|g' include/roaring/portability.h
+ use_stdbit '#include <stdint.h>' include/roaring/portability.h
+ cmake_init -DROARING_DISABLE_X64=ON -DCMAKE_C_FLAGS=-DROARING_DISABLE_X64=1 -DCMAKE_CXX_FLAGS=-DROARING_DISABLE_X64=1
+ make && ctest
+}
+
 test_curl() {
- github_tar curl curl curl-8_21_0
+ github_tar curl curl curl-8_22_0
  libtoolize
  autoreconf -fi
  fix_and_configure --with-openssl
@@ -378,7 +491,8 @@ test_diffutils() {
 }
 
 test_discount() {
- github_tar Orc discount v3.0.1.3
+ github_tar Orc discount v3.0.2.0
+ sed -i 's|(( $res > 0 ))|[ $res -gt 0 ]|g' tests/limits.t # https://github.com/Orc/discount/pull/309/
  sh configure.sh
  make test
 }
@@ -397,7 +511,7 @@ test_elk() {
 }
 
 test_emacs() {
- url_xz https://ftpmirror.gnu.org/gnu/emacs/emacs-30.2.tar.xz emacs
+ url_xz https://ftpmirror.gnu.org/gnu/emacs/emacs-31.1.tar.xz emacs
  ./configure
  make check -j2
 }
@@ -411,13 +525,21 @@ test_espruino() {
  ./bin/espruino --test-all
 }
 
+test_fastlz() {
+ git_fetch https://github.com/ariya/FastLZ b1342dabcf5257ab303743c9332fe75e9147a011 fastlz
+ git_fetch https://github.com/ariya/compression-corpus 1658609888c9e60e50dc791097d15703745b9720 compression-corpus
+ (cd enwik && unzip enwik8.zip)
+ cd ../tests
+ make roundtrip
+}
+
 test_femtolisp() {
  git_fetch https://github.com/JeffBezanson/femtolisp ec7601076a976f845bc05ad6bd3ed5b8cde58a97 femtolisp
  make CC=$CC CFLAGS=-D_GNU_SOURCE
 }
 
 test_ffc() {
- github_tar kolemannix ffc.h v26.04.01
+ github_tar kolemannix ffc.h v26.07.01
  use_stdbit ' #include <stdbool.h>' test_src/sonicsv.h
  cmake_init
  make && ctest
@@ -444,7 +566,7 @@ test_findutils() {
 }
 
 test_flatcc() {
- git_fetch https://github.com/dvidelabs/flatcc 29201734bf2d12713a7a1a035d31e5123aac9c93 flatcc
+ github_tar dvidelabs flatcc v0.6.3
  cmake_init -DCMAKE_C_FLAGS=-DPORTABLE_USE_ISINF
  make && ctest
 }
@@ -465,14 +587,36 @@ test_fribidi() {
  make check
 }
 
+test_frozen() {
+ github_tar cesanta frozen 1.7
+ $CC unit_test.c -o unit_test
+ ./unit_test
+}
+
+test_fse() {
+ git_fetch https://github.com/Cyan4973/FiniteStateEntropy 9f30e0918f87bd835fa040d922a208d7b219e50b fse
+ make check
+}
+
+test_fzy() {
+ github_tar jhawthorn fzy 1.1
+ make check
+}
+
 test_gawk() {
  url_lz https://ftpmirror.gnu.org/gnu/gawk/gawk-5.4.1.tar.lz gawk
  fix_and_configure ${is_CI+ --disable-pma } # pma segfault in docker
  make check
 }
 
+test_gdbm() {
+ url_tar https://ftpmirror.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz gdbm
+ fix_and_configure
+ make check
+}
+
 test_genann() {
- git_fetch https://github.com/codeplea/genann 4f72209510c9792131bd8c4b0347272b088cfa80 genann
+ github_tar codeplea genann v1.1.1
  make check
 }
 
@@ -509,6 +653,12 @@ test_gmake() {
  make check
 }
 
+test_gnuless() {
+ url_tar https://ftpmirror.gnu.org/gnu/less/less-704.tar.gz gnuless
+ ./configure
+ make check
+}
+
 test_gnutls() {
  url_xz https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz gnutls
  fix_configure
@@ -529,7 +679,7 @@ test_go() {
 }
 
 test_got() {
- github_tar gameoftrees got-portable 0.126
+ github_tar gameoftrees got-portable 0.127
  sh autogen.sh
 
  local GOT=$PWD/got_install
@@ -572,7 +722,7 @@ test_gtar() {
 }
 
 test_gumbo() {
- codeberg_tar gumbo-parser gumbo-parser 0.13.2
+ codeberg_tar gumbo-parser gumbo-parser 0.14.0
  muon_init
  muon_build
  muon_test
@@ -607,15 +757,34 @@ test_hoedown() {
  python3 test/runner.py
 }
 
+test_htscodecs() {
+ github_tar samtools htscodecs v1.6.7
+ libtoolize
+ autoreconf -fi
+ fix_and_configure
+ make check
+}
+
 test_httpparser() {
  git_fetch https://github.com/nodejs/http-parser ec8b5ee63f0e51191ea43bb0c6eac7bfbff3141d httpparser
  make test
 }
 
+test_ijgjpeg() {
+ url_tar https://www.ijg.org/files/jpegsrc.v10.tar.gz ijgjpeg
+ fix_and_configure
+ make check
+}
+
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-27
+ github_tar ImageMagick ImageMagick 7.1.2-30
  fix_and_configure
  make check V=1
+}
+
+test_incbin() {
+ git_fetch https://github.com/graphitemaster/incbin 22061f51fe9f2f35f061f85c2b217b55dd75310d incbin
+ make -C test test
 }
 
 test_inih() {
@@ -626,7 +795,7 @@ test_inih() {
 }
 
 test_janet() {
- github_tar janet-lang janet v1.41.2
+ github_tar janet-lang janet v1.42.0
  # Use C11 concurrency features
  sed -i "s|/\* #define JANET_THREAD_LOCAL _Thread_local \*/|#define JANET_THREAD_LOCAL _Thread_local|g" src/conf/janetconf.h
  sed -i "s|/\* #define JANET_USE_STDATOMIC \*/|#define JANET_USE_STDATOMIC|g" src/conf/janetconf.h
@@ -661,9 +830,22 @@ test_jq() {
  make check
 }
 
+test_js0n() {
+ git_fetch https://github.com/quartzjer/js0n a426896ae6d2652f564294887a31eb15d20ff864 js0n
+ sed -i 's|gcc|$(CC)|g' Makefile
+ make test
+}
+
 test_jsmn() {
  git_fetch https://github.com/zserge/jsmn 25647e692c7906b96ffd2b05ca54c097948e879c jsmn
  make CC=$CC test
+}
+
+test_jsonparser() {
+ git_fetch https://github.com/json-parser/json-parser e7ce6f75b81974bda98b74f5c0bdb0f8a00da7d7 jsonparser
+ cd tests
+ $CC test.c ../json.c -I ../ -lm -o test
+ ./test
 }
 
 test_kefir() {
@@ -674,7 +856,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh b0cef1a916fbb125f098c936363d92fbbf2d6b94 ksh93
+ git_fetch https://github.com/ksh93/ksh 3c35147117e0669acd78aeda5348764d5257c1a0 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -706,9 +888,29 @@ test_liballegro5() {
 }
 
 test_libarchive() {
- github_tar libarchive libarchive v3.8.8
+ github_tar libarchive libarchive v3.8.9
  replace_line "#elif defined(__GNUC__)" "#elif 1" libarchive/archive_blake2.h
  replace_line "#if defined(__GNUC__)" "#if 1" libarchive/archive_write_set_format_cpio_binary.c
+ libtoolize
+ autoreconf -fi
+ fix_and_configure
+ make check
+}
+
+test_libcheck() {
+ github_tar libcheck check 0.15.2
+ cmake_init
+ make && ctest
+}
+
+test_libconfig() {
+ github_tar hyperrealm libconfig v1.8.2
+ cmake_init -DBUILD_CXX=OFF
+ make && ctest
+}
+
+test_libcsv() {
+ git_fetch https://github.com/rgamble/libcsv b1d5212831842ee5869d99bc208a21837e4037d5 libcsv
  libtoolize
  autoreconf -fi
  fix_and_configure
@@ -724,7 +926,7 @@ test_libevent() {
 }
 
 test_libexpat() {
- github_tar libexpat libexpat R_2_8_2
+ github_tar libexpat libexpat R_2_8_4
  cd expat
  cmake_init
  make && ctest
@@ -739,8 +941,21 @@ test_libflac() {
  make check
 }
 
+test_libfyaml() {
+ github_tar pantoniou libfyaml v1.0.0-beta1
+ replace_line "if(NOT WIN32 AND NOT MSVC)" "if(FALSE)" CMakeLists.txt
+ sed -i 's|-std=c2x COMPILER_SUPPORTS_GNU2X|-std=gnu23 COMPILER_SUPPORTS_GNU2X|g' CMakeLists.txt
+ sed -i 's|-std=gnu2x|-std=gnu23|g' CMakeLists.txt
+ replace_line "#if defined(__GNUC__) && __GNUC__ >= 4" "#if 1" src/util/fy-blob.h
+ replace_line "#if defined(__x86_64__) || defined(__i386__)" "#if 0" include/libfyaml/libfyaml-atomics.h
+ sed -i 's|defined(__GNUC__) && __GNUC__ >= 4|1|g' include/libfyaml/libfyaml-util.h
+ replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" include/libfyaml/libfyaml-align.h
+ cmake_init -DENABLE_GENERIC=OFF # TODO: the generic test takes 10+ GBs memory to build
+ make && ctest
+}
+
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc e8e5a4eb19d21c94b14c158ff39cc68a3e105d30 libgc
+ git_fetch https://github.com/bdwgc/bdwgc b5161529cafc93cbfaeef23fc81005c5beddbfee libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -752,8 +967,8 @@ test_libgc() {
  make check
 }
 
-test_libgit2(){
- github_tar libgit2 libgit2 v1.9.4
+test_libgit2() {
+ github_tar libgit2 libgit2 v1.9.7
  use_stdatomic '#ifdef GIT_THREADS' src/util/thread.h
  sed -i 's|defined(GIT_BUILTIN_ATOMIC)|1|g' src/util/thread.h
  sed -i 's|__atomic_exchange(ptr, &newval, &foundval,|return atomic_exchange_explicit(ptr, newval,|g' src/util/thread.h
@@ -770,6 +985,12 @@ test_libgmp() {
  url_xz https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp
  fix_and_configure
  make && make check
+}
+
+test_libiconv() {
+ url_tar https://ftpmirror.gnu.org/gnu/libiconv/libiconv-1.19.tar.gz libiconv
+ fix_and_configure
+ make check
 }
 
 test_libjansson() {
@@ -800,8 +1021,9 @@ test_liblz4() {
 }
 
 test_libmicrohttpd() {
- url_tar https://ftpmirror.gnu.org/gnu/libmicrohttpd/libmicrohttpd-1.0.6.tar.gz libmicrohttpd
+ url_tar https://ftpmirror.gnu.org/gnu/libmicrohttpd/libmicrohttpd-1.0.10.tar.gz libmicrohttpd
  sed -i 's|defined(__GNUC__)|1|g' src/include/autoinit_funcs.h
+ sed -i 's|defined(__GNUC__)|1|g' src/microhttpd/mhd_panic_tripwire.h
  fix_and_configure
  make check
 }
@@ -828,7 +1050,14 @@ test_libopus() {
 }
 
 test_libpcre2() {
- github_tar PCRE2Project pcre2 pcre2-10.47
+ github_tar PCRE2Project pcre2 pcre2-10.48
+ fix_and_configure
+ make check
+}
+
+test_libpkgconf() {
+ github_tar pkgconf pkgconf pkgconf-3.0.6
+ sh autogen.sh
  fix_and_configure
  make check
 }
@@ -840,7 +1069,7 @@ test_libpng() {
 }
 
 test_libpsl() {
- github_clone rockdaboot libpsl 0.23.0
+ github_clone rockdaboot libpsl 0.23.3
  libtoolize
  sh autogen.sh
  fix_and_configure
@@ -857,12 +1086,23 @@ test_libressl() {
 }
 
 test_libsamplerate() {
- git_fetch https://github.com/libsndfile/libsamplerate 2ccde9568cca73c7b32c97fefca2e418c16ae5e3 libsamplerate
+ git_fetch https://github.com/libsndfile/libsamplerate 0844c208f683527c08ea8a80acc13b398aa9c8bf libsamplerate
  replace_line "#   define HAVE_SSE2_INTRINSICS" "" src/common.h
  libtoolize
  sh autogen.sh
  fix_and_configure
  make test
+}
+
+test_libsir() {
+ github_tar aremmell libsir v2.2.6
+ make tests && ./build/bin/sirtests
+}
+
+test_libsixel() {
+ git_fetch https://github.com/saitoha/libsixel a0151d940af8bb0733dac77248bd55ae86949e56 libsixel
+ CFLAGS=-DSTBI_NO_SIMD fix_and_configure
+ make check
 }
 
 test_libsodium() {
@@ -872,6 +1112,16 @@ test_libsodium() {
  replace_line "#if !defined(__clang__) && !defined(__GNUC__)" "#if 0" src/libsodium/include/sodium/export.h
  replace_line "#elif defined(HAVE_C11_MEMORY_FENCES)" "#elif defined(HAVE_C11_MEMORY_FENCES)\n#include <stdatomic.h>" src/libsodium/include/sodium/private/common.h
  make check
+}
+
+test_libspng() {
+ github_tar randy408 libspng v0.7.4
+ # https://github.com/randy408/libspng/issues/276
+ replace_line "test('ch1n3p04', test_exe, args: files('ch1n3p04.png'))" '' tests/images/meson.build
+ replace_line "test('ch2n3p08', test_exe, args: files('ch2n3p08.png'))" '' tests/images/meson.build
+ muon_init -Denable_opt=false -Ddev_build=true
+ muon_build
+ muon_test
 }
 
 test_libtommath() {
@@ -904,12 +1154,19 @@ test_libuv() {
  sed -i 's|TEST_DECLARE   (udp_multicast_join6)||g' test/test-list.h
  sed -i 's|TEST_ENTRY  (udp_multicast_join6)||g' test/test-list.h
  # flaky
- sed -i 's|TEST_DECLARE   (tcp_reuseport)||g' test/test-list.h
- sed -i 's|TEST_ENTRY  (tcp_reuseport)||g' test/test-list.h
+ ${is_CI+ sed -i 's|TEST_DECLARE   (tcp_reuseport)||g' test/test-list.h }
+ ${is_CI+ sed -i 's|TEST_ENTRY  (tcp_reuseport)||g' test/test-list.h }
  libtoolize
  sh autogen.sh
  fix_and_configure
  make check
+}
+
+test_libvips() {
+ github_tar libvips libvips v8.18.6
+ muon_init
+ muon_build
+ muon_test
 }
 
 test_libwebp() {
@@ -931,7 +1188,7 @@ test_libxml() {
 
 test_libxo_chimerautils() {
  local LIBXO=$PWD/libxo_install
- github_tar chimera-linux chimerautils v15.0.3
+ github_tar chimera-linux chimerautils v15.1.1
 
  github_tar Juniper libxo 1.7.5
  sed -i 's|__int128_t|_BitInt(128)|g' libxo/xo_humanize.h
@@ -972,19 +1229,19 @@ test_linenoise() {
 }
 
 test_lmdb() {
- github_tar LMDB lmdb LMDB_1.0.0
+ github_tar LMDB lmdb LMDB_1.0.1
  make -C libraries/liblmdb CC=$CC test
 }
 
 test_lua() {
- url_tar https://lua.org/ftp/lua-5.5.0.tar.gz lua
+ url_tar https://lua.org/ftp/lua-5.5.1.tar.gz lua
  cd src && make CC="$CC"
- url_tar https://lua.org/tests/lua-5.5.0-tests.tar.gz luatests
+ url_tar https://lua.org/tests/lua-5.5.1-tests.tar.gz luatests
  cd libs && make CC="$CC" && cd ../
  ../lua -e"_port=true" all.lua
 }
 
-test_lwan(){
+test_lwan() {
  git_fetch https://github.com/lpereira/lwan e310c183fb3d4c255e8ed9c5f41ad07242c5558c lwan
  use_stdbit '#include <assert.h>' src/bin/tools/mimegen.c
  use_stdbit '#include <assert.h>' src/lib/timeout.c
@@ -997,6 +1254,26 @@ test_lwan(){
  replace_line "#if __x86_64__" "#if 0" src/lib/lwan-template.c
  cmake_init
  make testsuite
+}
+
+test_lwjson() {
+ github_tar MaJerle lwjson v1.9.0
+ cd tests
+ sed -i "s|DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++|DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=clang++|g" test.py
+ sed -i "s| -G Ninja||g" test.py
+ python3 test.py
+}
+
+test_lwrb() {
+ github_tar MaJerle lwrb v3.3.0
+ cmake_init
+ make && ctest
+}
+
+test_lzo() {
+ git_fetch https://github.com/nemequ/lzo 0083878c235a89ef96a009d1ff0b500f3a364e4b lzo
+ fix_and_configure
+ make check
 }
 
 test_mawk() {
@@ -1038,7 +1315,7 @@ test_metalang99() {
 }
 
 test_micropython() {
- github_clone micropython micropython v1.28.0
+ github_clone micropython micropython v1.29.0
  use_stdbit "#include <stdbool.h>" py/misc.h
  # sed -i 's|inline MP_ALWAYSINLINE const|static inline const|g' py/misc.h ## if without CFLAGS_EXTRA=-ffake-always-inline
  replace_line "#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 8)" "#if 1" py/nlrx64.c
@@ -1049,7 +1326,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.4.1
+ github_tar microsoft mimalloc v3.5.1
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -1064,8 +1341,43 @@ test_miniz() {
  make && ctest
 }
 
+test_minizipng() {
+ github_tar zlib-ng minizip-ng 4.2.2
+ cmake_init -DMZ_BUILD_TESTS=ON -DMZ_BUILD_UNIT_TESTS=ON
+ make && ctest
+}
+
+test_minunit() {
+ git_fetch https://github.com/siu/minunit a0586569bd8abfb7a37390d670484c201e9173bf minunit
+ cd ci && make && ./check_example.sh
+}
+
+test_minmea() {
+ github_tar kosma minmea v1.0.0
+ sed -i 's|^project(minmea|& C|g' CMakeLists.txt
+ cmake_init
+ make && ./tests
+}
+
+test_mjs() {
+ git_fetch https://github.com/cesanta/mjs cf375c40f6f15447af4925c33cd7c549b54deb2c mjs
+ $CC tests/unit_test.c src/common/test_*.c src/common/cs_time.c -I. -Isrc -DMJS_MEMORY_STATS -DMJS_ENABLE_DEBUG=1 -lm -o unit_test
+ ./unit_test
+}
+
+test_mjson() {
+ git_fetch https://github.com/cesanta/mjson 696969cd0d35399cc66075f5ec7a96e23ba4a89b mjson
+ $CC test/unit_test.c src/mjson.c -Isrc -o unit_test
+ ./unit_test
+}
+
+test_mlib() {
+ git_fetch https://github.com/P-p-H-d/mlib 4acdfe4c12040150e2e531517a005a1aace6b794 mlib
+ make check CC="$CC -std=c23" CC99="$CC -std=c23" CC11="$CC -std=c23" CFLAGS=
+}
+
 test_mongoose() {
- github_tar cesanta mongoose 7.22
+ github_tar cesanta mongoose 7.23
  make -C test test ASAN= ${is_CI+ IPV6=0 TFLAGS=-DLOCALHOST_ONLY }
 }
 
@@ -1076,7 +1388,7 @@ test_monocypher() {
 }
 
 test_mpack() {
- git_fetch https://github.com/ludocode/mpack 90716842d49eb4c9e7d62a2b47ad3ba73cba429f mpack
+ git_fetch https://github.com/ludocode/mpack c9d1820ecfdbc3954c60a218492251e457cc1f86 mpack
  sed -i 's|compiler != "TinyCC"|False|g' test/unit/configure.py
  sed -i 's|^ninja |& -j1 |g' tools/unit.sh
  tools/unit.sh all
@@ -1096,7 +1408,7 @@ test_mruby() {
 }
 
 test_msgpack() {
- github_tar msgpack msgpack-c c-7.0.1
+ github_tar msgpack msgpack-c c-7.0.2
  convert_atomic_x_fetch cmake/sysdep.h.in
  cmake_init -DMSGPACK_32BIT=OFF -DBUILD_SHARED_LIBS=ON \
   -DMSGPACK_CHAR_SIGN=signed -DMSGPACK_BUILD_EXAMPLES=ON -DMSGPACK_BUILD_TESTS=ON
@@ -1118,7 +1430,7 @@ test_muon() {
 }
 
 test_nanomsg() {
- github_tar nanomsg nng v2.0.0-alpha.7
+ github_tar nanomsg nng v2.0.0-beta.2
  replace_line "#include <complex.h>" "" src/supplemental/http/http_conn.c
  replace_line "#include <complex.h>" "" src/supplemental/http/http_server_test.c
  replace_line "nng_defines_if(NNG_ENABLE_IPV6 NNG_ENABLE_IPV6)" "" CMakeLists.txt
@@ -1127,13 +1439,13 @@ test_nanomsg() {
 }
 
 test_nanopb() {
- git_fetch https://github.com/nanopb/nanopb 43f13ed6de2df8424b072bd13336f30525afc007 nanopb
+ github_tar nanopb nanopb nanopb-0.4.9.2
  cd tests
  scons CC=$CC
 }
 
 test_ncompress() {
- git_fetch https://github.com/vapier/ncompress c576364d691df490ec1841d028c7bece2b523c58 ncompress
+ git_fetch https://github.com/vapier/ncompress 03592d7a4702bb83558b6f1520c2a6a5381374c8 ncompress
  make && make check
 }
 
@@ -1150,8 +1462,21 @@ test_nettle() {
  make && make check
 }
 
+test_nghttp2() {
+ github_clone nghttp2 nghttp2 v1.70.0
+ cmake_init -DENABLE_LIB_ONLY=ON -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=ON
+ make check
+}
+
+test_nghttp3() {
+ github_clone ngtcp2 nghttp3 v1.18.0
+ use_stdbit '#include <string.h>' lib/nghttp3_qpack.c
+ cmake_init -DENABLE_LIB_ONLY=ON
+ make check
+}
+
 test_nginx() {
- github_tar nginx nginx release-1.31.3
+ github_tar nginx nginx release-1.31.5
  auto/configure
  make
  cd ../
@@ -1159,8 +1484,20 @@ test_nginx() {
  prove .
 }
 
+test_ngtcp2() {
+ github_clone ngtcp2 ngtcp2 v1.25.0
+ cmake_init -DENABLE_LIB_ONLY=ON
+ make check
+}
+
+test_nibble() {
+ git_fetch https://github.com/glouw/nibble 08dab5d9520fcb2450a4530d122c302e7f024c64 nibble
+ make CC=$CC CFLAGS=-std=c23 nibble
+ make TIME= ASAN= -C test
+}
+
 test_njs() {
- github_tar nginx njs 1.0.0
+ github_tar nginx njs 1.0.1
  use_stdbit '#include <stdint.h>' src/njs_cutils.h
  NJS_CC_NAME=$CC ./configure
  make test
@@ -1178,7 +1515,7 @@ test_noplate() {
 }
 
 test_nqp() {
- github_clone MoarVM MoarVM 2026.06.1
+ github_clone MoarVM MoarVM 2026.08
  use_stdbit '#include "moar.h"' src/core/coerce.c
  use_stdbit '#include "moar.h"' src/core/interp.c
  use_stdbit '#include "moar.h"' src/math/bigintops.c
@@ -1186,7 +1523,7 @@ test_nqp() {
  make install
  cd ../
 
- github_clone Raku nqp 2026.06
+ github_clone Raku nqp 2026.08
  perl Configure.pl --with-moar=$PWD/../MoarVM/install/bin/moar
  make test
 }
@@ -1231,13 +1568,13 @@ test_openrc() {
 }
 
 test_openssh() {
- github_tar openssh openssh-portable V_10_4_P1
+ github_tar openssh openssh-portable V_10_5_P1
  ./configure
  make unit
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.6.3
+ github_tar openssl openssl openssl-3.6.4
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -1248,12 +1585,34 @@ test_orangeduck_mpc() {
  make CC=$CC check
 }
 
+test_packcc() {
+ github_tar arithy packcc v3.1.0
+ sed -i 's|export CC=gcc|#&|g' tests/test.sh
+ sed -i 's| -fsanitize=undefined,address -fno-sanitize-recover=all||g' tests/test.sh
+ cmake_init
+ make check
+}
+
 test_pacman() {
  gitlab_tar gitlab.archlinux.org/pacman pacman v7.1.0
  sed -i "s| '',|& '\\\\n',|g" meson.build
  muon_init
  muon_build
  muon_test
+}
+
+test_par() {
+ git_fetch https://github.com/prideout/par f2a33359645840b02ff96dcf556eecb293f98c10 par
+ replace_line "WAI_NOINLINE" "" test/whereami.c
+ cmake_run test -Bbuild
+ make -C build VERBOSE=1
+ ./build/test_bubbles
+ ./build/test_shapes
+ ./build/test_filecache
+ ./build/test_filecache_lz4
+ ./build/test_sprune
+ ./build/test_strings
+ ./build/test_octasphere
 }
 
 test_parrot() {
@@ -1273,8 +1632,13 @@ test_pdpmake() {
  make test
 }
 
+test_pegleg() {
+ github_tar gpakosz peg 0.1.20
+ make test
+}
+
 test_perl() {
- github_tar perl perl5 v5.42.2
+ github_tar perl perl5 v5.44.0
  # https://github.com/Perl/perl5/blob/80f266d3fc15255d56d2bebebceba52614f04943/.github/workflows/testsuite.yml#L810
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
@@ -1283,7 +1647,7 @@ test_perl() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.8
+ github_tar php php-src php-8.5.10
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C) || defined(__TINYC__)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
@@ -1314,8 +1678,30 @@ test_pixman() {
  muon_test -t 20
 }
 
+test_pocketpy() {
+ github_tar pocketpy pocketpy v2.1.8
+ sed -i 's|project(pocketpy|& C|g' CMakeLists.txt
+ sed -i 's|python compileall.py|python3 compileall.py|g' scripts/run_tests.py
+ cmake_run ./
+ make
+ python3 scripts/run_tests.py
+}
+
+test_polybenchc() {
+ url_tar https://sourceforge.net/projects/polybench/files/polybench-c-4.2.1-beta.tar.gz/download polybenchc
+ perl utilities/makefile-gen.pl -cfg .
+
+ for f in `find | grep Makefile | sort`; do
+  DIR=`dirname $f`
+  make -C `dirname $f` -B CC=$CC
+  echo $DIR >> sum.txt
+  $DIR/`basename $DIR` 2>&1 | md5sum >> sum.txt
+ done
+ md5sum sum.txt | grep ac56f9f205ee4ec556b2f221971d749b
+}
+
 test_postgres() {
- github_tar postgres postgres REL_18_4
+ github_tar postgres postgres REL_18_6
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/storage/s_lock.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/port/simd.h
  replace_line "#if defined(__GNUC__) || defined(__INTEL_COMPILER)" "#if 1" src/include/port/atomics.h
@@ -1336,7 +1722,7 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.14.6
+ github_tar python cpython v3.14.7
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
@@ -1355,7 +1741,7 @@ test_qbe_simplecc() {
  make CC="$CC" check
  cd ../
 
- git_fetch git://git.simple-cc.org/scc cc00e16d081e5f802f046bc0a40ef597a4af1c0e simplecc
+ git_fetch git://git.simple-cc.org/scc 575a2d87cac49174b7f53aa6ac5f9186c2165697 simplecc
  sed -i "s|^#define QBEBIN \"|#define QBEBIN \"$PWD/../qbe\/|g" include/scc/bits/scc/sys-scc.h
  sed -i 's|bin\[32\]|bin[PATH_MAX]|g' src/cmd/scc-cc/posix/cc.c
  sed -i 's|16sss|16ssl|g' src/libmach/elf/elfprobe.c
@@ -1368,14 +1754,33 @@ test_qbe_simplecc() {
 
 }
 
+test_qman() {
+ github_tar plp13 qman v1.5.1
+ muon_init -Dtests=enabled
+ muon_build
+ muon_test
+}
+
 test_quickjs() {
  git_fetch https://github.com/bellard/quickjs 04be246001599f5995fa2f2d8c91a0f198d3f34c quickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  make CC=$CC test
 }
 
+test_rax() {
+ git_fetch https://github.com/antirez/rax 1927550cb218ec3c3dda8b39d82d1d019bf0476d rax
+ make rax-test
+ ./rax-test
+}
+
+test_rc() {
+ git_fetch https://github.com/rakitzis/rc 418fa950edc3584d7be01c8cb982c39c933bee93 rc
+ export YACC=byacc # sometimes make regenerates parse.c (timestamp issue?)
+ make check
+}
+
 test_redis() {
- github_tar redis redis 8.6.4
+ github_tar redis redis 8.6.6
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -1407,7 +1812,7 @@ test_redis() {
 }
 
 test_valkey() {
- github_tar valkey-io valkey 9.1.0
+ github_tar valkey-io valkey 9.1.2
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -1449,6 +1854,14 @@ test_rpmalloc() {
  RPMALLOC_TEST_THREADS=2 RPMALLOC_TEST_SCALE=10 ./bin/linux/release/x86-64/rpmalloc-test
 }
 
+test_rr() {
+ git_fetch https://github.com/glouw/rr 7a090016f80871194d247e0f40032767bd7805d5 rr
+ $CC -std=gnu11 roman2.c -o roman2 -lm
+ replace_line 'make install' '' test.sh
+ sed -i 's|roman2|../&|g' test.sh
+ sh test.sh
+}
+
 test_rsync() {
  github_tar RsyncProject rsync v3.4.4
  ./configure
@@ -1465,35 +1878,29 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 2c4c5e32eb5c97d1b76c289ccdc665a54dc23c7c rvvm
+ git_fetch https://github.com/LekKit/RVVM a662c0edd507b4e04f20d44490c514b683007ae7 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/util/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.24.4
- sed -i 's|from waflib.Tools import |from waflib.Tools import gcc, |g' buildtools/wafsamba/generic_cc.py
- sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
+ github_tar samba-team samba samba-4.24.6
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
  use_stdatomic '#include <stdarg.h>' third_party/quic_ko_wrapper/quic_ko_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
  replace_line "#if defined(__clang__) || defined(__GNUC__) || defined(__SUNPRO_C)" "#if 1" third_party/heimdal/include/heim_threads.h
  sed -i 's/defined(_MSC_VER) && !defined(__clang__) &&/1||/g' third_party/ngtcp2/lib/ngtcp2_ringbuf.c
- ./configure --without-json --without-ad-dc --enable-selftest --without-ldap --without-ldb-lmdb --without-ads --with-shared-modules='!vfs_snapper,!vfs_nfs4acl_xattr'
+ wafsamba_fix_and_configure --without-json --without-ad-dc --enable-selftest --without-ldap --without-ldb-lmdb --without-ads --with-shared-modules='!vfs_snapper,!vfs_nfs4acl_xattr'
  LD_LIBRARY_PATH=$PWD/bin/default/lib/util:$PWD/bin/default/libcli/util:$PWD/bin/default/librpc:$PWD/bin/default/nsswitch/libwbclient:$PWD/bin/default/source3:$PWD/bin/default/source3/libsmb make quicktest -j4
 }
 
 test_scrapscript() {
  git_fetch https://github.com/tekknolagi/scrapscript 986e0fbbcb497bea22875006d4c60dd3809a0cff scrapscript
- # INSTALL uv
- curl -LsSf https://astral.sh/uv/install.sh | sh
- ~/.local/bin/uv python install 3.10
- ~/.local/bin/uv python pin 3.010
- ~/.local/bin/uv run python compiler_tests.py
+ python3 compiler_tests.py
 }
 
 test_sdl3() {
- github_tar libsdl-org SDL release-3.4.12
+ github_tar libsdl-org SDL release-3.4.16
  replace_line "void \*alloca(size_t);" "#include <alloca.h>" include/SDL3/SDL_stdinc.h
  replace_line "#if defined(HAVE_GCC_ATOMICS) || defined(HAVE_GCC_SYNC_LOCK_TEST_AND_SET)" "#if 1" src/atomic/SDL_spinlock.c
  use_stdatomic '#include "SDL_internal.h"' src/atomic/SDL_spinlock.c
@@ -1520,6 +1927,12 @@ test_slimcc_c2y() {
  make test-stage2
 }
 
+test_slre() {
+ git_fetch https://github.com/cesanta/slre b92b363aa7a7814b8d224f1007503802d702872a slre
+ $CC unit_test.c slre.c -o unit_test
+ ./unit_test
+}
+
 test_smaz() {
  git_fetch https://github.com/antirez/smaz 2f625846a775501fb69456567409a8b12f10ea25 smaz
  sed -i 's|gcc|$(CC)|g' Makefile
@@ -1527,8 +1940,8 @@ test_smaz() {
 }
 
 test_sokol() {
- git_fetch https://github.com/floooh/sokol 2ef8487510b5efa9bf1314fbdf583eaffdc417bc sokol
- sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.8|g' tests/ext/CMakeLists.txt
+ git_fetch https://github.com/floooh/sokol 761b7a49c5c6b0a97b9ccfa5936df88202be2e1b sokol
+ sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.9|g' tests/ext/CMakeLists.txt
  cd tests
  cmake_init -DSOKOL_BACKEND=SOKOL_GLCORE
  make && ./sokol-test
@@ -1539,6 +1952,19 @@ test_sqlite() {
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make fuzztest tcltest
+}
+
+test_stc() {
+ git_fetch https://github.com/stclib/STC a799a131c1554b9dc0d5515aab9517358890f489 stc
+ muon_init
+ muon_build
+ muon_test
+}
+
+test_talloc() {
+ url_tar https://www.samba.org/ftp/talloc/talloc-2.5.0.tar.gz talloc
+ wafsamba_fix_and_configure
+ LD_LIBRARY_PATH=$PWD/bin/default make check
 }
 
 test_tcl() {
@@ -1553,6 +1979,18 @@ test_tcpdump() {
  github_tar the-tcpdump-group tcpdump tcpdump-4.99.6
  cmake_init
  make && make check
+}
+
+test_tdb() {
+ url_tar https://www.samba.org/ftp/tdb/tdb-1.4.15.tar.gz tdb
+ wafsamba_fix_and_configure
+ LD_LIBRARY_PATH=$PWD/bin/default make check
+}
+
+test_tinf() {
+ git_fetch https://github.com/jibsen/tinf 57ffa1f1d5e3dde19011b2127bd26d01689b694b tinf
+ cmake_init
+ make && ctest
 }
 
 test_tinycbor() {
@@ -1583,8 +2021,14 @@ test_tinycthread() {
 }
 
 test_tinyexpr() {
- git_fetch https://github.com/codeplea/tinyexpr 4a7456e2eab88b4c76053c1c4157639ccb930e2b tinyexpr
+ github_tar codeplea tinyexpr v1.1.1
  make CC=$CC smoke_pr
+}
+
+test_tinyobjloaderc() {
+ git_fetch https://github.com/syoyo/tinyobjloader-c 0f8ea84a0da616790b476912e1ccc641f36b463e tinyobjloaderc
+ sed -i 's| ../tinyobj_loader_c.h acutest.h$||g' test/Makefile
+ make test
 }
 
 test_tinyregexc() {
@@ -1630,7 +2074,7 @@ test_tweetnacl() {
 }
 
 test_umka() {
- github_tar vtereshkov umka-lang v1.5.6
+ github_tar vtereshkov umka-lang v1.5.7
  sed -i "s|^gcc |$CC |g" tests/lib/build_lib_linux.sh
  sed -i 's|__attribute__((always_inline)) inline||g' src/umka_vm.c
  sed -i 's|/bin/sh|&\nset -e|g' test_linux.sh
@@ -1645,8 +2089,14 @@ test_unqlite() {
  make && ctest
 }
 
+test_uriparser() {
+ github_tar uriparser uriparser uriparser-1.0.2
+ cmake_init -DURIPARSER_BUILD_DOCS=OFF -DURIPARSER_BUILD_TESTS=ON
+ make VERBOSE=1 && ctest
+}
+
 test_utf8h() {
- git_fetch https://github.com/sheredom/utf8.h 3821317e4185d91c5f69e8e639295881c7f51812 utf8h
+ git_fetch https://github.com/sheredom/utf8.h 7e403ccc3f3cb848d061cac352ee26e54f27c934 utf8h
  replace_line "#elif defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)" "#elif 1" test/utest.h
  replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" utf8.h
  "$CC" test/main.c -I./ -o run_tests
@@ -1659,13 +2109,23 @@ test_utf8proc() {
  make && ctest
 }
 
+test_uthash() {
+ github_tar troydhanson uthash v2.4.0
+ make -C tests
+}
+
 test_utillinux() {
  github_tar util-linux util-linux v2.42.2
  replace_line "# define __attribute__(_arg_)" "" include/c.h
  use_stdbit '#include <stdlib.h>' libblkid/src/superblocks/btrfs.c
  sh autogen.sh
  fix_and_configure
- make check TESTS_OPTIONS="--exclude='fadvise/drop fincore/count ts/script/options'" ${is_CI+ TESTS_PARALLEL= }
+ make check ${is_CI+ TESTS_OPTIONS="--exclude='kill/decode'" TESTS_PARALLEL= }
+}
+
+test_uzlib() {
+ github_tar pfalcon uzlib v2.9.5
+ make -C tests test
 }
 
 test_vim() {
@@ -1686,7 +2146,7 @@ test_vlc() {
 }
 
 test_wasm3() {
- git_fetch https://github.com/wasm3/wasm3 d77cd814aa0bc68cb1df917580a6304d34cfb30b wasm3
+ github_tar wasm3 wasm3 v0.9.0
  sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
  use_stdbit2 "#include <limits.h>" source/m3_exec.h
  mkdir build
@@ -1729,14 +2189,14 @@ test_wuffs() {
 }
 
 test_xterm() {
- github_tar ThomasDickey xterm-snapshots xterm-410
+ github_tar ThomasDickey xterm-snapshots xterm-411
  ./configure
  make
  make check
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash e573d4d2aaeaba0f3e5a0a9a54144a1f2b4b56e7 xxhash
+ git_fetch https://github.com/Cyan4973/xxHash c0b5ea995d66691734b1a79ad89e73a0d2fd5a53 xxhash
  make CC=$CC DISPATCH=0 check
 }
 
@@ -1746,11 +2206,19 @@ test_xz() {
  make && make test
 }
 
+test_yajl() {
+ git_fetch https://github.com/lloyd/yajl 5e3a7856e643b4d6410ddc3f84bc2f38174f2872 yajl
+ cmake_init
+ make && make test
+}
+
 test_yash() {
  github_tar magicant yash 2.61
  ./configure
  sed -i 's| docs$||g' Makefile
  ${is_CI+ sed -i 's| sigquit[1-8]-p.tst||g' tests/Makefile } # extremely slow in CI
+ ${is_CI+ sed -i 's| sigrtmin[1-8]-y.tst||g' tests/Makefile } # fail in CI
+ ${is_CI+ sed -i 's| trap-y.tst||g' tests/Makefile } # fail in CI
  make test
 }
 
@@ -1806,6 +2274,23 @@ EOF
  pb/bin/pb/scheme hello.scm | grep ^hello_world$
 }
 
+build_7zip() {
+ github_tar ip7z 7zip 26.02
+ sed -i 's|__sync_add_and_fetch|__builtin_atomic_arith_add|g' C/Threads.c
+ sed -i 's|__sync_sub_and_fetch|__builtin_atomic_arith_sub|g' C/Threads.c
+ sed -i 's|#include <stdlib.h>|&\n#include <stdint.h>|g' C/Alloc.c
+ sed -i 's|#include <string.h>|&\n#include <stdint.h>|g' C/MtDec.c
+ sed -i 's|#define MY_CPU_AMD64||g' C/CpuArch.h
+ sed -i 's|#define MY_CPU_X86||g' C/CpuArch.h
+ cd CPP/7zip/Bundles/Alone2
+ make -f makefile.gcc CC=$CC CXX=clang++
+
+ ./_o/7zz a test.7z makefile.gcc
+ ./_o/7zz t test.7z
+ ./_o/7zz e test.7z -otest
+ cmp -b makefile.gcc test/makefile.gcc
+}
+
 build_bc() {
  url_lz https://ftpmirror.gnu.org/gnu/bc/bc-1.08.2.tar.lz bc
  ./configure && make
@@ -1818,8 +2303,15 @@ build_cairo() {
  muon_build
 }
 
+build_chipmunk2d() {
+ git_fetch https://codeberg.org/slembcke/Chipmunk2D 5b45034a8761518800e03dd79f33c3aad0bf7fee chipmunk2d
+ sed -i 's|-ffast-math||g' CMakeLists.txt
+ cmake_init
+ make VERBOSE=1
+}
+
 build_dash() {
- git_fetch https://kernel.googlesource.com/pub/scm/utils/dash/dash 8a602ac2d4f54d9025115d65af517355cf8416e5 dash
+ git_fetch https://kernel.googlesource.com/pub/scm/utils/dash/dash 037bbdfd330017c368caf6242f977974123239b5 dash
  sh autogen.sh
  ./configure
  make
@@ -1845,7 +2337,7 @@ build_ellipsis() {
 }
 
 build_erlang() {
- github_tar erlang otp OTP-29.0.3
+ github_tar erlang otp OTP-29.0.6
  replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
  replace_line "#if defined(__GNUC__)" "#if 1" erts/include/internal/ethread_inline.h
  sed -i 's|-funroll-loops||g' lib/megaco/src/flex/Makefile.in
@@ -1861,8 +2353,17 @@ EOF
  ./bootstrap/bin/erl -noshell -s hello fn -s init stop | grep ^hello_world$
 }
 
+build_fenster() {
+ git_fetch https://github.com/zserge/fenster e700581dfb7956dd161aee44fc0cff0663e789a1 fenster
+ cd examples
+ make -C drawing-c
+ make -C input-c
+ make -C minimal-c
+ make -C sound-c
+}
+
 build_foot() {
- codeberg_tar dnkl foot 1.27.0
+ codeberg_tar dnkl foot 1.28.0
  muon_init
  use_stdbit '#include <stdlib.h>' composed.c
  use_stdbit '#include <stdlib.h>' key-binding.c
@@ -1905,13 +2406,23 @@ EOF
 }
 
 build_glfw() {
- git_fetch https://github.com/glfw/glfw ed6452b13c76f7b4da216a9952bc7837aeb0f031 glfw
+ github_tar glfw glfw 3.5.1
  cmake_init -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=ON
  make
 }
 
+build_greatest() {
+ github_tar silentbicycle greatest v1.5.0
+ make
+ (./example || true) | grep 'Pass: 173, fail: 35, skip: 23.'
+ ./example_no_runner | grep 'Pass: 1, fail: 0, skip: 0.'
+ (./example_no_suite || true) | grep 'Pass: 1, fail: 1, skip: 1.'
+ (./example_shuffle || true) | grep 'Pass: 1064, fail: 2, skip: 0.'
+ ./example_trunc | grep 'Pass: 11, fail: 0, skip: 0.'
+}
+
 build_htop() {
- github_tar htop-dev htop 3.5.1
+ github_tar htop-dev htop 3.5.3
  sh autogen.sh
  ./configure
  make
@@ -1921,6 +2432,20 @@ build_i3() {
  github_tar i3 i3 4.25.1
  muon_init -Dbuildtype=release
  muon_build
+}
+
+build_joe() {
+ github_tar joe-editor joe releases/joe-4.8
+ libtoolize
+ autoreconf -fi
+ ./configure
+ make
+ ./joe/joe -h | grep 'Joe'\''s Own Editor'
+}
+
+build_kilo() {
+ git_fetch https://github.com/antirez/kilo 323d93b29bd89a2cb446de90c4ed4fea1764176e kilo
+ make
 }
 
 build_lacc() {
@@ -1946,6 +2471,24 @@ build_libev() {
  make
 }
 
+build_libharu() {
+ github_tar libharu libharu v2.4.6
+ cmake_init -DLIBHPDF_EXAMPLES=ON
+ make
+}
+
+build_liblzf() {
+ git_fetch https://github.com/nemequ/liblzf fb25820c3c0aeafd127956ae6c115063b47e459a liblzf
+ autoreconf -fi
+ ./configure
+ make
+ cp ./configure ./test
+ ./lzf -c ./test
+ ! ls ./test
+ ./lzf -d ./test.lzf
+ cmp -b ./test ./configure
+}
+
 build_libsoldout() {
  git_fetch https://github.com/faelys/libsoldout f5402a2bec63240f2ca19ade3fd5a2a6bc7788cb libsoldout
  make
@@ -1953,7 +2496,7 @@ build_libsoldout() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 3c4f9fe2052b8d08a917ac0d5f38563f0297b5a3 luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT 1ee778a4e37122d8ca7d5733c590a47dafd6b15c luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -1976,6 +2519,16 @@ build_mg() {
  make
 }
 
+build_miniaudio() {
+ github_tar mackron miniaudio 0.11.25
+ cmake_init -DCMAKE_C_FLAGS=-DMA_DR_MP3_NO_SIMD
+}
+
+build_minihttpd() {
+ url_tar https://www.acme.com/software/mini_httpd/mini_httpd-1.30.tar.gz minihttpd
+ make CC=$CC CFLAGS='-std=gnu99 -include grp.h'
+}
+
 build_mksh() {
  git_fetch https://github.com/MirBSD/mksh 341752823184238dc9b2b0a22b48da984f25442d mksh
  sh Build.sh
@@ -1985,12 +2538,19 @@ build_mksh() {
 }
 
 build_nano() {
- url_xz https://www.nano-editor.org/dist/v9/nano-9.1.tar.xz nano
+ url_xz https://www.nano-editor.org/dist/v9/nano-9.2.tar.xz nano
  ./configure && make
 }
 
+build_nanovg() {
+ git_fetch https://github.com/memononen/nanovg ce3bf745eb2d2dbc14a50bf2446783f691ac4353 nanovg
+ perl -i -p0e 's|(links { \"GL\", \"GLU\", \"m\", \"GLEW\" }\n)\n|\1defines { \"NANOVG_GLEW\" }\n|g' premake4.lua
+ premake4 gmake
+ cd build && make
+}
+
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260711
+ github_tar ThomasDickey ncurses-snapshots v6_6_20260829
  ./configure
  make V=1
 }
@@ -2046,7 +2606,7 @@ build_oksh() {
 
 build_pcc() {
  local DIR=$PWD/pcc_install
- git_fetch https://github.com/PortableCC/pcc 08c57eee81dcc6106e2ec47b63b93db62a84640a pcc
+ git_fetch https://github.com/PortableCC/pcc 9db636ff7e67a8f8e9003aea6282d12c6e618539 pcc
  ./configure --prefix=$DIR
  make && make install
  cd ../
@@ -2063,6 +2623,11 @@ EOF
  ./hello | grep ^hello_world$
 }
 
+build_plmpeg() {
+ git_fetch https://github.com/phoboslab/pl_mpeg c871f2be022ece7ef4f64230b4fb8e1fb9eb6023 pl_mpeg
+ make CFLAGS='-std=gnu99 -DSDL_DISABLE_IMMINTRIN_H' extract player_sdl player_gl
+}
+
 build_q2rtx() {
  github_clone NVIDIA Q2RTX v1.8.1
  replace_line "#if (defined __GNUC__)" "#if 1" inc/common/intreadwrite.h
@@ -2073,6 +2638,17 @@ build_q2rtx() {
  make
 }
 
+build_qoi() {
+ git_fetch https://github.com/phoboslab/qoi 97bacc86a9c4abf5a2d452102dc26546c4c670b9 qoi
+ git_fetch https://github.com/nothings/stb 2c980bb59875b0d32144a71867fbdebb2f77cd20 stb
+ cd ../
+ CFLAGS='-Istb/ -DSTBI_NO_SIMD' make conv
+ ./qoiconv stb/tests/pngsuite/16bit/basi6a16.png out.qoi
+ ./qoiconv out.qoi out.png
+ ./qoiconv out.png out2.qoi
+ cmp -b out.qoi out2.qoi
+}
+
 build_quake3e() {
  github_tar ec- Quake3e 2025-10-14
  sed -i 's|Snd_Memset|Snd_Memset_unused|g' code/unix/linux_snd.c
@@ -2080,7 +2656,7 @@ build_quake3e() {
 }
 
 build_racket() {
- github_tar racket racket v9.2
+ github_tar racket racket v9.3
  replace_line "#ifdef MZ_CAS_AVAILABLE" "#if 1" racket/src/bc/src/mzrt_cas.inc
  sed -i 's|__sync_bool_compare_and_swap(addr, old|__builtin_compare_and_swap(addr, \&old|g' racket/src/bc/src/mzrt_cas.inc
  make bc-base
@@ -2107,10 +2683,16 @@ build_raylib_raygui() {
 }
 
 build_stb() {
- git_fetch https://github.com/nothings/stb 31c1ad37456438565541f4919958214b6e762fb4 stb
+ git_fetch https://github.com/nothings/stb 2c980bb59875b0d32144a71867fbdebb2f77cd20 stb
  sed -i 's|-DSTB_DIVIDE_TEST|-DSTB_DIVIDE_TEST -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' tests/Makefile
  sed -i 's|$(CC) $(INCLUDES) $(CPPFLAGS) -std=c++0x test_cpp_compilation.cpp -lm -lstdc++||g' tests/Makefile
  make -C tests
+}
+
+build_thttpd() {
+ url_tar https://www.acme.com/software/thttpd/thttpd-2.29.tar.gz thttpd
+ CFLAGS=-std=gnu89 ./configure
+ make CCOPT=-std=gnu89
 }
 
 build_tin() {
@@ -2119,15 +2701,34 @@ build_tin() {
  make build
 }
 
+build_tinybasic() {
+ git_fetch https://github.com/slviajero/tinybasic 99c6b631aebeede8badb73833e4207b4d89c8ed0 tinybasic
+ cd Basic2/Posix
+ $CC basic.c runtime.c -lm
+ ./a.out ../../examples/12systems/hello.bas | grep '^Hello World$'
+}
+
+build_tree() {
+ github_tar Old-Man-Programmer tree 2.3.2
+ make && ./tree
+}
+
 build_vedis() {
  git_fetch https://github.com/symisc/vedis 005e6be398fc905123ac61b45a4fbabff5fbff71 vedis
  "$CC" vedis_intro.c vedis.c && ./a.out | md5sum | grep 075febcdc6b0b3a5b73bc89a39b3bb1d
 }
 
 build_wayst() {
- git_fetch https://github.com/91861/wayst 51a1c97b04125f58bedc54df6dbd98a8da0939f8 wayst
+ git_fetch https://github.com/91861/wayst 273a2824f4961f7c7d49692bf502a04c52e1a564 wayst
  sed -i 's|-fshort-enums|& -DSTBI_NO_SIMD -DSTBIR_NO_SIMD|g' Makefile
  make mode=quick
+}
+
+build_wflz() {
+ git_fetch https://github.com/ShaneYCG/wflz e742c4bad7b3427fb3eeb1fc5af361af9d517a66 wflz
+ sed -i 's|(CXX)|(CC)|g' example/Makefile
+ make -C example/
+ example/wflz example/testdata/lorem2.txt
 }
 
 build_wlroots_sway() {
@@ -2162,7 +2763,7 @@ build_zig() {
 bootstrap_musl() {
  local ROOT_DIR=$PWD/musl_build
 
- git_fetch https://git.musl-libc.org/git/musl b306b16af15c89a04d8e0c55cac2dadbeb39c083 musl
+ git_fetch https://git.musl-libc.org/git/musl f21a96538f78fa8e2040831b4209b35f2fb581da musl
  rm -r src/complex/ include/complex.h
  AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
  make install
@@ -2188,7 +2789,7 @@ bootstrap_uclibcng() {
  make ARCH=x86_64 prefix= DESTDIR=$PWD/../linuxhdr/ install
  cd ../
 
- git_fetch https://github.com/wbx-github/uclibc-ng 852e583622646297a9b77129f6c6e5150b972c97 uclibcng
+ github_tar wbx-github uclibc-ng v1.0.58
  sed -i 's|dN|dM|g' extra/scripts/gen_bits_syscall_h.sh
  sed -i 's|:$(DEVEL_PREFIX)|:$(PREFIX)$(DEVEL_PREFIX)|g' Makefile.in
  sed -i 's|:$(RUNTIME_PREFIX)|:$(PREFIX)$(RUNTIME_PREFIX)|g' Makefile.in
@@ -2204,6 +2805,7 @@ bootstrap_uclibcng() {
  perl -i -p0e 's|int rename\(const char \*oldpath, const char \*newpath\)\n\{\n\t_syscall5|static inline _syscall5|g' libc/sysdeps/linux/common/rename.c
  perl -i -p0e 's|\treturn renameat2|int rename\(const char \*oldpath, const char \*newpath\)\n\{\n\treturn renameat2|g' libc/sysdeps/linux/common/rename.c
  sed -i 's|int \*status|void*status|g' libc/sysdeps/linux/common/wait4.c
+ sed -i 's|status = sw|(int*)&|g' libc/sysdeps/linux/common/wait4.c
  perl -i -p0e 's|__asm__ \("mov %rax, %rcx\\n\\t"\s+"neg %rcx"|__asm("neg %%eax;mov %%eax,%0":"=r"(err_no)|g' libc/sysdeps/linux/x86_64/__syscall_error.c
 
  config=(
@@ -2277,10 +2879,35 @@ fix_and_configure() {
  ./configure "$@"
 }
 
+# Follow https://stackoverflow.com/a/62864075
+cmake_init_flags=(
+ -DCMAKE_C_COMPILER=$CC
+ -DCMAKE_C_STANDARD_DEFAULT=17
+ -DCMAKE_C_EXTENSIONS_DEFAULT=ON
+ -DCMAKE_C90_STANDARD_COMPILE_OPTION=-std=c89
+ -DCMAKE_C99_STANDARD_COMPILE_OPTION=-std=c99
+ -DCMAKE_C11_STANDARD_COMPILE_OPTION=-std=c11
+ -DCMAKE_C17_STANDARD_COMPILE_OPTION=-std=c17
+ -DCMAKE_C23_STANDARD_COMPILE_OPTION=-std=c23
+ -DCMAKE_C90_EXTENSION_COMPILE_OPTION=-std=gnu89
+ -DCMAKE_C99_EXTENSION_COMPILE_OPTION=-std=gnu99
+ -DCMAKE_C11_EXTENSION_COMPILE_OPTION=-std=gnu11
+ -DCMAKE_C17_EXTENSION_COMPILE_OPTION=-std=gnu17
+ -DCMAKE_C23_EXTENSION_COMPILE_OPTION=-std=gnu23
+ -DCMAKE_C_COMPILE_FEATURES="c_std_90;c_std_99;c_std_11;c_std_17;c_std_23"
+ -DCMAKE_C_COMPILE_OPTIONS_PIC=-fPIC
+ -DCMAKE_C_COMPILE_OPTIONS_PIE=-fPIE
+ -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu
+)
+
 cmake_init() {
- mkdir cmakebuild && cd cmakebuild
- cmake ../ -DCMAKE_C_COMPILER=$CC -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu \
-  -DCMAKE_C_COMPILE_OPTIONS_PIC=-fPIC -DCMAKE_C_COMPILE_OPTIONS_PIE=-fPIE "$@"
+ mkdir cmakebuild
+ cd cmakebuild
+ cmake ../ ${cmake_init_flags[@]} "$@"
+}
+
+cmake_run() {
+ cmake ${cmake_init_flags[@]} "$@"
 }
 
 muon_init() {
@@ -2293,6 +2920,12 @@ muon_build() {
 
 muon_test() {
  $MUON -C muonbuild test -v -j1 "$@"
+}
+
+wafsamba_fix_and_configure() {
+ sed -i 's|from waflib.Tools import |& gcc, |g' buildtools/wafsamba/generic_cc.py
+ sed -i 's|conf.generic_cc_common_flags|conf.gcc_common_flags|g' buildtools/wafsamba/generic_cc.py
+ ./configure $@
 }
 
 replace_line() {
@@ -2377,12 +3010,12 @@ url_xz() {
 }
 
 shared_binutils() {
- url_xz https://ftpmirror.gnu.org/gnu/binutils/binutils-2.46.1.tar.xz binutils
+ url_lz https://ftpmirror.gnu.org/gnu/binutils/binutils-2.47.tar.lz binutils
  sed -i 's|^# define __attribute__(x)$||g' include/ansidecl.h
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon e851b53d310ed76cbb40f76f7424dbe57c5dc28e muon
+ git_fetch https://github.com/muon-build/muon 291081993a921844e2785e98100fca5ffed56704 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
