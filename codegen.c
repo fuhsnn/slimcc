@@ -2582,6 +2582,13 @@ static void gen_expr2(Node *node, bool is_void) {
     }
 
     Printftn("xchg %s, (%s)", ax, reg);
+
+    if (!is_void) {
+      switch (ty->kind) {
+      case TY_DOUBLE: Printftn("movq %s, %%xmm0", ax); break;
+      case TY_FLOAT:  Printftn("movd %s, %%xmm0", ax); break;
+      }
+    }
     return;
   }
   case ND_THREAD_FENCE: {
