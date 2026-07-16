@@ -499,6 +499,7 @@ struct Obj {
   const char *ptr;
   Obj *param_next;
   bool pass_by_stack;
+  bool is_zero_sized_arg;
   int stack_offset;
   Node *arg_expr;
   Obj *param_promoted;

@@ -41,10 +41,25 @@ typedef struct {
 
 int overaligned(Ov s1, long double d1, long double d2, Ov s2, Ov s3, long double d3, Ov s4, ...);
 
+typedef struct { } Empty1;
+typedef struct { int i[0]; } Empty2;
+typedef struct { int64_t a[16]; } Big;
+
+int64_t empty_struct_arg(int x, Empty1 s1, int y, Empty2 s2, int z, Big b);
+
 int main(void) {
   ASSERT(1, tls());
 
   { Ov s = {.c = 33}; ASSERT(316, overaligned(s, 1, 2, s, s, 3, s, (long double)55, s, (long double)66, (long double)-42, s, s)); };
+
+  {
+    Empty1 e1;
+    Empty2 e2;
+    Big big = {.a = {[0] = 4, [15] = 5}};
+    int i = 0;
+    ASSERT(12345, empty_struct_arg(1,(i++,e1),2,(i+=20,e2),3,big));
+    ASSERT(21, i);
+  }
 
   printf("OK\n");
 }

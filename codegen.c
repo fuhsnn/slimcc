@@ -731,6 +731,9 @@ static void gen_mem_copy(const char *sofs, const char *sptr, const char *dofs,
 }
 
 static void gen_mem_zero(int dofs, const char *dptr, int sz) {
+  if (sz <= 0)
+    return;
+
   if (sz >= 16) {
     Printstn("xorps %%xmm0, %%xmm0");
     for (int i = 0; i < sz;) {
@@ -1574,13 +1577,15 @@ static int calling_convention(Obj *var, int *gp_count, int *fp_count, int *stack
   int gp = *gp_count, fp = *fp_count;
   for (; var; var = var->param_next) {
     Type *ty = var->ty;
-    if (ty->size <= 0)
-      internal_error();
 
     switch (ty->kind) {
-    case TY_BITINT:
     case TY_STRUCT:
     case TY_UNION:
+      if (ty->size == 0) {
+        var->is_zero_sized_arg = true;
+        continue;
+      }
+    case TY_BITINT:
       if (is_by_reg_agg(ty)) {
         int fp_inc = is_fp_class_lo(ty) + (ty->size > 8 && is_fp_class_hi(ty));
         int gp_inc = !is_fp_class_lo(ty) + (ty->size > 8 && !is_fp_class_hi(ty));
@@ -1822,16 +1827,19 @@ static void place_reg_arg(Type *ty, const char *ofs, const char *ptr, int *gp, i
 // Logic should be in sync with prepare_funcall()
 static void gen_funcall_args(Node *node) {
   // Pass-by-stack or non-trivial args that need spilling
-  for (Obj *var = node->call.args; var; var = var->param_next)
+  for (Obj *var = node->call.args; var; var = var->param_next) {
     if (var->ptr)
       gen_var_assign(var, var->arg_expr);
+    else if (var->is_zero_sized_arg)
+      gen_void_expr(var->arg_expr);
+  }
 
   bool rtn_by_stk = is_mem_class(node->ty);
   int gp = rtn_by_stk, fp = 0;
 
   int reg_arg_cnt = 0;
   for (Obj *var = node->call.args; var; var = var->param_next) {
-    if (var->pass_by_stack)
+    if (var->pass_by_stack || var->is_zero_sized_arg)
       continue;
 
     char ofs[STRBUF_SZ];
@@ -2859,8 +2867,18 @@ static void gen_stmt(Node *node) {
       Printftn("jmp .L.rtn.%" PRIi64, rtn_label);
       return;
     }
-    gen_expr(node->m.lhs);
+
     Type *ty = node->m.lhs->ty;
+
+    if (ty->size <= 0) {
+      if (has_defr(node))
+        gen_defr(node);
+      gen_void_expr(node->m.lhs);
+      Printftn("jmp .L.rtn.%" PRIi64, rtn_label);
+      return;
+    }
+
+    gen_expr(node->m.lhs);
 
     if (ty->kind == TY_STRUCT || ty->kind == TY_UNION || ty->kind == TY_BITINT) {
       if (is_mem_class(ty)) {
@@ -5047,7 +5065,8 @@ static int assign_lvar_offsets(Scope *sc, int bottom) {
       var->ptr = rbp;
       continue;
     }
-    bottom += var->ty->size;
+    size_t sz = var->ty->size;
+    bottom += sz ? sz : 1;
     bottom = align_to(bottom, get_align(var));
     var->ofs = -bottom;
     var->ptr = lvar_ptr;
@@ -5362,7 +5381,7 @@ void emit_text(Obj *fn) {
   // Save passed-by-register arguments to the stack
   int gp = rtn_by_stk, fp = 0;
   for (Obj *var = fn->ty->param_list; var; var = var->param_next) {
-    if (var->pass_by_stack)
+    if (var->pass_by_stack || var->is_zero_sized_arg)
       continue;
 
     Type *ty = var->ty;
@@ -5460,6 +5479,9 @@ void prepare_funcall(Node *node, Scope *scope) {
       var->ptr = "%rsp";
       continue;
     }
+    if (var->is_zero_sized_arg)
+      continue;
+
     if (opt_optimize) {
       Node *arg_expr = var->arg_expr;
       reg_arg_cnt++;

@@ -5918,7 +5918,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
       precalc = ty->pre_calc;
 
       for (Obj *var = ty->param_list; var; var = var->param_next)
-        if (var->ty->size <= 0)
+        if (var->ty->size < 0)
           error_tok(tok, "incomplete parameter type");
     }
   }

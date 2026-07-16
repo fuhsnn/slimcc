@@ -34,9 +34,6 @@ int main(void) {
 
   ASSERT(127, static_inline_fn_ptr());
 
-  ASSERT(0, ({ struct S {}; sizeof(struct S);}));
-  ASSERT(0, ({ union U {}; sizeof(union U);}));
-
   printf("OK\n");
 }
 

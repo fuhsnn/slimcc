@@ -96,6 +96,13 @@ int incomplete_ptr(void) {
   {
     typedef struct S {} T;
     static_assert(_Generic(*p, T:0, default:1));
+
+    struct S {} s;
+    static_assert(_Generic(s, T:1));
+    {
+      typedef struct S {} S2;
+      static_assert(_Generic(S2, T:1));
+    }
   }
   struct S { int i; };
   { static_assert(_Generic(struct S { int i;}, typeof(*p): 1)); }
