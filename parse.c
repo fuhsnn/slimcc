@@ -2324,13 +2324,12 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
       }
     }
 
-    if (is_integer(init->ty->base) &&
-        init->ty->base->kind != TY_BOOL &&
-        (expr ||
-         !(tok->kind == TK_LBRACK || tok->kind == TK_DOT || tok->kind == TK_LCURLY))) {
-      if (!expr)
+    if (is_integer(init->ty->base) && init->ty->base->kind != TY_BOOL) {
+      if (!expr &&
+          !(tok->kind == TK_LBRACK || tok->kind == TK_DOT || tok->kind == TK_LCURLY))
         expr = assign(&tok, tok);
-      if (expr->kind == ND_VAR && expr->m.var->is_string_lit) {
+
+      if (expr && expr->kind == ND_VAR && expr->m.var->is_string_lit) {
         string_initializer(expr->tok, init);
         if (has_brace) {
           consume_tk(&tok, tok, TK_COMMA);
@@ -2353,10 +2352,10 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     if (has_brace) {
       set_init(init, INIT_NONE);
     } else {
-      if (!expr) {
+      if (!expr)
         expr = assign(&tok, tok);
-        add_type(expr);
-      }
+
+      add_type(expr);
       if (is_compatible(expr->ty, init->ty)) {
         set_init(init, INIT_EXPR);
         init->expr = expr;
@@ -5361,11 +5360,12 @@ static Node *generic_selection(Token **rest, Token *tok) {
       ret = node;
     }
   }
-  if (!ret)
-    ret = def;
-  if (!ret)
-    error_tok(start, "controlling expression type not compatible with"
-                     " any generic association type");
+  if (!ret) {
+    if (!def)
+      error_tok(start, "controlling expression type not compatible with"
+                       " any generic association type");
+    return def;
+  }
   return ret;
 }
 
