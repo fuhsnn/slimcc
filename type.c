@@ -415,26 +415,8 @@ static bool is_tag_compat(Type *t1, Type *t2) {
   return opt_std >= STD_C23 && t1->tag && t2->tag && equal_tok(t1->tag, t2->tag);
 }
 
-static bool is_arr_qual_compat(Type *t1, Type *t2) {
-  QualMask q1 = 0, q2 = 0;
-  do {
-    q1 |= t1->qual;
-    q2 |= t2->qual;
-
-    t1 = t1->base;
-    t2 = t2->base;
-  } while (is_array(t1) && is_array(t2));
-
-  q1 |= t1->qual;
-  q2 |= t2->qual;
-  return q1 == q2;
-}
-
 static bool is_qual_compat(Type *t1, Type *t2) {
-  if (is_array(t1) && is_array(t2))
-    return is_arr_qual_compat(t1, t2);
-
-  return t1->qual == t2->qual;
+  return get_elem(t1)->qual == get_elem(t2)->qual;
 }
 
 bool is_record_compat(Type *t1, Type *t2, bool is_redecl) {
@@ -711,11 +693,9 @@ static void int_promotion(Node **node) {
   }
 }
 
-static Type *cond_ptr_conv2(Type *ty1, Type *ty2, int msk, Node **cond, Obj **cond_var) {
-  msk |= ty1->qual | ty2->qual;
-
+static Type *cond_ptr_conv2(Type *ty1, Type *ty2, Node **cond, Obj **cond_var) {
   if (is_array(ty1)) {
-    Type *base = cond_ptr_conv2(ty1->base, ty2->base, msk, cond, cond_var);
+    Type *base = cond_ptr_conv2(ty1->base, ty2->base, cond, cond_var);
     int64_t *len;
     if ((len = get_arr_len(ty1)) || (len = get_arr_len(ty2))) {
       if (base->kind == TY_VLA)
@@ -727,7 +707,7 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, int msk, Node **cond, Obj **co
 
     return array_of(base, -1);
   }
-  return add_qual(msk, ty1, NULL);
+  return add_qual(ty2->qual, ty1, NULL);
 }
 
 static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
@@ -747,7 +727,7 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
       return pointer_to(add_qual(ty1->base->qual | ty2->base->qual, ty_void, NULL));
 
     if (is_compatible(ty1->base, ty2->base))
-      return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, 0, cond, &(Obj *){0}));
+      return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, cond, &(Obj *){0}));
 
     return pointer_to(ty_void);
   }

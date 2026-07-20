@@ -299,6 +299,13 @@ int main(int argc, char**argv) {
     static_assert(_Generic(typeof(0?*p2:*p1), struct S:1));
     static_assert(_Generic(typeof(0?*p1:*p1), struct S:1));
   }
+  {
+    const int ac[1] = {};
+    volatile int av[1];
+    static_assert(_Generic(typeof(*(0 ? ac : av)), int const volatile: 1, default: 0));
+    volatile int *pv;
+    static_assert(_Generic(typeof(*(0 ? ac : pv)), int const volatile: 1, default: 0));
+  }
 
   printf("OK\n");
 }
