@@ -3773,7 +3773,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       else if (node->ty->kind == TY_ARRAY || node->ty->kind == TY_FUNC)
         var = eval_var(node, &ofs, true);
 
-      if (var) {
+      if (var && var->kind == OBJ_GLOBAL) {
         ctx->var = var;
         return ofs;
       }

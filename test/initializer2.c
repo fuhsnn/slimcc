@@ -239,6 +239,14 @@ int main(void) {
     ASSERT(2, ({ struct { struct { int i; }; } a[] = { (enum { B })2 }; a[0].i; }));
     ASSERT(3, ({ static struct { int i[]; } f = { 1, (enum { C })3 }; f.i[1]; }));
   }
+  {
+    int v1;
+    //SREJ static void*badp1 = &v1;
+    int v2[v1];
+    //SREJ static void*badp2 = &v2;
+    static _Thread_local int v3;
+    //SREJ static void*badp3 = &v3;
+  }
   ASSERT(1, c23_zinit());
   ASSERT(1, flexible_structs());
   ASSERT(1, gnu_array_range());
