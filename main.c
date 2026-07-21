@@ -50,7 +50,7 @@ static StringArray opt_imacros;
 static StringArray opt_include;
 bool opt_E;
 bool opt_dM;
-static bool opt_P;
+bool opt_P;
 static bool opt_M;
 static bool opt_MM;
 static bool opt_MD;
@@ -975,46 +975,68 @@ static void print_linemarker(FILE *out, Token *tok) {
   const char *name = display_files.data[tok->display_file_no];
   if (!strcmp(name, "-"))
     name = "<stdin>";
-  if (!tok->at_bol)
-    fprintf(out, "\n");
   fprintf(out, "# %d \"%s\"\n", tok->display_line_no, name);
 }
 
 static void print_tokens(Token *tok, FILE *out) {
+  if (opt_P) {
+    tok->at_bol = false;
+    for (; tok->kind != TK_EOF; tok = tok->next) {
+      if (tok->at_bol)
+        fputc('\n', out);
+      if (tok->has_space)
+        fputc(' ', out);
+      fprintf(out, "%.*s", tok->len, tok->loc);
+    }
+    fputc('\n', out);
+    return;
+  }
+
   int line = 0;
   int file_no = -1;
-  tok->at_bol = false;
-
+  bool after_tok = false;
   for (; tok->kind != TK_EOF; tok = tok->next) {
-    if (tok->kind == TK_FMARK)
-      if (tok->display_file_no == tok->next->display_file_no)
+    if (tok->kind == TK_FMARK) {
+      if (tok->display_file_no == tok->next->display_file_no && tok->next->kind != TK_EOF)
         continue;
+      if (after_tok)
+        fputc('\n', out);
+      print_linemarker(out, tok);
+      file_no = tok->display_file_no;
+      after_tok = false;
+      continue;
+    }
 
-    if (tok->at_bol) {
-      fprintf(out, "\n");
-      line++;
-    }
-    if (!opt_P) {
-      if (file_no != tok->display_file_no) {
-        file_no = tok->display_file_no;
-        print_linemarker(out, tok);
-      } else {
-        int diff = tok->display_line_no - line;
-        if (diff > 0 && diff <= 8) {
-          while (line++ < tok->display_line_no)
-            fprintf(out, "\n");
-        } else if (diff) {
-          print_linemarker(out, tok);
-        }
-      }
+    if (file_no != tok->display_file_no) {
+      if (after_tok)
+        fputc('\n', out);
+      print_linemarker(out, tok);
+      file_no = tok->display_file_no;
       line = tok->display_line_no;
+
+    } else if (tok->at_bol) {
+      if (after_tok) {
+        fputc('\n', out);
+        line++;
+      }
+      int diff = tok->display_line_no - line;
+      if (diff) {
+        if (diff > 0 && diff <= 8)
+          fprintf(out, "%.*s", diff, "\n\n\n\n\n\n\n\n");
+        else
+          print_linemarker(out, tok);
+
+        line = tok->display_line_no;
+      }
     }
+
     if (tok->has_space)
-      fprintf(out, " ");
+      fputc(' ', out);
 
     fprintf(out, "%.*s", tok->len, tok->loc);
+    after_tok = true;
   }
-  fprintf(out, "\n");
+  fputc('\n', out);
 }
 
 bool in_sysincl_path(int idx) {

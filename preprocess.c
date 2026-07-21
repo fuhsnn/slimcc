@@ -129,13 +129,20 @@ static Token *to_eof(Token *tok) {
   return tok;
 }
 
-static Token *new_fmark(Token *tok) {
-  Token *t = copy_token(tok);
-  t->kind = TK_FMARK;
-  t->len = 0;
-  t->line_no = 1;
-  t->at_bol = false;
-  return t;
+static Token *add_fmark2(Token *tok, int64_t line) {
+  if (opt_E && !opt_dM && !opt_P) {
+    Token *t = copy_token(tok);
+    t->kind = TK_FMARK;
+    t->len = 0;
+    t->line_no = line;
+    t->next = tok;
+    return t;
+  }
+  return tok;
+}
+
+static Token *add_fmark(Token *tok) {
+  return add_fmark2(tok, 1);
 }
 
 static Token *new_pmark(Token *tok) {
@@ -1133,14 +1140,12 @@ static Token *include_file(Token *tok, const char *path, Token *filename_tok, In
   start->file->is_syshdr = filename_tok->file->is_syshdr || in_sysincl_path(idx);
   add_dep_file(path, start->file->is_syshdr);
 
-  Token *fmark = opt_E ? new_fmark(start) : NULL;
-
   if (!end) {
-    if (fmark) {
-      fmark->next = tok;
-      return fmark;
-    }
-    return tok;
+    Token *t = add_fmark(start);
+    if (t == start)
+      return tok;
+    t->next = tok;
+    return t;
   }
 
   if (Is_hash(start) &&
@@ -1150,12 +1155,7 @@ static Token *include_file(Token *tok, const char *path, Token *filename_tok, In
     start->next->is_incl_guard = end->is_incl_guard = true;
 
   end->next = tok;
-
-  if (fmark) {
-    fmark->next = start;
-    return fmark;
-  }
-  return start;
+  return add_fmark(start);
 }
 
 static Token *embed_file(Token *cont, Token *tok, const char *path, Token *start) {
@@ -1250,6 +1250,7 @@ static void read_line_marker(Token **rest, Token *tok) {
     error_tok(tok, "filename expected");
 
   start->file->display_file_no = add_display_file(tok->str);
+  *rest = add_fmark2(*rest, start->line_no + 1);
 }
 
 static void finalize_tok2(Token *tok, Token *orig) {
@@ -2124,7 +2125,7 @@ static void include_files_cli(StringArray *arr, Token **cur) {
       continue;
 
     add_dep_file(path, false);
-    preprocess2(tokenize_file(path, NULL, NULL), cur);
+    preprocess2(add_fmark(tokenize_file(path, NULL, NULL)), cur);
   }
 }
 
@@ -2142,7 +2143,7 @@ Token *preprocess(const char *file, StringArray *incls, StringArray *imacros) {
 
   include_files_cli(incls, &cur);
 
-  preprocess2(tokenize_file(file, NULL, NULL), &cur);
+  preprocess2(add_fmark(tokenize_file(file, NULL, NULL)), &cur);
 
   cur = cur->next;
   cur->is_root = true;

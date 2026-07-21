@@ -1127,6 +1127,7 @@ extern StringArray iquote_paths;
 extern StringArray display_files;
 extern bool opt_E;
 extern bool opt_dM;
+extern bool opt_P;
 extern int opt_fpic;
 extern int opt_fpie;
 extern bool opt_femulated_tls;
