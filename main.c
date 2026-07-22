@@ -140,16 +140,12 @@ static bool take_arg_s(char **argv, int *i, const char **p, const char *str) {
   return take_arg(argv, i, p, str) || startswith(argv[*i], p, str);
 }
 
-static bool comma_arg(const char *arg, StringArray *arr, const char *str) {
-  if (startswith(arg, &arg, str)) {
-    arg = strtok(strdup(arg), ",");
-    while (arg) {
-      strarray_push(arr, arg);
-      arg = strtok(NULL, ",");
-    }
-    return true;
+static void comma_arg(const char *arg, StringArray *arr) {
+  arg = strtok(strdup(arg), ",");
+  while (arg) {
+    strarray_push(arr, arg);
+    arg = strtok(NULL, ",");
   }
-  return false;
 }
 
 void add_include_path(StringArray *arr, const char *path) {
@@ -514,8 +510,10 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
       continue;
     }
 
-    if (comma_arg(argv[i], &as_args, "-Wa,"))
+    if (startswith(argv[i], &arg, "-Wa,")) {
+      comma_arg(arg, &as_args);
       continue;
+    }
 
     if (startswith(argv[i], &arg, "-Wl,")) {
       strarray_push(input_args, argv[i]);
@@ -1416,12 +1414,25 @@ int main(int argc, char **argv) {
       opt_x = parse_opt_x(input_args.data[++i]);
       continue;
     }
-    if (comma_arg(input, &ld_args, "-Wl,"))
+
+    const char *arg;
+    if (startswith(input, &arg, "-Wl,")) {
+      if (opt_M || opt_E || opt_S || opt_c)
+        continue;
+      comma_arg(arg, &ld_args);
       continue;
+    }
 
     FileType type = opt_x ? opt_x : get_file_type(input);
 
     if (type == FILE_LDARG) {
+      if (opt_M || opt_E || opt_S || opt_c) {
+        if (!file_exists(input)) {
+          fprintf(stderr, "linker input file '%s' not found\n", input);
+          cleanup_exit(1);
+        }
+        continue;
+      }
       strarray_push(&ld_args, input);
       continue;
     }
@@ -1481,7 +1492,7 @@ int main(int argc, char **argv) {
     continue;
   }
 
-  if (ld_args.len && !(opt_M || opt_E || opt_S || opt_c))
+  if (ld_args.len)
     run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
 
   cleanup();
