@@ -2106,7 +2106,10 @@ static Token *preprocess3(Token *tok) {
       if (tok->next->kind == TK_STR)
         join_adjacent_string_literals(tok);
       break;
-    case TK_INVALID: error_tok(tok, "invalid token");
+    case TK_PUNCT:
+    case TK_INVALID: {
+      error_tok(tok, "invalid token");
+    }
     }
 
     stash_attr(tok, &attr_head, &attr_cur);
