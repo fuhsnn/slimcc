@@ -11,7 +11,7 @@ void platform_init_cc1(void) {
 }
 
 void platform_init_driver(void) {
-  dumpmachine_str = "amd64-unknown-openbsd7.7";
+  dumpmachine_str = "amd64-unknown-openbsd7.9";
 
   default_as = "gas";
 

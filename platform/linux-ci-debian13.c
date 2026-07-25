@@ -5,6 +5,8 @@
 void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
+  if (!is_iso_std)
+    define_macro("linux", "1");
   define_macro("__linux", "1");
   define_macro("__linux__", "1");
   define_macro("__gnu_linux__", "1");
