@@ -19,6 +19,10 @@ SASSERT(!np1);
 SASSERT(np2 == 0);
 SASSERT(np3 == NULL);
 
+constexpr int redecl = 123;
+static const int redecl;
+static_assert(redecl == 123);
+
 void local_adr(int recur, const int *local_p, const int *static_p) {
   if (recur >= 3)
     return;

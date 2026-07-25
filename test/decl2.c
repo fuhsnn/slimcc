@@ -34,6 +34,9 @@ int main(void) {
 
   ASSERT(127, static_inline_fn_ptr());
 
+  //SREJ struct { int[2]; } s;
+  //SREJ struct { struct { int z; }[2]; } s;
+
   printf("OK\n");
 }
 
