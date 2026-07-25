@@ -116,6 +116,7 @@ int main(void){
   ASSERT(1, p22 == 0);
   ASSERT(1, p23 == NULL);
   ASSERT(1, p24 == nullptr);
+  //SREJ *p21;
 
   static nullptr_t p31;
   static nullptr_t p32 = 0;
