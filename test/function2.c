@@ -210,6 +210,11 @@ static int (* (*asterisk3(int[3]) )(int[*]) )(int[*]) { return 0; }
 static void asterisk4(int (*p)[*], int (*p2)[sizeof *p][_Countof *p][_Alignof *p]);
 static void asterisk4(int (*p)[9], int (*p2)[sizeof *p][_Countof *p][_Alignof *p]) {}
 
+static void void_rtn2(){}
+static void void_rtn(){
+  return 0 ? void_rtn2() : void_rtn2();
+}
+
 int main(void) {
   G g[] = {10,11,12,13,14,15};
   F f[] = {20,21,22,23,24,25,26,27};

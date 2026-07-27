@@ -3109,8 +3109,11 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       return node;
 
     Node *n = expression(&tok, tok->next);
+    add_type(n);
+
     if (fnctx->fn->ty->return_ty->kind != TY_VOID)
       n = assign_cast(fnctx->fn->ty->return_ty, n);
+
     node->m.lhs = n;
     *rest = skip_tk(tok, TK_SEMI);
     return node;

@@ -2860,8 +2860,7 @@ static void gen_stmt(Node *node) {
       error_tok(node->tok, "function is noreturn");
 
     if (!node->m.lhs) {
-      if (has_defr(node))
-        gen_defr(node);
+      gen_defr(node);
       if (is_x87_class(codegen_fn->ty->return_ty))
         Printstn("fldz");
       Printftn("jmp .L.rtn.%" PRIi64, rtn_label);
@@ -2871,8 +2870,7 @@ static void gen_stmt(Node *node) {
     Type *ty = node->m.lhs->ty;
 
     if (ty->size <= 0) {
-      if (has_defr(node))
-        gen_defr(node);
+      gen_defr(node);
       gen_void_expr(node->m.lhs);
       Printftn("jmp .L.rtn.%" PRIi64, rtn_label);
       return;
