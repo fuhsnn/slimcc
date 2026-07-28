@@ -1824,16 +1824,18 @@ static void place_reg_arg(Type *ty, const char *ofs, const char *ptr, int *gp, i
     load_extend_int(ty, ofs, ptr, argreg64[(*gp)++]);
 }
 
+// Pass-by-stack or non-trivial args that need spilling
+static void gen_funcall_stack_args(Obj *var) {
+  for (; var; var = var->param_next) {
+    if (var->is_zero_sized_arg)
+      gen_void_expr(var->arg_expr);
+    else if (var->ptr)
+      gen_var_assign(var, var->arg_expr);
+  }
+}
+
 // Logic should be in sync with prepare_funcall()
 static void gen_funcall_args(Node *node) {
-  // Pass-by-stack or non-trivial args that need spilling
-  for (Obj *var = node->call.args; var; var = var->param_next) {
-    if (var->ptr)
-      gen_var_assign(var, var->arg_expr);
-    else if (var->is_zero_sized_arg)
-      gen_void_expr(var->arg_expr);
-  }
-
   bool rtn_by_stk = is_mem_class(node->ty);
   int gp = rtn_by_stk, fp = 0;
 
@@ -1898,18 +1900,23 @@ static void gen_funcall(Node *node) {
   int arg_stk_align;
   int arg_stk_size = calling_convention(node->call.args, &gp_count, &fp_count,
                                         &arg_stk_align);
-  if (arg_stk_size)
-    if (arg_stk_align > 16)
-      push_from("%rsp");
-
   bool use_fn_ptr = !is_direct_fncall(node->call.expr);
   if (use_fn_ptr) {
     gen_expr(node->call.expr);
     push();
   }
 
+  gen_funcall_stack_args(node->call.alloca_args);
+
   if (arg_stk_size) {
     if (arg_stk_align > 16) {
+      if (use_fn_ptr) {
+        const char *reg = pop_inreg(tmpreg64[0]);
+        push_from("%rsp");
+        push_from(reg);
+      } else {
+        push_from("%rsp");
+      }
       Printftn("sub $%d, %%rsp", arg_stk_size);
       Printftn("and $-%d, %%rsp", arg_stk_align);
     } else {
@@ -1917,6 +1924,7 @@ static void gen_funcall(Node *node) {
     }
   }
 
+  gen_funcall_stack_args(node->call.args);
   gen_funcall_args(node);
 
   Type *fnty = get_func_ty(node->call.expr);
@@ -5468,6 +5476,24 @@ void emit_text(Obj *fn) {
 void prepare_funcall(Node *node, Scope *scope) {
   bool rtn_by_stk = is_mem_class(node->ty);
   calling_convention(node->call.args, &(int){rtn_by_stk}, &(int){0}, NULL);
+
+  if (scope->has_alloca) {
+    Obj head = {0};
+    Obj *cur = &head;
+    for (Obj *var = node->call.args; var; var = var->param_next) {
+      cur = cur->param_next = new_lvar(var->ty);
+      cur->arg_expr = var->arg_expr;
+
+      if (var->is_zero_sized_arg) {
+        cur->is_zero_sized_arg = true;
+        var->arg_expr = new_node(ND_NULL_EXPR, cur->arg_expr->tok);
+      } else {
+        var->arg_expr = new_var_node(cur, cur->arg_expr->tok);
+      }
+      add_type(var->arg_expr);
+    }
+    node->call.alloca_args = head.param_next;
+  }
 
   int reg_arg_cnt = 0;
   for (Obj *var = node->call.args; var; var = var->param_next) {

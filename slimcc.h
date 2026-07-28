@@ -767,6 +767,7 @@ struct Node {
     Node *expr;
     Obj *rtn_buf;
     Obj *args;
+    Obj *alloca_args;
   } call;
 
   // Atomic compare-and-swap
@@ -802,6 +803,7 @@ struct Scope {
   bool is_stmt;
   bool is_fn_base;
   bool has_label;
+  bool has_alloca;
 
   HashMap vars;
   HashMap tags;
@@ -813,6 +815,8 @@ int64_t eval_sign_extend(Type *ty, int64_t val);
 void eval_fp(Node *node, FPVal *fval);
 Obj *parse(Token *tok);
 Token *skip_paren(Token *tok);
+Node *new_node(NodeKind kind, Token *tok);
+Node *new_var_node(Obj *obj, Token *tok);
 Obj *new_lvar(Type *ty);
 bool is_const_var(Obj *var);
 bool is_const_expr(Node *node, int64_t *val);
