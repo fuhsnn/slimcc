@@ -232,7 +232,6 @@ static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr);
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty);
 static bool is_const_bitint(Node *node, BitBuf **result);
 static bool int_or_trunc_bitint(Node **node, bool chk_narrow);
-static Node *new_node(NodeKind kind, Token *tok);
 static Node *resolve_local_gotos(void);
 static void push_goto(Node *node);
 
@@ -270,8 +269,10 @@ static bool leave_scope(void) {
     free(scope->tags.buckets);
   }
   bool has_label = scope->has_label;
+  bool has_alloca = scope->has_alloca;
   scope = scope->parent;
   scope->has_label |= has_label;
+  scope->has_alloca |= has_alloca;
   return !has_label;
 }
 
@@ -372,7 +373,7 @@ static bool equal_substr(const char *loc, size_t len, const char *op) {
   return strlen(op) == len && !memcmp(loc, op, len);
 }
 
-static Node *new_node(NodeKind kind, Token *tok) {
+Node *new_node(NodeKind kind, Token *tok) {
   Node *node = arena_calloc(&ast_arena, sizeof(Node));
   node->kind = kind;
   node->tok = tok;
@@ -412,7 +413,7 @@ static Node *new_boolean(bool val, Token *tok) {
   return node;
 }
 
-static Node *new_var_node(Obj *var, Token *tok) {
+Node *new_var_node(Obj *var, Token *tok) {
   Node *node = new_node(ND_VAR, tok);
   node->m.var = var;
   return node;
@@ -5332,6 +5333,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     node = new_unary(ND_ALLOCA, node, tok);
     *rest = skip_tk(tok, TK_RPAREN);
 
+    scope->has_alloca = true;
     fnctx->dont_dealloc_vla = true;
     return node;
   }
