@@ -5221,6 +5221,9 @@ static Node *generic_selection(Token **rest, Token *tok) {
 
   while (comma_list(rest, &tok, TK_RPAREN, true)) {
     if (tok->kind == TK_default) {
+      if (def)
+        error_tok(tok, "duplicate default generic assoication");
+
       tok = skip_tk(tok->next, TK_COLON);
       def = assign(&tok, tok);
       continue;
