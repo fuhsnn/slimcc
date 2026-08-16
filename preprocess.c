@@ -456,6 +456,9 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
       break;
     }
     if (tok->next->kind == TK_DOT3) {
+      if (equal(tok, "_Expr")) {
+        error_tok(tok, "_Expr not allowed with __VA_ARGS__");
+      }
       *rest = skip_tk(tok->next->next, TK_RPAREN);
       add_macro_param(&cur, head.next, tok);
       m->has_va_arg = true;
