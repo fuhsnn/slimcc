@@ -461,6 +461,9 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
       m->has_va_arg = true;
       break;
     }
+
+    bool is_expr = consume(&tok, tok, "_Expr");
+    tok->is_expr_param = is_expr;
     add_macro_param(&cur, head.next, tok);
     tok = tok->next;
   }
@@ -509,22 +512,43 @@ static void read_macro_definition2(Token **rest, Token *tok) {
   *rest = skip_line(tok->next->next);
 }
 
-static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
+static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest, bool is_expr) {
   Token head = {0};
   Token *cur = &head;
   int level = 0;
+  int level_curly = 0;
+  int level_brack = 0;
+  int level_qmark = 0;
+
   Token *start = tok;
 
   for (;;) {
-    if (level == 0 && tok->kind == TK_RPAREN)
+    if (level == 0 && level_curly == 0 && level_brack == 0 && level_qmark == 0 && tok->kind == TK_RPAREN)
       break;
-    if (level == 0 && !read_rest && tok->kind == TK_COMMA)
+    if (level == 0 && level_curly == 0 && level_brack == 0 && level_qmark == 0 && !read_rest && tok->kind == TK_COMMA)
       break;
+
+    if (level < 0 || level_curly < 0 || level_brack < 0 || level_qmark < 0)
+      error_tok(start, "unbalanced args");
 
     if (tok->kind == TK_LPAREN)
       level++;
     else if (tok->kind == TK_RPAREN)
       level--;
+    if (is_expr) {
+      if (tok->kind == TK_LCURLY)
+        level_curly++;
+      else if (tok->kind == TK_RCURLY)
+        level_curly--;
+      else if (tok->kind == TK_LBRACK)
+        level_brack++;
+      else if (tok->kind == TK_RBRACK)
+        level_brack--;
+      else if (tok->kind == TK_QMARK)
+        level_qmark++;
+      else if (tok->kind == TK_COLON)
+        level_qmark--;
+    }
 
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
@@ -541,6 +565,7 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
   MacroContext ctx = {.m = m};
   ctx.args = calloc(m->arg_cnt, sizeof(MacroArg));
 
+  Token *param = m->params;
   for (int idx = 0; idx < m->arg_cnt; idx++) {
     bool is_va_arg = m->has_va_arg && (idx == m->arg_cnt - 1);
 
@@ -550,7 +575,8 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
     else if (idx)
       tok = skip_tk(tok, TK_COMMA);
 
-    ap->tok = read_macro_arg_one(&tok, tok, is_va_arg);
+    ap->tok = read_macro_arg_one(&tok, tok, is_va_arg, param->is_expr_param);
+    param = param->next;
   }
 
   skip_tk(tok, TK_RPAREN);
@@ -612,7 +638,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
 
   if (equal(tok, "__VA_OPT__") && tok->next->kind == TK_LPAREN) {
     MacroArg *arg = arena_malloc(&pp_arena, sizeof(MacroArg));
-    arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
+    arg->tok = read_macro_arg_one(&tok, tok->next->next, true, false);
 
     if (has_non_empty_va_arg(ctx, NULL))
       arg->tok = subst(arg->tok, ctx);
