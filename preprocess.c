@@ -515,47 +515,103 @@ static void read_macro_definition2(Token **rest, Token *tok) {
   *rest = skip_line(tok->next->next);
 }
 
+static void expr_param(Token **end, Token *tok, TokenKind close_token)
+{
+  while (tok && tok->kind != TK_EOF) {
+    TokenKind closer = TK_INVALID;
+    
+    switch (tok->kind) {
+      case TK_LPAREN:
+        closer = TK_RPAREN;
+        break;
+      case TK_LBRACK:
+        closer = TK_RBRACK;
+        break;
+      case TK_LCURLY:
+        closer = TK_RCURLY;
+        break;
+      case TK_QMARK:
+        closer = TK_COLON;
+        break;
+        
+      case TK_RPAREN:
+        if (close_token == TK_INVALID) {
+          *end = tok;
+          return;
+        }
+        // fallthrough
+      case TK_RBRACK:
+      case TK_RCURLY:
+        if (close_token != tok->kind) {
+          error_tok(tok, "unbalanced token");
+        }
+        else {
+          *end = tok;
+          return;
+        }
+        break;
+      case TK_COLON:
+        if (close_token == TK_COLON) {
+          *end = tok;
+          return;
+        }
+        break;
+
+      default:;
+    }
+
+    if (closer != TK_INVALID) {
+      tok = tok->next; // skip opener
+      expr_param(&tok, tok, closer);
+      tok = skip_tk(tok, closer);
+    }
+    else if(close_token == TK_INVALID && tok->kind == TK_COMMA) {
+      *end = tok;
+      return;
+    }
+    else {
+      tok = tok->next;
+    }
+  }
+
+  error_tok(tok, "unterminated list");
+}
+
 static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest, bool is_expr) {
   Token head = {0};
   Token *cur = &head;
   int level = 0;
-  int level_curly = 0;
-  int level_brack = 0;
-  int level_qmark = 0;
-
   Token *start = tok;
 
+  if (is_expr) {
+    if (read_rest)
+      internal_error();
+
+    Token *end;
+    expr_param(&end, tok, TK_INVALID);
+    while (tok != end) {
+      cur = cur->next = copy_token(tok);
+      tok = tok->next;
+    }
+    cur->next = new_eof(tok);
+    *rest = tok;
+    return head.next;
+  }
+
   for (;;) {
-    if (level == 0 && level_curly == 0 && level_brack == 0 && level_qmark == 0 && tok->kind == TK_RPAREN)
+    if (level == 0 && tok->kind == TK_RPAREN)
       break;
-    if (level == 0 && level_curly == 0 && level_brack == 0 && level_qmark == 0 && !read_rest && tok->kind == TK_COMMA)
+    if (level == 0 && !read_rest && tok->kind == TK_COMMA)
       break;
-
-    if (level < 0 || level_curly < 0 || level_brack < 0 || level_qmark < 0)
-      error_tok(start, "unbalanced args");
-
+    
     if (tok->kind == TK_LPAREN)
       level++;
     else if (tok->kind == TK_RPAREN)
       level--;
-    if (is_expr) {
-      if (tok->kind == TK_LCURLY)
-        level_curly++;
-      else if (tok->kind == TK_RCURLY)
-        level_curly--;
-      else if (tok->kind == TK_LBRACK)
-        level_brack++;
-      else if (tok->kind == TK_RBRACK)
-        level_brack--;
-      else if (tok->kind == TK_QMARK)
-        level_qmark++;
-      else if (tok->kind == TK_COLON)
-        level_qmark--;
-    }
-
+    
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
-
+    
     cur = cur->next = copy_token(tok);
     tok = tok->next;
   }
