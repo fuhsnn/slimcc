@@ -519,7 +519,7 @@ static void expr_param(Token **end, Token *tok, TokenKind close_token)
 {
   while (tok && tok->kind != TK_EOF) {
     TokenKind closer = TK_INVALID;
-    
+
     switch (tok->kind) {
       case TK_LPAREN:
         closer = TK_RPAREN;
@@ -533,7 +533,7 @@ static void expr_param(Token **end, Token *tok, TokenKind close_token)
       case TK_QMARK:
         closer = TK_COLON;
         break;
-        
+
       case TK_RPAREN:
         if (close_token == TK_INVALID) {
           *end = tok;
@@ -603,15 +603,15 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest, bool 
       break;
     if (level == 0 && !read_rest && tok->kind == TK_COMMA)
       break;
-    
+
     if (tok->kind == TK_LPAREN)
       level++;
     else if (tok->kind == TK_RPAREN)
       level--;
-    
+
     if (tok->kind == TK_EOF)
       error_tok(start, "unterminated list");
-    
+
     cur = cur->next = copy_token(tok);
     tok = tok->next;
   }
