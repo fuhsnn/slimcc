@@ -786,6 +786,7 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
         !strcmp(argv[i], "-fno-builtin") ||
         !strcmp(argv[i], "-fno-fast-math") ||
         !strcmp(argv[i], "-fno-lto") ||
+        !strcmp(argv[i], "-fno-unwind-tables") ||
         !strcmp(argv[i], "-fno-asynchronous-unwind-tables") ||
         !strcmp(argv[i], "-fno-delete-null-pointer-checks") ||
         !strcmp(argv[i], "-fno-exceptions") ||
