@@ -456,11 +456,17 @@ static Macro *new_funclike_macro(char *name, Token **rest, Token *tok) {
       break;
     }
     if (tok->next->kind == TK_DOT3) {
+      if (equal(tok, "_Expr")) {
+        error_tok(tok, "_Expr not allowed with __VA_ARGS__");
+      }
       *rest = skip_tk(tok->next->next, TK_RPAREN);
       add_macro_param(&cur, head.next, tok);
       m->has_va_arg = true;
       break;
     }
+
+    bool is_expr = consume(&tok, tok, "_Expr");
+    tok->is_expr_param = is_expr;
     add_macro_param(&cur, head.next, tok);
     tok = tok->next;
   }
@@ -509,11 +515,90 @@ static void read_macro_definition2(Token **rest, Token *tok) {
   *rest = skip_line(tok->next->next);
 }
 
-static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
+static void expr_param(Token **end, Token *tok, TokenKind close_token)
+{
+  while (tok && tok->kind != TK_EOF) {
+    TokenKind closer = TK_INVALID;
+
+    switch (tok->kind) {
+      case TK_LPAREN:
+        closer = TK_RPAREN;
+        break;
+      case TK_LBRACK:
+        closer = TK_RBRACK;
+        break;
+      case TK_LCURLY:
+        closer = TK_RCURLY;
+        break;
+      case TK_QMARK:
+        closer = TK_COLON;
+        break;
+
+      case TK_RPAREN:
+        if (close_token == TK_INVALID) {
+          *end = tok;
+          return;
+        }
+        // fallthrough
+      case TK_RBRACK:
+      case TK_RCURLY:
+        if (close_token != tok->kind) {
+          error_tok(tok, "unbalanced token");
+        }
+        else {
+          *end = tok;
+          return;
+        }
+        break;
+      case TK_COLON:
+        if (close_token == TK_COLON) {
+          *end = tok;
+          return;
+        }
+        break;
+
+      default:;
+    }
+
+    if (closer != TK_INVALID) {
+      tok = tok->next; // skip opener
+      expr_param(&tok, tok, closer);
+      tok = skip_tk(tok, closer);
+    }
+    else if(close_token == TK_INVALID && tok->kind == TK_COMMA) {
+      *end = tok;
+      return;
+    }
+    else {
+      tok = tok->next;
+    }
+  }
+
+  error_tok(tok, "unterminated list");
+}
+
+static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest, bool is_expr) {
   Token head = {0};
   Token *cur = &head;
   int level = 0;
   Token *start = tok;
+
+  if (is_expr) {
+    if (read_rest)
+      internal_error();
+
+    cur = cur->next = make_token("(", copy_token(tok), NULL);
+    Token *end;
+    expr_param(&end, tok, TK_INVALID);
+    while (tok != end) {
+      cur = cur->next = copy_token(tok);
+      tok = tok->next;
+    }
+    cur = cur->next = make_token(")", copy_token(tok), NULL);
+    cur->next = new_eof(tok);
+    *rest = tok;
+    return head.next;
+  }
 
   for (;;) {
     if (level == 0 && tok->kind == TK_RPAREN)
@@ -541,6 +626,7 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
   MacroContext ctx = {.m = m};
   ctx.args = calloc(m->arg_cnt, sizeof(MacroArg));
 
+  Token *param = m->params;
   for (int idx = 0; idx < m->arg_cnt; idx++) {
     bool is_va_arg = m->has_va_arg && (idx == m->arg_cnt - 1);
 
@@ -550,7 +636,8 @@ static MacroContext read_macro_args(Token *tok, Macro *m) {
     else if (idx)
       tok = skip_tk(tok, TK_COMMA);
 
-    ap->tok = read_macro_arg_one(&tok, tok, is_va_arg);
+    ap->tok = read_macro_arg_one(&tok, tok, is_va_arg, param->is_expr_param);
+    param = param->next;
   }
 
   skip_tk(tok, TK_RPAREN);
@@ -612,7 +699,7 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
 
   if (equal(tok, "__VA_OPT__") && tok->next->kind == TK_LPAREN) {
     MacroArg *arg = arena_malloc(&pp_arena, sizeof(MacroArg));
-    arg->tok = read_macro_arg_one(&tok, tok->next->next, true);
+    arg->tok = read_macro_arg_one(&tok, tok->next->next, true, false);
 
     if (has_non_empty_va_arg(ctx, NULL))
       arg->tok = subst(arg->tok, ctx);
