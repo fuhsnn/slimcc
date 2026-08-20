@@ -587,12 +587,14 @@ static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest, bool 
     if (read_rest)
       internal_error();
 
+    cur = cur->next = make_token("(", tok, NULL);
     Token *end;
     expr_param(&end, tok, TK_INVALID);
     while (tok != end) {
       cur = cur->next = copy_token(tok);
       tok = tok->next;
     }
+    cur = cur->next = make_token(")", tok, NULL);
     cur->next = new_eof(tok);
     *rest = tok;
     return head.next;
