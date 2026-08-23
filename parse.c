@@ -1113,7 +1113,8 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 
     TokenKind tk_kind = tok->kind;
     if (!is_type_kw(tk_kind)) {
-      if (!ty && (ty = find_typedef(tok))) {
+      if (!ty && (ty = find_typedef(tok)) &&
+        (opt_std < STD_C23 || !(attr->strg & SC_AUTO) || tok->next->kind != TK_EQ)) {
         tok = tok->next;
         counter |= OTHER;
         continue;
