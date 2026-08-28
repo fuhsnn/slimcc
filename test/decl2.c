@@ -12,6 +12,9 @@ extern int init_extern = 3;
 static inline typeof(int) static_inline_fn(void);
 int (*static_inline_fn_ptr)(void) = static_inline_fn;
 
+//SREJ int[];
+//SREJ void void_var;
+
 int main(void) {
   {
     ASSERT(7, var1);
@@ -36,6 +39,9 @@ int main(void) {
 
   //SREJ struct { int[2]; } s;
   //SREJ struct { struct { int z; }[2]; } s;
+
+  //SREJ int[];
+  //SREJ void void_var;
 
   printf("OK\n");
 }
