@@ -43,6 +43,11 @@ int main(void) {
   //SREJ int[];
   //SREJ void void_var;
 
+  //SREJ { struct INCMPL s; }
+  //SREJ { struct INCMPL s = {}; }
+  //SREJ { static struct INCMPL s; }
+  //SREJ { static struct INCMPL s = {}; }
+
   printf("OK\n");
 }
 

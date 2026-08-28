@@ -43,6 +43,8 @@ void local_adr(int recur, const int *local_p, const int *static_p) {
   local_adr(recur + 1, &local_v, &static_v);
 }
 
+//SREJ constexpr struct INCMPL s = {};
+
 int main() {
   SASSERT(ld == f * 2);
   SASSERT(sizeof(arr0) == len * sizeof(typeof(arr0[0])));
@@ -124,6 +126,8 @@ int main() {
     //SREJ static constexpr int noinit;
     //SREJ constexpr int fn();
   }
+  //SREJ { constexpr struct INCMPL s = {}; }
+  //SREJ { static constexpr struct INCMPL s = {}; }
 
   printf("OK\n");
   return 0;
