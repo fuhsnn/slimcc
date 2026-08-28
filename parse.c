@@ -1823,6 +1823,11 @@ static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr) {
   return n;
 }
 
+static void chk_incomplete(Type *ty, Token *tok) {
+  if (ty->size < 0)
+    error_tok(tok, "variable has incomplete type");
+}
+
 static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
                           Obj **cond_var) {
   Token *name = NULL;
@@ -1857,6 +1862,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     } else if (tok->kind == TK_EQ) {
       gvar_initializer(&tok, tok->next, var);
       *cond_var = var;
+    } else {
+      chk_incomplete(var->ty, name);
     }
     *rest = tok;
     return expr;
@@ -1901,9 +1908,10 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   } else if (tok->kind == TK_EQ) {
     chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
     *cond_var = var;
+  } else {
+    chk_incomplete(var->ty, name);
   }
-  if (var->ty->size < 0)
-    error_tok(name, "variable has incomplete type");
+
   *rest = tok;
   return expr;
 }
@@ -2302,6 +2310,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init) {
 }
 
 static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
+  Token *start = tok;
   Type *ty = var->ty;
 
   if (ty->kind == TY_AUTO) {
@@ -2322,6 +2331,8 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
     init->kind = INIT_FLEX;
 
   initializer2(rest, tok, init);
+
+  chk_incomplete(init->ty, start);
   var->ty = init->ty;
 
   if (ty->is_flexible && init->kind == INIT_LIST) {
@@ -2712,9 +2723,6 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   }
   Initializer init = {0};
   initializer(rest, tok, &init, var);
-
-  if (var->ty->size < 0)
-    error_tok(tok, "variable has incomplete type");
 
   Relocation head = {0};
   char *buf = calloc(1, var->ty->size);
@@ -5905,7 +5913,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
 
 static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   if (ty->return_ty->size < 0)
-    error_tok(tok, "incomplate return type");
+    error_tok(tok, "incomplete return type");
   if (fn->is_definition)
     error_tok(tok, "redefinition of %s", fn->name);
   fn->is_definition = true;
