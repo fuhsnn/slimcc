@@ -1066,6 +1066,13 @@ static void cleanup_attr(Token *name, Token *tok, VarAttr *attr, Obj *var) {
   }
 }
 
+static void chk_vardecl(Type *ty, Token *name, Token *tok) {
+  if (!name)
+    error_tok(tok, "variable name omitted");
+  if (ty->kind == TY_VOID)
+    error_tok(tok, "variable declared void");
+}
+
 static void chk_inline(VarAttr *attr, Token *tok) {
   if (attr->strg & SC_INLINE)
     error_tok(tok, "only function declarations can be 'inline'");
@@ -1826,10 +1833,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     return NULL;
   }
 
-  if (ty->kind == TY_VOID)
-    error_tok(tok, "variable declared void");
-  if (!name)
-    error_tok(tok, "variable name omitted");
+  chk_vardecl(ty, name, tok);
   chk_inline(attr, tok);
   ty = qual_constexpr(ty, attr, tok);
 
@@ -1900,8 +1904,6 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   }
   if (var->ty->size < 0)
     error_tok(name, "variable has incomplete type");
-  if (var->ty->kind == TY_VOID)
-    error_tok(name, "variable declared void");
   *rest = tok;
   return expr;
 }
@@ -5996,8 +5998,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       continue;
     }
 
-    if (!name)
-      error_tok(tok, "variable name omitted");
+    chk_vardecl(ty, name, tok);
     chk_inline(attr, tok);
     ty = qual_constexpr(ty, attr, tok);
 
