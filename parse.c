@@ -1398,8 +1398,6 @@ static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *c
       return vla_of(ty, NULL, array_len);
     return array_of(ty, array_len);
   }
-  if (is_const_context())
-    error_tok(tok, "variably-modified type in constant context");
   return vla_of(ty, expr, 0);
 }
 
@@ -1821,6 +1819,10 @@ static Node *calc_vla(Type *ty, Token *tok) {
   Node *n = NULL;
   do {
     if (ty->kind == TY_VLA && ty->vla_len_expr && !ty->vla_len_val) {
+      if (is_const_context()) {
+        chain_expr(&n, new_unknown(ty_size_t, ty->vla_len_expr->tok));
+        continue;
+      }
       ty->vla_len_val = new_lvar2(ty_size_t, base_scope());
       chain_expr(&n, new_binary(ND_ASSIGN, new_var_node(ty->vla_len_val, tok),
                                 ty->vla_len_expr, tok));
@@ -4368,6 +4370,9 @@ static Node *vla_cond_result_len2(Type *ty) {
 }
 
 Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **cond_var) {
+  if (is_const_context())
+    return vla_of(base, new_unknown(ty_size_t, (*cond)->tok), 0);
+
   Node *len1 = vla_cond_result_len2(ty1);
   Node *len2 = vla_cond_result_len2(ty2);
 
@@ -5330,8 +5335,8 @@ static Node *compound_literal(Token **rest, Token *tok) {
   ty = qual_constexpr(ty, &attr, tok);
 
   Node *expr = NULL;
-  if (!is_const_context())
-    chain_expr(&expr, calc_vla2(ty, tok, &attr));
+  chain_expr(&expr, calc_vla2(ty, tok, &attr));
+
   tok = skip_tk(tok, TK_RPAREN);
 
   if (is_const_context() || (attr.strg & SC_STATIC)) {
@@ -5731,6 +5736,8 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
 
     if (!name)
       error_tok(tok, "typedef name omitted");
+    if (!scope->parent && is_vm_ty(ty))
+      error_tok(tok, "variably-modified type at file scope");
 
     int align = 0;
     aligned_attr(name, tok, attr, &align);
@@ -6040,11 +6047,11 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     chk_inline(attr, tok);
     ty = qual_constexpr(ty, attr, tok);
 
+    if (is_vm_ty(ty))
+      error_tok(name, "variably-modified type cannot be 'extern' or at file scope");
+
     bool is_definition = !(attr->strg & SC_EXTERN);
     if (!is_definition) {
-      if (is_vm_ty(ty))
-        error_tok(tok, "variably-modified type cannot be 'extern'");
-
       if (tok->kind == TK_EQ) {
         if (scope->parent)
           error_tok(tok, "extern variable cannot be initialized");
