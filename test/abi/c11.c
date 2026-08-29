@@ -47,6 +47,10 @@ typedef struct { int64_t a[16]; } Big;
 
 int64_t empty_struct_arg(int x, Empty1 s1, int y, Empty2 s2, int z, Big b);
 
+static void static_arr_size_oldstyle(n, a)
+  int n, a[static n];
+{}
+
 int main(void) {
   ASSERT(1, tls());
 

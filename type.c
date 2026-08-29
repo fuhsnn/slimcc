@@ -578,20 +578,22 @@ void ptr_convert(Node **node) {
     *node = new_cast(*node, ty);
 }
 
-Type *func_type(Type *return_ty, Token *tok) {
+void unqual_rtn_ty(Type *ty, Token *tok) {
+  Type *return_ty = ty->return_ty;
+
   if (is_decay_ty(return_ty))
     error_tok(tok, "invalid function return type");
 
   if (return_ty->qual) {
     if (return_ty->origin->align != return_ty->align)
-      return_ty = aligned_type(return_ty->align, return_ty->origin);
+      ty->return_ty = aligned_type(return_ty->align, return_ty->origin);
     else
-      return_ty = return_ty->origin;
+      ty->return_ty = return_ty->origin;
   }
+}
 
-  // The C spec disallows sizeof(<function type>), but
-  // GCC allows that and the expression is evaluated to 1.
-  Type *ty = new_type(TY_FUNC, 1, 1);
+Type *func_type(TypeKind kind, Type *return_ty) {
+  Type *ty = new_type(kind, 1, 1);
   ty->return_ty = return_ty;
   return ty;
 }
@@ -606,16 +608,27 @@ Type *get_func_ty(Node *node) {
   error_tok(node->tok, "not a function");
 }
 
-Type *array_of(Type *base, int64_t len) {
-  Type *ty = new_type(TY_ARRAY, base->size * len, base->align);
+Type *array_type(Type *base) {
+  Type *ty = arena_calloc(&cc1_arena, sizeof(Type));
   ty->base = base;
-  ty->array_len = len;
   return ty;
 }
 
-Type *vla_of(Type *base, Node *len, int64_t arr_len) {
-  Type *ty = new_type(TY_VLA, 0, 0);
-  ty->base = base;
+void array_setty(Type *ty, Type *base, int64_t len) {
+  ty->kind = TY_ARRAY;
+  ty->size = base->size * len;
+  ty->align = base->align;
+  ty->array_len = len;
+}
+
+Type *array_of(Type *base, int64_t len) {
+  Type *ty = array_type(base);
+  array_setty(ty, base, len);
+  return ty;
+}
+
+void vla_setty(Type *ty, Node *len, int64_t arr_len) {
+  ty->kind = TY_VLA;
   if (len) {
     add_type(len);
     cast_if_not(ty_size_t, &len);
@@ -623,6 +636,11 @@ Type *vla_of(Type *base, Node *len, int64_t arr_len) {
   } else {
     ty->array_len = arr_len;
   }
+}
+
+Type *vla_of(Type *base, Node *len, int64_t arr_len) {
+  Type *ty = array_type(base);
+  vla_setty(ty, len, arr_len);
   return ty;
 }
 

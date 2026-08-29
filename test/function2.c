@@ -209,11 +209,19 @@ static int (* (*asterisk3(int[*]) )(int[*]) )(int[*]);
 static int (* (*asterisk3(int[3]) )(int[*]) )(int[*]) { return 0; }
 static void asterisk4(int (*p)[*], int (*p2)[sizeof *p][_Countof *p][_Alignof *p]);
 static void asterisk4(int (*p)[9], int (*p2)[sizeof *p][_Countof *p][_Alignof *p]) {}
+//SREJ int asterisk_bad(int[static *]);
 
 static void void_rtn2(){}
 static void void_rtn(){
   return 0 ? void_rtn2() : void_rtn2();
 }
+
+static int fn1(int) { return 1; }
+//SREJ static typeof(fn1) typeof_fndef_bad { return 1; }
+typedef typeof(fn1) tydef_fn;
+//SREJ static tydef_fn tydef_fn_bad { return 1; }
+typedef int tydef_fn2(float);
+//SERJ static tydef_fn2 tydef_fn2_bad { return 1; }
 
 int main(void) {
   G g[] = {10,11,12,13,14,15};

@@ -120,13 +120,6 @@ struct LocalLabel {
   Node *label;
 };
 
-typedef struct {
-  Token *end;
-  bool is_param;
-  bool is_glob;
-  bool let_star;
-} DeclContext;
-
 typedef enum {
   EV_CONST,     // constant expression
   EV_LABEL,     // relocation label
@@ -186,13 +179,15 @@ static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
 static bool comma_list(Token **rest, Token **tok_rest, TokenKind end, bool skip_comma);
 static bool braced_list(Token **rest, Token **tok_rest, bool skip_comma);
+static Token *skip_bracket(Token *tok);
 static Type *typename(Token **rest, Token *tok);
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr);
 static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok);
-static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
-                         DeclContext *ctx);
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok);
+static void declarator3(Type *basety, Type *ty, bool let_star, bool is_fndef);
+static QualMask pointer_qualifiers(Token **rest, Token *tok);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr);
@@ -367,10 +362,6 @@ static bool is_vm_ty(Type *ty) {
   } while (vmty_iter(&ty));
 
   return false;
-}
-
-static bool is_func_def(Token *end_tok) {
-  return end_tok->kind == TK_LCURLY || is_typename(end_tok);
 }
 
 bool equal_tok(Token *a, Token *b) {
@@ -1290,43 +1281,72 @@ static Type *qual_constexpr(Type *ty, VarAttr *attr, Token *tok) {
   return ty;
 }
 
-static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
-  Type *fn_ty = func_type(rtn_ty, tok);
+static Type *param_declarator(Type *basety, Type *ty, Token *tok, bool is_fndef) {
+  QualMask arr_qual = 0;
+  bool has_static = false;
+  if (ty->kind == TY_ARRAY_INCMP) {
+    Token *t = ty->tag;
 
-  if (tok->kind == TK_DOT3 && consume_tk(rest, tok->next, TK_RPAREN)) {
-    fn_ty->is_variadic = true;
-    return fn_ty;
+    has_static = consume_tk(&t, t, TK_static);
+    if (is_type_kw(t->kind)) {
+      arr_qual = pointer_qualifiers(&t, t);
+      if (!has_static)
+        has_static = consume_tk(&t, t, TK_static);
+    }
+    ty->tag = t;
   }
-  if (tok->kind == TK_void && consume_tk(rest, tok->next, TK_RPAREN))
-    return fn_ty;
 
-  if (consume_tk(rest, tok, TK_RPAREN)) {
+  declarator3(basety, ty, !is_fndef, false);
+
+  if (has_static)
+    if ((ty->kind == TY_ARRAY && ty->array_len < 0) ||
+        (ty->kind == TY_VLA && ty->vla_len_expr && ty->vla_len_expr->kind == ND_UNKNOWN))
+      error_tok(tok, "'static' requires an array size");
+
+  ty = add_qual(arr_qual, ptr_decay(ty), tok);
+
+  if (ty->kind == TY_VOID || (ty->size < 0 && is_fndef))
+    error_tok(tok, "invalid parameter type");
+
+  return ty;
+}
+
+static void func_params(Token *tok, Type *fn_ty, bool is_def) {
+  fn_ty->kind = TY_FUNC;
+
+  if (tok->kind == TK_DOT3 && tok->next->kind == TK_RPAREN) {
+    fn_ty->is_variadic = true;
+    return;
+  }
+  if (tok->kind == TK_void && tok->next->kind == TK_RPAREN)
+    return;
+
+  if (tok->kind == TK_RPAREN) {
     if (opt_std < STD_C23)
       fn_ty->is_oldstyle = true;
-    return fn_ty;
+    return;
   }
-  bool is_def = end && is_func_def(*end ? *end : skip_paren(tok));
 
   if (!is_typename(tok)) {
     fn_ty->is_oldstyle = true;
 
     Token *start = tok;
     if (!is_def) {
-      while (comma_list(rest, &tok, TK_RPAREN, tok != start))
+      while (comma_list(&tok, &tok, TK_RPAREN, tok != start))
         ident_tok(&tok, tok);
-      return fn_ty;
+      return;
     }
     enter_fn_scope(fn_ty);
 
     Obj head = {0};
     Obj *cur = &head;
-    while (comma_list(rest, &tok, TK_RPAREN, tok != start)) {
+    while (comma_list(&tok, &tok, TK_RPAREN, tok != start)) {
       Token *name = ident_tok(&tok, tok);
       cur = cur->param_next = new_param(get_ident(&ast_arena, name), NULL);
     }
     fn_ty->param_list = head.param_next;
     leave_scope();
-    return fn_ty;
+    return;
   }
 
   enter_fn_scope(fn_ty);
@@ -1335,25 +1355,25 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   Obj *cur = &head;
   Node *expr = NULL;
 
-  while (comma_list(rest, &tok, TK_RPAREN, cur != &head)) {
+  while (comma_list(&tok, &tok, TK_RPAREN, cur != &head)) {
     if (tok->kind == TK_DOT3) {
       fn_ty->is_variadic = true;
-      *rest = skip_tk(tok->next, TK_RPAREN);
+      skip_tk(tok->next, TK_RPAREN);
       break;
     }
     VarAttr attr = {0};
-    Token *name = NULL;
-    Type *ty = declspec(&tok, tok, &attr, SC_REGISTER);
-    ty = declarator2(&tok, tok, ty, &name,
-                     &(DeclContext){.let_star = !is_def, .is_param = true});
+    Type *basety = declspec(&tok, tok, &attr, SC_REGISTER);
 
     if (is_def)
-      chain_expr(&expr, calc_vla2(ty, tok, &attr));
+      chain_expr(&expr, calc_vla2(basety, tok, &attr));
 
-    Type *param_ty = add_qual(ty->param_qual, ptr_decay(ty), tok);
+    Token *name = NULL;
+    Type *raw_ty = declarator2(&tok, tok, basety, &name);
+    Type *param_ty = param_declarator(basety, raw_ty, tok, is_def);
 
-    if (param_ty->kind == TY_VOID)
-      error_tok(tok, "parameter declared void");
+    if (is_def)
+      chain_expr(&expr, calc_vla(raw_ty, tok));
+
     cur = cur->param_next = new_param(NULL, param_ty);
     if (name)
       push_var_name(name, cur);
@@ -1361,44 +1381,47 @@ static Type *func_params(Token **rest, Token *tok, Type *rtn_ty, Token **end) {
   fn_ty->pre_calc = expr;
   fn_ty->param_list = head.param_next;
   leave_scope();
-  return fn_ty;
 }
 
-static Type *array_dimensions(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
-  Node *expr;
-  if (consume_tk(&tok, tok, TK_RBRACK)) {
-    expr = NULL;
-  } else if (tok->kind == TK_MUL && tok->next->kind == TK_RBRACK) {
-    if (!ctx->let_star)
+static Node *array_dimension(Token *tok, bool let_star) {
+  if (consume_tk(&tok, tok, TK_RBRACK))
+    return NULL;
+
+  if (tok->kind == TK_MUL && tok->next->kind == TK_RBRACK) {
+    if (!let_star)
       error_tok(tok, "`[*]` not allowed here");
-    expr = new_unknown(ty_size_t, tok);
-    tok = tok->next->next;
-  } else {
-    expr = assign(&tok, tok);
-    if (!int_or_trunc_bitint(&expr, true))
-      error_tok(tok, "size of array not integer");
-    tok = skip_tk(tok, TK_RBRACK);
+    return new_unknown(ty_size_t, tok);
   }
+  Node *expr = assign(&tok, tok);
+  if (!int_or_trunc_bitint(&expr, true))
+    error_tok(tok, "size of array not integer");
+  skip_tk(tok, TK_RBRACK);
+  return expr;
+}
 
-  if (tok->kind == TK_LBRACK)
-    ty = array_dimensions(&tok, tok->next, ty, ctx);
-
-  if (ty->size < 0 || ty->kind == TY_VOID || ty->kind == TY_FUNC)
+static void array_dimension2(Type *ty, Token *tok, Node *expr) {
+  Type *basety = ty->base;
+  if (basety->size < 0 || basety->kind == TY_VOID || basety->kind == TY_FUNC)
     error_tok(tok, "invalid array element type");
 
-  *rest = tok;
-  if (!expr)
-    return array_of(ty, -1);
+  if (!expr) {
+    array_setty(ty, basety, -1);
+    return;
+  }
 
   int64_t array_len;
   if (is_const_expr(expr, &array_len)) {
     if (array_len < 0)
       error_tok(expr->tok, "size of array is negative");
-    if (ty->kind == TY_VLA)
-      return vla_of(ty, NULL, array_len);
-    return array_of(ty, array_len);
+    if (basety->kind == TY_VLA) {
+      vla_setty(ty, NULL, array_len);
+      return;
+    }
+    array_setty(ty, basety, array_len);
+    return;
   }
-  return vla_of(ty, expr, 0);
+  vla_setty(ty, expr, 0);
+  return;
 }
 
 static QualMask pointer_qualifiers(Token **rest, Token *tok) {
@@ -1416,42 +1439,24 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok) {
   return qual;
 }
 
-static Type *type_suffix(Token **rest, Token *tok, Type *ty, DeclContext *ctx) {
-  if (tok->kind == TK_LPAREN)
-    return func_params(rest, tok->next, ty, NULL);
+static Token *skip_bracket(Token *tok) {
+  int level = 0;
+  Token *start = tok;
+  for (;;) {
+    if (level == 0 && tok->kind == TK_RBRACK)
+      break;
 
-  if (consume_tk(&tok, tok, TK_LBRACK)) {
-    QualMask qual = 0;
-    bool has_static = false;
+    if (tok->kind == TK_EOF)
+      error_tok(start, "unterminated list");
 
-    if (ctx->is_param) {
-      has_static = consume_tk(&tok, tok, TK_static);
-      if (is_type_kw(tok->kind)) {
-        qual = pointer_qualifiers(&tok, tok);
-        if (!has_static)
-          has_static = consume_tk(&tok, tok, TK_static);
-      }
-    }
-    Type *ty2 = array_dimensions(rest, tok, ty, ctx);
+    if (tok->kind == TK_LBRACK)
+      level++;
+    else if (tok->kind == TK_RBRACK)
+      level--;
 
-    if (ctx->is_param) {
-      if (has_static && ty2->array_len < 0)
-        error_tok(tok, "'static' requires an array size");
-      ty2->param_qual = qual;
-    }
-    return ty2;
+    tok = tok->next;
   }
-  *rest = tok;
-  return ty;
-}
-
-static Type *pointers(Token **rest, Token *tok, Type *ty) {
-  while (consume_tk(&tok, tok, TK_MUL)) {
-    QualMask q = pointer_qualifiers(&tok, tok);
-    ty = add_qual(q, pointer_to(ty), tok);
-  }
-  *rest = tok;
-  return ty;
+  return tok->next;
 }
 
 Token *skip_paren(Token *tok) {
@@ -1474,34 +1479,96 @@ Token *skip_paren(Token *tok) {
   return tok->next;
 }
 
-static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok,
-                         DeclContext *ctx) {
-  ty = pointers(&tok, tok, ty);
+static Type *array_suffix(Token **rest, Token *tok, Type *ty) {
+  Token *end = skip_bracket(tok);
+
+  if (end->kind == TK_LBRACK)
+    ty = array_suffix(&end, end->next, ty);
+  *rest = end;
+
+  Type *arr_ty = array_type(ty);
+  arr_ty->kind = TY_ARRAY_INCMP;
+  arr_ty->tag = tok;
+  return arr_ty;
+}
+
+static Type *func_suffix(Token **rest, Token *tok, Type *ty) {
+  *rest = skip_paren(tok);
+
+  Type *fn_ty = func_type(TY_FUNC_INCMP, ty);
+  fn_ty->tag = tok;
+  return fn_ty;
+}
+
+static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
+  if (consume_tk(&tok, tok, TK_LBRACK))
+    return array_suffix(rest, tok, ty);
+
+  if (tok->kind == TK_LPAREN)
+    return func_suffix(rest, tok->next, ty);
+
+  *rest = tok;
+  return ty;
+}
+
+static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name_tok) {
+  while (consume_tk(&tok, tok, TK_MUL)) {
+    QualMask q = pointer_qualifiers(&tok, tok);
+    ty = add_qual(q, pointer_to(ty), tok);
+  }
 
   if (consume_tk(&tok, tok, TK_LPAREN)) {
     if (is_typename(tok) || tok->kind == TK_DOT3 || tok->kind == TK_RPAREN)
-      return func_params(rest, tok, ty, NULL);
+      return func_suffix(rest, tok, ty);
 
-    ty = type_suffix(rest, skip_paren(tok), ty, ctx);
-    if (ctx->is_glob) {
-      ctx->is_glob = false;
-      ctx->end = *rest;
-    }
-    return declarator2(&(Token *){0}, tok, ty, name_tok, ctx);
+    ty = type_suffix(rest, skip_paren(tok), ty);
+    return declarator2(&(Token *){0}, tok, ty, name_tok);
   }
 
   if (name_tok && tok->kind == TK_IDENT) {
     *name_tok = tok;
     tok = tok->next;
   }
-  if (consume_tk(&tok, tok, TK_LPAREN))
-    return func_params(rest, tok, ty, &ctx->end);
-
-  return type_suffix(rest, tok, ty, ctx);
+  return type_suffix(rest, tok, ty);
 }
 
-static Type *declarator(Token **rest, Token *tok, Type *ty, Token **name_tok) {
-  return declarator2(rest, tok, ty, name_tok, &(DeclContext){0});
+static void declarator3(Type *basety, Type *ty, bool let_star, bool is_fndef) {
+  for (;;) {
+    if (ty == basety)
+      return;
+
+    if (ty->kind == TY_PTR) {
+      ty = ty->base;
+      continue;
+    }
+    if (ty->kind == TY_FUNC_INCMP) {
+      Token *tok = ty->tag;
+      ty->tag = NULL;
+      func_params(tok, ty, is_fndef);
+
+      declarator3(basety, ty->return_ty, let_star, false);
+
+      unqual_rtn_ty(ty, tok);
+      return;
+    }
+    if (ty->kind == TY_ARRAY_INCMP) {
+      Token *tok = ty->tag;
+      ty->tag = NULL;
+      Node *expr = array_dimension(tok, let_star);
+
+      declarator3(basety, ty->base, let_star, false);
+
+      array_dimension2(ty, tok, expr);
+      return;
+    }
+    internal_error();
+  }
+}
+
+static Type *declarator(Token **rest, Token *tok, Type *basety, Token **name_tok) {
+  Type *ty = declarator2(rest, tok, basety, name_tok);
+  declarator3(basety, ty, false, false);
+  return ty;
 }
 
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr) {
@@ -5272,8 +5339,9 @@ static Node *generic_selection(Token **rest, Token *tok) {
       continue;
     }
 
-    Type *t2 = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
-    t2 = declarator2(&tok, tok, t2, NULL, &(DeclContext){.let_star = true});
+    Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
+    Type *t2 = declarator2(&tok, tok, basety, NULL);
+    declarator3(basety, t2, true, false);
 
     Node *node = assign(&tok, skip_tk(tok, TK_COLON));
     if (is_compatible2(t1, t2)) {
@@ -5652,7 +5720,7 @@ static Node *primary(Token **rest, Token *tok) {
         return node;
 
       if (opt_std < STD_C99) {
-        Type *ty = func_type(ty_int, tok);
+        Type *ty = func_type(TY_FUNC, ty_int);
         ty->is_oldstyle = true;
         return new_var_node(func_prototype2(ty, &(VarAttr){0}, tok), tok);
       }
@@ -5889,22 +5957,21 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
 
     do {
       Token *name = NULL;
-      Type *ty = declarator(&tok, tok, basety, &name);
+      Type *raw_ty = declarator2(&tok, tok, basety, &name);
+      Type *ty = param_declarator(basety, raw_ty, tok, true);
+
+      chain_expr(&expr, calc_vla(raw_ty, tok));
+
       if (!name)
         error_tok(tok, "expected identifier");
-
-      chain_expr(&expr, calc_vla(ty, tok));
 
       Obj *var = find_param(name, def_ty->param_list);
       if (!var)
         error_tok(name, "no such parameter");
 
       if (!def_ty->is_oldstyle) {
-        ty = ptr_decay(ty);
         if (!is_compatible(var->ty, ty))
           error_tok(name, "mismatched parameter type");
-        if (ty->kind == TY_VOID || ty->size <= 0)
-          error_tok(name, "invalid parameter type");
         var->ty = ty;
         push_var_name(name, var);
         continue;
@@ -5917,9 +5984,6 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         promoted = ty_double;
 
       if (!promoted) {
-        ty = ptr_decay(ty);
-        if (ty->kind == TY_VOID || ty->size <= 0)
-          error_tok(name, "invalid parameter type");
         var->ty = ty;
         push_var_name(name, var);
       } else {
@@ -5966,15 +6030,10 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   } else {
     scope = ty->scopes;
 
-    if (ty->is_oldstyle) {
+    if (ty->is_oldstyle)
       precalc = func_old_style_param(&tok, tok, prot_ty, ty);
-    } else {
+    else
       precalc = ty->pre_calc;
-
-      for (Obj *var = ty->param_list; var; var = var->param_next)
-        if (var->ty->size < 0)
-          error_tok(tok, "incomplete parameter type");
-    }
   }
 
   fn->body = compound_stmt2(rest, skip_tk(tok, TK_LCURLY), ND_BLOCK);
@@ -6028,12 +6087,20 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
   bool first = true;
   for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
     Token *name = NULL;
-    Type *ty = declarator2(&tok, tok, basety, &name,
-                           &(DeclContext){.is_glob = !scope->parent});
+    Type *ty = declarator2(&tok, tok, basety, &name);
+
+    bool is_fndef = first &&
+                    ty->kind == TY_FUNC_INCMP &&
+                    (tok->kind == TK_LCURLY || is_typename(tok));
+
+    declarator3(basety, ty, false, is_fndef);
+
     if (ty->kind == TY_FUNC) {
       Obj *fn = func_prototype(tok, name, ty, attr);
 
-      if (first && !scope->parent && is_func_def(tok)) {
+      if (is_fndef) {
+        if (scope->parent)
+          error_tok(tok, "nested function not supported");
         func_exportness(fn, attr, true);
         func_definition(rest, tok, fn, ty);
         return;
