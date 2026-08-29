@@ -150,3 +150,9 @@ int main(void){
 
   printf("OK\n");
 }
+
+int n;
+//SREJ int file_scope_vm_sizeof = sizeof(int[n]);
+//SREJ void *file_scope_vm_complit = (int(*)[n]){};
+//SREJ typedef int (*file_scope_vm_typedef)[n];
+int file_scope_vm_generic = _Generic(int(*)[n], int(*)[*]:1);
