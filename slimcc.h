@@ -905,7 +905,9 @@ typedef enum {
   TY_PTR,
   TY_NULLPTR,
   TY_FUNC,
+  TY_FUNC_INCMP,
   TY_ARRAY,
+  TY_ARRAY_INCMP,
   TY_VLA, // variable-length array
   TY_STRUCT,
   TY_UNION,
@@ -953,9 +955,6 @@ struct Type {
   Member *members;
   bool is_flexible;
   bool is_constructing;
-
-  // Function parameter
-  QualMask param_qual;
 
   // Function type
   Scope *scopes;
@@ -1041,10 +1040,14 @@ Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *ptr_decay(Type *ty);
 void ptr_convert(Node **node);
-Type *func_type(Type *return_ty, Token *tok);
+void unqual_rtn_ty(Type *ty, Token *tok);
+Type *func_type(TypeKind kind, Type *return_ty);
 Type *get_func_ty(Node *node);
+Type *array_type(Type *base);
 Type *array_of(Type *base, int64_t size);
 Type *vla_of(Type *base, Node *expr, int64_t arr_len);
+void array_setty(Type *ty, Type *base, int64_t size);
+void vla_setty(Type *ty, Node *size, int64_t arr_len);
 Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
 Type *unqual(Type *ty);
