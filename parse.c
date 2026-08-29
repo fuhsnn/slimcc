@@ -5253,11 +5253,12 @@ static Node *generic_selection(Token **rest, Token *tok) {
       ret = node;
     }
   }
-  if (!ret)
-    ret = def;
-  if (!ret)
-    error_tok(start, "controlling expression type not compatible with"
-                     " any generic association type");
+  if (!ret) {
+    if (!def)
+      error_tok(start, "controlling expression type not compatible with"
+                       " any generic association type");
+    return def;
+  }
   return ret;
 }
 
