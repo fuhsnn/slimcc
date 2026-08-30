@@ -1054,6 +1054,7 @@ bool chk_qual_type(QualMask qual, Type *ty);
 Type *aligned_type(int align, Type *ty);
 Type *add_qual(QualMask msk, Type *ty, Token *tok);
 bool mem_iter(Member **mem);
+bool vmty_iter(Type **ty);
 Node *assign_cast(Type *to, Node *expr);
 
 void _add_type(Node *node);
