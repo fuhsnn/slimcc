@@ -92,7 +92,7 @@ int main() {
   EASSERT(16, sizeof(2.0L));
 
   test_assert(1, size\
-of(char), \
+of(char), __LINE__, \
          "sizeof(char)");
 
   EASSERT(4, sizeof(L'\0'));

@@ -130,7 +130,7 @@ int main() {
 #define if 5
 #define five "5"
 #define END )
-  ASSERT_ 5, if, five END;
+  ASSERT_ 5, if, __LINE__, five END;
 
 #undef ASSERT_
 #undef if

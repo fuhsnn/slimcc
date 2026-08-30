@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define ASSERT(x, y) test_assert((int)(x), (int)(y), #y)
+#define ASSERT(x, y) test_assert((int)(x), (int)(y), __LINE__, #y)
 #define SASSERT(x) static_assert(x,"")
 #define EASSERT(x,y) static_assert((int)(x) == (int)(y),"")
 
@@ -25,4 +25,4 @@ extern
 #if defined __cplusplus
 "C"
 #endif
-void test_assert(int expected, int actual, char *code);
+void test_assert(int expected, int actual, int line, const char *code);

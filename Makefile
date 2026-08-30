@@ -28,7 +28,7 @@ $(TESTS): slimcc test/host/common.o
 	$(SHELL) scripts/test_helper.sh ./slimcc $< $@
 
 test: $(TESTS)
-	for i in $(TESTS); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	for i in $(TESTS); do echo $$i; ./$$i || exit 1; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc $(CC)
 	./slimcc -hashmap-test
 
@@ -52,7 +52,7 @@ $(TESTS_S2): slimcc-stage2 test/host/common.o
 	$(SHELL) scripts/test_helper.sh ./slimcc-stage2 $< $@
 
 test-stage2: $(TESTS_S2)
-	for i in $(TESTS_S2); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	for i in $(TESTS_S2); do echo $$i; ./$$i || exit 1; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-stage2 $(CC)
 	./slimcc-stage2 -hashmap-test
 
@@ -76,7 +76,7 @@ $(TESTS_SAN): slimcc-san test/host/common.o
 	$(SHELL) scripts/test_helper.sh ./slimcc-san $< $@
 
 test-san: $(TESTS_SAN)
-	for i in $(TESTS_SAN); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	for i in $(TESTS_SAN); do echo $$i; ./$$i || exit 1; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-san $(CC)
 	./slimcc-san scripts/amalgamation.c -c -o/dev/null
 	./slimcc-san -hashmap-test
@@ -107,7 +107,7 @@ $(TESTS_FILC): slimcc-filc test/host/common.o
 	$(SHELL) scripts/test_helper.sh ./slimcc-filc $< $@
 
 test-filc: $(TESTS_FILC)
-	for i in $(TESTS_FILC); do echo $$i; ./$$i >/dev/null || exit 1; echo; done
+	for i in $(TESTS_FILC); do echo $$i; ./$$i || exit 1; done
 	$(SHELL) scripts/test_driver.sh $(PWD)/slimcc-filc $(CC)
 	./slimcc-filc scripts/amalgamation.c -c -o/dev/null
 	./slimcc-filc -hashmap-test
