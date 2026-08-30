@@ -6046,8 +6046,13 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);
 
-    if (!is_definition || var->init_data)
+    if (!is_definition)
       continue;
+    if (var->init_data) {
+      if (tok->kind == TK_EQ)
+        error_tok(tok, "redefinition of '%.*s'", name->len, name->loc);
+      continue;
+    }
     var->is_definition = true;
 
     if (attr->strg & SC_CONSTEXPR)
