@@ -2,11 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void test_assert(int expected, int actual, char *code) {
+void test_assert(int expected, int actual, int line, const char *code) {
   if (expected == actual) {
-    printf("%s => %d\n", code, actual);
+//    printf("%s => %d\n", code, actual);
   } else {
-    fprintf(stderr, "%s => %d expected but got %d\n", code, expected, actual);
+    fprintf(stderr, "line %d: %s => %d expected but got %d\n", line, code, expected, actual);
     exit(1);
   }
 }
