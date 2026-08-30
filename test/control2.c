@@ -1,6 +1,15 @@
 #include "test.h"
 #include <stdint.h>
 
+//SREJ void*label_val_in_file_scope = &&P;
+
+void label_val_scope(
+//SREJ int(*)[(&&P, 1)]
+) {
+  int label_val_in_fn_scope_proto(int(*)[(&&P, 1)]);
+  P:
+}
+
 char c23_label(void) {
 
   {

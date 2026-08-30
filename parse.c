@@ -4662,6 +4662,9 @@ static Node *unary(Token **rest, Token *tok) {
 
   // [GNU] labels-as-values
   if (tok->kind == TK_AND2) {
+    if (!fnctx)
+      error_tok(tok, "lable-as-value not in a function");
+
     Node *node = new_node(ND_LABEL_VAL, ident_tok(rest, tok->next));
     push_goto(node);
     fnctx->dont_dealloc_vla = true;
