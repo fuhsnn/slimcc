@@ -361,9 +361,11 @@ static bool less_eq(Type *ty, int64_t lhs, int64_t rhs) {
 }
 
 static bool is_vm_ty(Type *ty) {
-  for (; ty->base; ty = ty->base)
+  do {
     if (ty->kind == TY_VLA)
       return true;
+  } while (vmty_iter(&ty));
+
   return false;
 }
 
@@ -1817,14 +1819,13 @@ static Node *ptr_base_size(Type *ty, Token *tok) {
 
 static Node *calc_vla(Type *ty, Token *tok) {
   Node *n = NULL;
-  if (ty->kind == TY_VLA && ty->vla_len_expr && !ty->vla_len_val) {
-    ty->vla_len_val = new_lvar2(ty_size_t, base_scope());
-    n = new_binary(ND_ASSIGN, new_var_node(ty->vla_len_val, tok), ty->vla_len_expr, tok);
-  }
-  if (ty->base)
-    chain_expr(&n, calc_vla(ty->base, tok));
-  else if (ty->kind == TY_FUNC)
-    chain_expr(&n, calc_vla(ty->return_ty, tok));
+  do {
+    if (ty->kind == TY_VLA && ty->vla_len_expr && !ty->vla_len_val) {
+      ty->vla_len_val = new_lvar2(ty_size_t, base_scope());
+      chain_expr(&n, new_binary(ND_ASSIGN, new_var_node(ty->vla_len_val, tok),
+                                ty->vla_len_expr, tok));
+    }
+  } while (vmty_iter(&ty));
   return n;
 }
 

@@ -78,6 +78,13 @@ int vm_in_cast(int i) {
 
   (int (*(*)(void))[++i])0;
   ASSERT(13, i);
+
+  int(*(*fn_ptr)(int))[i++];
+  ASSERT(14, i);
+
+  //SREJ int(*(*fn_proto(int))(int))[i++];
+  //SREJ typeof(fn_ptr) fn_proto2(int);
+
   return 1;
 }
 

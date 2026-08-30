@@ -251,6 +251,18 @@ bool mem_iter(Member **mem) {
   return m;
 }
 
+bool vmty_iter(Type **ty) {
+  Type *t = *ty;
+  if (t->base)
+    t = t->base;
+  else if (t->kind == TY_FUNC)
+    t = t->return_ty;
+  else
+    t = NULL;
+  *ty = t;
+  return t;
+}
+
 bool is_pow_of_two(uint64_t val) {
   return !(val & (val - 1));
 }
