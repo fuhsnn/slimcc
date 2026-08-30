@@ -3105,12 +3105,19 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
 
     Node *node = new_node(ND_RETURN, tok);
     node->dfr_from = fnctx->defr;
-    if (consume_tk(rest, tok->next, TK_SEMI))
-      return node;
+    if (consume_tk(rest, tok->next, TK_SEMI)) {
+      if (fnctx->fn->ty->return_ty->kind == TY_VOID)
+        return node;
+      else
+        error_tok(tok->next, "non-void function must return a value");
+    }
+
+    if (fnctx->fn->ty->return_ty->kind == TY_VOID)
+      error_tok(tok->next, "void function cannot return value");
 
     Node *n = expression(&tok, tok->next);
-    if (fnctx->fn->ty->return_ty->kind != TY_VOID)
-      n = assign_cast(fnctx->fn->ty->return_ty, n);
+    n = assign_cast(fnctx->fn->ty->return_ty, n);
+
     node->m.lhs = n;
     *rest = skip_tk(tok, TK_SEMI);
     return node;
