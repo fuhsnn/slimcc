@@ -133,14 +133,18 @@ typedef enum {
   EV_AGGREGATE, // struct/union/array
 } EvalKind;
 
+typedef enum {
+  EV_ARRAY = 1,
+  EV_VOLATILE = 1 << 1,
+  EV_ATOMIC = 1 << 2,
+} EvalVarSpec;
+
 typedef struct {
   EvalKind kind;
   Node *label;
   Obj *var;
   int deref_cnt;
-  bool let_array;
-  bool let_atomic;
-  bool let_volatile;
+  EvalVarSpec vspec;
 } EvalContext;
 
 typedef struct JumpContext JumpContext;
@@ -3411,21 +3415,17 @@ static bool eval_ctx(Node *node, EvalContext *ctx, int64_t *val) {
 
 static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
-    EvalContext ctx = {.kind = EV_AGGREGATE,
-                       .let_array = true,
-                       .let_atomic = true,
-                       .let_volatile = true};
+    EvalContext ctx = {.kind = EV_AGGREGATE, .vspec = EV_ARRAY | EV_ATOMIC | EV_VOLATILE};
     if (eval_ctx(node, &ctx, ofs) && !ctx.var)
       return true;
   }
   return false;
 }
 
-static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile,
-                         bool let_atomic) {
+static Obj *eval_var_ofs(Node *node, int *ofs, EvalVarSpec vspec) {
   if (node->kind == ND_VAR && node->ty->kind != TY_VLA) {
-    if ((let_volatile || !(node->ty->qual & Q_VOLATILE)) &&
-        (let_atomic || !(node->ty->qual & Q_ATOMIC))) {
+    if (((vspec & EV_VOLATILE) || !(node->ty->qual & Q_VOLATILE)) &&
+        ((vspec & EV_ATOMIC) || !(node->ty->qual & Q_ATOMIC))) {
       *ofs = 0;
       return node->m.var;
     }
@@ -3433,10 +3433,7 @@ static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     int64_t offset;
-    EvalContext ctx = {.kind = EV_AGGREGATE,
-                       .let_array = let_array,
-                       .let_volatile = let_volatile,
-                       .let_atomic = let_atomic};
+    EvalContext ctx = {.kind = EV_AGGREGATE, .vspec = vspec};
     if (eval_ctx(node, &ctx, &offset) && ctx.var) {
       *ofs = offset;
       return ctx.var;
@@ -3446,11 +3443,19 @@ static Obj *eval_var_ofs(Node *node, int *ofs, bool let_array, bool let_volatile
 }
 
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile) {
-  return eval_var_ofs(node, ofs, true, let_volatile, true);
+  EvalVarSpec vkind = EV_ARRAY | EV_ATOMIC;
+  if (let_volatile)
+    vkind |= EV_VOLATILE;
+  return eval_var_ofs(node, ofs, vkind);
 }
 
 Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic) {
-  return eval_var_ofs(node, ofs, let_subarray, true, let_atomic);
+  EvalVarSpec vkind = 0;
+  if (let_subarray)
+    vkind |= EV_ARRAY;
+  if (let_atomic)
+    vkind |= EV_ATOMIC;
+  return eval_var_ofs(node, ofs, vkind);
 }
 
 static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
@@ -3698,8 +3703,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   }
 
   if (ctx->kind == EV_AGGREGATE) {
-    if (((ty->qual & Q_ATOMIC) && !ctx->let_atomic) ||
-        ((ty->qual & Q_VOLATILE) && !ctx->let_volatile))
+    if (((ty->qual & Q_ATOMIC) && !(ctx->vspec & EV_ATOMIC)) ||
+        ((ty->qual & Q_VOLATILE) && !(ctx->vspec & EV_VOLATILE)))
       return eval_error(node);
 
     if (node->kind == ND_DEREF) {
@@ -3716,9 +3721,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       ctx->deref_cnt--;
 
     if (ctx->deref_cnt < 0) {
-      if (!ctx->let_array)
+      if (!(ctx->vspec & EV_ARRAY))
         return eval_error(node);
-      ctx->let_array = false;
+      ctx->vspec -= EV_ARRAY;
       ctx->deref_cnt = 0;
     }
 
