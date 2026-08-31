@@ -4672,6 +4672,8 @@ static Node *unary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
     }
+    if (ty->kind == TY_ARRAY && ty->size < 0 && ty->base->size >= 0)
+      ty = ty->base;
     if (ty->size < 0)
       error_tok(tok, "alignof applied to incomplete type");
     while (is_array(ty))
