@@ -137,6 +137,7 @@ typedef enum {
   EV_ARRAY = 1,
   EV_VOLATILE = 1 << 1,
   EV_ATOMIC = 1 << 2,
+  EV_CONSTEXPR = 1 << 3,
 } EvalVarSpec;
 
 typedef struct {
@@ -209,6 +210,7 @@ static int64_t align_expr(Token **rest, Token *tok);
 static int64_t eval(Node *node);
 static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
+static bool is_static_const_var(Obj *var);
 static Node *assign(Token **rest, Token *tok);
 static long_double_t eval_double(Node *node);
 static BitBuf *eval_bitint(Node *node);
@@ -2574,16 +2576,13 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
       if (is_compatible(init->ty, init->expr->ty))
         var = eval_var(init->expr, &sofs, false);
 
-      if (var &&
-          var->init_data &&
-          !var->is_weak &&
-          (is_const_var(var) || var->is_compound_lit)) {
+      if (var && (var->is_compound_lit || is_static_const_var(var))) {
         Relocation *srel = var->rel;
         while (srel && srel->offset < sofs)
           srel = srel->next;
 
         int end = MIN(init->ty->size, var->ty->size - sofs);
-
+        char *data = var->init_data ? var->init_data : var->constexpr_data;
         for (int pos = 0; pos < end;) {
           if (srel && srel->offset == pos + sofs) {
             Relocation *rel = arena_calloc(fnctx ? &ast_arena : &cc1_arena,
@@ -2596,7 +2595,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
             srel = srel->next;
             pos += 8;
           } else {
-            buf[pos + offset] = var->init_data[pos + sofs];
+            buf[pos + offset] = data[pos + sofs];
             pos++;
           }
         }
@@ -3458,9 +3457,22 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic) {
   return eval_var_ofs(node, ofs, vkind);
 }
 
-static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
-  if (!var->init_data || var->is_weak || !is_const_var(var))
-    return false;
+static bool is_static_const_var(Obj *var) {
+  return var->constexpr_data || (var->init_data && !var->is_weak && is_const_var(var));
+}
+
+static bool is_constexpr_complit(Node *node, Obj **var) {
+  if (node->kind == ND_CHAIN && node->m.rhs->kind == ND_VAR) {
+    Obj *v = node->m.rhs->m.var;
+    if (v->is_compound_lit && v->constexpr_data) {
+      *var = v;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_non_relo_read(Obj *var, int ofs, int read_sz) {
   for (Relocation *rel = var->rel; rel; rel = rel->next) {
     if ((rel->offset + ty_nullptr->size) <= ofs)
       continue;
@@ -3472,34 +3484,24 @@ static bool is_static_const_var(Obj *var, int ofs, int read_sz) {
 }
 
 static char *eval_constexpr_data(Node *node) {
-  int32_t ofs;
+  int32_t ofs = 0;
   Obj *var = NULL;
 
-  if (node->kind == ND_CHAIN && node->m.rhs->kind == ND_VAR) {
-    Obj *v = node->m.rhs->m.var;
-    if (v->is_compound_lit && v->constexpr_data) {
-      ofs = 0;
-      var = v;
-    }
+  if (!is_constexpr_complit(node, &var))
+    var = eval_var_ofs(node, &ofs, EV_CONSTEXPR);
+
+  if (var && (var->is_string_lit ||
+              (is_static_const_var(var) && is_non_relo_read(var, ofs, node->ty->size)))) {
+    int32_t access_sz = !is_bitfield(node) ? node->ty->size
+                                           : bitfield_footprint(node->m.member);
+
+    if (ofs < 0 || (var->ty->size < (ofs + access_sz)))
+      return (char *)eval_error2(node, "constexpr access out of bounds");
+
+    char *data = var->init_data ? var->init_data : var->constexpr_data;
+    return data + ofs;
   }
-  if (!var)
-    var = eval_var(node, &ofs, false);
-
-  if (!var || !(var->constexpr_data ||
-                var->is_string_lit ||
-                is_static_const_var(var, ofs, node->ty->size)))
-    return (char *)eval_error(node);
-
-  int32_t access_sz = !is_bitfield(node) ? node->ty->size
-                                         : bitfield_footprint(node->m.member);
-
-  if (ofs < 0 || (var->ty->size < (ofs + access_sz)))
-    return (char *)eval_error2(node, "constexpr access out of bounds");
-
-  if (var->constexpr_data)
-    return var->constexpr_data + ofs;
-
-  return var->init_data + ofs;
+  return (char *)eval_error(node);
 }
 
 int64_t eval_sign_extend(Type *ty, int64_t val) {
@@ -3736,6 +3738,9 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       ctx->var = node->m.var;
       return 0;
     }
+
+    if ((ctx->vspec & EV_CONSTEXPR) && is_constexpr_complit(node, &ctx->var))
+      return 0;
   }
 
   if (ctx->kind == EV_LABEL) {

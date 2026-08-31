@@ -27,5 +27,8 @@ int main(void){
   constexpr struct S2 sa2 = { 1,2,3,4 };
   SASSERT( sa2.i[1] == 2);
 
+  static_assert((constexpr int[]){3,4,5}[0] == 3);
+  static_assert((constexpr int[]){3,4,5}[1] == (constexpr int[]){3,4,5}[2] - 1);
+
   printf("OK\n");
 }

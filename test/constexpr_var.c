@@ -110,6 +110,11 @@ int main() {
     static_assert((constexpr int){13} + 29 == (const int){42});
   }
   {
+    struct S { int i, j, k; };
+    static_assert((constexpr struct S){3,4,5}.i == 3);
+    static_assert((constexpr struct S){3,4,5}.j == (constexpr struct S){3,4,5}.k -1);
+  }
+  {
     constexpr int *p1 = 0;
     constexpr const int *p2 = p1;
     static_assert(_Generic(typeof(p1), int *const: 1));
