@@ -231,7 +231,7 @@ static Node *primary(Token **rest, Token *tok);
 static Node *compound_literal(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name);
-static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr);
+static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr);
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Node *calc_vla(Type *ty, Token *tok);
 static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr);
@@ -1840,7 +1840,9 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   Type *ty = declarator(&tok, tok, basety, &name);
 
   if (ty->kind == TY_FUNC) {
-    func_prototype(rest, tok, name, ty, attr);
+    Obj *fn = func_prototype(tok, name, ty, attr);
+    assembler_name(&tok, tok, fn);
+    *rest = tok;
     return NULL;
   }
 
@@ -5976,7 +5978,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fnctx = NULL;
 }
 
-static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarAttr *attr) {
+static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr) {
   if (!name)
     error_tok(tok, "function name omitted");
   if (is_vm_ty(ty->return_ty))
@@ -5985,11 +5987,9 @@ static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarA
     error_tok(tok, "invalid storage class for function");
 
   Obj *fn = func_prototype2(ty, attr, name);
-  assembler_name(&tok, tok, fn);
   aligned_attr(name, tok, attr, &fn->alt_align);
   symbol_attr(name, tok, attr, fn);
   func_attr(name, tok, attr, fn);
-  *rest = tok;
   return fn;
 }
 
@@ -6010,7 +6010,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     Type *ty = declarator2(&tok, tok, basety, &name,
                            &(DeclContext){.is_glob = !scope->parent});
     if (ty->kind == TY_FUNC) {
-      Obj *fn = func_prototype(&tok, tok, name, ty, attr);
+      Obj *fn = func_prototype(tok, name, ty, attr);
 
       if (first && !scope->parent && is_func_def(tok)) {
         func_exportness(fn, attr, true);
@@ -6018,6 +6018,7 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
         return;
       }
       func_exportness(fn, attr, false);
+      assembler_name(&tok, tok, fn);
       continue;
     }
 
