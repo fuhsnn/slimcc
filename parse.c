@@ -1084,6 +1084,11 @@ static void chk_inline(VarAttr *attr, Token *tok) {
     error_tok(tok, "only function declarations can be 'inline'");
 }
 
+static void chk_local_tls(VarAttr *attr, Token *tok) {
+  if (attr->strg & SC_THREAD)
+    error_tok(tok, "thread local cannot be local");
+}
+
 static bool chk_storage_class(StorageClass msk, StorageClass allow) {
   if (msk == SC_NONE)
     return false;
@@ -1876,6 +1881,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     *rest = tok;
     return expr;
   }
+
+  chk_local_tls(attr, tok);
 
   Obj *var = new_lvar2(ty, decl_scope());
   push_var_name(name, var);
@@ -5337,6 +5344,8 @@ static Node *compound_literal(Token **rest, Token *tok) {
     return expr;
   }
 
+  chk_local_tls(&attr, tok);
+
   Obj *var = new_lvar2(ty, decl_scope());
   var->is_compound_lit = true;
   var->alt_align = attr.align;
@@ -6045,6 +6054,8 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       if ((!var->is_static && !!(attr->strg & SC_STATIC)) ||
           (var->is_static && !(attr->strg & (SC_STATIC | SC_EXTERN))))
         error_tok(name, "redeclaration has inconsistent 'static'");
+      if (var->is_tls != !!(attr->strg & SC_THREAD))
+        error_tok(name, "redeclaration with%s thread local", var->is_tls ? "out" : "");
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;
     } else {
