@@ -5982,6 +5982,8 @@ static Obj *func_prototype(Token **rest, Token *tok, Token *name, Type *ty, VarA
     error_tok(tok, "function name omitted");
   if (is_vm_ty(ty->return_ty))
     error_tok(tok, "cannot return variably-modified type");
+  if (attr->strg & (SC_AUTO | SC_CONSTEXPR | SC_REGISTER | SC_THREAD))
+    error_tok(tok, "invalid storage class for function");
 
   Obj *fn = func_prototype2(ty, attr, name);
   assembler_name(&tok, tok, fn);
