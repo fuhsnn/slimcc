@@ -1885,17 +1885,19 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
 
   chk_local_tls(attr, tok);
 
-  Obj *var = new_lvar2(ty, decl_scope());
-  push_var_name(name, var);
-
   if (ty->kind == TY_VLA) {
     fnctx->use_vla = true;
+
+    Obj *var = alloc_ast_var(ty);
+    var->vptr = new_lvar2(ty_ptrdiff_t, decl_scope());
+    var->kind = OBJ_INDIR;
+    push_var_name(name, var);
 
     Node *node = vla_size(ty, name);
     node = new_unary(ND_ALLOCA, node, name);
     node->m.var = var;
 
-    new_defr(DF_VLA_DEALLOC)->vla = var;
+    new_defr(DF_VLA_DEALLOC)->vla = var->vptr;
 
     aligned_attr(name, tok, attr, &var->alt_align);
     cleanup_attr(name, tok, attr, var);
@@ -1911,6 +1913,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     return expr;
   }
 
+  Obj *var = new_lvar2(ty, decl_scope());
+  push_var_name(name, var);
   assembler_name(&tok, tok, var);
   aligned_attr(name, tok, attr, &var->alt_align);
   cleanup_attr(name, tok, attr, var);
@@ -3432,7 +3436,7 @@ static bool eval_non_var_ofs(Node *node, int64_t *ofs) {
 }
 
 static Obj *eval_var_ofs(Node *node, int *ofs, EvalVarSpec vspec) {
-  if (node->kind == ND_VAR && node->ty->kind != TY_VLA) {
+  if (node->kind == ND_VAR) {
     if (((vspec & EV_VOLATILE) || !(node->ty->qual & Q_VOLATILE)) &&
         ((vspec & EV_ATOMIC) || !(node->ty->qual & Q_ATOMIC))) {
       *ofs = 0;
