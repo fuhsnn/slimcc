@@ -510,6 +510,7 @@ struct Obj {
   int stack_offset;
   Node *arg_expr;
   Obj *param_promoted;
+  Obj *vptr;
 
   // Global variable or function
   bool is_definition;
