@@ -341,12 +341,12 @@ static bool eval_memop(Node *node, char *ofs, const char **ptr, bool let_array,
   int offset;
   Obj *var = eval_var_opt(node, &offset, let_array, let_atomic);
   if (var) {
-    if (var->is_local) {
+    if (var->kind == OBJ_LOCAL) {
       snprintf(ofs, STRBUF_SZ, "%d", offset + var->ofs);
       *ptr = var->ptr;
       return true;
     }
-    if (!var->is_tls && use_rip(var)) {
+    if (var->kind == OBJ_GLOBAL && use_rip(var)) {
       if (offset)
         snprintf(ofs, STRBUF_SZ, "%d+\"%s\"", offset, get_symbol(var));
       else
@@ -1015,13 +1015,13 @@ static void gen_addr(Node *node) {
     }
 
     // Local variable
-    if (node->m.var->is_local) {
+    if (node->m.var->kind == OBJ_LOCAL) {
       Printftn("lea %d(%s), %%rax", node->m.var->ofs, node->m.var->ptr);
       return;
     }
 
     // Thread-local variable
-    if (node->m.var->is_tls) {
+    if (node->m.var->kind == OBJ_TLS) {
       if (opt_femulated_tls) {
         clobber_all_regs();
         Printftn("movq \"__emutls_v.%s\"@GOTPCREL(%%rip), %%rdi", get_symbol(node->m.var));
@@ -5131,13 +5131,13 @@ static void emit_data(Obj *var) {
   if (var->ty->kind == TY_ARRAY && sz < 0)
     sz = var->ty->base->size;
 
-  if (opt_femulated_tls && var->is_tls) {
+  if (opt_femulated_tls && var->kind == OBJ_TLS) {
     char name_t[STRBUF_SZ], name_v[STRBUF_SZ];
     snprintf(name_t, STRBUF_SZ, "__emutls_t.%s", var_name);
     snprintf(name_v, STRBUF_SZ, "__emutls_v.%s", var_name);
 
     Obj tmp_var = *var;
-    tmp_var.is_tls = false;
+    tmp_var.kind = OBJ_GLOBAL;
     tmp_var.asm_name = tmp_var.alias_name = NULL;
 
     emit_symbol(&tmp_var, name_v);
@@ -5159,7 +5159,7 @@ static void emit_data(Obj *var) {
 
   if (!var->init_data &&
       !var->is_static_lvar &&
-      !var->is_tls &&
+      var->kind != OBJ_TLS &&
       !(var->is_weak || var->section_name) &&
       (var->is_common || (!var->is_nocommon && opt_fcommon))) {
     Printftn(".comm \"%s\", %" PRIi64 ", %d", var_name, sz, get_align(var));
@@ -5171,7 +5171,7 @@ static void emit_data(Obj *var) {
 
   if (var->section_name)
     Printfts(".section \"%s\"", var->section_name);
-  else if (var->is_tls)
+  else if (var->kind == OBJ_TLS)
     Printfts(".section .%s", use_bss ? "tbss" : "tdata");
   else if (use_rodata)
     Printsts(".section .rodata");
@@ -5184,7 +5184,7 @@ static void emit_data(Obj *var) {
   if (opt_data_sections && !var->section_name)
     Printf(".\"%s\"", var_name);
 
-  if (var->is_tls)
+  if (var->kind == OBJ_TLS)
     Printssn(",\"awT\"");
   else if (use_rodata)
     Printssn(",\"a\"");
@@ -5497,7 +5497,7 @@ void prepare_funcall(Node *node, Scope *scope) {
 
   int reg_arg_cnt = 0;
   for (Obj *var = node->call.args; var; var = var->param_next) {
-    var->is_local = true;
+    var->kind = OBJ_LOCAL;
     if (var->pass_by_stack) {
       var->ofs = var->stack_offset;
       var->ptr = "%rsp";

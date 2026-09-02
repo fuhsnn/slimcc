@@ -482,12 +482,19 @@ extern Token *tok_freelist;
 // parse.c
 //
 
+typedef enum {
+  OBJ_GLOBAL = 0,
+  OBJ_TLS,
+  OBJ_LOCAL,
+  OBJ_INDIR,
+} ObjKind;
+
 typedef struct Obj Obj;
 struct Obj {
   Obj *next;
   char *name;
   Type *ty;
-  bool is_local;
+  ObjKind kind;
   bool is_live;
   bool is_used;
   bool is_compound_lit;
@@ -515,7 +522,6 @@ struct Obj {
   char *asm_name;
 
   // Global variable
-  bool is_tls;
   bool is_common;
   bool is_nocommon;
   char *section_name;
