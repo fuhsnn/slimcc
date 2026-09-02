@@ -5146,16 +5146,14 @@ static Node *postfix(Node *node, Token **rest, Token *tok) {
     }
 
     if (tok->kind == TK_DOT) {
-      node = struct_ref(node, tok->next);
-      tok = tok->next->next;
+      node = struct_ref(node, ident_tok(&tok, tok->next));
       continue;
     }
 
     if (tok->kind == TK_ARROW) {
       // x->y is short for (*x).y
       node = new_unary(ND_DEREF, node, tok);
-      node = struct_ref(node, tok->next);
-      tok = tok->next->next;
+      node = struct_ref(node, ident_tok(&tok, tok->next));
       continue;
     }
 
