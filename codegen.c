@@ -255,8 +255,6 @@ static const char *asm_name(Obj *var) {
 }
 
 static int get_align(Obj *var) {
-  if (var->ty->kind == TY_VLA)
-    return 8;
   if (var->alt_align)
     return var->alt_align;
   if (var->ty->kind == TY_ARRAY && var->ty->size >= 16)
@@ -1008,9 +1006,8 @@ static void gen_addr(Node *node) {
 
   switch (node->kind) {
   case ND_VAR:
-    // Variable-length array, which is always local.
-    if (node->m.var->ty->kind == TY_VLA) {
-      Printftn("mov %d(%s), %%rax", node->m.var->ofs, node->m.var->ptr);
+    if (node->m.var->kind == OBJ_INDIR) {
+      Printftn("mov %d(%s), %%rax", node->m.var->vptr->ofs, node->m.var->vptr->ptr);
       return;
     }
 
@@ -1736,7 +1733,7 @@ static void builtin_alloca(Node *node) {
   Printstn("1:");
 
   if (node->m.var)
-    Printftn("mov %%rsp, %d(%s)", node->m.var->ofs, node->m.var->ptr);
+    Printftn("mov %%rsp, %d(%s)", node->m.var->vptr->ofs, node->m.var->vptr->ptr);
   else
     Printstn("mov %%rsp, %%rax");
 }

@@ -602,7 +602,7 @@ Type *array_of(Type *base, int64_t len) {
 }
 
 Type *vla_of(Type *base, Node *len, int64_t arr_len) {
-  Type *ty = new_type(TY_VLA, 8, 8);
+  Type *ty = new_type(TY_VLA, 0, 0);
   ty->base = base;
   if (len) {
     add_type(len);
