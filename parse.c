@@ -668,7 +668,7 @@ static Obj *alloc_ast_var(Type *ty) {
 
 static Obj *new_lvar2(Type *ty, Scope *sc) {
   Obj *var = alloc_ast_var(ty);
-  var->is_local = true;
+  var->kind = OBJ_LOCAL;
   var->next = sc->locals;
   sc->locals = var;
   return var;
@@ -687,7 +687,7 @@ static Obj *alloc_var(char *name, Type *ty) {
 
 static Obj *new_param(char *name, Type *ty) {
   Obj *var = alloc_var(name, ty);
-  var->is_local = true;
+  var->kind = OBJ_LOCAL;
   var->next = scope->locals;
   scope->locals = var;
   return var;
@@ -1864,7 +1864,8 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     Obj *var = new_static_lvar(ty);
     push_var_name(name, var);
 
-    var->is_tls = attr->strg & SC_THREAD;
+    if (attr->strg & SC_THREAD)
+      var->kind = OBJ_TLS;
     assembler_name(&tok, tok, var);
     aligned_attr(name, tok, attr, &var->alt_align);
     symbol_attr(name, tok, attr, var);
@@ -5332,8 +5333,9 @@ static Node *compound_literal(Token **rest, Token *tok) {
   if (is_const_context() || (attr.strg & SC_STATIC)) {
     Obj *var = new_anon_gvar(ty);
     var->is_compound_lit = true;
-    var->is_tls = attr.strg & SC_THREAD;
     var->alt_align = attr.align;
+    if (attr.strg & SC_THREAD)
+      var->kind = OBJ_TLS;
 
     if (attr.strg & SC_CONSTEXPR)
       constexpr_initializer(rest, tok, var, var);
@@ -6054,14 +6056,16 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
       if ((!var->is_static && !!(attr->strg & SC_STATIC)) ||
           (var->is_static && !(attr->strg & (SC_STATIC | SC_EXTERN))))
         error_tok(name, "redeclaration has inconsistent 'static'");
-      if (var->is_tls != !!(attr->strg & SC_THREAD))
-        error_tok(name, "redeclaration with%s thread local", var->is_tls ? "out" : "");
+      if ((var->kind == OBJ_TLS) != !!(attr->strg & SC_THREAD))
+        error_tok(name, "redeclaration with%s thread local",
+                  var->kind == OBJ_TLS ? "out" : "");
       if (var->ty->kind == TY_ARRAY && var->ty->size < 0)
         var->ty = ty;
     } else {
       var = ent->val = new_gvar(get_ident(&cc1_arena, name), ty);
       var->is_static = (attr->strg & SC_STATIC) || (attr->strg & SC_CONSTEXPR);
-      var->is_tls = attr->strg & SC_THREAD;
+      if (attr->strg & SC_THREAD)
+        var->kind = OBJ_TLS;
     }
     push_gvar_name(name, var);
 
