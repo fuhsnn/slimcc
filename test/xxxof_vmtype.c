@@ -275,6 +275,46 @@ int cond_result_type(bool t, bool f, int m, int n) {
     ASSERT(9, _Countof ******(f ? (char(*)[13][n][11][m*n-m][3][m])0 : (char(*)[][m][11][m*n-n][n][9])0));
     ASSERT(9, _Countof ******(0 ? (char(*)[13][n][11][m*n-m][3][m])0 : (char(*)[][m][11][m*n-n][n][9])0));
 
+    ASSERT(5, _Countof   *(1 ? (char(*(*)[m])[n])0 : (char(*(*)[ ])[9])0));
+    ASSERT(9, _Countof ***(1 ? (char(*(*)[m])[n])0 : (char(*(*)[ ])[9])0));
+    ASSERT(9, _Countof   *(1 ? (char(*(*)[9])[n])0 : (char(*(*)[m])[ ])0));
+    ASSERT(7, _Countof ***(1 ? (char(*(*)[9])[n])0 : (char(*(*)[m])[ ])0));
+
+    ASSERT(5, _Countof   *(t ? (char(*(*)[m])[n])0 : (char(*(*)[ ])[9])0));
+    ASSERT(9, _Countof ***(t ? (char(*(*)[m])[n])0 : (char(*(*)[ ])[9])0));
+    ASSERT(9, _Countof   *(t ? (char(*(*)[9])[n])0 : (char(*(*)[m])[ ])0));
+    ASSERT(7, _Countof ***(t ? (char(*(*)[9])[n])0 : (char(*(*)[m])[ ])0));
+
+    ASSERT(5, _Countof   *(0 ? (char(*(*)[ ])[9])0 : (char(*(*)[m])[n])0));
+    ASSERT(9, _Countof ***(0 ? (char(*(*)[ ])[9])0 : (char(*(*)[m])[n])0));
+    ASSERT(9, _Countof   *(0 ? (char(*(*)[m])[ ])0 : (char(*(*)[9])[n])0));
+    ASSERT(7, _Countof ***(0 ? (char(*(*)[m])[ ])0 : (char(*(*)[9])[n])0));
+
+    ASSERT(5, _Countof   *(f ? (char(*(*)[ ])[9])0 : (char(*(*)[m])[n])0));
+    ASSERT(9, _Countof ***(f ? (char(*(*)[ ])[9])0 : (char(*(*)[m])[n])0));
+    ASSERT(9, _Countof   *(f ? (char(*(*)[m])[ ])0 : (char(*(*)[9])[n])0));
+    ASSERT(7, _Countof ***(f ? (char(*(*)[m])[ ])0 : (char(*(*)[9])[n])0));
+
+    static_assert(9 == _Countof(*(1?(int(*(*)())[9])0:(int(*(*)())[m])0)()));
+    static_assert(9 == _Countof(*(0?(int(*(*)())[9])0:(int(*(*)())[m])0)()));
+    static_assert(9 == _Countof(*(t?(int(*(*)())[9])0:(int(*(*)())[m])0)()));
+    static_assert(9 == _Countof(*(f?(int(*(*)())[9])0:(int(*(*)())[m])0)()));
+
+    static_assert(9 == _Countof(*(1?(int(*(*)())[9])0:(int(*(*)())[ ])0)()));
+    static_assert(9 == _Countof(*(0?(int(*(*)())[9])0:(int(*(*)())[ ])0)()));
+    static_assert(9 == _Countof(*(t?(int(*(*)())[9])0:(int(*(*)())[ ])0)()));
+    static_assert(9 == _Countof(*(f?(int(*(*)())[9])0:(int(*(*)())[ ])0)()));
+
+    static_assert(9 == _Countof(*(1?(int(*(*)())[ ])0:(int(*(*)())[9])0)()));
+    static_assert(9 == _Countof(*(0?(int(*(*)())[ ])0:(int(*(*)())[9])0)()));
+    static_assert(9 == _Countof(*(t?(int(*(*)())[ ])0:(int(*(*)())[9])0)()));
+    static_assert(9 == _Countof(*(f?(int(*(*)())[ ])0:(int(*(*)())[9])0)()));
+
+    static_assert(9 == _Countof(*(1?(int(*(*)())[n])0:(int(*(*)())[9])0)()));
+    static_assert(9 == _Countof(*(0?(int(*(*)())[n])0:(int(*(*)())[9])0)()));
+    static_assert(9 == _Countof(*(t?(int(*(*)())[n])0:(int(*(*)())[9])0)()));
+    static_assert(9 == _Countof(*(f?(int(*(*)())[n])0:(int(*(*)())[9])0)()));
+
     return 1;
 }
 

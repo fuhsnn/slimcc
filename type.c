@@ -707,6 +707,16 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, Node **cond, Obj **cond_var) {
 
     return array_of(base, -1);
   }
+  if (ty1->kind == TY_PTR) {
+    Type *newty = copy_type(ty1);
+    newty->base = cond_ptr_conv2(ty1->base, ty2->base, cond, cond_var);
+    return newty;
+  }
+  if (ty1->kind == TY_FUNC) {
+    Type *newty = copy_type(ty1);
+    newty->return_ty = cond_ptr_conv2(ty1->return_ty, ty2->return_ty, cond, cond_var);
+    return newty;
+  }
   return add_qual(ty2->qual, ty1, NULL);
 }
 
