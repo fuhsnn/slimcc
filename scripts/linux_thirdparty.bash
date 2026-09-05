@@ -325,7 +325,7 @@ test_cgltf() {
 }
 
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme 8f94a5ea7b724b57a93fcaa81c6eaed2e4f6bbee chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme a5f7bac94353c55c05fec5dad39f10ca3ed1cae2 chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
 }
@@ -777,7 +777,7 @@ test_ijgjpeg() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-30
+ github_tar ImageMagick ImageMagick 7.1.2-31
  fix_and_configure
  make check V=1
 }
@@ -842,7 +842,7 @@ test_jsmn() {
 }
 
 test_jsonparser() {
- git_fetch https://github.com/json-parser/json-parser e7ce6f75b81974bda98b74f5c0bdb0f8a00da7d7 jsonparser
+ git_fetch https://github.com/json-parser/json-parser a265aecd99f04ec41addbd96026ccf8876389133 jsonparser
  cd tests
  $CC test.c ../json.c -I ../ -lm -o test
  ./test
@@ -856,7 +856,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 3c35147117e0669acd78aeda5348764d5257c1a0 ksh93
+ git_fetch https://github.com/ksh93/ksh 8da8797452de04998c68e0fafa2d6ef48246626f ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1056,7 +1056,7 @@ test_libpcre2() {
 }
 
 test_libpkgconf() {
- github_tar pkgconf pkgconf pkgconf-3.0.6
+ github_tar pkgconf pkgconf pkgconf-3.0.7
  sh autogen.sh
  fix_and_configure
  make check
@@ -1178,7 +1178,7 @@ test_libwebp() {
 }
 
 test_libxml() {
- github_tar GNOME libxml2 v2.15.3
+ github_tar GNOME libxml2 v2.15.4
  libtoolize
  sh autogen.sh
  fix_configure
@@ -1529,7 +1529,7 @@ test_nqp() {
 }
 
 test_ocaml() {
- github_clone ocaml ocaml 5.5.0
+ github_clone ocaml ocaml 5.5.1
  rm testsuite/tests/lib-unix/unix-sockaddr/sockaddr_cxx.ml
  fix_and_configure --enable-ocamltest
  make -j5  && make -C testsuite parallel -j5
@@ -1679,7 +1679,7 @@ test_pixman() {
 }
 
 test_pocketpy() {
- github_tar pocketpy pocketpy v2.1.8
+ github_tar pocketpy pocketpy v2.2.0
  sed -i 's|project(pocketpy|& C|g' CMakeLists.txt
  sed -i 's|python compileall.py|python3 compileall.py|g' scripts/run_tests.py
  cmake_run ./
@@ -1955,7 +1955,7 @@ test_sqlite() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC a799a131c1554b9dc0d5515aab9517358890f489 stc
+ git_fetch https://github.com/stclib/STC 3e3a0e4411b6f95d666d711c540bb72a92640e2b stc
  muon_init
  muon_build
  muon_test
@@ -2115,7 +2115,7 @@ test_uthash() {
 }
 
 test_utillinux() {
- github_tar util-linux util-linux v2.42.2
+ github_tar util-linux util-linux v2.42.3
  replace_line "# define __attribute__(_arg_)" "" include/c.h
  use_stdbit '#include <stdlib.h>' libblkid/src/superblocks/btrfs.c
  sh autogen.sh
@@ -2275,7 +2275,7 @@ EOF
 }
 
 build_7zip() {
- github_tar ip7z 7zip 26.02
+ github_tar ip7z 7zip 26.03
  sed -i 's|__sync_add_and_fetch|__builtin_atomic_arith_add|g' C/Threads.c
  sed -i 's|__sync_sub_and_fetch|__builtin_atomic_arith_sub|g' C/Threads.c
  sed -i 's|#include <stdlib.h>|&\n#include <stdint.h>|g' C/Alloc.c
@@ -2496,7 +2496,7 @@ build_libsoldout() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 1ee778a4e37122d8ca7d5733c590a47dafd6b15c luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT 24c20c94e7db195b640854619577441f9b4bc6be luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
