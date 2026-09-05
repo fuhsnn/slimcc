@@ -1603,7 +1603,7 @@ static Type *enum_ty_tag(Token *tag, Type *tag_ty) {
     return tag_ty;
   }
 
-  Type *ty = new_type(TY_ENUM, -1, 0);
+  Type *ty = new_type(TY_ENUM_INCMP, -1, 0);
   ty->is_enum = true;
 
   if (tag)
@@ -1667,7 +1667,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   tok = skip_tk(tok, TK_LCURLY);
 
   bool is_redecl = false;
-  if (tag_ty && tag_ty->kind != TY_ENUM) {
+  if (tag_ty && tag_ty->kind != TY_ENUM_INCMP) {
     if (opt_std < STD_C23)
       error_tok(tag, "redefinition of '%.*s'", tag->len, tag->loc);
     else if (tag_ty->enums)

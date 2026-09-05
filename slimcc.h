@@ -901,7 +901,7 @@ typedef enum {
   TY_FLOAT,
   TY_DOUBLE,
   TY_LDOUBLE,
-  TY_ENUM,
+  TY_ENUM_INCMP,
   TY_PTR,
   TY_NULLPTR,
   TY_FUNC,
