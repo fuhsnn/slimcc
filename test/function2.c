@@ -1,6 +1,9 @@
 #include "test.h"
 #include <stdarg.h>
 
+SASSERT(1 == sizeof(__FUNCTION__));
+int fn_macro_in_proto(struct S { int i; SASSERT(1 == sizeof(__FUNCTION__)); }*);
+
 typedef struct {
   char g;
 } G;
