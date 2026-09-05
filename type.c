@@ -133,7 +133,7 @@ static Type *copy_array_ty(Type *elem_ty, Type *ty) {
   return ret;
 }
 
-static Type *get_elem(Type *ty) {
+Type *get_elem(Type *ty) {
   while (is_array(ty))
     ty = ty->base;
   return ty;
