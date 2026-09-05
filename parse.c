@@ -4381,7 +4381,10 @@ static Node *new_inc_dec(Node *lhs, Token *tok, int addend) {
 
 static void chk_assignable(Node *node) {
   add_type(node);
-  if (node->is_nonlval || (node->ty->qual & Q_CONST) || is_decay_ty(node->ty))
+  if (node->is_nonlval ||
+      (node->ty->qual & Q_CONST) ||
+      node->ty->has_const_member ||
+      is_decay_ty(node->ty))
     error_tok(node->tok, "operand unassignable");
 }
 
@@ -4899,6 +4902,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member *cur = &head;
   Token *flex_tok = NULL;
   HashMap names = {0};
+  bool has_const = false;
 
   while (tok->kind != TK_RCURLY) {
     if (consume_tk(&tok, tok, TK_SEMI))
@@ -4929,6 +4933,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 
       tok = tok->next;
       cur = cur->next = mem;
+      has_const = (mem->ty->qual & Q_CONST) || mem->ty->has_const_member;
       continue;
     }
 
@@ -4962,6 +4967,9 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       mem_attr(mem->name, tok, &attr, mem);
       cur = cur->next = mem;
 
+      Type *elemty = get_elem(mem->ty);
+      has_const = (elemty->qual & Q_CONST) || elemty->has_const_member;
+
       if (mem->ty->size < 0) {
         if (mem->ty->kind == TY_ARRAY && ty->kind == TY_STRUCT && !flex_tok) {
           flex_tok = tok;
@@ -4980,6 +4988,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     ty->is_flexible = true;
   }
   ty->members = head.next;
+  ty->has_const_member = has_const;
 }
 
 static Type *struct_ty_tag(TypeKind kind, Token *tag, Type *tag_ty) {

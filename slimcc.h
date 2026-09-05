@@ -955,6 +955,7 @@ struct Type {
   Member *members;
   bool is_flexible;
   bool is_constructing;
+  bool has_const_member;
 
   // Function type
   Scope *scopes;
@@ -1050,6 +1051,7 @@ void array_setty(Type *ty, Type *base, int64_t size);
 void vla_setty(Type *ty, Node *size, int64_t arr_len);
 Type *new_type(TypeKind kind, int64_t size, int align);
 Type *new_bitint(int64_t width, Token *tok);
+Type *get_elem(Type *ty);
 Type *unqual(Type *ty);
 Type *tyof_unqual(Type *ty);
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty);
