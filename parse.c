@@ -5791,8 +5791,13 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_FUNCTION) {
-    if (!fnctx)
-      error_tok(tok, "not in function");
+    if (!fnctx) {
+      static Obj *empty_name;
+      if (!empty_name)
+        empty_name = new_anon_gvar(array_of(ty_pchar, 1));
+      *rest = tok->next;
+      return new_var_node(empty_name, tok);
+    }
     if (!fnctx->fnname) {
       char *name = fnctx->fn->name;
       fnctx->fnname = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
