@@ -6230,19 +6230,8 @@ Obj *parse(Token *tok) {
     }
 
     if (tok->kind == TK_static_assert) {
-      Obj *last = globals;
-
       eval_static_assert(&tok, tok->next);
       tok = skip_tk(tok, TK_SEMI);
-
-      for (Obj *obj = last->next; obj;) {
-        Obj *tmp = obj;
-        obj = obj->next;
-        free(tmp);
-      }
-      globals = last;
-      last->next = NULL;
-
       arena_off(&ast_arena);
       continue;
     }
