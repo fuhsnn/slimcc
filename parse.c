@@ -2361,8 +2361,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
         init->expr = expr;
         *rest = tok;
         return;
-      }
-      else if (init->is_root) {
+      } else if (init->is_root) {
         error_tok(tok, "incompatible types");
       }
     }

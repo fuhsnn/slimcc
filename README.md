@@ -2,7 +2,7 @@ slimcc started as fork of [Rui Ueyama's chibicc](https://github.com/rui314/chibi
 
 It is mature enough to serve as a drop-in C compiler for most portably-written programs in glibc environment, and able to [bootstrap a chroot](https://github.com/fuhsnn/slimcc-musl-bootstrap) with `musl`/`binutils`/userland all compiled by itself. Please have a look at the [test suite](https://github.com/fuhsnn/slimcc/blob/main/.github/workflows/linux_thirdparty.yml) to count how many big-name C projects you know are in it, bet it's plenty!
 
-Many C2Y features are already implemented, the bigger ones being `if` declarations, labeled `break`/`continue`, `_Countof`, `_Generic(typename,...)`, `enum:_BitInt()`, and implicit integer `constexpr`.
+Many C2Y features are already implemented, including `if (int i = 0)`, `break Label;`, `_Countof`, `_Generic(int, ...)`, `enum:_BitInt()`, `constexpr` array subscription, and implicit int `constexpr`.
 
 `_Defer` is enabled in all modes, to use non-uglified `defer`, pass `-fdefer-ts` or `#include <stddefer.h>`.
 
