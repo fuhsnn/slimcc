@@ -20,11 +20,11 @@ test_ag() {
 }
 
 test_apexmarkdown() {
- github_clone ApexMarkdown apex v1.1.17
+ github_clone ApexMarkdown apex v1.1.21
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
- cat test.log | grep Results | grep '0;31m6 failed'
+ cat test.log | grep Results | grep '0;31m8 failed'
 }
 
 test_apk() {
@@ -142,7 +142,7 @@ test_blake3() {
 }
 
 test_blosc2() {
- github_tar Blosc c-blosc2 v3.3.3
+ github_tar Blosc c-blosc2 v3.3.4
  replace_line "  #elif (defined(__GNUC__) && __GNUC__ >= 4) || defined(__clang__)" "#elif 1" include/blosc2/blosc2-export.h
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_persistency.c
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_save.c
@@ -191,6 +191,7 @@ test_brotli() {
 
 test_bubblewrap() {
  github_tar containers bubblewrap v0.12.0
+ sed -i "s|'test-run.sh',||g" tests/meson.build # permission
  muon_init -Dbash_completion=disabled
  muon_build
  muon_test
@@ -221,7 +222,8 @@ test_bzip2() {
 }
 
 test_bzip3() {
- git_fetch https://github.com/iczelia/bzip3 3c60c830d14f51a905fea92c6b9ffe51d7fd3742 bzip3
+ github_tar iczelia bzip3 1.5.4
+ echo '1' > .tarball-version
  libtoolize
  sh ./bootstrap.sh
  fix_and_configure --disable-arch-native
@@ -232,7 +234,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 42fd7b3dadaf23c05e32412e4b5a8794f1767867 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 30041e60ef4160d377370f79e84212acd48d4c55 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -245,7 +247,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.8.3
+ github_tar c3lang c3c v0.8.4
  cmake_init
  make
  cd ../test
@@ -325,7 +327,7 @@ test_cgltf() {
 }
 
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme a5f7bac94353c55c05fec5dad39f10ca3ed1cae2 chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme a2e383f685d23992a6a307fc61544b07e5843cbe chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
 }
@@ -425,7 +427,7 @@ test_coremarkpro() {
 }
 
 test_coreutils() {
- url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.11.tar.xz coreutils
+ url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.12.tar.xz coreutils
  ${is_CI+ replace_line "skip_if_root_" "skip_" tests/rm/deep-2.sh }
  ./configure
  make check
@@ -448,7 +450,7 @@ test_cproc() {
 }
 
 test_croaring() {
- github_tar RoaringBitmap CRoaring v5.1.1
+ github_tar RoaringBitmap CRoaring v5.2.0
  sed -i 's|^#include <x86intrin.h>|//&|g' include/roaring/portability.h
  use_stdbit '#include <stdint.h>' include/roaring/portability.h
  cmake_init -DROARING_DISABLE_X64=ON -DCMAKE_C_FLAGS=-DROARING_DISABLE_X64=1 -DCMAKE_CXX_FLAGS=-DROARING_DISABLE_X64=1
@@ -679,7 +681,7 @@ test_go() {
 }
 
 test_got() {
- github_tar gameoftrees got-portable 0.127
+ github_tar gameoftrees got-portable 0.128
  sh autogen.sh
 
  local GOT=$PWD/got_install
@@ -795,7 +797,7 @@ test_inih() {
 }
 
 test_janet() {
- github_tar janet-lang janet v1.42.0
+ github_tar janet-lang janet v1.42.1
  # Use C11 concurrency features
  sed -i "s|/\* #define JANET_THREAD_LOCAL _Thread_local \*/|#define JANET_THREAD_LOCAL _Thread_local|g" src/conf/janetconf.h
  sed -i "s|/\* #define JANET_USE_STDATOMIC \*/|#define JANET_USE_STDATOMIC|g" src/conf/janetconf.h
@@ -842,7 +844,7 @@ test_jsmn() {
 }
 
 test_jsonparser() {
- git_fetch https://github.com/json-parser/json-parser a265aecd99f04ec41addbd96026ccf8876389133 jsonparser
+ git_fetch https://github.com/json-parser/json-parser 69c23112b432f0ae332f20afab902cd9841e4417 jsonparser
  cd tests
  $CC test.c ../json.c -I ../ -lm -o test
  ./test
@@ -856,7 +858,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 8da8797452de04998c68e0fafa2d6ef48246626f ksh93
+ git_fetch https://github.com/ksh93/ksh 53c2358e9505c0bf34da15c6bf11ee0c696d6305 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -872,7 +874,7 @@ test_lame() {
 }
 
 test_lexbor() {
- github_tar lexbor lexbor v3.0.0
+ github_tar lexbor lexbor v3.0.1
  cmake_init -DLEXBOR_BUILD_TESTS=ON
  make && ctest
 }
@@ -955,7 +957,7 @@ test_libfyaml() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc b5161529cafc93cbfaeef23fc81005c5beddbfee libgc
+ git_fetch https://github.com/bdwgc/bdwgc a13eb5756f484c1856b41be0acf9fdd2d09df207 libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -1199,8 +1201,6 @@ test_libxo_chimerautils() {
  cd ../
 
  export PKG_CONFIG_PATH="$LIBXO/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
- sed -i "s|type: 'boolean', value: 'true'|type: 'boolean', value: true|g" meson_options.txt
- sed -i 's|NL_TEXTMAX|2048|g' src.freebsd/coreutils/nl/nl.c # glibc NL_TEXTMAX is 2GB, use musl's size
  muon_init
  muon_build
 
@@ -1326,7 +1326,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.5.1
+ github_tar microsoft mimalloc v3.5.2
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -1722,15 +1722,22 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.14.7
- replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
+ github_tar python cpython v3.15.0rc2
+ # gnu::section
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
+ # gnu::constructor
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
+ # https://github.com/python/cpython/issues/134070
+ replace_line "#if defined(__GNUC__)" "#if 1" Include/internal/mimalloc/mimalloc/internal.h
+ use_stdbit '#include <limits.h>' Include/internal/mimalloc/mimalloc/internal.h
+ # backtrace() need unwind table
+ replace_line "#if defined(HAVE_EXECINFO_H) && defined(HAVE_BACKTRACE)" "#if 0" Modules/_testinternalcapi.c
+
  skip_tests=(
   ${is_CI+ test_asyncio test_socket }
   test_os # https://github.com/python/cpython/issues/126112
  )
- ./configure
+ CFLAGS=-std=c23 ./configure
  make -j3 && ./python -m test -j3 --exclude "${skip_tests[@]}"
 }
 
@@ -1869,7 +1876,7 @@ test_rsync() {
 }
 
 test_ruby() {
- github_tar ruby ruby v4.0.6
+ github_tar ruby ruby v4.0.7
  rm tool/test/test_commit_email.rb
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
@@ -1884,7 +1891,7 @@ test_rvvm() {
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.24.6
+ github_tar samba-team samba samba-4.24.7
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
  use_stdatomic '#include <stdarg.h>' third_party/quic_ko_wrapper/quic_ko_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
@@ -2146,7 +2153,7 @@ test_vlc() {
 }
 
 test_wasm3() {
- github_tar wasm3 wasm3 v0.9.0
+ github_tar wasm3 wasm3 v0.9.1-beta.1
  sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
  use_stdbit2 "#include <limits.h>" source/m3_exec.h
  mkdir build
@@ -2196,12 +2203,12 @@ test_xterm() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash c0b5ea995d66691734b1a79ad89e73a0d2fd5a53 xxhash
+ git_fetch https://github.com/Cyan4973/xxHash ef167a2c34d6d660fc2d14f800cda879b4ca8d38 xxhash
  make CC=$CC DISPATCH=0 check
 }
 
 test_xz() {
- github_tar tukaani-project xz v5.8.3
+ github_tar tukaani-project xz v5.8.4
  cmake_init
  make && make test
 }
@@ -2223,7 +2230,7 @@ test_yash() {
 }
 
 test_yyjson() {
- github_tar ibireme yyjson 0.12.0
+ github_tar ibireme yyjson 0.13.0
  cmake_init -DYYJSON_BUILD_TESTS=ON
  make && ctest
 }
@@ -2496,7 +2503,7 @@ build_libsoldout() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 24c20c94e7db195b640854619577441f9b4bc6be luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT c6ffc141a8762b41703f9287d63d93622a13dd8f luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -2513,7 +2520,7 @@ build_lynx() {
 }
 
 build_mg() {
- github_tar troglobit mg v4.0
+ github_tar troglobit mg v4.1
  sh ./autogen.sh
  fix_and_configure
  make
@@ -2545,7 +2552,7 @@ build_nanovg() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260829
+ github_tar ThomasDickey ncurses-snapshots v6_6_20260912
  ./configure
  make V=1
 }
@@ -2685,13 +2692,13 @@ build_stb() {
 }
 
 build_tin() {
- github_tar ThomasDickey tin-beta-snapshots v2_6_5-20250919
+ github_tar ThomasDickey tin-beta-snapshots v2_6_6-20260422
  ./configure
  make build
 }
 
 build_tinybasic() {
- git_fetch https://github.com/slviajero/tinybasic 99c6b631aebeede8badb73833e4207b4d89c8ed0 tinybasic
+ git_fetch https://github.com/slviajero/tinybasic 86ec458ca3dac9d156ce23bfa28a99f1f39ca656 tinybasic
  cd Basic2/Posix
  $CC basic.c runtime.c -lm
  ./a.out ../../examples/12systems/hello.bas | grep '^Hello World$'
@@ -2752,7 +2759,7 @@ build_zig() {
 bootstrap_musl() {
  local ROOT_DIR=$PWD/musl_build
 
- git_fetch https://git.musl-libc.org/git/musl f21a96538f78fa8e2040831b4209b35f2fb581da musl
+ git_fetch https://git.musl-libc.org/git/musl 5e9972eaef08ccf55dabe254ac829a30329793d3 musl
  rm -r src/complex/ include/complex.h
  AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
  make install
@@ -3004,7 +3011,7 @@ shared_binutils() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 291081993a921844e2785e98100fca5ffed56704 muon
+ git_fetch https://github.com/muon-build/muon 4cd30b2b8d1cb7136c66d686a0acb2f841b82445 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
@@ -3040,6 +3047,7 @@ shared_redis_valkey_rm_flaky() {
   tests/integration/replication-rdbchannel.tcl
   tests/unit/type/stream-cgroups.tcl
   tests/unit/scripting.tcl
+  tests/unit/type/set.tcl
  )
  rm -f ${tests[@]}
 }
