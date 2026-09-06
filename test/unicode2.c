@@ -58,10 +58,7 @@ int main(void) {
   ASSERT(11111, \u00b542\U000000b5);
 
   int CAT(\U000000b5, \u00b5) = 44;
-
-#ifdef NOTCLANG
   ASSERT(44, µµ);
-#endif
 
 #if 0
   \U000 \* \U{ff \u{ff \x{zz \x{} \o{99}

@@ -197,7 +197,7 @@ int main(int argc, char**argv) {
 
   ASSERT(1, ({ int vla[argc]; _Generic(vla, int*:1 ); }) );
 
-#ifdef __slimcc__
+#ifdef NOTCLANG
   ASSERT(1, ({ int vla[argc]; _Generic(&vla, int(*)[*]:1 ); }) );
   ASSERT(1, ({ int vla[argc]; _Generic(typeof(vla), int[*]:1 ); }) );
   ASSERT(1, _Generic(int[argc][argc], int[][*]:1 ) );
