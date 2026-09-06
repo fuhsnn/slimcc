@@ -45,6 +45,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  premake4 \
  # minizip-ng
  libgmock-dev \
+ # libxo
+ byacc \
  && apt-get clean && rm -rf /var/cache/apt/*
 
 FROM install-deps AS setup-toolchain
