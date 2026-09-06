@@ -20,11 +20,11 @@ test_ag() {
 }
 
 test_apexmarkdown() {
- github_clone ApexMarkdown apex v1.1.17
+ github_clone ApexMarkdown apex v1.1.34
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
- cat test.log | grep Results | grep '0;31m6 failed'
+ cat test.log | grep Results | grep '0;31m5 failed'
 }
 
 test_apk() {
@@ -142,7 +142,7 @@ test_blake3() {
 }
 
 test_blosc2() {
- github_tar Blosc c-blosc2 v3.3.3
+ github_tar Blosc c-blosc2 v3.3.5
  replace_line "  #elif (defined(__GNUC__) && __GNUC__ >= 4) || defined(__clang__)" "#elif 1" include/blosc2/blosc2-export.h
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_persistency.c
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_save.c
@@ -163,11 +163,14 @@ test_box2d() {
 }
 
 test_box3d() {
- git_fetch https://github.com/erincatto/box3d 47d7f7cc7e091142c08d11dc7d2e493c5d34f536 box3d
+ git_fetch https://github.com/erincatto/box3d 9f998c862d54c03a633ecea3831937385c78b532 box3d
  use_stdbit '#include <stdint.h>' src/ctz.h
+ perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b3Prefetch)/#elif 0\1/g' src/platform.h
+
  use_stdatomic '#include <stdint.h>' src/platform.h
  replace_line "#elif defined( __GNUC__ ) || defined( __clang__ )" "#elif 1" src/platform.h
  sed -i 's|__atomic_compare_exchange_n( &a->value, &expected, desired, false,|atomic_compare_exchange_strong_explicit(\&a->value,\&expected,desired,|g' src/platform.h
+
  cmake_init -DBOX3D_DISABLE_SIMD=ON
  make
  ./bin/test
@@ -190,7 +193,8 @@ test_brotli() {
 }
 
 test_bubblewrap() {
- github_tar containers bubblewrap v0.12.0
+ github_tar containers bubblewrap v0.13.0
+ sed -i "s|'test-run.sh',||g" tests/meson.build # permission
  muon_init -Dbash_completion=disabled
  muon_build
  muon_test
@@ -221,7 +225,8 @@ test_bzip2() {
 }
 
 test_bzip3() {
- git_fetch https://github.com/iczelia/bzip3 3c60c830d14f51a905fea92c6b9ffe51d7fd3742 bzip3
+ github_tar iczelia bzip3 1.5.4
+ echo '1' > .tarball-version
  libtoolize
  sh ./bootstrap.sh
  fix_and_configure --disable-arch-native
@@ -232,7 +237,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 42fd7b3dadaf23c05e32412e4b5a8794f1767867 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 4456eeb15eff989861d84ba25c47085ebead0619 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -245,7 +250,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.8.3
+ github_tar c3lang c3c v0.8.4
  cmake_init
  make
  cd ../test
@@ -270,7 +275,7 @@ test_camgunz_cmp() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 e11fb5c39371046ebe25485f984f644c5a0d65d3 cc65
+ git_fetch https://github.com/cc65/cc65 d8a486acdef93ea1ba432a6a35b96cf1b797bda5 cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
 }
@@ -325,14 +330,14 @@ test_cgltf() {
 }
 
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme a5f7bac94353c55c05fec5dad39f10ca3ed1cae2 chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme c4e7367e867428889d8fe898a0b39f42e418b3f1 chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
 }
 
 test_chips() {
- git_fetch https://github.com/floooh/chips ca7d7ddd3ba77b48685d24120cf413ea53786767 chips
- git_fetch https://github.com/floooh/chips-test 5203a6178b6691155f6cdf4b980e74623ec0d8c4 chipstest
+ git_fetch https://github.com/floooh/chips 9e88298ce56319953ac7a43213a1120359f7a3a6 chips
+ git_fetch https://github.com/floooh/chips-test dc7176cfc5b6f2fe7db795b82f4e592dd6faae7a chipstest
  cd tests
 
  for f in *-test.c; do
@@ -425,7 +430,7 @@ test_coremarkpro() {
 }
 
 test_coreutils() {
- url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.11.tar.xz coreutils
+ url_xz https://ftpmirror.gnu.org/gnu/coreutils/coreutils-9.12.tar.xz coreutils
  ${is_CI+ replace_line "skip_if_root_" "skip_" tests/rm/deep-2.sh }
  ./configure
  make check
@@ -448,7 +453,7 @@ test_cproc() {
 }
 
 test_croaring() {
- github_tar RoaringBitmap CRoaring v5.1.1
+ github_tar RoaringBitmap CRoaring v5.2.2
  sed -i 's|^#include <x86intrin.h>|//&|g' include/roaring/portability.h
  use_stdbit '#include <stdint.h>' include/roaring/portability.h
  cmake_init -DROARING_DISABLE_X64=ON -DCMAKE_C_FLAGS=-DROARING_DISABLE_X64=1 -DCMAKE_CXX_FLAGS=-DROARING_DISABLE_X64=1
@@ -539,7 +544,7 @@ test_femtolisp() {
 }
 
 test_ffc() {
- github_tar kolemannix ffc.h v26.07.01
+ github_tar kolemannix ffc.h v26.09.01
  use_stdbit ' #include <stdbool.h>' test_src/sonicsv.h
  cmake_init
  make && ctest
@@ -566,7 +571,7 @@ test_findutils() {
 }
 
 test_flatcc() {
- github_tar dvidelabs flatcc v0.6.3
+ github_tar dvidelabs flatcc v0.6.4
  cmake_init -DCMAKE_C_FLAGS=-DPORTABLE_USE_ISINF
  make && ctest
 }
@@ -579,7 +584,7 @@ test_flex() {
 }
 
 test_fribidi() {
- github_tar fribidi fribidi v1.0.16
+ github_tar fribidi fribidi v1.0.17
  export CC_FOR_BUILD=$CC
  libtoolize
  sh autogen.sh
@@ -632,7 +637,7 @@ test_giflib() {
 }
 
 test_git() {
- github_tar git git v2.55.0
+ github_tar git git v2.56.0
  make CC="$CC" NO_RUST=1 test -j2
 }
 
@@ -654,7 +659,7 @@ test_gmake() {
 }
 
 test_gnuless() {
- url_tar https://ftpmirror.gnu.org/gnu/less/less-704.tar.gz gnuless
+ url_tar https://ftpmirror.gnu.org/gnu/less/less-710.tar.gz gnuless
  ./configure
  make check
 }
@@ -679,7 +684,7 @@ test_go() {
 }
 
 test_got() {
- github_tar gameoftrees got-portable 0.127
+ github_tar gameoftrees got-portable 0.129
  sh autogen.sh
 
  local GOT=$PWD/got_install
@@ -702,7 +707,7 @@ test_gpatch() {
 }
 
 test_groff() {
- url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.1.tar.gz groff
+ url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.2.tar.gz groff
  ./configure
  make
  sed -i 's|exec eqn|exec ./eqn|g' neqn
@@ -722,14 +727,14 @@ test_gtar() {
 }
 
 test_gumbo() {
- codeberg_tar gumbo-parser gumbo-parser 0.14.0
+ codeberg_tar gumbo-parser gumbo-parser 0.14.1
  muon_init
  muon_build
  muon_test
 }
 
 test_gzip() {
- url_xz https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.xz gzip
+ url_xz https://ftpmirror.gnu.org/gnu/gzip/gzip-1.15.tar.xz gzip
  fix_and_configure
  make check
 }
@@ -777,7 +782,7 @@ test_ijgjpeg() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-31
+ github_tar ImageMagick ImageMagick 7.1.2-32
  fix_and_configure
  make check V=1
 }
@@ -795,7 +800,7 @@ test_inih() {
 }
 
 test_janet() {
- github_tar janet-lang janet v1.42.0
+ github_tar janet-lang janet v1.42.1
  # Use C11 concurrency features
  sed -i "s|/\* #define JANET_THREAD_LOCAL _Thread_local \*/|#define JANET_THREAD_LOCAL _Thread_local|g" src/conf/janetconf.h
  sed -i "s|/\* #define JANET_USE_STDATOMIC \*/|#define JANET_USE_STDATOMIC|g" src/conf/janetconf.h
@@ -805,7 +810,7 @@ test_janet() {
 }
 
 test_jemalloc() {
- github_tar jemalloc jemalloc 5.3.1
+ github_tar jemalloc jemalloc 5.4.0
  autoconf
  ./configure --disable-cxx
  make check
@@ -842,21 +847,21 @@ test_jsmn() {
 }
 
 test_jsonparser() {
- git_fetch https://github.com/json-parser/json-parser a265aecd99f04ec41addbd96026ccf8876389133 jsonparser
+ git_fetch https://github.com/json-parser/json-parser 9d50ae5ea2cdeef3b75146c621ec7b26e2e3642f jsonparser
  cd tests
  $CC test.c ../json.c -I ../ -lm -o test
  ./test
 }
 
 test_kefir() {
- url_tar https://git.sr.ht/~jprotopopov/kefir/archive/v0.5.0.tar.gz kefir
+ github_tar sourcehut-mirrors kefir v0.5.0
  mkdir bin && CC=gcc scripts/detect-host-env.sh --header > bin/config.h
  make CC="$CC"
  LC_ALL=C.UTF-8 make CC=gcc test
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 8da8797452de04998c68e0fafa2d6ef48246626f ksh93
+ git_fetch https://github.com/ksh93/ksh 1d0ffcf1c6cfbcb0d5f2c27aead3ab2f31c974b9 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -872,7 +877,7 @@ test_lame() {
 }
 
 test_lexbor() {
- github_tar lexbor lexbor v3.0.0
+ github_tar lexbor lexbor v3.0.1
  cmake_init -DLEXBOR_BUILD_TESTS=ON
  make && ctest
 }
@@ -926,7 +931,7 @@ test_libevent() {
 }
 
 test_libexpat() {
- github_tar libexpat libexpat R_2_8_4
+ github_tar libexpat libexpat R_2_8_5
  cd expat
  cmake_init
  make && ctest
@@ -942,7 +947,7 @@ test_libflac() {
 }
 
 test_libfyaml() {
- github_tar pantoniou libfyaml v1.0.0-beta1
+ github_tar pantoniou libfyaml v1.0.0-beta2
  replace_line "if(NOT WIN32 AND NOT MSVC)" "if(FALSE)" CMakeLists.txt
  sed -i 's|-std=c2x COMPILER_SUPPORTS_GNU2X|-std=gnu23 COMPILER_SUPPORTS_GNU2X|g' CMakeLists.txt
  sed -i 's|-std=gnu2x|-std=gnu23|g' CMakeLists.txt
@@ -955,7 +960,7 @@ test_libfyaml() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc b5161529cafc93cbfaeef23fc81005c5beddbfee libgc
+ git_fetch https://github.com/bdwgc/bdwgc e50d792d8abfcd5092eb16113ffb618e913c890b libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -1050,7 +1055,7 @@ test_libopus() {
 }
 
 test_libpcre2() {
- github_tar PCRE2Project pcre2 pcre2-10.48
+ github_tar PCRE2Project pcre2 pcre2-10.49
  fix_and_configure
  make check
 }
@@ -1063,7 +1068,7 @@ test_libpkgconf() {
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.58
+ github_tar pnggroup libpng v1.6.59
  fix_and_configure
  make test
 }
@@ -1146,7 +1151,7 @@ test_libuev() {
 }
 
 test_libuv() {
- github_tar libuv libuv v1.52.1
+ github_tar libuv libuv v1.53.0
  replace_line "#elif defined(__GNUC__)" "#elif 1" include/uv.h
  # https://github.com/libuv/libuv/issues/2635#issuecomment-575109464
  sed -i 's|TEST_DECLARE   (udp_multicast_join)||g' test/test-list.h
@@ -1163,7 +1168,7 @@ test_libuv() {
 }
 
 test_libvips() {
- github_tar libvips libvips v8.18.6
+ github_tar libvips libvips v8.18.7
  muon_init
  muon_build
  muon_test
@@ -1190,7 +1195,7 @@ test_libxo_chimerautils() {
  local LIBXO=$PWD/libxo_install
  github_tar chimera-linux chimerautils v15.1.1
 
- github_tar Juniper libxo 1.7.5
+ github_tar Juniper libxo 2.1.0
  sed -i 's|__int128_t|_BitInt(128)|g' libxo/xo_humanize.h
  libtoolize
  autoreconf -fi
@@ -1199,8 +1204,6 @@ test_libxo_chimerautils() {
  cd ../
 
  export PKG_CONFIG_PATH="$LIBXO/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
- sed -i "s|type: 'boolean', value: 'true'|type: 'boolean', value: true|g" meson_options.txt
- sed -i 's|NL_TEXTMAX|2048|g' src.freebsd/coreutils/nl/nl.c # glibc NL_TEXTMAX is 2GB, use musl's size
  muon_init
  muon_build
 
@@ -1326,7 +1329,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.5.1
+ github_tar microsoft mimalloc v3.5.4
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -1360,7 +1363,7 @@ test_minmea() {
 }
 
 test_mjs() {
- git_fetch https://github.com/cesanta/mjs cf375c40f6f15447af4925c33cd7c549b54deb2c mjs
+ git_fetch https://github.com/cesanta/mjs 3f0894c5b61ac2e732524b4b6ada6f66815d496e mjs
  $CC tests/unit_test.c src/common/test_*.c src/common/cs_time.c -I. -Isrc -DMJS_MEMORY_STATS -DMJS_ENABLE_DEBUG=1 -lm -o unit_test
  ./unit_test
 }
@@ -1395,7 +1398,7 @@ test_mpack() {
 }
 
 test_mquickjs() {
- git_fetch https://github.com/bellard/mquickjs 203d5bb79789bc47b74855d9207415dab71661a0 mquickjs
+ git_fetch https://github.com/bellard/mquickjs 6d4d7eb6b99011d5aab6e88a9b99e8fd4d86c6e9 mquickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  sed -i 's|-fno-math-errno -fno-trapping-math||g' Makefile
  make CC=$CC HOST_CC=$CC test
@@ -1476,7 +1479,7 @@ test_nghttp3() {
 }
 
 test_nginx() {
- github_tar nginx nginx release-1.31.5
+ github_tar nginx nginx release-1.31.6
  auto/configure
  make
  cd ../
@@ -1515,7 +1518,7 @@ test_noplate() {
 }
 
 test_nqp() {
- github_clone MoarVM MoarVM 2026.08
+ github_clone MoarVM MoarVM 2026.09
  use_stdbit '#include "moar.h"' src/core/coerce.c
  use_stdbit '#include "moar.h"' src/core/interp.c
  use_stdbit '#include "moar.h"' src/math/bigintops.c
@@ -1523,7 +1526,7 @@ test_nqp() {
  make install
  cd ../
 
- github_clone Raku nqp 2026.08
+ github_clone Raku nqp 2026.09
  perl Configure.pl --with-moar=$PWD/../MoarVM/install/bin/moar
  make test
 }
@@ -1561,7 +1564,7 @@ test_oniguruma() {
 }
 
 test_openrc() {
- github_tar OpenRC openrc 0.63.3
+ github_tar OpenRC openrc 0.64.1
  muon_init
  muon_build
  muon_test
@@ -1574,7 +1577,7 @@ test_openssh() {
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.6.4
+ github_tar openssl openssl openssl-3.6.5
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -1602,17 +1605,11 @@ test_pacman() {
 }
 
 test_par() {
- git_fetch https://github.com/prideout/par f2a33359645840b02ff96dcf556eecb293f98c10 par
+ git_fetch https://github.com/prideout/par 68e1215a055ccbeae378dd5969e09d0c79963a4a par
  replace_line "WAI_NOINLINE" "" test/whereami.c
  cmake_run test -Bbuild
  make -C build VERBOSE=1
- ./build/test_bubbles
- ./build/test_shapes
- ./build/test_filecache
- ./build/test_filecache_lz4
- ./build/test_sprune
- ./build/test_strings
- ./build/test_octasphere
+ ./build/test_*
 }
 
 test_parrot() {
@@ -1623,7 +1620,7 @@ test_parrot() {
 }
 
 test_parson() {
- git_fetch https://github.com/kgabis/parson ba29f4eda9ea7703a9f6a9cf2b0532a2605723c3 parson
+ git_fetch https://github.com/kgabis/parson ec53fb6528b45811df9db0db22cab96a94a96a11 parson
  make CC=$CC test
 }
 
@@ -1647,7 +1644,7 @@ test_perl() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.10
+ github_tar php php-src php-8.5.11
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C) || defined(__TINYC__)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
@@ -1722,15 +1719,22 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.14.7
- replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
+ github_tar python cpython v3.15.0rc2
+ # gnu::section
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
+ # gnu::constructor
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
+ # https://github.com/python/cpython/issues/134070
+ replace_line "#if defined(__GNUC__)" "#if 1" Include/internal/mimalloc/mimalloc/internal.h
+ use_stdbit '#include <limits.h>' Include/internal/mimalloc/mimalloc/internal.h
+ # backtrace() need unwind table
+ replace_line "#if defined(HAVE_EXECINFO_H) && defined(HAVE_BACKTRACE)" "#if 0" Modules/_testinternalcapi.c
+
  skip_tests=(
   ${is_CI+ test_asyncio test_socket }
   test_os # https://github.com/python/cpython/issues/126112
  )
- ./configure
+ CFLAGS=-std=c23 ./configure
  make -j3 && ./python -m test -j3 --exclude "${skip_tests[@]}"
 }
 
@@ -1741,7 +1745,7 @@ test_qbe_simplecc() {
  make CC="$CC" check
  cd ../
 
- git_fetch git://git.simple-cc.org/scc 575a2d87cac49174b7f53aa6ac5f9186c2165697 simplecc
+ git_fetch git://git.simple-cc.org/scc 66f99bceac13dc773446a44f22afd4bdc5f895a8 simplecc
  sed -i "s|^#define QBEBIN \"|#define QBEBIN \"$PWD/../qbe\/|g" include/scc/bits/scc/sys-scc.h
  sed -i 's|bin\[32\]|bin[PATH_MAX]|g' src/cmd/scc-cc/posix/cc.c
  sed -i 's|16sss|16ssl|g' src/libmach/elf/elfprobe.c
@@ -1762,7 +1766,7 @@ test_qman() {
 }
 
 test_quickjs() {
- git_fetch https://github.com/bellard/quickjs 04be246001599f5995fa2f2d8c91a0f198d3f34c quickjs
+ git_fetch https://github.com/bellard/quickjs abf571aa9211ee4b27c17d528e7205c9f757cac9 quickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  make CC=$CC test
 }
@@ -1780,7 +1784,7 @@ test_rc() {
 }
 
 test_redis() {
- github_tar redis redis 8.6.6
+ github_tar redis redis 8.6.7
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -1869,7 +1873,7 @@ test_rsync() {
 }
 
 test_ruby() {
- github_tar ruby ruby v4.0.6
+ github_tar ruby ruby v4.0.7
  rm tool/test/test_commit_email.rb
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
@@ -1878,13 +1882,13 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM a662c0edd507b4e04f20d44490c514b683007ae7 rvvm
+ git_fetch https://github.com/LekKit/RVVM ce8ca7c00ba4058e5f26811057573b3ff23e9316 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/util/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.24.6
+ github_tar samba-team samba samba-4.25.0
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
  use_stdatomic '#include <stdarg.h>' third_party/quic_ko_wrapper/quic_ko_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
@@ -1955,7 +1959,7 @@ test_sqlite() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC 3e3a0e4411b6f95d666d711c540bb72a92640e2b stc
+ git_fetch https://github.com/stclib/STC da05cc7474260f0cfb6fbacba9524f1f26d697cd stc
  muon_init
  muon_build
  muon_test
@@ -1968,7 +1972,7 @@ test_talloc() {
 }
 
 test_tcl() {
- github_tar tcltk tcl core-9-0-4
+ github_tar tcltk tcl core-9-1-0
  ./unix/configure
  rm ./tests/socket.test # fails under su
  make test | tee __testlog
@@ -1976,7 +1980,7 @@ test_tcl() {
 }
 
 test_tcpdump() {
- github_tar the-tcpdump-group tcpdump tcpdump-4.99.6
+ github_tar the-tcpdump-group tcpdump tcpdump-4.99.7
  cmake_init
  make && make check
 }
@@ -2015,7 +2019,7 @@ test_tinycc() {
 }
 
 test_tinycthread() {
- git_fetch https://github.com/gyrovorbis/tinycthread e2795439b1663fe782048dfd4a4dd1f2499fa142 tinycthread
+ git_fetch https://github.com/gyrovorbis/tinycthread 56194461f1c9815adfbf537d52644f5bb40303aa tinycthread
  cmake_init -DTINYCTHREAD_ENABLE_TESTS=ON
  make && ctest
 }
@@ -2096,7 +2100,7 @@ test_uriparser() {
 }
 
 test_utf8h() {
- git_fetch https://github.com/sheredom/utf8.h 7e403ccc3f3cb848d061cac352ee26e54f27c934 utf8h
+ git_fetch https://github.com/sheredom/utf8.h f59f2fba4386f3d18261351833b44c92cd652a10 utf8h
  replace_line "#elif defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)" "#elif 1" test/utest.h
  replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" utf8.h
  "$CC" test/main.c -I./ -o run_tests
@@ -2104,7 +2108,7 @@ test_utf8h() {
 }
 
 test_utf8proc() {
- github_tar JuliaStrings utf8proc v2.11.3
+ github_tar JuliaStrings utf8proc v2.12.0
  cmake_init -DUTF8PROC_ENABLE_TESTING=ON
  make && ctest
 }
@@ -2135,7 +2139,7 @@ test_vim() {
 }
 
 test_vlc() {
- github_tar videolan vlc 3.0.23-2
+ github_tar videolan vlc 3.0.24
  libtoolize
  autoreconf -fi
  fix_configure
@@ -2146,7 +2150,7 @@ test_vlc() {
 }
 
 test_wasm3() {
- github_tar wasm3 wasm3 v0.9.0
+ github_tar wasm3 wasm3 v0.9.1-beta.1
  sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
  use_stdbit2 "#include <limits.h>" source/m3_exec.h
  mkdir build
@@ -2157,13 +2161,13 @@ test_wasm3() {
 }
 
 test_wget() {
- url_lz https://ftpmirror.gnu.org/gnu/wget/wget2-2.2.1.tar.lz wget
+ url_lz https://ftpmirror.gnu.org/gnu/wget/wget2-2.3.0.tar.lz wget
  fix_and_configure
  make check
 }
 
 test_wolfssl() {
- github_tar wolfSSL wolfssl v5.9.2-stable
+ github_tar wolfSSL wolfssl v5.9.4-stable
  cmake_init
  make && ctest
 }
@@ -2196,12 +2200,12 @@ test_xterm() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash c0b5ea995d66691734b1a79ad89e73a0d2fd5a53 xxhash
+ github_tar Cyan4973 xxHash v0.8.4
  make CC=$CC DISPATCH=0 check
 }
 
 test_xz() {
- github_tar tukaani-project xz v5.8.3
+ github_tar tukaani-project xz v5.8.4
  cmake_init
  make && make test
 }
@@ -2223,7 +2227,7 @@ test_yash() {
 }
 
 test_yyjson() {
- github_tar ibireme yyjson 0.12.0
+ github_tar ibireme yyjson 0.13.0
  cmake_init -DYYJSON_BUILD_TESTS=ON
  make && ctest
 }
@@ -2298,7 +2302,7 @@ build_bc() {
 }
 
 build_cairo() {
- gitlab_tar gitlab.freedesktop.org/cairo cairo 1.18.4
+ gitlab_tar gitlab.freedesktop.org/cairo cairo 1.18.6
  muon_init -Dtests=disabled
  muon_build
 }
@@ -2337,7 +2341,7 @@ build_ellipsis() {
 }
 
 build_erlang() {
- github_tar erlang otp OTP-29.0.6
+ github_tar erlang otp OTP-29.1.1
  replace_line "#  if defined(__GNUC__)" "#if 1" erts/include/internal/ethread.h
  replace_line "#if defined(__GNUC__)" "#if 1" erts/include/internal/ethread_inline.h
  sed -i 's|-funroll-loops||g' lib/megaco/src/flex/Makefile.in
@@ -2496,7 +2500,7 @@ build_libsoldout() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 24c20c94e7db195b640854619577441f9b4bc6be luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT c6ffc141a8762b41703f9287d63d93622a13dd8f luajit
  sed -i 's|-O2 -fomit-frame-pointer|-O2 -DLUAJIT_NO_UNWIND|g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -2513,7 +2517,7 @@ build_lynx() {
 }
 
 build_mg() {
- github_tar troglobit mg v4.0
+ github_tar troglobit mg v4.1
  sh ./autogen.sh
  fix_and_configure
  make
@@ -2545,7 +2549,7 @@ build_nanovg() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260829
+ github_tar ThomasDickey ncurses-snapshots v6_6_20260926
  ./configure
  make V=1
 }
@@ -2601,7 +2605,7 @@ build_oksh() {
 
 build_pcc() {
  local DIR=$PWD/pcc_install
- git_fetch https://github.com/PortableCC/pcc 9db636ff7e67a8f8e9003aea6282d12c6e618539 pcc
+ git_fetch https://github.com/PortableCC/pcc 201554009decadafd2af7c7d1dd631e583967dd8 pcc
  ./configure --prefix=$DIR
  make && make install
  cd ../
@@ -2634,7 +2638,7 @@ build_q2rtx() {
 }
 
 build_qoi() {
- git_fetch https://github.com/phoboslab/qoi 97bacc86a9c4abf5a2d452102dc26546c4c670b9 qoi
+ git_fetch https://github.com/phoboslab/qoi ffb2d2cb74a1de60819b21b939f7209aa53e91c1 qoi
  git_fetch https://github.com/nothings/stb 2c980bb59875b0d32144a71867fbdebb2f77cd20 stb
  cd ../
  CFLAGS='-Istb/ -DSTBI_NO_SIMD' make conv
@@ -2685,13 +2689,13 @@ build_stb() {
 }
 
 build_tin() {
- github_tar ThomasDickey tin-beta-snapshots v2_6_5-20250919
+ github_tar ThomasDickey tin-beta-snapshots v2_6_7-20260917
  ./configure
  make build
 }
 
 build_tinybasic() {
- git_fetch https://github.com/slviajero/tinybasic 99c6b631aebeede8badb73833e4207b4d89c8ed0 tinybasic
+ git_fetch https://github.com/slviajero/tinybasic 86ec458ca3dac9d156ce23bfa28a99f1f39ca656 tinybasic
  cd Basic2/Posix
  $CC basic.c runtime.c -lm
  ./a.out ../../examples/12systems/hello.bas | grep '^Hello World$'
@@ -2752,7 +2756,7 @@ build_zig() {
 bootstrap_musl() {
  local ROOT_DIR=$PWD/musl_build
 
- git_fetch https://git.musl-libc.org/git/musl f21a96538f78fa8e2040831b4209b35f2fb581da musl
+ git_fetch https://git.musl-libc.org/git/musl c4e1bb3994c14ed5112c894d15a451bf00f0d501 musl
  rm -r src/complex/ include/complex.h
  AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
  make install
@@ -3004,7 +3008,7 @@ shared_binutils() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 291081993a921844e2785e98100fca5ffed56704 muon
+ git_fetch https://github.com/muon-build/muon be891e13d6ca9866fc28c77c1e3650f45896ab15 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
@@ -3040,6 +3044,7 @@ shared_redis_valkey_rm_flaky() {
   tests/integration/replication-rdbchannel.tcl
   tests/unit/type/stream-cgroups.tcl
   tests/unit/scripting.tcl
+  tests/unit/type/set.tcl
  )
  rm -f ${tests[@]}
 }
