@@ -1199,8 +1199,6 @@ test_libxo_chimerautils() {
  cd ../
 
  export PKG_CONFIG_PATH="$LIBXO/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
- sed -i "s|type: 'boolean', value: 'true'|type: 'boolean', value: true|g" meson_options.txt
- sed -i 's|NL_TEXTMAX|2048|g' src.freebsd/coreutils/nl/nl.c # glibc NL_TEXTMAX is 2GB, use musl's size
  muon_init
  muon_build
 
