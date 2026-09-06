@@ -70,6 +70,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  byacc \
  # qman
  python3-cogapp libcunit1-dev \
+ # fribidi
+ help2man \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain
