@@ -1721,15 +1721,22 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.14.7
- replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" Include/pyport.h
+ github_tar python cpython v3.15.0rc2
+ # gnu::section
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
+ # gnu::constructor
  replace_line "#elif defined(__GNUC__) || defined(__clang__)" "#elif 1" Objects/mimalloc/init.c
+ # https://github.com/python/cpython/issues/134070
+ replace_line "#if defined(__GNUC__)" "#if 1" Include/internal/mimalloc/mimalloc/internal.h
+ use_stdbit '#include <limits.h>' Include/internal/mimalloc/mimalloc/internal.h
+ # backtrace() need unwind table
+ replace_line "#if defined(HAVE_EXECINFO_H) && defined(HAVE_BACKTRACE)" "#if 0" Modules/_testinternalcapi.c
+
  skip_tests=(
   ${is_CI+ test_asyncio test_socket }
   test_os # https://github.com/python/cpython/issues/126112
  )
- ./configure
+ CFLAGS=-std=c23 ./configure
  make -j3 && ./python -m test -j3 --exclude "${skip_tests[@]}"
 }
 
