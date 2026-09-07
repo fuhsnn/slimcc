@@ -5797,14 +5797,17 @@ static Node *primary(Token **rest, Token *tok) {
   if (tok->kind == TK_FUNCTION) {
     if (!fnctx) {
       static Obj *empty_name;
-      if (!empty_name)
-        empty_name = new_anon_gvar(array_of(ty_pchar, 1));
+      if (!empty_name) {
+        empty_name = new_anon_gvar(array_of(add_qual(Q_CONST, ty_pchar, tok), 1));
+        empty_name->init_data = arena_strdup(&cc1_arena, "");
+      }
       *rest = tok->next;
       return new_var_node(empty_name, tok);
     }
     if (!fnctx->fnname) {
       char *name = fnctx->fn->name;
-      fnctx->fnname = new_static_lvar(array_of(ty_pchar, strlen(name) + 1));
+      fnctx->fnname = new_static_lvar(array_of(add_qual(Q_CONST, ty_pchar, tok),
+                                               strlen(name) + 1));
       fnctx->fnname->init_data = name;
     }
     *rest = tok->next;

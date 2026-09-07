@@ -3,6 +3,14 @@
 
 SASSERT(1 == sizeof(__FUNCTION__));
 int fn_macro_in_proto(struct S { int i; SASSERT(1 == sizeof(__FUNCTION__)); }*);
+static const int z = __FUNCTION__[0];
+
+static int fn_macro() {
+  _Static_assert(_Generic(typeof(__FUNCTION__), const char[9]: 1));
+  _Static_assert(_Generic(typeof(__func__), const char[9]: 1));
+  static const char arr[4] = {__FUNCTION__[3], __func__[7], z};
+  return !strcmp(arr, "mo");
+}
 
 typedef struct {
   char g;
@@ -227,6 +235,8 @@ typedef int tydef_fn2(float);
 //SERJ static tydef_fn2 tydef_fn2_bad { return 1; }
 
 int main(void) {
+  ASSERT(1, fn_macro());
+
   G g[] = {10,11,12,13,14,15};
   F f[] = {20,21,22,23,24,25,26,27};
   G gs[]  = {30,31};
