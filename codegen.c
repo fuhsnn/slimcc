@@ -4858,7 +4858,7 @@ static bool is_asm_symbolic_arg(Node *node, const char *punct) {
 static void asm_body(Node *node) {
   const char *p = node->gasm.str_tok->str;
   for (;;) {
-    size_t spn = strcspn(p, "%");
+    size_t spn = strcspn(p, "%{|}");
     if (spn) {
       fwrite(p, 1, spn, output_file);
       p += spn;
@@ -4866,11 +4866,22 @@ static void asm_body(Node *node) {
     if (*p == '\0')
       break;
 
-    if (p[1] == '%') {
-      fputc('%', output_file);
+    switch (*p) {
+    case '{':
+    case '|':
+    case '}': error_tok(node->gasm.str_tok, "assembler dialects not supported");
+    }
+
+    switch (p[1]) {
+    case '%':
+    case '{':
+    case '|':
+    case '}':
+      fputc(p[1], output_file);
       p += 2;
       continue;
     }
+
     p++;
 
     if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
