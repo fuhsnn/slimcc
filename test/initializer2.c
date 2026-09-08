@@ -3,7 +3,7 @@
 long double ld = 0.0L;
 
 const int arr[2][2] = {{1,2},{3,4}};
-int *const p1 = arr[1];
+const int *const p1 = arr[1];
 
 int g1 = ((int){77});
 int g2 = arr[1][1];
@@ -12,12 +12,15 @@ const struct {
   int *a, *b, *c;
 } relo = {.a = &g1, .c = &g2};
 int *p2 = relo.c;
-int *p1p = p1;
+const int *p1p = p1;
 
 struct S { int i, j, k; };
 struct S const s1 = {99, 88, 77};
 struct S s2 = (struct S){33,44,55};
 struct S s3 = s1;
+struct { struct S s; } s4 = {.s = s1, .s.i = 11, .s.k = 33};
+struct { struct S s; } s5 = {.s = s1, .s.i = 11, .s = {}};
+struct { struct S s; } s6 = {.s = s1, .s = {}, .s.k = 33};
 #ifdef NOTGCC
 int g3 = (struct S){55,66,77}.j;
 int g4 = (const int[]){11,22,33,44}[2];
@@ -30,6 +33,50 @@ _Bool ba[] = {3,3,3};
 struct {
     _Bool b;
 } bs = {4};
+
+int globals(void) {
+  ASSERT(3, *p1);
+
+  ASSERT(77, g1);
+  ASSERT(4, g2);
+  ASSERT(1, p2 == &g2);
+  ASSERT(1, p1p == p1);
+
+  ASSERT(33, s2.i);
+  ASSERT(44, s2.j);
+  ASSERT(55, s2.k);
+
+  ASSERT(99, s3.i);
+  ASSERT(88, s3.j);
+  ASSERT(77, s3.k);
+
+  ASSERT(11, s4.s.i);
+#ifdef NOTGCC
+  ASSERT(88, s4.s.j);
+#endif
+  ASSERT(33, s4.s.k);
+
+  ASSERT(0, s5.s.i);
+  ASSERT(0, s5.s.j);
+  ASSERT(0, s5.s.k);
+
+  ASSERT(0, s6.s.i);
+  ASSERT(0, s6.s.j);
+  ASSERT(33, s6.s.k);
+
+#ifdef NOTGCC
+  ASSERT(66, g3);
+  ASSERT(33, g4);
+#endif
+
+  ASSERT(0, strcmp("obar", (char *)obar));
+
+  ASSERT(1, b);
+  ASSERT(1, ba[2]);
+  ASSERT(1, bs.b);
+
+  return 1;
+}
 
 long long z10 = {};
 static long long z11 = {};
@@ -193,31 +240,7 @@ int brace_override() {
 }
 
 int main(void) {
-  ASSERT(3, *p1);
-
-  ASSERT(77, g1);
-  ASSERT(4, g2);
-  ASSERT(1, p2 == &g2);
-  ASSERT(1, p1p == p1);
-
-  ASSERT(33, s2.i);
-  ASSERT(44, s2.j);
-  ASSERT(55, s2.k);
-
-  ASSERT(99, s3.i);
-  ASSERT(88, s3.j);
-  ASSERT(77, s3.k);
-
-#ifdef NOTGCC
-  ASSERT(66, g3);
-  ASSERT(33, g4);
-#endif
-
-  ASSERT(1, b);
-  ASSERT(1, ba[2]);
-  ASSERT(1, bs.b);
-
-  ASSERT(0, strcmp("obar", (char *)obar));
+  ASSERT(1, globals());
 
   {
     struct Sub {

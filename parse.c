@@ -68,6 +68,7 @@ struct Initializer {
     INIT_LIST,
     INIT_STR_ARRAY,
     INIT_EXPR,
+    INIT_OVERRIDE,
     INIT_TOK,
     INIT_NUM_SEQ
   } kind;
@@ -78,6 +79,11 @@ struct Initializer {
   ANON_UNION_START
   Token *tok;
   Node *expr;
+
+  struct {
+    Initializer *expr;
+    Initializer *list;
+  } ovr;
 
   struct {
     Initializer *data;
@@ -528,6 +534,13 @@ static Node *cond_cast(Node *expr) {
 }
 
 static void free_initializers(Initializer *init) {
+  if (init->kind == INIT_OVERRIDE) {
+    if (init->ovr.list) {
+      free_initializers(init->ovr.list);
+      free(init->ovr.expr);
+      return;
+    }
+  }
   if (init->kind == INIT_LIST && init->list.cnt) {
     for (int i = 0; i < init->list.cnt; i++)
       free_initializers(&init->list.data[i]);
@@ -602,9 +615,24 @@ static void prepare_array_init(Initializer *init, Type *ty) {
     init->list.data[i].ty = ty->base;
 }
 
-static void prepare_struct_init(Initializer *init, Type *ty) {
+static Initializer *prepare_struct_init(Initializer *init, Type *ty) {
   if (init->kind == INIT_LIST)
-    return;
+    return init;
+
+  if (init->kind == INIT_OVERRIDE)
+    return init->ovr.list;
+
+  if (init->kind == INIT_EXPR) {
+    Initializer expr = *init;
+
+    init->kind = INIT_OVERRIDE;
+    init->ovr.expr = calloc(2, sizeof(Initializer));
+    *init->ovr.expr = expr;
+
+    init->ovr.list = init->ovr.expr + 1;
+    init->ovr.list->ty = init->ty;
+    init = init->ovr.list;
+  }
 
   int len = 0;
   for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next)
@@ -612,7 +640,7 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
 
   init->kind = INIT_LIST;
   if (!(init->list.cnt = len))
-    return;
+    return init;
   init->list.data = calloc(init->list.cnt, sizeof(Initializer));
 
   for (Member *mem = ty->members; mem_iter(&mem); mem = mem->next) {
@@ -625,6 +653,7 @@ static void prepare_struct_init(Initializer *init, Type *ty) {
     }
     child->ty = mem->ty;
   }
+  return init;
 }
 
 static VarScope *push_var_scope(const char *key, int keylen, Obj *var) {
@@ -2182,7 +2211,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
       error_tok(tok, "field designator not in struct or union initializer");
 
     Member *mem = struct_designator(&tok, tok->next, init->ty);
-    prepare_struct_init(init, init->ty);
+    init = prepare_struct_init(init, init->ty);
 
     if (init->ty->kind == TY_UNION) {
       init->list.union_idx = mem->idx;
@@ -2365,7 +2394,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
         error_tok(tok, "incompatible types");
       }
     }
-    prepare_struct_init(init, init->ty);
+    init = prepare_struct_init(init, init->ty);
     aggregate_initializer(rest, tok, init, expr, has_brace);
     return;
   }
@@ -2465,6 +2494,11 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
   case INIT_NONE:
   case INIT_FLEX:
   case INIT_FLEX_NESTED: {
+    return;
+  }
+  case INIT_OVERRIDE: {
+    create_lvar_init(cur, init->ovr.expr, desg, tok);
+    create_lvar_init(cur, init->ovr.list, desg, tok);
     return;
   }
   case INIT_TOK:
@@ -2644,6 +2678,15 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
   case INIT_NONE:
   case INIT_FLEX:
   case INIT_FLEX_NESTED: {
+    return;
+  }
+  case INIT_OVERRIDE: {
+    Relocation *start = *cur;
+    write_gvar_data(cur, init->ovr.expr, buf, offset, ev_kind);
+    if (start != *cur)
+      error_tok(init->ovr.expr->expr->tok,
+                "overriding expression with relocation unsupported");
+    write_gvar_data(cur, init->ovr.list, buf, offset, ev_kind);
     return;
   }
   case INIT_TOK:
