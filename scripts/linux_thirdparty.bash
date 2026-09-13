@@ -142,7 +142,7 @@ test_blake3() {
 }
 
 test_blosc2() {
- github_tar Blosc c-blosc2 v3.3.3
+ github_tar Blosc c-blosc2 v3.3.4
  replace_line "  #elif (defined(__GNUC__) && __GNUC__ >= 4) || defined(__clang__)" "#elif 1" include/blosc2/blosc2-export.h
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_persistency.c
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_save.c
@@ -222,7 +222,7 @@ test_bzip2() {
 }
 
 test_bzip3() {
- git_fetch https://github.com/iczelia/bzip3 505a3703de3114e57c89283cc759d7103762bb0a bzip3
+ github_tar iczelia bzip3 1.5.4
  libtoolize
  sh ./bootstrap.sh
  fix_and_configure --disable-arch-native
@@ -233,7 +233,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 6bb852d4750315356b6d170cafc2095e7d1b6d48 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 30041e60ef4160d377370f79e84212acd48d4c55 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -246,7 +246,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.8.3
+ github_tar c3lang c3c v0.8.4
  cmake_init
  make
  cd ../test
@@ -326,7 +326,7 @@ test_cgltf() {
 }
 
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme 6991e209307ec4768a51394f9850975b5360e32a chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme bb9b3215e52bd29cecdfa3ce37cd97721f0c2cc0 chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
 }
@@ -796,7 +796,7 @@ test_inih() {
 }
 
 test_janet() {
- github_tar janet-lang janet v1.42.0
+ github_tar janet-lang janet v1.42.1
  # Use C11 concurrency features
  sed -i "s|/\* #define JANET_THREAD_LOCAL _Thread_local \*/|#define JANET_THREAD_LOCAL _Thread_local|g" src/conf/janetconf.h
  sed -i "s|/\* #define JANET_USE_STDATOMIC \*/|#define JANET_USE_STDATOMIC|g" src/conf/janetconf.h
@@ -843,7 +843,7 @@ test_jsmn() {
 }
 
 test_jsonparser() {
- git_fetch https://github.com/json-parser/json-parser eed7cbe97846762dac7d7c2b45e973310f7c5542 jsonparser
+ git_fetch https://github.com/json-parser/json-parser 69c23112b432f0ae332f20afab902cd9841e4417 jsonparser
  cd tests
  $CC test.c ../json.c -I ../ -lm -o test
  ./test
@@ -857,7 +857,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh befb0ac59f25b642f46cde220895090eb64c6d43 ksh93
+ git_fetch https://github.com/ksh93/ksh f9ba97929f9a06ee319c749baa163afad9d664c7 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -956,7 +956,7 @@ test_libfyaml() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc b5161529cafc93cbfaeef23fc81005c5beddbfee libgc
+ git_fetch https://github.com/bdwgc/bdwgc a13eb5756f484c1856b41be0acf9fdd2d09df207 libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -1325,7 +1325,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.5.1
+ github_tar microsoft mimalloc v3.5.2
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -1890,7 +1890,7 @@ test_rvvm() {
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.24.6
+ github_tar samba-team samba samba-4.24.7
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
  use_stdatomic '#include <stdarg.h>' third_party/quic_ko_wrapper/quic_ko_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
@@ -2152,7 +2152,7 @@ test_vlc() {
 }
 
 test_wasm3() {
- github_tar wasm3 wasm3 v0.9.0
+ github_tar wasm3 wasm3 v0.9.1-beta.1
  sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
  use_stdbit2 "#include <limits.h>" source/m3_exec.h
  mkdir build
@@ -2207,7 +2207,7 @@ test_xxhash() {
 }
 
 test_xz() {
- github_tar tukaani-project xz v5.8.3
+ github_tar tukaani-project xz v5.8.4
  cmake_init
  make && make test
 }
@@ -2551,7 +2551,7 @@ build_nanovg() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260905
+ github_tar ThomasDickey ncurses-snapshots v6_6_20260912
  ./configure
  make V=1
 }
@@ -2697,7 +2697,7 @@ build_tin() {
 }
 
 build_tinybasic() {
- git_fetch https://github.com/slviajero/tinybasic 99c6b631aebeede8badb73833e4207b4d89c8ed0 tinybasic
+ git_fetch https://github.com/slviajero/tinybasic 86ec458ca3dac9d156ce23bfa28a99f1f39ca656 tinybasic
  cd Basic2/Posix
  $CC basic.c runtime.c -lm
  ./a.out ../../examples/12systems/hello.bas | grep '^Hello World$'
@@ -3010,7 +3010,7 @@ shared_binutils() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 3ee54382d463bec09647edc6bd834a8f50f34458 muon
+ git_fetch https://github.com/muon-build/muon 3370c8349e8ed1c192887694eeb81f1720aebdc9 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
