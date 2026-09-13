@@ -223,6 +223,7 @@ test_bzip2() {
 
 test_bzip3() {
  github_tar iczelia bzip3 1.5.4
+ echo '1' > .tarball-version
  libtoolize
  sh ./bootstrap.sh
  fix_and_configure --disable-arch-native
