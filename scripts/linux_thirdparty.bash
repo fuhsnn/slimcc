@@ -1606,13 +1606,7 @@ test_par() {
  replace_line "WAI_NOINLINE" "" test/whereami.c
  cmake_run test -Bbuild
  make -C build VERBOSE=1
- ./build/test_bubbles
- ./build/test_shapes
- ./build/test_filecache
- ./build/test_filecache_lz4
- ./build/test_sprune
- ./build/test_strings
- ./build/test_octasphere
+ ./build/test_*
 }
 
 test_parrot() {
