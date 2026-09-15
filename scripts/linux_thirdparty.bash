@@ -1192,7 +1192,7 @@ test_libxo_chimerautils() {
  local LIBXO=$PWD/libxo_install
  github_tar chimera-linux chimerautils v15.1.1
 
- github_tar Juniper libxo 1.7.5
+ github_tar Juniper libxo 2.1.0
  sed -i 's|__int128_t|_BitInt(128)|g' libxo/xo_humanize.h
  libtoolize
  autoreconf -fi
