@@ -1930,7 +1930,8 @@ static Token *has_extension_macro(Token *start) {
                 equal(tok, "c_countof") ||
                 equal(tok, "gnu_asm") ||
                 equal(tok, "gnu_asm_goto_with_outputs") ||
-                equal(tok, "gnu_asm_goto_with_outputs_full");
+                equal(tok, "gnu_asm_goto_with_outputs_full") ||
+                equal(tok, "slimcc_interp");
 
   tok = skip(tok->next, ")");
   pop_macro_lock_until(start, tok);
@@ -1941,7 +1942,7 @@ static Token *interp_count_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
 
-  if(tok->kind != TK_ISTR)
+  if(tok->kind != TK_FSTR)
     error_tok(start, "not an interpolated string");
 
   int counter = 0;
@@ -1963,7 +1964,7 @@ static Token *interp_literal_count_macro(Token *start)
 {
   Token *tok = skip(start->next, "(");
 
-  if(tok->kind != TK_ISTR)
+  if(tok->kind != TK_FSTR)
     error_tok(start, "not an interpolated string");
 
   int counter = 0;
@@ -1987,7 +1988,7 @@ static Token *interp_list_macro(Token *start)
 
   Token *itok = tok;
 
-  if(itok->kind != TK_ISTR && itok->kind != TK_STR)
+  if(itok->kind != TK_FSTR && itok->kind != TK_STR)
     error_tok(start, "expected a string");
 
   tok = tok->next;
@@ -2023,7 +2024,7 @@ static Token *interp_literal_list_macro(Token *start)
   Token *tok = skip(start->next, "(");
 
   Token *itok = tok;
-  if(itok->kind != TK_ISTR && itok->kind != TK_STR)
+  if(itok->kind != TK_FSTR && itok->kind != TK_STR)
     error_tok(start, "expected a string");
 
   tok = tok->next;

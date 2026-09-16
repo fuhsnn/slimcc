@@ -210,7 +210,7 @@ typedef enum {
   TK_KEYWORD, // Keywords
   TK_STR,     // String literals
   TK_ASM_STR,
-  TK_ISTR,    // Interpolated string
+  TK_FSTR,    // Interpolated string
   TK_INT_NUM, // Integer Numeric literals
   TK_PP_NUM,  // Preprocessing numbers
   TK_FMARK,   // Filemarkers for -E

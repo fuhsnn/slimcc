@@ -647,7 +647,7 @@ static Token *read_interp_string_literal(const char *start, const char *quote, T
     }
   }
 
-  Token *tok = new_token(TK_ISTR, start, strings->loc + strings->len);
+  Token *tok = new_token(TK_FSTR, start, strings->loc + strings->len);
   tok->interp_str_next = strings_start.interp_str_next;
   tok->interp_next = interps_start.interp_next;
   return tok;
