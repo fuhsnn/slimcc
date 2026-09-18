@@ -453,7 +453,7 @@ test_cproc() {
 }
 
 test_croaring() {
- github_tar RoaringBitmap CRoaring v5.2.1
+ github_tar RoaringBitmap CRoaring v5.2.2
  sed -i 's|^#include <x86intrin.h>|//&|g' include/roaring/portability.h
  use_stdbit '#include <stdint.h>' include/roaring/portability.h
  cmake_init -DROARING_DISABLE_X64=ON -DCMAKE_C_FLAGS=-DROARING_DISABLE_X64=1 -DCMAKE_CXX_FLAGS=-DROARING_DISABLE_X64=1
@@ -810,7 +810,7 @@ test_janet() {
 }
 
 test_jemalloc() {
- github_tar jemalloc jemalloc 5.3.1
+ github_tar jemalloc jemalloc 5.4.0
  autoconf
  ./configure --disable-cxx
  make check
@@ -861,7 +861,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh a05a7a4443092bb4276d3143ba382048cb714a68 ksh93
+ git_fetch https://github.com/ksh93/ksh 051db1f33e51d4fd2140bda79c9ccc01f18e75f4 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1784,7 +1784,7 @@ test_rc() {
 }
 
 test_redis() {
- github_tar redis redis 8.6.6
+ github_tar redis redis 8.6.7
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -2139,7 +2139,7 @@ test_vim() {
 }
 
 test_vlc() {
- github_tar videolan vlc 3.0.23-2
+ github_tar videolan vlc 3.0.24
  libtoolize
  autoreconf -fi
  fix_configure
@@ -2200,7 +2200,7 @@ test_xterm() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash 3be518f18f988133e16a7a49556938dd25698506 xxhash
+ git_fetch https://github.com/Cyan4973/xxHash e103f5f1ed345acc83de15632e04d50e6dbdbfa1 xxhash
  make CC=$CC DISPATCH=0 check
 }
 
