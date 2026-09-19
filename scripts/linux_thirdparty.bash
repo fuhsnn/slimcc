@@ -2200,7 +2200,7 @@ test_xterm() {
 }
 
 test_xxhash() {
- git_fetch https://github.com/Cyan4973/xxHash e103f5f1ed345acc83de15632e04d50e6dbdbfa1 xxhash
+ github_tar Cyan4973 xxHash v0.8.4
  make CC=$CC DISPATCH=0 check
 }
 
