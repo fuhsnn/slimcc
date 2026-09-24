@@ -237,7 +237,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 30041e60ef4160d377370f79e84212acd48d4c55 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler f49f04d690cad97b4212a67d5407cadbbf44ab86 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -544,7 +544,7 @@ test_femtolisp() {
 }
 
 test_ffc() {
- github_tar kolemannix ffc.h v26.07.01
+ github_tar kolemannix ffc.h v26.09.01
  use_stdbit ' #include <stdbool.h>' test_src/sonicsv.h
  cmake_init
  make && ctest
@@ -1564,7 +1564,7 @@ test_oniguruma() {
 }
 
 test_openrc() {
- github_tar OpenRC openrc 0.64
+ github_tar OpenRC openrc 0.64.1
  muon_init
  muon_build
  muon_test
@@ -3008,7 +3008,7 @@ shared_binutils() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 0e6d9c87884f53cde9641b41cb8185a9f11485c4 muon
+ git_fetch https://github.com/muon-build/muon 2766e951c02bfecee41551272f415b386d7de779 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
