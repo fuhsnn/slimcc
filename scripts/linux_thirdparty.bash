@@ -24,7 +24,7 @@ test_apexmarkdown() {
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
- cat test.log | grep Results | grep '0;31m8 failed'
+ cat test.log | grep Results | grep '0;31m5 failed'
 }
 
 test_apk() {
@@ -854,7 +854,7 @@ test_jsonparser() {
 }
 
 test_kefir() {
- url_tar https://git.sr.ht/~jprotopopov/kefir/archive/v0.5.0.tar.gz kefir
+ github_tar sourcehut-mirrors kefir v0.5.0
  mkdir bin && CC=gcc scripts/detect-host-env.sh --header > bin/config.h
  make CC="$CC"
  LC_ALL=C.UTF-8 make CC=gcc test
