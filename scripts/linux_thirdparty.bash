@@ -20,7 +20,7 @@ test_ag() {
 }
 
 test_apexmarkdown() {
- github_clone ApexMarkdown apex v1.1.31
+ github_clone ApexMarkdown apex v1.1.34
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
@@ -163,7 +163,7 @@ test_box2d() {
 }
 
 test_box3d() {
- git_fetch https://github.com/erincatto/box3d 5643cd81ff07fd0497e3bfcdf04f6425cc8a2e7f box3d
+ git_fetch https://github.com/erincatto/box3d 9f998c862d54c03a633ecea3831937385c78b532 box3d
  use_stdbit '#include <stdint.h>' src/ctz.h
  perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b3Prefetch)/#elif 0\1/g' src/platform.h
 
@@ -330,7 +330,7 @@ test_cgltf() {
 }
 
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme a2e383f685d23992a6a307fc61544b07e5843cbe chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme c4e7367e867428889d8fe898a0b39f42e418b3f1 chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
 }
@@ -637,7 +637,7 @@ test_giflib() {
 }
 
 test_git() {
- github_tar git git v2.55.0
+ github_tar git git v2.56.0
  make CC="$CC" NO_RUST=1 test -j2
 }
 
@@ -684,7 +684,7 @@ test_go() {
 }
 
 test_got() {
- github_tar gameoftrees got-portable 0.128
+ github_tar gameoftrees got-portable 0.129
  sh autogen.sh
 
  local GOT=$PWD/got_install
@@ -707,7 +707,7 @@ test_gpatch() {
 }
 
 test_groff() {
- url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.1.tar.gz groff
+ url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.2.tar.gz groff
  ./configure
  make
  sed -i 's|exec eqn|exec ./eqn|g' neqn
@@ -727,7 +727,7 @@ test_gtar() {
 }
 
 test_gumbo() {
- codeberg_tar gumbo-parser gumbo-parser 0.14.0
+ codeberg_tar gumbo-parser gumbo-parser 0.14.1
  muon_init
  muon_build
  muon_test
@@ -782,7 +782,7 @@ test_ijgjpeg() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-31
+ github_tar ImageMagick ImageMagick 7.1.2-32
  fix_and_configure
  make check V=1
 }
@@ -861,7 +861,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh d8442c728139c2b8ac096acd058ebc5d0a7fc0d2 ksh93
+ git_fetch https://github.com/ksh93/ksh f09d2aafadcf3feed72c4493a1e104e26e89034e ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -960,7 +960,7 @@ test_libfyaml() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc 2547e33aa8123320dd8021ca3cea998075ede415 libgc
+ git_fetch https://github.com/bdwgc/bdwgc e50d792d8abfcd5092eb16113ffb618e913c890b libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -1055,7 +1055,7 @@ test_libopus() {
 }
 
 test_libpcre2() {
- github_tar PCRE2Project pcre2 pcre2-10.48
+ github_tar PCRE2Project pcre2 pcre2-10.49
  fix_and_configure
  make check
 }
@@ -1068,7 +1068,7 @@ test_libpkgconf() {
 }
 
 test_libpng() {
- github_tar pnggroup libpng v1.6.58
+ github_tar pnggroup libpng v1.6.59
  fix_and_configure
  make test
 }
@@ -1518,7 +1518,7 @@ test_noplate() {
 }
 
 test_nqp() {
- github_clone MoarVM MoarVM 2026.08
+ github_clone MoarVM MoarVM 2026.09
  use_stdbit '#include "moar.h"' src/core/coerce.c
  use_stdbit '#include "moar.h"' src/core/interp.c
  use_stdbit '#include "moar.h"' src/math/bigintops.c
@@ -1526,7 +1526,7 @@ test_nqp() {
  make install
  cd ../
 
- github_clone Raku nqp 2026.08
+ github_clone Raku nqp 2026.09
  perl Configure.pl --with-moar=$PWD/../MoarVM/install/bin/moar
  make test
 }
@@ -1766,7 +1766,7 @@ test_qman() {
 }
 
 test_quickjs() {
- git_fetch https://github.com/bellard/quickjs a38171d37357edff256c28a73eaeb41d2466d1d5 quickjs
+ git_fetch https://github.com/bellard/quickjs abf571aa9211ee4b27c17d528e7205c9f757cac9 quickjs
  use_stdbit "#include <stdlib.h>" cutils.h
  make CC=$CC test
 }
@@ -1959,7 +1959,7 @@ test_sqlite() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC 3e3a0e4411b6f95d666d711c540bb72a92640e2b stc
+ git_fetch https://github.com/stclib/STC d136e0ded6e4c1e9971634374cec48b1d1ea26d5 stc
  muon_init
  muon_build
  muon_test
@@ -2605,7 +2605,7 @@ build_oksh() {
 
 build_pcc() {
  local DIR=$PWD/pcc_install
- git_fetch https://github.com/PortableCC/pcc 68440c9da080e60e88ba0c3595dcda36f134be96 pcc
+ git_fetch https://github.com/PortableCC/pcc 201554009decadafd2af7c7d1dd631e583967dd8 pcc
  ./configure --prefix=$DIR
  make && make install
  cd ../
@@ -2638,7 +2638,7 @@ build_q2rtx() {
 }
 
 build_qoi() {
- git_fetch https://github.com/phoboslab/qoi 97bacc86a9c4abf5a2d452102dc26546c4c670b9 qoi
+ git_fetch https://github.com/phoboslab/qoi ffb2d2cb74a1de60819b21b939f7209aa53e91c1 qoi
  git_fetch https://github.com/nothings/stb 2c980bb59875b0d32144a71867fbdebb2f77cd20 stb
  cd ../
  CFLAGS='-Istb/ -DSTBI_NO_SIMD' make conv
@@ -3008,7 +3008,7 @@ shared_binutils() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon 921380641d616be0d0750d51709f0c98108d396d muon
+ git_fetch https://github.com/muon-build/muon be891e13d6ca9866fc28c77c1e3650f45896ab15 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
