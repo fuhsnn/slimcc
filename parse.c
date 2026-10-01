@@ -2435,7 +2435,10 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
 
   if (ty->kind == TY_AUTO) {
     init->kind = INIT_EXPR;
-    init->expr = assign(rest, tok);
+    init->expr = assign(&tok, tok);
+    if (tok->kind == TK_COMMA)
+      error_tok(tok, "multiple declarators unsupported for type inference");
+    *rest = tok;
     ptr_convert(&init->expr);
 
     if (chk_qual_type(ty->qual, init->expr->ty))
