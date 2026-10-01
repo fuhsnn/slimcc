@@ -237,7 +237,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler d8524970362ce785a09003c83d806fb6ca5fc44d c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 4456eeb15eff989861d84ba25c47085ebead0619 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -861,7 +861,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh f09d2aafadcf3feed72c4493a1e104e26e89034e ksh93
+ git_fetch https://github.com/ksh93/ksh 1d0ffcf1c6cfbcb0d5f2c27aead3ab2f31c974b9 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1329,7 +1329,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.5.3
+ github_tar microsoft mimalloc v3.5.4
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -1363,7 +1363,7 @@ test_minmea() {
 }
 
 test_mjs() {
- git_fetch https://github.com/cesanta/mjs cf375c40f6f15447af4925c33cd7c549b54deb2c mjs
+ git_fetch https://github.com/cesanta/mjs 3f0894c5b61ac2e732524b4b6ada6f66815d496e mjs
  $CC tests/unit_test.c src/common/test_*.c src/common/cs_time.c -I. -Isrc -DMJS_MEMORY_STATS -DMJS_ENABLE_DEBUG=1 -lm -o unit_test
  ./unit_test
 }
@@ -1577,7 +1577,7 @@ test_openssh() {
 }
 
 test_openssl() {
- github_tar openssl openssl openssl-3.6.4
+ github_tar openssl openssl openssl-3.6.5
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
  make -j2 && make test HARNESS_JOBS=2
@@ -1959,7 +1959,7 @@ test_sqlite() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC d136e0ded6e4c1e9971634374cec48b1d1ea26d5 stc
+ git_fetch https://github.com/stclib/STC da05cc7474260f0cfb6fbacba9524f1f26d697cd stc
  muon_init
  muon_build
  muon_test
@@ -1972,7 +1972,7 @@ test_talloc() {
 }
 
 test_tcl() {
- github_tar tcltk tcl core-9-0-4
+ github_tar tcltk tcl core-9-1-0
  ./unix/configure
  rm ./tests/socket.test # fails under su
  make test | tee __testlog
@@ -2100,7 +2100,7 @@ test_uriparser() {
 }
 
 test_utf8h() {
- git_fetch https://github.com/sheredom/utf8.h 7b7431278ba0162eba6c60a3ecd2f1210f9e963b utf8h
+ git_fetch https://github.com/sheredom/utf8.h f59f2fba4386f3d18261351833b44c92cd652a10 utf8h
  replace_line "#elif defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)" "#elif 1" test/utest.h
  replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" utf8.h
  "$CC" test/main.c -I./ -o run_tests
