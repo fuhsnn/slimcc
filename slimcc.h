@@ -421,6 +421,7 @@ struct Token {
   bool is_root : 1;
   bool is_live : 1;
   bool has_ucn : 1;
+  bool is_expr_param : 1;
   int len;         // Token length
   const char *loc; // Token location
   File *file;
