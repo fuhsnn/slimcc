@@ -401,13 +401,19 @@ uint32_t decode_utf8(const char **new_pos, const char *p) {
   return c;
 }
 
-static bool in_range(uint32_t c, const UTF32Range *range, int len) {
-  for (int i = 0; i < len; i++) {
-    if (c > range[i].last)
-      continue;
-    if (range[i].first <= c)
+static bool in_range(uint32_t c, const UTF32Range *range, size_t len) {
+  int64_t lo = 0;
+  int64_t hi = len - 1;
+
+  while (lo <= hi) {
+    int64_t mid = (lo + hi) / 2;
+
+    if (range[mid].first > c)
+      hi = mid - 1;
+    else if (range[mid].last < c)
+      lo = mid + 1;
+    else
       return true;
-    return false;
   }
   return false;
 }
