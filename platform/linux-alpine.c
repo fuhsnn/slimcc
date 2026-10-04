@@ -9,11 +9,11 @@ void platform_init_cc1(void) {
     define_macro("linux", "1");
   define_macro("__linux", "1");
   define_macro("__linux__", "1");
+
+  init_ty_lp64();
 }
 
 void platform_init_driver(void) {
-  init_ty_lp64();
-
   dumpmachine_str = "x86_64-alpine-linux-musl";
 
   opt_fpie = 2;
