@@ -448,6 +448,11 @@ int display_width(const char *p, int len) {
   const char *start = p;
   int w = 0;
   while (p - start < len) {
+    if (*p >= 0x20 && *p < 0x7F) {
+      w++;
+      p++;
+      continue;
+    }
     if (*p == '\t') {
       w += 8;
       p++;
