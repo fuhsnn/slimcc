@@ -48,6 +48,7 @@ Token *last_alloc_tok;
 Token *tok_freelist;
 
 static const char *base_file;
+static const char *base_file_str;
 struct tm *cur_time;
 
 static Token *preprocess3(Token *tok);
@@ -324,13 +325,13 @@ static Token *new_num_token(int64_t val, Token *orig, Token *nxt) {
   return make_token(arena_format(&cc1_arena, "%" PRIi64 "\n", val), orig, nxt);
 }
 
-static Token *new_str_token(const char *str, Token *orig) {
+static char *quote_string(const char *str) {
   size_t len = strlen(str);
-  char *buf = malloc(len + 3);
+  char *buf = arena_malloc(&cc1_arena, len + 3);
   memcpy(buf + 1, str, len);
   buf[0] = buf[len + 1] = '"';
   buf[len + 2] = '\0';
-  return make_token(buf, orig, orig->next);
+  return buf;
 }
 
 static Token *to_pp_eval_int(Token *tok, int64_t val) {
@@ -635,47 +636,61 @@ static MacroArg *find_arg(Token **rest, Token *tok, MacroContext *ctx) {
 }
 
 // Concatenates all tokens in `tok` and returns a new string.
-static char *join_tokens(Token *tok, Token *end, bool add_slash) {
+static char *join_tokens(Token *tok, Token *end, bool is_stringize) {
   // Compute the length of the resulting token.
-  int len = 1;
+  size_t len = is_stringize ? 3 : 1;
+
   for (Token *t = tok; t != end; t = t->next) {
-    if (t->has_space && len != 1)
+    if (t->has_space && t != tok)
       len++;
 
-    if (add_slash && (t->kind == TK_CHAR_LIT ||
-                      t->kind == TK_STR ||
-                      t->kind == TK_ASM_STR ||
-                      t->kind == TK_INVALID))
-      for (int i = 0; i < t->len; i++)
-        if (t->loc[i] == '\\' || t->loc[i] == '"')
+    if (is_stringize) {
+      switch (t->kind) {
+      case TK_STR:
+      case TK_CHAR_LIT:
+      case TK_ASM_STR:
+      case TK_INVALID:
+        for (int i = 0; i < t->len; i++) {
+          if (t->loc[i] == '\\' || t->loc[i] == '"')
+            len++;
           len++;
-
+        }
+        continue;
+      }
+    }
     len += t->len;
   }
 
-  char *buf = calloc(1, len);
+  char *buf = malloc(len);
+  size_t pos = 0;
+  if (is_stringize)
+    buf[pos++] = '"';
 
-  // Copy token texts.
-  int pos = 0;
   for (Token *t = tok; t != end; t = t->next) {
-    if (t->has_space && pos != 0)
+    if (t->has_space && t != tok)
       buf[pos++] = ' ';
 
-    if (add_slash && (t->kind == TK_CHAR_LIT ||
-                      t->kind == TK_STR ||
-                      t->kind == TK_ASM_STR ||
-                      t->kind == TK_INVALID)) {
-      for (int i = 0; i < t->len; i++) {
-        if (t->loc[i] == '\\' || t->loc[i] == '"')
-          buf[pos++] = '\\';
-        buf[pos++] = t->loc[i];
+    if (is_stringize) {
+      switch (t->kind) {
+      case TK_STR:
+      case TK_CHAR_LIT:
+      case TK_ASM_STR:
+      case TK_INVALID:
+        for (int i = 0; i < t->len; i++) {
+          if (t->loc[i] == '\\' || t->loc[i] == '"')
+            buf[pos++] = '\\';
+          buf[pos++] = t->loc[i];
+        }
+        continue;
       }
-      continue;
     }
-
     memcpy(buf + pos, t->loc, t->len);
     pos += t->len;
   }
+
+  if (is_stringize)
+    buf[pos++] = '"';
+
   buf[pos] = '\0';
   return buf;
 }
@@ -688,7 +703,7 @@ static Token *stringize(Token *hash, Token *tok) {
       cur = cur->next = tok;
   cur->next = tok;
 
-  return new_str_token(join_tokens(head.next, tok, true), hash);
+  return make_token(join_tokens(head.next, tok, true), hash, hash->next);
 }
 
 static void align_token(Token *tok1, Token *tok2) {
@@ -1557,7 +1572,9 @@ static Token *file_macro(Token *start) {
   Token *tok = start;
   if (tok->origin)
     tok = tok->origin;
-  return new_str_token(display_files.data[tok->file->display_file_no], start);
+
+  const char *name = display_files.data[tok->file->display_file_no];
+  return make_token(quote_string(name), start, start->next);
 }
 
 static Token *line_macro(Token *start) {
@@ -1628,7 +1645,9 @@ static Token *timestamp_macro(Token *start) {
 }
 
 static Token *base_file_macro(Token *start) {
-  return new_str_token(base_file, start);
+  if (!base_file_str)
+    base_file_str = quote_string(base_file);
+  return make_token(base_file_str, start, start->next);
 }
 
 static Token *pragma_macro(Token *start) {
