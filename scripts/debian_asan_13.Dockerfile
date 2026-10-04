@@ -72,6 +72,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  python3-cogapp libcunit1-dev \
  # fribidi
  help2man \
+ # bcgh
+ bc \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain

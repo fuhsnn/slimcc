@@ -41,6 +41,7 @@ jobs:
           - { vm: interop, proj: build_foot }
           - { vm: interop, proj: build_glfw }
           - { vm: interop, proj: build_i3 }
+          - { vm: interop, proj: build_microui }
           - { vm: interop, proj: build_miniaudio }
           - { vm: interop, proj: build_nanovg }
           - { vm: interop, proj: build_ncurses }
@@ -52,11 +53,13 @@ jobs:
           - { vm: interop, proj: build_wayst }
           - { vm: interop, proj: build_wlroots_sway }
           - { vm: interop, proj: build_yquake2 }
+          - { vm: interop, proj: build_zopfli }
           - { vm: interop, proj: test_apexmarkdown }
           - { vm: interop, proj: test_blosc2 }
           - { vm: interop, proj: test_box2d }
           - { vm: interop, proj: test_box3d }
           - { vm: interop, proj: test_c3 }
+          - { vm: interop, proj: test_cares }
           - { vm: interop, proj: test_cgltf }
           - { vm: interop, proj: test_ckdl }
           - { vm: interop, proj: test_cmark }
@@ -101,6 +104,8 @@ jobs:
           - { vm: main, proj: bootstrap_musl }
           - { vm: main, proj: build_bc }
           - { vm: main, proj: build_dash }
+          - { vm: main, proj: build_dnsmasq }
+          - { vm: main, proj: build_dropbear }
           - { vm: main, proj: build_duktape }
           - { vm: main, proj: build_ellipsis }
           - { vm: main, proj: build_erlang }
@@ -117,14 +122,18 @@ jobs:
           - { vm: main, proj: build_libsoldout }
           - { vm: main, proj: build_luajit }
           - { vm: main, proj: build_lynx }
+          - { vm: main, proj: build_mandoc }
           - { vm: main, proj: build_mg }
           - { vm: main, proj: build_mksh }
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_nolibc }
           - { vm: main, proj: build_oksh }
           - { vm: main, proj: build_pcc }
+          - { vm: main, proj: build_pngcrush }
           - { vm: main, proj: build_qoi }
           - { vm: main, proj: build_racket }
+          - { vm: main, proj: build_speex }
+          - { vm: main, proj: build_speexdsp }
           - { vm: main, proj: build_stb }
           - { vm: main, proj: build_tin }
           - { vm: main, proj: build_tinybasic }
@@ -137,6 +146,7 @@ jobs:
           - { vm: main, proj: test_argtable3 }
           - { vm: main, proj: test_asn1c }
           - { vm: main, proj: test_bash }
+          - { vm: main, proj: test_bcgh }
           - { vm: main, proj: test_bearssl }
           - { vm: main, proj: test_bfs }
           - { vm: main, proj: test_binn }
@@ -212,16 +222,6 @@ jobs:
           - { vm: main, proj: test_heatshrink }
           - { vm: main, proj: test_hoedown }
           - { vm: main, proj: test_htscodecs }
-          - { vm: main, proj: test_httpparser }
-          - { vm: main, proj: test_ijgjpeg }
-          - { vm: main, proj: test_incbin }
-          - { vm: main, proj: test_janet }
-          - { vm: main, proj: test_jemalloc }
-          - { vm: main, proj: test_jerryscript }
-          - { vm: main, proj: test_jq }
-          - { vm: main, proj: test_js0n }
-          - { vm: main, proj: test_jsmn }
-          - { vm: main, proj: test_jsonparser }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -233,6 +233,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_httpparser }
+          - { vm: main, proj: test_ijgjpeg }
+          - { vm: main, proj: test_incbin }
+          - { vm: main, proj: test_janet }
+          - { vm: main, proj: test_jemalloc }
+          - { vm: main, proj: test_jerryscript }
+          - { vm: main, proj: test_jq }
+          - { vm: main, proj: test_js0n }
+          - { vm: main, proj: test_jsmn }
+          - { vm: main, proj: test_jsonparser }
           - { vm: main, proj: test_ksh93 }
           - { vm: main, proj: test_lame }
           - { vm: main, proj: test_lexbor }
@@ -250,6 +260,7 @@ jobs:
           - { vm: main, proj: test_libjpeg }
           - { vm: main, proj: test_libjsonc }
           - { vm: main, proj: test_liblz4 }
+          - { vm: main, proj: test_liblzw }
           - { vm: main, proj: test_libmpc }
           - { vm: main, proj: test_libmpfr }
           - { vm: main, proj: test_libopus }
@@ -271,10 +282,12 @@ jobs:
           - { vm: main, proj: test_libyaml }
           - { vm: main, proj: test_lighthttpd }
           - { vm: main, proj: test_linenoise }
+          - { vm: main, proj: test_lizard }
           - { vm: main, proj: test_lmdb }
           - { vm: main, proj: test_lua }
           - { vm: main, proj: test_lwan }
           - { vm: main, proj: test_lwrb }
+          - { vm: main, proj: test_lzfse }
           - { vm: main, proj: test_lzo }
           - { vm: main, proj: test_mawk }
           - { vm: main, proj: test_mbedtls }
@@ -310,11 +323,13 @@ jobs:
           - { vm: main, proj: test_openrc }
           - { vm: main, proj: test_openssh }
           - { vm: main, proj: test_openssl }
+          - { vm: main, proj: test_optparse }
           - { vm: main, proj: test_orangeduck_mpc }
           - { vm: main, proj: test_packcc }
           - { vm: main, proj: test_pacman }
           - { vm: main, proj: test_parrot }
           - { vm: main, proj: test_parson }
+          - { vm: main, proj: test_pdjson }
           - { vm: main, proj: test_pdpmake }
           - { vm: main, proj: test_pegleg }
           - { vm: main, proj: test_perl }
