@@ -655,7 +655,8 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
           set_bool(arg, b, "gnu89-inline", &opt_gnu89_inline))
         continue;
 
-      if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct))
+      if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct) ||
+          set_bool(arg, b, "ms-anonymous-structs", &opt_ms_anon_struct))
         continue;
 
       if (!strcmp(arg, "asm") || !strcmp(arg, "gnu-keywords")) {

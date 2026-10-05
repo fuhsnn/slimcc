@@ -4929,7 +4929,8 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       if (basety->size < 0)
         error_tok(tok, "member has incomplete type");
       if (basety->tag && !opt_ms_anon_struct)
-        error_tok(tok, "enable MSVC anonymous struct extension with `-fms-anon-struct`");
+        error_tok(tok,
+                  "enable MSVC anonymous struct extension with `-fms-anonymous-structs`");
       chk_mem_name(&names, basety->members);
 
       Member *mem = calloc(1, sizeof(Member));
