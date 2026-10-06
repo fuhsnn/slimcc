@@ -522,6 +522,8 @@ bool is_compatible(Type *t1, Type *t2) {
         return false;
     }
     return t1->is_unsigned == t2->is_unsigned;
+  case TY_VOID:
+  case TY_NULLPTR:
   case TY_FLOAT:
   case TY_DOUBLE:
   case TY_LDOUBLE: return true;

@@ -5345,6 +5345,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
   }
   Node *ret = NULL;
   Node *def = NULL;
+  StringArray genassoc_types = {0};
 
   while (comma_list(rest, &tok, TK_RPAREN, true)) {
     if (tok->kind == TK_default) {
@@ -5356,19 +5357,31 @@ static Node *generic_selection(Token **rest, Token *tok) {
       continue;
     }
 
+    Token *type_begin = tok;
     Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
     Type *t2 = declarator2(&tok, tok, basety, NULL);
+
     declarator3(basety, t2, true, false);
 
     Node *node = assign(&tok, skip_tk(tok, TK_COLON));
-    if (is_compatible2(t1, t2)) {
-      if (ret) {
-        notice_tok(ret->tok, "ambiguous _Generic selection");
-        error_tok(node->tok, "with this option");
+    
+    for (int i = 0; i < genassoc_types.len; i++) {
+      if (is_compatible2((Type*) genassoc_types.data[i], t2)) {
+        error_tok(type_begin, "_Generic selection contains multiple associations with compatible types");
       }
+    }
+
+    strarray_push(&genassoc_types, (char*) t2);
+
+    if (is_compatible2(t1, t2)) {
+      if (ret)
+        internal_error();
       ret = node;
     }
   }
+
+  free(genassoc_types.data);
+
   if (!ret) {
     if (!def)
       error_tok(start, "controlling expression type not compatible with"
