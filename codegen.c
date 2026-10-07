@@ -144,8 +144,8 @@ typedef struct {
 
 static struct {
   Slot *data;
-  int capacity;
-  int depth;
+  int32_t capacity;
+  int32_t depth;
 } tmp_stack;
 
 struct AsmContext {
@@ -231,10 +231,9 @@ static void push_ref(Obj *var) {
   ent->val = (void *)1;
 
   FuncObj *fn = codegen_fn->output;
-  if (fn->ref_cnt == fn->ref_capacity) {
-    fn->ref_capacity += 4;
-    fn->refs = realloc(fn->refs, sizeof(Obj *) * fn->ref_capacity);
-  }
+  if (fn->ref_cnt == fn->ref_capacity)
+    GrowArr(fn->refs, &fn->ref_capacity);
+
   fn->refs[fn->ref_cnt++] = var;
 }
 
@@ -471,10 +470,8 @@ static void clobber_gp(int i) {
 }
 
 static Slot *push_tmpstack(SlotKind kind) {
-  if (tmp_stack.depth == tmp_stack.capacity) {
-    tmp_stack.capacity += 4;
-    tmp_stack.data = realloc(tmp_stack.data, sizeof(Slot) * tmp_stack.capacity);
-  }
+  if (tmp_stack.depth == tmp_stack.capacity)
+    GrowArr(tmp_stack.data, &tmp_stack.capacity);
 
   long loc = resrvln();
   Slot *sl = &tmp_stack.data[tmp_stack.depth++];

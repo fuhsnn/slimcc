@@ -35,8 +35,8 @@ typedef struct {
 
 static struct {
   CondIncl *data;
-  int capacity;
-  int cnt;
+  int32_t capacity;
+  int32_t cnt;
 } cond_incl;
 
 static Macro *locked_macros;
@@ -407,11 +407,10 @@ static int64_t eval_pp_const_expr(Token *tok) {
 }
 
 static void push_cond_incl(Token *tok, bool active) {
+  if (cond_incl.cnt == cond_incl.capacity)
+    GrowArr(cond_incl.data, &cond_incl.capacity);
+
   int idx = cond_incl.cnt++;
-  if (idx >= cond_incl.capacity) {
-    cond_incl.capacity = idx + 8;
-    cond_incl.data = realloc(cond_incl.data, sizeof(CondIncl) * cond_incl.capacity);
-  }
   cond_incl.data[idx].tok = tok;
   cond_incl.data[idx].is_else = false;
   cond_incl.data[idx].been_active = active;

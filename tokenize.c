@@ -7,8 +7,8 @@ typedef struct {
 
 struct SlashDelta {
   SlashPos *sp;
-  int capacity;
-  int len;
+  int32_t capacity;
+  int32_t len;
 };
 
 static File *current_file;
@@ -1357,7 +1357,7 @@ static void delta_push(SlashDelta *dlt, int pos, int cnt) {
     }
   }
   if (dlt->capacity == dlt->len)
-    dlt->sp = realloc(dlt->sp, (dlt->capacity += 8) * sizeof(SlashPos));
+    GrowArr(dlt->sp, &dlt->capacity);
 
   dlt->sp[dlt->len].pos = pos;
   dlt->sp[dlt->len].cnt = cnt;

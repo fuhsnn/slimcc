@@ -246,12 +246,18 @@ void hashmap_test(void);
 // strings.c
 //
 
+#define GrowArr(_data, _cap)                         \
+  do {                                               \
+    _data = grow_array(_data, sizeof(*_data), _cap); \
+  } while (0)
+
 typedef struct {
   const char **data;
-  int capacity;
-  int len;
+  int32_t capacity;
+  int32_t len;
 } StringArray;
 
+void *grow_array(void *data, size_t sz, int32_t *cap);
 void strarray_push(StringArray *arr, const char *s);
 char *format(const char *fmt, ...) FMTCHK(1, 2);
 

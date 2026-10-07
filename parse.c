@@ -151,9 +151,9 @@ struct JumpContext {
 } *jump_ctx;
 
 struct {
-  int *data;
-  int capacity;
-  int cnt;
+  int32_t *data;
+  int32_t capacity;
+  int32_t cnt;
 } pack_stk;
 
 typedef struct FuncContext FuncContext;
@@ -800,11 +800,10 @@ static bool braced_list(Token **rest, Token **tok_rest, bool skip_comma) {
 static void pragma_pack_push(void) {
   bool init = !pack_stk.cnt;
 
+  if (pack_stk.cnt == pack_stk.capacity)
+    GrowArr(pack_stk.data, &pack_stk.capacity);
+
   int idx = pack_stk.cnt++;
-  if (idx >= pack_stk.capacity) {
-    pack_stk.capacity = idx + 2;
-    pack_stk.data = realloc(pack_stk.data, sizeof(*pack_stk.data) * pack_stk.capacity);
-  }
   pack_stk.data[idx] = idx ? pack_stk.data[idx - 1] : 0;
 
   if (init)

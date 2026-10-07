@@ -1,17 +1,22 @@
 #include "slimcc.h"
 
-void strarray_push(StringArray *arr, const char *s) {
-  if (!arr->data) {
-    arr->data = calloc(8, sizeof(char *));
-    arr->capacity = 8;
+void *grow_array(void *data, size_t sz, int32_t *cap) {
+  int64_t newcap = (int64_t)*cap * 2;
+  if (newcap <= INT32_MAX) {
+    if (newcap == 0)
+      newcap = 8;
+    void *p = realloc(data, sz * newcap);
+    if (p) {
+      *cap = newcap;
+      return p;
+    }
   }
+  internal_error();
+}
 
-  if (arr->capacity == arr->len) {
-    arr->data = realloc(arr->data, sizeof(char *) * arr->capacity * 2);
-    arr->capacity *= 2;
-    for (int i = arr->len; i < arr->capacity; i++)
-      arr->data[i] = NULL;
-  }
+void strarray_push(StringArray *arr, const char *s) {
+  if (arr->capacity == arr->len)
+    GrowArr(arr->data, &arr->capacity);
 
   arr->data[arr->len++] = s;
 }

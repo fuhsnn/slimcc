@@ -15,8 +15,8 @@ typedef struct {
 
 typedef struct {
   MacroChange *data;
-  int capacity;
-  int len;
+  int32_t capacity;
+  int32_t len;
 } MacroChangeArr;
 
 StringArray include_paths;
@@ -232,10 +232,9 @@ static void set_std_iso(const char *arg) {
 }
 
 static void macrochange_push(MacroChangeArr *arr, const char *arg, bool is_def) {
-  if (arr->len == arr->capacity) {
-    arr->capacity += 8;
-    arr->data = realloc(arr->data, sizeof(MacroChange) * arr->capacity);
-  }
+  if (arr->len == arr->capacity)
+    GrowArr(arr->data, &arr->capacity);
+
   MacroChange *m = &arr->data[arr->len++];
   m->arg = arg;
   m->is_def = is_def;
