@@ -522,10 +522,7 @@ bool is_compatible(Type *t1, Type *t2) {
         return false;
     }
     return t1->is_unsigned == t2->is_unsigned;
-  case TY_FLOAT:
-  case TY_DOUBLE:
-  case TY_LDOUBLE: return true;
-  case TY_PTR:     return is_compatible2(t1->base, t2->base);
+  case TY_PTR:  return is_compatible2(t1->base, t2->base);
   case TY_FUNC: {
     if (!is_compatible(t1->return_ty, t2->return_ty))
       return false;
