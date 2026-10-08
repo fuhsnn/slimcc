@@ -206,6 +206,7 @@ static void set_std(bool is_iso, const char *arg) {
     case 17:
     case 18: opt_std = STD_C17; return;
     case 23: opt_std = STD_C23; return;
+    case 29: opt_std = STD_C2Y; return;
     }
   }
   error("unknown c standard");
@@ -253,6 +254,7 @@ static void cli_macros(bool is_asm_pp) {
     case STD_C11: define_macro("__STDC_VERSION__", "201112L"); break;
     case STD_C17: define_macro("__STDC_VERSION__", "201710L"); break;
     case STD_C23: define_macro("__STDC_VERSION__", "202311L"); break;
+    case STD_C2Y: define_macro("__STDC_VERSION__", "202400L"); break;
     }
 
     if (opt_std >= STD_C99)
@@ -639,6 +641,11 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
         set_std_iso(arg);
       else
         error("unknown c standard");
+      continue;
+    }
+
+    if (!strcmp(argv[i], "--tmpflagstdgnu2y")) {
+      set_std(false, "29");
       continue;
     }
 

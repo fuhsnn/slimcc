@@ -1,5 +1,7 @@
 #include "test.h"
 
+static_assert(_Generic(0wb, _BitInt(2):1));
+
 _BitInt(333) bitint_fn1(unsigned char c, int m, _BitInt(300) h);
 _BitInt(80) bitint_fn2(unsigned _BitInt(3) neg4,int food, _BitInt(80) v, int cat);
 

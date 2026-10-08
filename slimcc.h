@@ -1113,7 +1113,7 @@ void run_linker(StringArray *paths, StringArray *args, const char *output);
 // main.c
 //
 
-typedef enum { STD_C89, STD_C94, STD_C99, STD_C11, STD_C17, STD_C23 } StdVer;
+typedef enum { STD_C89, STD_C94, STD_C99, STD_C11, STD_C17, STD_C23, STD_C2Y } StdVer;
 
 typedef enum {
   LT_RELO,

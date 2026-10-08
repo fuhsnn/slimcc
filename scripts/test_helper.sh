@@ -6,7 +6,7 @@ SRC=$2
 
 OUT=$3
 
-FLAGS='-Itest/ -std=gnu23'
+FLAGS='-Itest/ --tmpflagstdgnu2y'
 
 for p in `sed -n '/\/\/SREJ /=' $SRC`; do
   sed -e $p's|\/\/SREJ ||g' $SRC | $TSTCC -xc - $FLAGS -S -o/dev/null 2>/dev/null

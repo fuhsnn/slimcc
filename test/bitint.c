@@ -56,7 +56,7 @@ void bitint_bitfiled(void) {
   ASSERT(1, ({struct { _BitInt(W+1)i:W-1;} s; _Generic(0+s.i, _BitInt(W+1):1);}));
 }
 
-SASSERT(_Generic(0wb, _BitInt(2):1));
+SASSERT(_Generic(0wb, _BitInt(1):1));
 SASSERT(_Generic(0uwb, _BitInt(1) unsigned:1));
 SASSERT(_Generic(0b11wb, _BitInt(3):1));
 SASSERT(_Generic(0b10wbu, _BitInt(2) unsigned:1));
