@@ -697,6 +697,13 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
         continue;
       }
 
+      // These options are ignored for now.
+      if (!strcmp(arg, "strict-aliasing") ||
+          !strcmp(arg, "strict-overflow") ||
+          !strcmp(arg, "unroll-loops") ||
+          !strcmp(arg, "omit-frame-pointer"))
+        continue;
+
       // -f only options
       if (b) {
         if (set_true(arg, "defer-ts", &opt_fdefer_ts))
@@ -790,10 +797,7 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
         !strcmp(argv[i], "-fno-asynchronous-unwind-tables") ||
         !strcmp(argv[i], "-fno-delete-null-pointer-checks") ||
         !strcmp(argv[i], "-fno-exceptions") ||
-        !strcmp(argv[i], "-fno-omit-frame-pointer") ||
         !strcmp(argv[i], "-fno-stack-protector") ||
-        !strcmp(argv[i], "-fno-strict-aliasing") ||
-        !strcmp(argv[i], "-fno-strict-overflow") ||
         !strcmp(argv[i], "-fwrapv") ||
         !strcmp(argv[i], "-m64") ||
         !strcmp(argv[i], "-malign-double") ||
