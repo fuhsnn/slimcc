@@ -89,10 +89,6 @@ int main() {
     constexpr uint64_t y = (uint64_t)x;
     static_assert((uint64_t)-6L == y);
   }
-  {
-    constexpr struct {  char c[23]; } s = {0};
-    static_assert((s,1));
-  }
 
   for (constexpr int i = 0; i;) {
     static_assert(i == 0);

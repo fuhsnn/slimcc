@@ -104,7 +104,7 @@ int main(void) {
   SASSERT( 16777217.0 != (float)16777217.0 );
   SASSERT( 9007199254740993.0L != (double)9007199254740993.0L || sizeof(double) == sizeof(long double) );
 
-#ifdef NOTCLANG
+#ifdef NOTGCC
   SASSERT( 127 == (unsigned char)511.0 >> 1 );
 #endif
   SASSERT( (long long)(0.1f * 1e12f) == 99999997952LL );
@@ -125,6 +125,28 @@ int main(void) {
 
     SASSERT(8 == sizeof((0,arr)));
     SASSERT(3 == sizeof( (typeof(arr)){0} ));
+  }
+
+  {
+    #define CHK_NON_CONST(...) \
+      SASSERT(1 == _Generic((1?(void *)(intptr_t)((__VA_ARGS__)*0):(int*)0), int*:0,void*:1)); \
+      ASSERT(1, ({ int(*p)[(intptr_t)(__VA_ARGS__)*0+1]=0; typeof(p++)q; p-0!=0; }))
+
+    volatile int x = 1;
+    CHK_NON_CONST(0&&x);
+    CHK_NON_CONST(1||x);
+    CHK_NON_CONST(1,1);
+    CHK_NON_CONST(0?x:1);
+    CHK_NON_CONST(1?1:x);
+    CHK_NON_CONST(1?:x);
+    CHK_NON_CONST(!"foo");
+
+    volatile double f = 1.0;
+    CHK_NON_CONST(0?f:1);
+    CHK_NON_CONST(1?1:f);
+    CHK_NON_CONST(1?:f);
+
+    CHK_NON_CONST(0,0.0);
   }
 
   printf("OK\n");

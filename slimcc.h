@@ -833,6 +833,7 @@ Node *new_var_node(Obj *obj, Token *tok);
 Obj *new_lvar(Type *ty);
 bool is_const_var(Obj *var);
 bool is_const_expr(Node *node, int64_t *val);
+bool is_const_expr_strict(Node *node, int64_t *val);
 bool is_const_fp(Node *node, FPVal *fval);
 bool is_const_zero_bitint(Node *node);
 Obj *eval_var_opt(Node *node, int *ofs, bool let_array, bool let_atomic);

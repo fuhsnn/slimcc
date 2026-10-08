@@ -11,7 +11,7 @@ int main(void){
   SASSERT( sizeof(arr2) == 5 * sizeof(int) );
   SASSERT( arr[arr2[arr[0]]] == 7);
 
-  SASSERT( (0, arr)[5] == (i == j ? arr2 : arr)[1] );
+  SASSERT( arr[5] == (i == j ? arr2 : arr)[1] );
 
   constexpr int arr3[3][2] = {1,2,3,4,5,6};
   SASSERT( (arr3[0] + 1)[0] == 2);

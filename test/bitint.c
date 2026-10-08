@@ -115,6 +115,17 @@ void bitint_null_ptr_constant(int i) {
   ASSERT(1, (_BitInt(99))0 != (int *){&i});
   ASSERT(1, (_BitInt(99))0 == (void*)0);
   ASSERT(1, (_BitInt(99))0 == nullptr);
+
+  #define CHK_NON_CONST(...) \
+    static_assert(_Generic((1?(void *)(__VA_ARGS__):(int*)0),void*:1))
+
+  volatile _BitInt(2) x;
+  CHK_NON_CONST(0,0wb);
+  CHK_NON_CONST(0?x:(_BitInt(300))0);
+  CHK_NON_CONST(1?(_BitInt(300))0:x);
+
+  static_assert(0?x:(_BitInt(300))1);
+  static_assert(1?(_BitInt(300))1:x);
 }
 
 int main() {
@@ -131,7 +142,7 @@ int main() {
     SASSERT(A == -999);
 
     alignas(1000 + 24uwb) _BitInt(300wb + 80) i;
-    ASSERT(0, (int)&i & 1023);
+    ASSERT(0, (intptr_t)&i & 1023);
     ASSERT(48, sizeof(i));
 
     static_assert(((_BitInt(400))1 << 300));

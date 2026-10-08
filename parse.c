@@ -174,6 +174,7 @@ static Scope *scope = &(Scope){0};
 static HashMap symbols;
 static FuncContext *fnctx;
 static bool *eval_recover;
+static bool eval_strict;
 
 static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
@@ -210,6 +211,7 @@ static Node *assign(Token **rest, Token *tok);
 static long_double_t eval_double(Node *node);
 static BitBuf *eval_bitint(Node *node);
 static BitBuf *eval_bitint_clean(Node *node);
+static bool is_const_bitint_strict(Node *node, BitBuf **result);
 static Node *conditional(Token **rest, Token *tok);
 static bool addsub_overload(Node **lhs, Node **rhs);
 static Node *new_add(Node *lhs, Node *rhs, Token *tok);
@@ -470,31 +472,10 @@ Node *new_cast(Node *expr, Type *ty) {
   if (invalid_cast(expr, ty))
     error_tok(expr->tok, "invalid cast");
 
-  if (ty->kind == TY_BOOL) {
-    Node *n = expr;
-    while (n->kind == ND_CAST &&
-           n->ty->size == 8 &&
-           (n->ty->kind == TY_PTR || is_integer(n->ty)))
-      n = n->m.lhs;
-
-    Obj *var = NULL;
-    if (n->kind == ND_ADDR && n->m.lhs->kind == ND_VAR)
-      var = n->m.lhs->m.var;
-    else if (n->kind == ND_VAR && is_decay_ty(n->ty))
-      var = n->m.var;
-
-    if (var && !var->is_weak) {
-      expr->kind = ND_NUM;
-      expr->num.val = 1;
-      expr->ty = ty_bool;
-      return expr;
-    }
-  }
-
   Node tmp_node = {.kind = ND_CAST, .tok = expr->tok, .m.lhs = expr, .ty = ty};
   if (opt_optimize) {
     int64_t val = 0;
-    if (is_integer(ty) && is_const_expr(&tmp_node, &val)) {
+    if (is_integer(ty) && is_const_expr_strict(&tmp_node, &val)) {
       expr->kind = ND_NUM;
       expr->num.val = val;
       expr->ty = ty;
@@ -1409,7 +1390,7 @@ static void array_dimension2(Type *ty, Token *tok, Node *expr) {
   }
 
   int64_t array_len;
-  if (is_const_expr(expr, &array_len)) {
+  if (is_const_expr_strict(expr, &array_len)) {
     if (array_len < 0)
       error_tok(expr->tok, "size of array is negative");
     if (basety->kind == TY_VLA) {
@@ -2884,13 +2865,15 @@ static void eval_static_assert(Token **rest, Token *tok) {
   add_type(node);
 
   bool res;
-  if (is_integer(node->ty))
+  if (is_integer(node->ty)) {
     res = eval(node);
-  else if (node->ty->kind == TY_BITINT)
-    res = !is_const_zero_bitint(node);
-  else
+  } else if (node->ty->kind == TY_BITINT) {
+    BitBuf *val = eval_bitint(node);
+    res = eval_bitint_to_bool(node->ty->bit_cnt, val);
+    free(val);
+  } else {
     error_tok(tok, "static_assert argument not integer");
-
+  }
   if (!res)
     error_tok(tok, "static assertion failed");
 
@@ -3600,20 +3583,6 @@ int64_t eval_sign_extend(Type *ty, int64_t val) {
   return val;
 }
 
-static void eval_void(Node *node) {
-  if (node->kind == ND_VAR) {
-    if (!node->m.var->constexpr_data)
-      eval_error(node);
-    return;
-  }
-  if (node->ty->kind == TY_BITINT)
-    free(eval_bitint(node));
-  else if (is_flonum(node->ty))
-    eval_double(node);
-  else
-    eval(node);
-}
-
 static int64_t eval_cmp(Node *node) {
   Node *lhs = node->m.lhs;
   Node *rhs = node->m.rhs;
@@ -3739,17 +3708,38 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
   case ND_LT:
   case ND_LE:
   case ND_GT:
-  case ND_GE: return eval_cmp(node);
-  case ND_COND:
-    return eval(node->ctrl.cond) ? eval2(node->ctrl.then, ctx) : eval2(node->ctrl.els, ctx);
-  case ND_COMMA: {
-    eval_void(lhs);
-    return eval2(rhs, ctx);
+  case ND_GE: {
+    return eval_cmp(node);
+  }
+  case ND_COND: {
+    bool cond = eval(node->ctrl.cond);
+    if (eval_strict) {
+      int64_t lval = eval2(node->ctrl.then, ctx);
+      int64_t rval = eval2(node->ctrl.els, ctx);
+      return cond ? lval : rval;
+    }
+    return cond ? eval2(node->ctrl.then, ctx) : eval2(node->ctrl.els, ctx);
   }
   case ND_NOT:    return !eval(lhs);
   case ND_BITNOT: return eval_sign_extend(ty, ~eval(lhs));
-  case ND_LOGAND: return eval(lhs) && eval(rhs);
-  case ND_LOGOR:  return eval(lhs) || eval(rhs);
+  case ND_LOGAND: {
+    int64_t lval = eval(lhs);
+    if (!lval) {
+      if (eval_strict)
+        eval(rhs);
+      return 0;
+    }
+    return eval(rhs);
+  }
+  case ND_LOGOR: {
+    int64_t lval = eval(lhs);
+    if (lval) {
+      if (eval_strict)
+        eval(rhs);
+      return 1;
+    }
+    return eval(rhs);
+  }
   case ND_CAST: {
     if (lhs->ty->kind == TY_BITINT) {
       BitBuf *data = eval_bitint(lhs);
@@ -3779,6 +3769,23 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       if (ty->size == 8 && ty->is_unsigned)
         return (uint64_t)eval_double(lhs);
       return eval_sign_extend(ty, eval_double(lhs));
+    }
+
+    if (ty->kind == TY_BOOL && !eval_strict) {
+      Node *n = lhs;
+      while (n->kind == ND_CAST &&
+             n->ty->size == 8 &&
+             (n->ty->kind == TY_PTR || is_integer(n->ty)))
+        n = n->m.lhs;
+
+      Obj *var = NULL;
+      if (n->kind == ND_ADDR && n->m.lhs->kind == ND_VAR)
+        var = n->m.lhs->m.var;
+      else if (n->kind == ND_VAR && is_decay_ty(n->ty))
+        var = n->m.var;
+
+      if (var && !var->is_weak)
+        return 1;
     }
 
     int64_t val = eval2(lhs, ctx);
@@ -3944,6 +3951,16 @@ bool is_const_expr(Node *node, int64_t *val) {
   return !failed;
 }
 
+bool is_const_expr_strict(Node *node, int64_t *val) {
+  bool prv = eval_strict;
+  eval_strict = true;
+
+  bool res = is_const_expr(node, val);
+
+  eval_strict = prv;
+  return res;
+}
+
 bool is_const_fp(Node *node, FPVal *fval) {
   bool failed = false;
   bool *prev = eval_recover;
@@ -3971,14 +3988,24 @@ static bool is_const_bitint(Node *node, BitBuf **result) {
   return !failed;
 }
 
-bool is_const_zero_bitint(Node *node) {
-  BitBuf *data = NULL;
-  if (!is_const_bitint(node, &data))
-    return false;
+static bool is_const_bitint_strict(Node *node, BitBuf **result) {
+  bool prv = eval_strict;
+  eval_strict = true;
 
-  bool res = !eval_bitint_to_bool(node->ty->bit_cnt, data);
-  free(data);
+  bool res = is_const_bitint(node, result);
+
+  eval_strict = prv;
   return res;
+}
+
+bool is_const_zero_bitint(Node *node) {
+  BitBuf *val = NULL;
+  if (is_const_bitint_strict(node, &val)) {
+    bool res = eval_bitint_to_bool(node->ty->bit_cnt, val);
+    free(val);
+    return !res;
+  }
+  return false;
 }
 
 static int64_t const_expr2(Token **rest, Token *tok, Type **ty) {
@@ -4076,14 +4103,16 @@ static long_double_t eval_double(Node *node) {
       break;
     return eval_fp_cast(lval / rval, ty);
   }
-  case ND_POS: return eval_double(lhs);
-  case ND_NEG: return -eval_double(lhs);
-  case ND_COND:
-    return eval(node->ctrl.cond) ? eval_double(node->ctrl.then)
-                                 : eval_double(node->ctrl.els);
-  case ND_COMMA: {
-    eval_void(lhs);
-    return eval_double(rhs);
+  case ND_POS:  return eval_double(lhs);
+  case ND_NEG:  return -eval_double(lhs);
+  case ND_COND: {
+    bool cond = eval(node->ctrl.cond);
+    if (eval_strict) {
+      long double lval = eval_double(node->ctrl.then);
+      long double rval = eval_double(node->ctrl.els);
+      return cond ? lval : rval;
+    }
+    return cond ? eval_double(node->ctrl.then) : eval_double(node->ctrl.els);
   }
   case ND_CAST:
     if (is_flonum(lhs->ty))
@@ -4185,12 +4214,14 @@ static BitBuf *eval_bitint(Node *node) {
     }
     return val;
   }
-  case ND_COND:
-    return eval(node->ctrl.cond) ? eval_bitint(node->ctrl.then)
-                                 : eval_bitint(node->ctrl.els);
-  case ND_COMMA: {
-    eval_void(lhs);
-    return eval_bitint(rhs);
+  case ND_COND: {
+    bool cond = eval(node->ctrl.cond);
+    if (eval_strict) {
+      BitBuf *lval = eval_bitint(node->ctrl.then);
+      BitBuf *rval = eval_bitint(node->ctrl.els);
+      return cond ? (free(rval), lval) : (free(lval), rval);
+    }
+    return cond ? eval_bitint(node->ctrl.then) : eval_bitint(node->ctrl.els);
   }
   case ND_CAST:
     if (lhs->ty->kind == TY_BITINT) {

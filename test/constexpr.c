@@ -1,7 +1,7 @@
 #include "test.h"
 
 float g40 = 1.5;
-double g41 = 0.0 ? 55 : (0, 1 + 1 * 5.0 / 2 * (double)2 * (int)2.0);
+double g41 = 0.0 ? 55 : (1 + 1 * 5.0 / 2 * (double)2 * (int)2.0);
 
 int main() {
   ASSERT(10, ({ enum { ten=1+2+3+4 }; ten; }));
@@ -22,7 +22,6 @@ int main() {
   EASSERT(2, (1<=1)+1);
   EASSERT(2, 1?2:3);
   EASSERT(3, 0?2:3);
-  EASSERT(3, (1,3));
   EASSERT(2, !0+1);
   EASSERT(1, !1+1);
   EASSERT(2, ~-3);

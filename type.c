@@ -685,7 +685,7 @@ bool is_null_ptr_constant(Node *node) {
     return is_const_zero_bitint(node);
 
   int64_t val;
-  return is_integer(node->ty) && is_const_expr(node, &val) && val == 0;
+  return is_integer(node->ty) && is_const_expr_strict(node, &val) && val == 0;
 }
 
 static void int_promotion(Node **node) {
