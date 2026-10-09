@@ -126,6 +126,11 @@ void bitint_null_ptr_constant(int i) {
 
   static_assert(0?x:(_BitInt(300))1);
   static_assert(1?(_BitInt(300))1:x);
+
+  const _BitInt(2) n1 = 1?0wb:x;
+  const _BitInt(2) n2 = 0?x:0wb;
+  CHK_NON_CONST(n1);
+  CHK_NON_CONST(n2);
 }
 
 int main() {

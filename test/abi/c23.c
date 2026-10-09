@@ -33,5 +33,7 @@ int main(void) {
 
   ASSERT(1, va_call());
 
+  ASSERT(0, ({ const int i = 0; _Generic((1?(void *)i:(int*)0), void*:0, int*:1);}));
+
   printf("OK\n");
 }

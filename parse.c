@@ -192,12 +192,13 @@ static QualMask pointer_qualifiers(Token **rest, Token *tok);
 static void list_initializer(Token **rest, Token *tok, Initializer *init, int i);
 static void initializer2(Token **rest, Token *tok, Initializer *init);
 static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr);
-static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
+static Node *lvar_initializer(Token **rest, Token *tok, Obj *var, bool try_promote);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
 static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int offset,
                             EvalKind ev_kind);
 static void constexpr_initializer(Token **rest, Token *tok, Obj *init_var, Obj *var);
 static void constexpr_initializer2(Initializer *init, Obj *init_var, Obj *var);
+static Node *constexpr_lvar_init(Obj *init_var, Obj *var, Token *tok);
 static Node *compound_stmt(Token **rest, Token *tok, NodeKind kind);
 static Node *stmt(Token **rest, Token *tok, Token *label_list);
 static Node *expr_stmt(Token **rest, Token *tok);
@@ -1972,11 +1973,10 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   if (attr->strg & SC_CONSTEXPR) {
     Obj *init_var = new_static_lvar(ty);
     constexpr_initializer(&tok, skip_tk(tok, TK_EQ), init_var, var);
-    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
-                                 new_var_node(init_var, tok), tok));
+    chain_expr(&expr, constexpr_lvar_init(init_var, var, tok));
     *cond_var = var;
   } else if (tok->kind == TK_EQ) {
-    chain_expr(&expr, lvar_initializer(&tok, tok->next, var));
+    chain_expr(&expr, lvar_initializer(&tok, tok->next, var, true));
     *cond_var = var;
   } else {
     chk_incomplete(var->ty, name);
@@ -2543,7 +2543,10 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
 }
 
 static bool promote_int_constexpr(Initializer *init, Type *ty) {
-  if (!(ty->qual & Q_CONST) || (ty->qual & Q_VOLATILE) || !is_int_class(ty))
+  if (opt_std <= STD_C23 ||
+      !(ty->qual & Q_CONST) ||
+      (ty->qual & Q_VOLATILE) ||
+      !is_int_class(ty))
     return false;
 
   switch (init->kind) {
@@ -2560,26 +2563,25 @@ static bool promote_int_constexpr(Initializer *init, Type *ty) {
     add_type(exp);
 
     if (is_integer(exp->ty))
-      return is_const_expr(exp, NULL);
+      return is_const_expr_strict(exp, NULL);
     if (exp->ty->kind == TY_BITINT)
-      return is_const_bitint(exp, NULL);
-    break;
+      return is_const_bitint_strict(exp, NULL);
   }
   }
   return false;
 }
 
-static Node *lvar_initializer(Token **rest, Token *tok, Obj *var) {
+static Node *lvar_initializer(Token **rest, Token *tok, Obj *var, bool try_promote) {
   Initializer init = {0};
   initializer(rest, tok, &init, var);
 
-  if (promote_int_constexpr(&init, var->ty)) {
+  if (try_promote && promote_int_constexpr(&init, var->ty)) {
     Obj *init_var = new_static_lvar(var->ty);
 
     constexpr_initializer2(&init, init_var, var);
 
     free_initializers(&init);
-    return new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok);
+    return constexpr_lvar_init(init_var, var, tok);
   }
 
   Node head = {0};
@@ -2835,6 +2837,10 @@ static void constexpr_initializer2(Initializer *init, Obj *init_var, Obj *var) {
   init_var->init_data = var->constexpr_data = buf;
   init_var->rel = head.next;
   var->ty = init_var->ty;
+}
+
+static Node *constexpr_lvar_init(Obj *init_var, Obj *var, Token *tok) {
+  return new_binary(ND_ASSIGN, new_var_node(var, tok), new_var_node(init_var, tok), tok);
 }
 
 static bool is_type_kw(TokenKind kind) {
@@ -5480,10 +5486,9 @@ static Node *compound_literal(Token **rest, Token *tok) {
   if (attr.strg & SC_CONSTEXPR) {
     Obj *init_var = new_anon_gvar(ty);
     constexpr_initializer(&tok, tok, init_var, var);
-    chain_expr(&expr, new_binary(ND_ASSIGN, new_var_node(var, tok),
-                                 new_var_node(init_var, tok), tok));
+    chain_expr(&expr, constexpr_lvar_init(init_var, var, tok));
   } else {
-    chain_expr(&expr, lvar_initializer(&tok, tok, var));
+    chain_expr(&expr, lvar_initializer(&tok, tok, var, false));
   }
   chain_expr(&expr, new_var_node(var, start));
   *rest = tok;

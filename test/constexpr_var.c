@@ -103,7 +103,7 @@ int main() {
     static_assert(i2 == 2);
     static_assert(_Generic(i1, long:1));
 
-    static_assert((constexpr int){13} + 29 == (const int){42});
+    static_assert((constexpr int){13} + 29 == (constexpr int){42});
   }
   {
     struct S { int i, j, k; };
