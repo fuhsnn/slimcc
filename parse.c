@@ -5385,6 +5385,12 @@ static Node *generic_selection(Token **rest, Token *tok) {
   Node *ret = NULL;
   Node *def = NULL;
 
+  struct {
+    Type **data;
+    int32_t cap;
+    int32_t len;
+  } types = {0};
+
   while (comma_list(rest, &tok, TK_RPAREN, true)) {
     if (tok->kind == TK_default) {
       if (def)
@@ -5395,26 +5401,34 @@ static Node *generic_selection(Token **rest, Token *tok) {
       continue;
     }
 
+    Token *ty_tok = tok;
     Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
     Type *t2 = declarator2(&tok, tok, basety, NULL);
     declarator3(basety, t2, true, false);
 
+    for (int32_t i = 0; i < types.len; i++)
+      if (is_compatible2(types.data[i], t2))
+        error_tok(ty_tok, "'_Generic' association compatible with a previous type");
+
+    if (types.len == types.cap)
+      GrowArr(types.data, &types.cap);
+    types.data[types.len++] = t2;
+
     Node *node = assign(&tok, skip_tk(tok, TK_COLON));
     if (is_compatible2(t1, t2)) {
-      if (ret) {
-        notice_tok(ret->tok, "ambiguous _Generic selection");
-        error_tok(node->tok, "with this option");
-      }
+      if (ret)
+        internal_error();
       ret = node;
     }
   }
-  if (!ret) {
-    if (!def)
-      error_tok(start, "controlling expression type not compatible with"
-                       " any generic association type");
-    return def;
-  }
-  return ret;
+
+  free(types.data);
+
+  if (ret)
+    return ret;
+  if (!def)
+    error_tok(start, "controlling type not compatible with any association type");
+  return def;
 }
 
 static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
