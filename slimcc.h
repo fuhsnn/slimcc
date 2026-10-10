@@ -515,7 +515,6 @@ struct Obj {
   bool is_zero_sized_arg;
   int stack_offset;
   Node *arg_expr;
-  Obj *param_promoted;
   Obj *vptr;
 
   // Global variable or function
