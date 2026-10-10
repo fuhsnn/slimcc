@@ -3089,7 +3089,7 @@ static void gen_void_assign(Node *node) {
 }
 
 static void gen_void_expr(Node *node) {
-  if ((node->ty->qual & Q_VOLATILE) || (node->ty->qual & Q_ATOMIC)) {
+  if ((node->ty->qual & (Q_VOLATILE | Q_ATOMIC))) {
     gen_expr2(node, true);
     return;
   }

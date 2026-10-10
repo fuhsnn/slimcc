@@ -126,6 +126,15 @@ int main() {
 
     //SREJ static constexpr int noinit;
     //SREJ constexpr int fn();
+    {
+      //SREJ constexpr volatile int v = 0;
+      //SREJ constexpr _Atomic int a = 0;
+      constexpr volatile int *pv = 0;
+      constexpr _Atomic int *pa = 0;
+      //SREJ constexpr int *_Atomic ap = 0;
+      //SREJ constexpr int *volatile vp = 0;
+      //SREJ constexpr int *restrict rp = 0;
+    }
   }
   //SREJ { constexpr struct INCMPL s = {}; }
   //SREJ { static constexpr struct INCMPL s = {}; }

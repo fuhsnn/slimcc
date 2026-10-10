@@ -1257,8 +1257,11 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
 }
 
 static Type *qual_constexpr(Type *ty, VarAttr *attr, Token *tok) {
-  if (attr->strg & SC_CONSTEXPR)
+  if (attr->strg & SC_CONSTEXPR) {
+    if (ty->qual & (Q_VOLATILE | Q_ATOMIC | Q_RESTRICT))
+      error_tok(tok, "invalid qualifier for 'constexpr'");
     return add_qual(Q_CONST, ty, tok);
+  }
   return ty;
 }
 
