@@ -55,7 +55,6 @@ toolchain.register_compiler(
 ```
 
 ## Compatibility options
- - `-fms-anon-struct`: Enable declaring anonymous struct member with tags like GCC's `-fms-extensions` or `-fplan9-extensions`.
  - `-fdisable-visibility`: Some projects adopt an idiom that globally set `-fvisibility=hidden` then selectively export public API with `__attribute__((visibility("default")))`. slimcc support both, yet a problem arises when the former is probed by build system while the latter hardcoded in `#if __GNUC__` blocks regardless of the build system's decision. The option simply disable both features to prevent the conflict.
  - `-ffake-always-inline`: slimcc currently don't inline functions, but some projects' usage of GCC `always_inline` on non-static inline functions would cause missing definition at link time. This option turns these definitions into `static inline`'s to work around compile error.
 
@@ -66,10 +65,9 @@ toolchain.register_compiler(
  - - `BOOTSTRAP_NO_LDOUBLE` aliases `long double` to `double`.
  - - `BOOTSTRAP_NO_VLA` makes VLA-using functions no-op (only `_BitInt` evaluation affected).
  - As proof of portability and reproducibility, the following compilers are known to bootstrap identical stage2 of slimcc:
- - - `gcc`, `clang`, `tcc`, [`kefir`](https://sr.ht/~jprotopopov/kefir), [`fil-c`](https://github.com/pizlonator/fil-c)
+ - - `gcc`, `clang`, `tcc`, [`kefir`](https://sr.ht/~jprotopopov/kefir), [`antcc`](https://codeberg.org/lsof/antcc)
  - - `chibicc` with [backported patches](https://github.com/fuhsnn/chibicc/tree/minimum-fix), [`widcc`](https://github.com/fuhsnn/widcc)
  - - [`pcc`](https://github.com/portablecc/pcc) with `-std=c99`
- - - [`antcc`](https://codeberg.org/lsof/antcc) with `-DBOOTSTRAP_NO_VLA`
  - - [`cproc`](https://sr.ht/~mcf/cproc) with `-DBOOTSTRAP_NO_LDOUBLE -U__has_builtin`
  - - [`cparser`](https://github.com/libfirm/cparser) with `-DBOOTSTRAP_NO_LDOUBLE`
  - - [`compcert`](https://github.com/AbsInt/CompCert) with `-DBOOTSTRAP_NO_LDOUBLE -DBOOTSTRAP_NO_VLA -U__has_builtin -fstruct-passing`
