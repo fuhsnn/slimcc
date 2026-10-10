@@ -335,6 +335,7 @@ jobs:
           - { vm: main, proj: test_perl }
           - { vm: main, proj: test_php }
           - { vm: main, proj: test_picohttpparser }
+          - { vm: main, proj: test_pigz }
           - { vm: main, proj: test_pixman }
           - { vm: main, proj: test_pocketpy }
           - { vm: main, proj: test_polybenchc }
