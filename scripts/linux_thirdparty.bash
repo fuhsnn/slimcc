@@ -1725,6 +1725,11 @@ test_picohttpparser() {
  make CFLAGS= test
 }
 
+test_pigz() {
+ github_tar madler pigz v2.8
+ make CC="$CC" test
+}
+
 test_pixman() {
  gitlab_tar gitlab.freedesktop.org/pixman pixman pixman-0.46.4
  muon_init -Dmmx=disabled -Dsse2=disabled
