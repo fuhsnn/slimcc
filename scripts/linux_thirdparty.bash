@@ -825,6 +825,13 @@ test_inih() {
  muon_test
 }
 
+test_iniparser() {
+ github_tar ndevilla iniparser v4.3.2
+ sed -i 's|-fsanitize=address||g' test/CMakeLists.txt
+ cmake_init -DBUILD_TESTING=ON -DBUILD_EXAMPLES=ON
+ make && ctest
+}
+
 test_janet() {
  github_tar janet-lang janet v1.42.1
  # Use C11 concurrency features

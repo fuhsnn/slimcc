@@ -236,6 +236,7 @@ jobs:
           - { vm: main, proj: test_httpparser }
           - { vm: main, proj: test_ijgjpeg }
           - { vm: main, proj: test_incbin }
+          - { vm: main, proj: test_iniparser }
           - { vm: main, proj: test_janet }
           - { vm: main, proj: test_jemalloc }
           - { vm: main, proj: test_jerryscript }
