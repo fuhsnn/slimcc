@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  libffi-dev \
  libpcre3-dev libmount-dev desktop-file-utils shared-mime-info \
  python3.11-minimal python3-distutils \
+ # gforth
+ gforth libltdl-dev libtool-bin \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain

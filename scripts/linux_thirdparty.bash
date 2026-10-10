@@ -254,7 +254,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler b664aca25b9a54857a717d2fc0e976ece06c328b c2compiler
+ git_fetch https://github.com/c2lang/c2compiler bfd74ac2e76a2910f41f84180e8ae0839ab1e327 c2compiler
  export C2_LIBDIR=$PWD/libs
  export C2_PLUGINDIR=$PWD/output/plugins
  make CC=$CC test
@@ -267,7 +267,7 @@ test_c23doku() {
 }
 
 test_c3() {
- github_tar c3lang c3c v0.8.4
+ github_tar c3lang c3c v0.8.5
  cmake_init
  make
  cd ../test
@@ -300,7 +300,7 @@ test_cares() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 71746c829e77f74c2b601a7d16821170c2610df3 cc65
+ git_fetch https://github.com/cc65/cc65 e47ac5060b28a8be899871c814644aa04d21c221 cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
 }
@@ -355,7 +355,7 @@ test_cgltf() {
 }
 
 test_chibischeme() {
- git_fetch https://github.com/ashinn/chibi-scheme c4e7367e867428889d8fe898a0b39f42e418b3f1 chibischeme
+ git_fetch https://github.com/ashinn/chibi-scheme b2087f3a320a56f79ede5c546fd45fdde582c4ed chibischeme
  sed -i "s|\"cc\"|\"`realpath $CC`\"|g" tools/chibi-ffi
  make && make test-all
 }
@@ -651,6 +651,17 @@ test_genann() {
  make check
 }
 
+test_gforth() {
+ github_tar forthy42 gforth 0.7.9_20260923
+ sed -i 's|inline Char ascii_toupper|static &|g' engine/support.c
+ sed -i 's|test \"$GCC|# &|g' configure.ac
+ sh autogen.sh
+ ./configure
+ sed -i 's|$(COMPILER) $(ENGINE1) -o $@ $<|sed -i '\''s/gforth_engine2/gforth_engine/g'\'' $< \&\& & \&\& sed -i '\''s/gforth_engine/gforth_engine2/g'\'' $<|g' engine/Makefile
+ sed -i 's|$(COMPILER) $(ENGINE1) -o $@ -c $<|sed -i '\''s/gforth_engine2/gforth_engine/g'\'' $< \&\& & \&\& sed -i '\''s/gforth_engine/gforth_engine2/g'\'' $<|g' engine/Makefile
+ make && make test
+}
+
 test_ggrep() {
  url_xz https://ftpmirror.gnu.org/gnu/grep/grep-3.12.tar.xz ggrep
  ./configure
@@ -732,6 +743,12 @@ test_gpatch() {
  make check
 }
 
+test_gravity() {
+ github_tar marcobambini gravity 0.9.9
+ make
+ ./gravity -t test/unittest
+}
+
 test_groff() {
  url_tar https://ftpmirror.gnu.org/gnu/groff/groff-1.24.2.tar.gz groff
  ./configure
@@ -776,6 +793,12 @@ test_hare() {
  make CC="$CC" check
 }
 
+test_hdiffpatch() {
+ github_tar sisong HDiffPatch v5.1.3
+ make LZMA=0 ZSTD=0 LDEF=0 MD5=0 BZIP2=0 BSD=0 CXX=clang++ CC="$CC" unit_test
+ ./unit_test
+}
+
 test_heatshrink() {
  git_fetch https://github.com/atomicobject/heatshrink 7d419e1fa4830d0b919b9b6a91fe2fb786cf3280 heatshrink
  sed -i 's|HEATSHRINK_MIN_WINDOW_BITS, 4);|HEATSHRINK_MIN_WINDOW_BITS, HEATSHRINK_MIN_WINDOW_BITS - 1);|g' test_heatshrink_dynamic.c
@@ -801,6 +824,13 @@ test_httpparser() {
  make test
 }
 
+test_icon() {
+ github_tar gtownsend icon v9.5.25a
+ make Configure name=linux
+ make CC="$CC"
+ make Test
+}
+
 test_ijgjpeg() {
  url_tar https://www.ijg.org/files/jpegsrc.v10.tar.gz ijgjpeg
  fix_and_configure
@@ -808,7 +838,7 @@ test_ijgjpeg() {
 }
 
 test_imagemagick() {
- github_tar ImageMagick ImageMagick 7.1.2-32
+ github_tar ImageMagick ImageMagick 7.1.2-33
  fix_and_configure
  make check V=1
 }
@@ -825,6 +855,13 @@ test_inih() {
  muon_test
 }
 
+test_iniparser() {
+ github_tar ndevilla iniparser v4.3.2
+ sed -i 's|-fsanitize=address||g' test/CMakeLists.txt
+ cmake_init -DBUILD_TESTING=ON -DBUILD_EXAMPLES=ON
+ make && ctest
+}
+
 test_janet() {
  github_tar janet-lang janet v1.42.1
  # Use C11 concurrency features
@@ -833,6 +870,11 @@ test_janet() {
  # Enable computed goto
  replace_line "#if defined(__GNUC__) && !defined(__EMSCRIPTEN__)" "#if 1" src/core/vm.c
  make test
+}
+
+test_jbigkit() {
+ git_fetch https://github.com/codacy-open-source-projects-scans/jbigkit 33c965ebf2496c1038d9fb35495ad7b1e3bdb96e jbigkit
+ make CC="$CC" MAN2TXT=true test
 }
 
 test_jemalloc() {
@@ -887,7 +929,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh b932ee1bddcd0aeea205e7f9cdbe8142c9e90133 ksh93
+ git_fetch https://github.com/ksh93/ksh 0039c5bc4610acc1087fdff39c2cf15d42b9a4d5 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1162,6 +1204,19 @@ test_libspng() {
  muon_test
 }
 
+test_libtiff() {
+ gitlab_tar gitlab.com/libtiff libtiff v4.7.2
+ replace_line '#if defined(__x86_64__) || (defined(_M_X64) && !defined(_M_ARM64EC))' '#if 0' libtiff/tif_predict.c
+ cmake_init
+ make && ctest
+}
+
+test_libtomcrypt() {
+ git_fetch https://github.com/libtom/libtomcrypt 6c6d5104de66f3ca0dfd7b68540ef86869982b07 libtomcrypt
+ make CFLAGS="-DUSE_GMP -DGMP_DESC -DLTC_NO_AES_NI -DLTC_NO_GCM_PCLMUL" EXTRALIBS="-lgmp" test
+ ./test
+}
+
 test_libtommath() {
  git_fetch https://github.com/libtom/libtommath ae40a87a920099a7d9d00979570e0c8d917a1fd7 libtommath
  sed -i 's|defined(__GNUC__) && __GNUC__ >= 4|1|g' tommath_private.h
@@ -1385,6 +1440,14 @@ test_mimalloc() {
  make && make test
 }
 
+test_minimp3() {
+ git_fetch https://github.com/lieff/minimp3 ea99364f61c14656440e8d77e9c233ccf3124633 minimp3
+ "$CC" -o minimp3 minimp3_test.c -lm -DMINIMP3_NO_SIMD
+ bash scripts/test.sh
+ "$CC" -o minimp3 minimp3_test.c -lm -DMINIMP3_NO_SIMD -DMINIMP3_FLOAT_OUTPUT
+ bash scripts/test.sh
+}
+
 test_miniz() {
  github_tar richgel999 miniz 3.1.2
  cmake_init -DBUILD_TESTS=ON
@@ -1442,6 +1505,12 @@ test_mpack() {
  sed -i 's|compiler != "TinyCC"|False|g' test/unit/configure.py
  sed -i 's|^ninja |& -j1 |g' tools/unit.sh
  tools/unit.sh all
+}
+
+test_mpg123() {
+ url_bz https://sourceforge.net/projects/mpg123/files/mpg123/1.33.7/mpg123-1.33.7.tar.bz2/download mpg123
+ fix_and_configure
+ make check
 }
 
 test_mquickjs() {
@@ -1610,6 +1679,21 @@ test_oniguruma() {
  make check
 }
 
+test_open62541() {
+ github_tar open62541 open62541 v1.5.9
+ cmake_init -DUA_BUILD_UNIT_TESTS=ON
+ make
+ ctest -E "check_pubsub_publisherid|check_pubsub_subscribe|check_pubsub_connection"
+}
+
+test_openjpeg() {
+ github_tar uclouvain openjpeg v2.5.4
+ cmake_init -DBUILD_UNIT_TESTS=ON
+ make
+ ./bin/bench_dwt
+ ./bin/test_sparse_array
+}
+
 test_openrc() {
  github_tar OpenRC openrc 0.64.1
  muon_init
@@ -1723,6 +1807,11 @@ test_php() {
 test_picohttpparser() {
  github_branch h2o picohttpparser master
  make CFLAGS= test
+}
+
+test_pigz() {
+ github_tar madler pigz v2.8
+ make CC="$CC" test
 }
 
 test_pixman() {
@@ -1937,9 +2026,15 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 2799ffac4d5b306c3f86b4291b0603d3906673fa rvvm
+ git_fetch https://github.com/LekKit/RVVM e7214efa23a9ab72c489c456889af79aa552873f rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/util/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
+}
+
+test_s2ntls() {
+ github_tar aws s2n-tls v1.7.11
+ cmake_init -DCMAKE_EXE_LINKER_FLAGS='-lz -lzstd'
+ make && ctest
 }
 
 test_samba() {
@@ -1972,6 +2067,12 @@ test_sdl3() {
 test_sds() {
  git_fetch https://github.com/antirez/sds 5347739b1581fcba74fd5cab1fc21d2aef317d71 sds
  make sds-test && ./sds-test
+}
+
+test_shapelib() {
+ github_tar OSGeo shapelib v1.6.3
+ cmake_init
+ make && ctest
 }
 
 test_shoco() {
@@ -2007,17 +2108,23 @@ test_sokol() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.53.1
+ github_tar sqlite sqlite version-3.54.0
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
+ sed -i 's|cannot open file: x|error in fread()|g' test/zipfile.test
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
  make fuzztest tcltest
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC f57a860ff2d291e3d8d91b2f9eb75b7662db9f90 stc
+ git_fetch https://github.com/stclib/STC 3e7cccb53740823d2a0a199dbe238497c71139b1 stc
  muon_init
  muon_build
  muon_test
+}
+
+test_stream() {
+ git_fetch https://github.com/jeffhammond/STREAM 6703f7504a38a8da96b353cadafa64d3c2d7a2d3 stream
+ "$CC" stream.c && ./a.out | grep 'avg error less than'
 }
 
 test_talloc() {
@@ -2096,6 +2203,12 @@ test_tinyregexc() {
  make CC=$CC test
 }
 
+test_tinyscheme() {
+ github_tar RodionGork tinyscheme v21.03
+ make CC="$CC"
+ bash run-tests.sh
+}
+
 test_tomlc17() {
  github_tar cktan tomlc17 R20260515
  wget -O - https://github.com/toml-lang/toml-test/releases/download/v2.1.0/toml-test-v2.1.0-linux-amd64.gz | gunzip -c > test/stdtest/toml-test
@@ -2104,6 +2217,13 @@ test_tomlc17() {
  sed -i 's|^toml-test|./&|g' test/stdtest/run.sh
  find . -name 'Makefile' -exec sed -i 's|-fsanitize=address,undefined||g' {} +
  make CC=$CC test
+}
+
+test_tomsfastmath() {
+ git_fetch https://github.com/libtom/tomsfastmath b2b4d030cf12431946b3fc485847b2ca026278c1 tomsfastmath
+ sed -i 's|typedef unsigned long      fp_word __attribute__ ((mode(TI)))|typedef _BitInt(128) fp_word|g' src/headers/tfm.h
+ make test_standalone
+ ./test
 }
 
 test_toxcore() {
@@ -2204,6 +2324,19 @@ test_vlc() {
  make check
 }
 
+test_wamr() {
+ github_tar wasm-micro-runtime wasm-micro-runtime WAMR-2.4.5
+ find . -name CMakeLists.txt -exec sed -i 's|set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mindirect-branch-register")||g' {} +
+ replace_line '#elif defined(__GNUC__)' '#elif 1' core/shared/platform/include/platform_wasi_types.h #aligned
+ replace_line '#elif defined(__GNUC__) || defined(__clang__)' '#elif 1' core/shared/mem-alloc/ems/ems_gc_internal.h #packed
+ sed -i 's|defined(BH_HAS_STD_ATOMIC)|1|g' core/shared/platform/include/platform_api_extension.h #stdatomic
+ cd tests/wamr-test-suites
+ bash test_wamr.sh -s spec -b -t fast-interp -M
+ bash test_wamr.sh -s spec -b -t fast-interp -p
+ bash test_wamr.sh -s spec -b -t classic-interp -E
+ bash test_wamr.sh -s spec -b -t fast-interp -N
+}
+
 test_wasm3() {
  github_tar wasm3 wasm3 v0.9.1-beta.1
  sed -i 's|#  ifdef __linux__|#if 1\n#include <stdint.h>\n|g' source/wasm3_defs.h
@@ -2217,6 +2350,14 @@ test_wasm3() {
 
 test_wget() {
  url_lz https://ftpmirror.gnu.org/gnu/wget/wget2-2.3.0.tar.lz wget
+ fix_and_configure
+ make check
+}
+
+test_whitedb() {
+ url_tar https://github.com/priitj/whitedb/releases/download/v0.8.0alpha/whitedb-0.8-alpha.tar.gz whitedb
+ replace_line '#elif defined(__GNUC__)' '#elif 1' Db/dblock.c
+ sed -i 's|__sync_bool_compare_and_swap(ptr, oldv|__builtin_compare_and_swap(ptr, \&oldv|g' Db/dblock.c
  fix_and_configure
  make check
 }
@@ -2248,7 +2389,7 @@ test_wuffs() {
 }
 
 test_xterm() {
- github_tar ThomasDickey xterm-snapshots xterm-411
+ github_tar ThomasDickey xterm-snapshots xterm-412
  ./configure
  make
  make check
@@ -2331,6 +2472,12 @@ cat << EOF > hello.scm
 (exit)
 EOF
  pb/bin/pb/scheme hello.scm | grep ^hello_world$
+}
+
+test_zydis() {
+ git_fetch https://github.com/zyantific/zydis a95bb71013436547f689fc0b380f48edf663066e zydis
+ cmake_init
+ make && ctest
 }
 
 build_7zip() {
@@ -2452,7 +2599,7 @@ build_fossil() {
 }
 
 build_freetype() {
- gitlab_tar gitlab.freedesktop.org/freetype freetype VER-2-14-3
+ gitlab_tar gitlab.freedesktop.org/freetype freetype VER-2-15-0
  cmake_init
  make
 }
@@ -2583,7 +2730,7 @@ build_lynx() {
 }
 
 build_mandoc() {
- git_fetch https://github.com/salewski/mandoc-mirror 3fa800a38c80d67cb0f1747376dfeaa351e23d32 mandoc
+ git_fetch https://github.com/salewski/mandoc-mirror c4d5e9919789e8443edff932ebc09e417a79d136 mandoc
  replace_line 'CC=cc' 'CC=$CC' ./configure
  ./configure
  make
@@ -2591,7 +2738,7 @@ build_mandoc() {
 }
 
 build_mg() {
- github_tar troglobit mg v4.2
+ github_tar troglobit mg v4.3
  sh ./autogen.sh
  fix_and_configure
  make
@@ -2630,7 +2777,7 @@ build_nanovg() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20260926
+ github_tar ThomasDickey ncurses-snapshots v6_6_20261010
  ./configure
  make V=1
 }
