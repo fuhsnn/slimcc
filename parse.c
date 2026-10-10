@@ -6005,25 +6005,41 @@ static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name) {
   return fn;
 }
 
-static Obj *find_param(Token *name, Obj *list) {
-  for (Obj *p = list; p; p = p->param_next)
-    if (equal(name, p->name))
+static Obj *find_param(Type *fn, Token *name, int *idx) {
+  int i = 0;
+  for (Obj *p = fn->param_list; p; p = p->param_next, i++) {
+    if (equal(name, p->name)) {
+      *idx = i;
       return p;
+    }
+  }
   return NULL;
 }
 
+static void chk_param_ty(Type *fn, Type *ty, int idx, Token *tok) {
+  int i = 0;
+  for (Obj *p = fn->param_list; p; p = p->param_next, i++) {
+    if (i == idx) {
+      if (!is_compatible(p->ty, ty))
+        error_tok(tok, "mismatched parameter type");
+      return;
+    }
+  }
+  internal_error();
+}
+
 static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type *def_ty) {
-  if (!prot_ty->is_oldstyle && def_ty->is_oldstyle) {
+  if (!prot_ty->is_oldstyle) {
+    def_ty->is_oldstyle = false;
+
     Obj *p1 = prot_ty->param_list;
     Obj *p2 = def_ty->param_list;
     while (p1 && p2) {
-      p2->ty = p1->ty;
       p1 = p1->param_next;
       p2 = p2->param_next;
     }
     if (!p1 != !p2)
-      error_tok(tok, "prototype mismatch");
-    def_ty->is_oldstyle = false;
+      error_tok(tok, "parameter count mismatch");
   }
 
   Node *expr = NULL;
@@ -6043,13 +6059,14 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
       if (!name)
         error_tok(tok, "expected identifier");
 
-      Obj *var = find_param(name, def_ty->param_list);
+      int idx;
+      Obj *var = find_param(def_ty, name, &idx);
       if (!var)
         error_tok(name, "no such parameter");
 
-      if (!def_ty->is_oldstyle) {
-        if (!is_compatible(var->ty, ty))
-          error_tok(name, "mismatched parameter type");
+      if (!prot_ty->is_oldstyle) {
+        chk_param_ty(prot_ty, ty, idx, name);
+
         var->ty = ty;
         push_var_name(name, var);
         continue;
@@ -6077,14 +6094,18 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
     } while (comma_list(&tok, &tok, TK_SEMI, true));
   }
 
-  if (def_ty->is_oldstyle) {
-    for (Obj *var = def_ty->param_list; var; var = var->param_next) {
-      if (var->ty)
-        continue;
-      var->ty = ty_int;
-      push_var_name2(var->name, strlen(var->name), tok, var);
-    }
+  int idx = 0;
+  for (Obj *var = def_ty->param_list; var; var = var->param_next, idx++) {
+    if (var->ty)
+      continue;
+
+    if (!prot_ty->is_oldstyle)
+      chk_param_ty(prot_ty, ty_int, idx, tok);
+
+    var->ty = ty_int;
+    push_var_name2(var->name, strlen(var->name), tok, var);
   }
+
   *rest = tok;
   return expr;
 }
