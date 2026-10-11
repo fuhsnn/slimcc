@@ -1311,7 +1311,43 @@ static void func_params(Token *tok, Type *fn_ty, bool is_def) {
     return;
   }
 
-  if (!is_typename(tok)) {
+  if (is_typename(tok)) {
+    enter_fn_scope(fn_ty);
+
+    Obj head = {0};
+    Obj *cur = &head;
+    Node *expr = NULL;
+
+    while (comma_list(&tok, &tok, TK_RPAREN, cur != &head)) {
+      if (tok->kind == TK_DOT3) {
+        fn_ty->is_variadic = true;
+        skip_tk(tok->next, TK_RPAREN);
+        break;
+      }
+      VarAttr attr = {0};
+      Type *basety = declspec(&tok, tok, &attr, SC_REGISTER);
+
+      if (is_def)
+        chain_expr(&expr, calc_vla2(basety, tok, &attr));
+
+      Token *name = NULL;
+      Type *raw_ty = declarator2(&tok, tok, basety, &name);
+      Type *param_ty = param_declarator(basety, raw_ty, tok, is_def);
+
+      if (is_def)
+        chain_expr(&expr, calc_vla(raw_ty, tok));
+
+      cur = cur->param_next = new_param(NULL, param_ty);
+      if (name)
+        push_var_name(name, cur);
+    }
+    fn_ty->pre_calc = expr;
+    fn_ty->param_list = head.param_next;
+    leave_scope();
+    return;
+  }
+
+  if (tok->kind == TK_IDENT) {
     fn_ty->is_oldstyle = true;
 
     Token *start = tok;
@@ -1333,38 +1369,7 @@ static void func_params(Token *tok, Type *fn_ty, bool is_def) {
     return;
   }
 
-  enter_fn_scope(fn_ty);
-
-  Obj head = {0};
-  Obj *cur = &head;
-  Node *expr = NULL;
-
-  while (comma_list(&tok, &tok, TK_RPAREN, cur != &head)) {
-    if (tok->kind == TK_DOT3) {
-      fn_ty->is_variadic = true;
-      skip_tk(tok->next, TK_RPAREN);
-      break;
-    }
-    VarAttr attr = {0};
-    Type *basety = declspec(&tok, tok, &attr, SC_REGISTER);
-
-    if (is_def)
-      chain_expr(&expr, calc_vla2(basety, tok, &attr));
-
-    Token *name = NULL;
-    Type *raw_ty = declarator2(&tok, tok, basety, &name);
-    Type *param_ty = param_declarator(basety, raw_ty, tok, is_def);
-
-    if (is_def)
-      chain_expr(&expr, calc_vla(raw_ty, tok));
-
-    cur = cur->param_next = new_param(NULL, param_ty);
-    if (name)
-      push_var_name(name, cur);
-  }
-  fn_ty->pre_calc = expr;
-  fn_ty->param_list = head.param_next;
-  leave_scope();
+  error_tok(tok, "expected function parameter");
 }
 
 static Node *array_dimension(Token *tok, bool let_star) {
