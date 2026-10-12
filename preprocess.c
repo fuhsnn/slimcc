@@ -1479,7 +1479,7 @@ static Token *directives(Token **cur, Token *start, bool is_root) {
     return tok;
   }
 
-  if (tok->kind == TK_PP_NUM) {
+  if (tok->kind == TK_PP_NUM && !opt_cc1_asm_pp) {
     read_line_marker(&tok, tok);
     return tok;
   }
