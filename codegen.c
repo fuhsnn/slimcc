@@ -870,7 +870,7 @@ static void gen_bitfield_load(Node *node, int ofs) {
     int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
     load2(bitwidth_to_ty(p2bits, mem->ty->is_unsigned), ofs, "%rax");
 
-    if (mem->bit_width == mem->ty->size * 8)
+    if (mem->bit_width == p2bits)
       return;
 
     int lshft = 64 - mem->bit_width - mem->bit_offset;

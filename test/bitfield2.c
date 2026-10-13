@@ -218,6 +218,14 @@ static int packed_fields() {
     };
     PACKED_CHK(struct S, packed7, 6);
   }
+  {
+    struct S {
+      char a:1;
+      char b:8;
+      short c:16;
+    } __attribute__((packed));
+    PACKED_CHK(struct S, packed8, 4);
+  }
   return 1;
 }
 
