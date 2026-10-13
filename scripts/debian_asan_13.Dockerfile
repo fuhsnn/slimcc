@@ -5,7 +5,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  file binutils libc-dev libgcc-14-dev \
  make cmake pkg-config ninja-build \
  zip lzip xz-utils bzip2 zlib1g-dev unzip \
- autoconf autopoint automake gettext texinfo \
+ autoconf autoconf-archive autopoint automake gettext texinfo \
  git curl ca-certificates wget locales \
  tcl-dev bison flex re2c libpcre2-dev \
  libcurl4-openssl-dev libssl-dev libexpat1-dev libicu-dev \
@@ -74,6 +74,14 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  help2man \
  # bcgh
  bc \
+ # kcgi
+ bmake \
+ # ldns
+ dnsutils \
+ # squashfuse
+ libfuse-dev squashfs-tools \
+ # pngquant
+ libpng-dev liblcms2-dev \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain
