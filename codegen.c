@@ -3764,7 +3764,7 @@ static bool gen_bool_opt(Node *node) {
     return true;
   }
 
-  if (is_cmp(node)) {
+  if (is_cmp(node) && (is_gp_ty(node->m.lhs->ty) || node->m.lhs->ty->kind == TY_BITINT)) {
     Node n = *node;
     flip_cmp(&n.kind, flip);
     gen_expr(&n);

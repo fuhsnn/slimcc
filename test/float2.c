@@ -56,6 +56,22 @@ int main(void) {
     long double neg_z; neg_z = -0.0L;
     ASSERT(1, pos_z == neg_z && memcmp(&pos_z, &neg_z, 10));
   }
+  {
+    volatile double z = 0.0;
+    volatile double n = z / z;
+    ASSERT(0, n == n);
+    ASSERT(1, n != n);
+    ASSERT(0, n < n);
+    ASSERT(0, n > n);
+    ASSERT(0, n <= n);
+    ASSERT(0, n >= n);
+    ASSERT(1, !(n == n));
+    ASSERT(0, !(n != n));
+    ASSERT(1, !(n < n));
+    ASSERT(1, !(n > n));
+    ASSERT(1, !(n <= n));
+    ASSERT(1, !(n >= n));
+  }
 
   printf("OK\n");
 }
