@@ -1382,8 +1382,6 @@ static Node *array_dimension(Token *tok, bool let_star) {
     return new_unknown(ty_size_t, tok);
   }
   Node *expr = assign(&tok, tok);
-  if (!int_or_trunc_bitint(&expr, true))
-    error_tok(tok, "size of array not integer");
   skip_tk(tok, TK_RBRACK);
   return expr;
 }
@@ -1397,6 +1395,9 @@ static void array_dimension2(Type *ty, Token *tok, Node *expr) {
     array_setty(ty, basety, -1);
     return;
   }
+
+  if (!int_or_trunc_bitint(&expr, true))
+    error_tok(expr->tok, "size of array not integer");
 
   int64_t array_len;
   if (is_const_expr_strict(expr, &array_len)) {
