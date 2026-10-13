@@ -152,6 +152,10 @@ int main(void) {
     CHK_NON_CONST(i);
     CHK_NON_CONST((const int){0});
 
+    static const int i2 = 0&&x;
+    CHK_NON_CONST(i2);
+  }
+  {
     ASSERT(1, ({ const int i = 0; _Generic((1?(void *)i:(int*)0), void*:0, int*:1);}));
   }
 

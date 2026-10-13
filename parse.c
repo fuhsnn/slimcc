@@ -3542,7 +3542,8 @@ Obj *eval_var_opt(Node *node, int *ofs, bool let_subarray, bool let_atomic) {
 }
 
 static bool is_static_const_var(Obj *var) {
-  return var->constexpr_data || (var->init_data && !var->is_weak && is_const_var(var));
+  return var->constexpr_data ||
+         (var->init_data && !var->is_weak && is_const_var(var) && !eval_strict);
 }
 
 static bool is_constexpr_complit(Node *node, Obj **var) {
