@@ -874,18 +874,27 @@ static const char *replace_extn(const char *tmpl, const char *extn) {
   return format("%s%s", filename, extn);
 }
 
-static void cleanup(void) {
-  for (int i = 0; i < tmpfiles.len; i++)
-    unlink(tmpfiles.data[i]);
-  if (tmp_folder)
-    rmdir(tmp_folder);
-}
-
 void cleanup_exit(int status) {
   if (is_fork_child)
     _exit(status);
 
-  cleanup();
+  for (int i = 0; i < tmpfiles.len; i++)
+    unlink(tmpfiles.data[i]);
+  if (tmp_folder)
+    rmdir(tmp_folder);
+
+#if defined(CHECK_MEMUSE)
+  {
+    int64_t accum = 0;
+    struct rusage stat;
+    getrusage(RUSAGE_SELF, &stat);
+    accum += stat.ru_maxrss;
+    getrusage(RUSAGE_CHILDREN, &stat);
+    accum += stat.ru_maxrss;
+    if (accum > 5000 * 1024)
+      status = 5;
+  }
+#endif
 
   exit(status);
 }
@@ -1507,5 +1516,5 @@ int main(int argc, char **argv) {
   if (ld_args.len)
     run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
 
-  cleanup();
+  cleanup_exit(0);
 }
