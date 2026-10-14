@@ -211,7 +211,7 @@ static bool is_static_const_var(Obj *var);
 static Node *assign(Token **rest, Token *tok);
 static long_double_t eval_double(Node *node);
 static BitBuf *eval_bitint(Node *node);
-static BitBuf *eval_bitint_clean(Node *node);
+static void clean_bitint(BitBuf *val, Type *ty);
 static bool is_const_bitint_strict(Node *node, BitBuf **result);
 static Node *conditional(Token **rest, Token *tok);
 static bool addsub_overload(Node **lhs, Node **rhs);
@@ -2706,7 +2706,8 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
     }
 
     if (init->ty->kind == TY_BITINT) {
-      BitBuf *val = eval_bitint_clean(node);
+      BitBuf *val = eval_bitint(node);
+      clean_bitint(val, node->ty);
       memcpy(buf + offset, val, init->ty->size);
       free(val);
       return;
@@ -3920,13 +3921,18 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
 }
 
 static void chk_bitint_within_64bit(BitBuf *data, Type *ty, Token *tok) {
-  int64_t cnt = bitint_buffer_size(ty) / 8;
-  uint64_t *d64 = &data->as64;
+  clean_bitint(data, ty);
 
-  uint64_t chunk = (!ty->is_unsigned && ((int64_t)d64[cnt - 1] < 0)) ? -1 : 0;
+  int64_t cnt = bitint_buffer_size(ty) / 8;
+
+  uint64_t chunk;
+  if (!ty->is_unsigned && ((int64_t)(&data->as64)[cnt - 1] < 0))
+    chunk = -1;
+  else
+    chunk = 0;
 
   for (int64_t i = 1; i < cnt; i++)
-    if (chunk != d64[i])
+    if (chunk != (&data->as64)[i])
       error_tok(tok, "_BitInt constant out of range");
 }
 
@@ -4034,7 +4040,7 @@ static int64_t const_expr2(Token **rest, Token *tok, Type **ty) {
     return eval(node);
 
   if (node->ty->kind == TY_BITINT) {
-    BitBuf *data = eval_bitint_clean(node);
+    BitBuf *data = eval_bitint(node);
 
     chk_bitint_within_64bit(data, node->ty, node->tok);
 
@@ -4282,13 +4288,9 @@ static BitBuf *eval_bitint(Node *node) {
   return (void *)eval_error(node);
 }
 
-static BitBuf *eval_bitint_clean(Node *node) {
-  BitBuf *val = eval_bitint(node);
-
-  Type *ty = node->ty;
+static void clean_bitint(BitBuf *val, Type *ty) {
   if (ty->bit_cnt % 64)
     eval_bitint_sign_ext(ty->bit_cnt, val, ty->size * 8, ty->is_unsigned);
-  return val;
 }
 
 static Node *atomic_op(NodeKind kind, Node *lhs, Node *rhs, Token *tok, bool return_old) {

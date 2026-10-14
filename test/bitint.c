@@ -178,6 +178,20 @@ int main() {
     ASSERT(1011, accum);
   }
   {
+    static_assert(-2 == ((_BitInt(65))0xFFFF'FFFF'FFFF'FFFFwb << 1));
+
+    int x = 0;
+    switch ((_BitInt(65))0xFFFF'FFFF'FFFF'FFFFwb << 1) {
+    case -2:
+        x = 42;
+        break;
+    default:
+        x = 33;
+        break;
+    }
+    ASSERT(42, x);
+  }
+  {
     const _BitInt(999) i0 = {};
     const _BitInt(999) i1 = 1;
     const auto i2 = 4uwb / 2wb;
