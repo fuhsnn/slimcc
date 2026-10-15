@@ -1,5 +1,9 @@
 #include "slimcc.h"
 
+void platform_init_driver(void) {
+  dumpmachine_str = "x86_64-unknown-freebsd15.0";
+}
+
 void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
@@ -7,10 +11,6 @@ void platform_init_cc1(void) {
   define_macro("__extension__", "");
 
   init_ty_lp64();
-}
-
-void platform_init_driver(void) {
-  dumpmachine_str = "x86_64-unknown-freebsd15.0";
 }
 
 void platform_stdinc_paths(StringArray *paths) {

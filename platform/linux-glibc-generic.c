@@ -2,6 +2,16 @@
 
 static char *gcclibpath;
 
+void platform_init_driver(void) {
+  dumpmachine_str = "x86_64-linux-gnu";
+
+  // Follow build compiler's PIE on/off status
+#if __pie__
+  opt_fpie = 2;
+  opt_pie = true;
+#endif
+}
+
 void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
@@ -12,16 +22,6 @@ void platform_init_cc1(void) {
   define_macro("__gnu_linux__", "1");
 
   init_ty_lp64();
-}
-
-void platform_init_driver(void) {
-  dumpmachine_str = "x86_64-linux-gnu";
-
-  // Follow build compiler's PIE on/off status
-#if __pie__
-  opt_fpie = 2;
-  opt_pie = true;
-#endif
 }
 
 void platform_stdinc_paths(StringArray *paths) {

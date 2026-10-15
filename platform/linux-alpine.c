@@ -2,6 +2,13 @@
 
 static char *libgccpath;
 
+void platform_init_driver(void) {
+  dumpmachine_str = "x86_64-alpine-linux-musl";
+
+  opt_fpie = 2;
+  opt_pie = true;
+}
+
 void platform_init_cc1(void) {
   define_macro("__ELF__", "1");
 
@@ -11,13 +18,6 @@ void platform_init_cc1(void) {
   define_macro("__linux__", "1");
 
   init_ty_lp64();
-}
-
-void platform_init_driver(void) {
-  dumpmachine_str = "x86_64-alpine-linux-musl";
-
-  opt_fpie = 2;
-  opt_pie = true;
 }
 
 void platform_stdinc_paths(StringArray *paths) {

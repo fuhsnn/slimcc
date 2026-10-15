@@ -1101,8 +1101,8 @@ int display_width(const char *p, int len);
 // platform.c
 //
 
-void platform_init_cc1(void);
 void platform_init_driver(void);
+void platform_init_cc1(void);
 void platform_stdinc_paths(StringArray *paths);
 void platform_search_dirs(StringArray *paths);
 void run_assembler(StringArray *as_args, const char *input, const char *output);
