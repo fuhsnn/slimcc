@@ -193,7 +193,7 @@ static void imm_cmp(const char *op, const char *tmp, int64_t val);
 static const char *arith_ins(NodeKind kind);
 static void imm_tmpl(const char *ins, const char *op, int64_t val);
 
-static bool is_asm_symbolic_arg(Node *node, const char *punct);
+static bool is_asm_symbolic_arg(Node *node);
 
 #define Prints(str) fprintf(output_file, str)
 #define Printsts(str) fprintf(output_file, "\t" str)
@@ -4391,7 +4391,7 @@ static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
       ap->kind = ASMOP_NUM;
       continue;
     }
-    if (is_symbolic && is_asm_symbolic_arg(ap->arg, NULL)) {
+    if (is_symbolic && is_asm_symbolic_arg(ap->arg)) {
       ap->kind = ASMOP_SYMBOLIC;
       continue;
     }
@@ -4836,37 +4836,55 @@ static AsmParam *find_op(const char *p, const char **rest, Token *tok, bool is_l
   error_tok(tok, "operand not found");
 }
 
-static bool is_asm_symbolic_arg(Node *node, const char *punct) {
+#define AsmPrintf(str, ...)     \
+  do {                          \
+    if (dialect != 2)           \
+      Printf(str, __VA_ARGS__); \
+  } while (0)
+
+static bool is_asm_symbolic_arg2(Node *node, const char *punct, int dialect) {
   if (node->kind == ND_VAR && node->m.var->ty->kind == TY_FUNC && use_rip(node->m.var)) {
     if (punct)
-      fprintf(output_file, "%s\"%s\"", punct, get_symbol(node->m.var));
+      AsmPrintf("%s\"%s\"", punct, get_symbol(node->m.var));
     return true;
   }
   char ofs[STRBUF_SZ];
   const char *ptr;
   if (node->kind == ND_ADDR && is_memop(node->m.lhs, ofs, &ptr, true) && ptr == rip) {
     if (punct)
-      Printf("%s%s", punct, ofs);
+      AsmPrintf("%s%s", punct, ofs);
     return true;
   }
   return false;
 }
 
+static bool is_asm_symbolic_arg(Node *node) {
+  return is_asm_symbolic_arg2(node, NULL, 0);
+}
+
 static void asm_body(Node *node) {
+  int dialect = 0;
   const char *p = node->gasm.str_tok->str;
   for (;;) {
     size_t spn = strcspn(p, "%{|}");
     if (spn) {
-      fwrite(p, 1, spn, output_file);
+      if (dialect != 2)
+        fwrite(p, 1, spn, output_file);
       p += spn;
     }
     if (*p == '\0')
       break;
 
-    switch (*p) {
-    case '{':
-    case '|':
-    case '}': error_tok(node->gasm.str_tok, "assembler dialects not supported");
+    if ((*p == '{' && dialect == 0) || (*p == '|' && dialect == 1)) {
+      dialect++;
+      p++;
+      continue;
+    } else if (*p == '}' && dialect == 2) {
+      dialect = 0;
+      p++;
+      continue;
+    } else if (*p != '%') {
+      error_tok(node->gasm.str_tok, "unknown asm dialect alternative formation");
     }
 
     switch (p[1]) {
@@ -4874,11 +4892,11 @@ static void asm_body(Node *node) {
     case '{':
     case '|':
     case '}':
-      fputc(p[1], output_file);
+      if (dialect != 2)
+        fputc(p[1], output_file);
       p += 2;
       continue;
     }
-
     p++;
 
     if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
@@ -4887,9 +4905,9 @@ static void asm_body(Node *node) {
         error_tok(ap->arg->tok, "not a label");
 
       if (node->gasm.outputs)
-        Printf("%df", ap->label_id);
+        AsmPrintf("%df", ap->label_id);
       else
-        Printf(".L.jmp.%" PRIi64, ap->arg->jmp.target->lbl.id);
+        AsmPrintf(".L.jmp.%" PRIi64, ap->arg->jmp.target->lbl.id);
       continue;
     }
 
@@ -4911,11 +4929,11 @@ static void asm_body(Node *node) {
 
       switch (ap->kind) {
       case ASMOP_NUM: {
-        Printf("%s%" PRIi64, punct, ap->val);
+        AsmPrintf("%s%" PRIi64, punct, ap->val);
         continue;
       }
       case ASMOP_SYMBOLIC: {
-        if (is_asm_symbolic_arg(ap->arg, punct))
+        if (is_asm_symbolic_arg2(ap->arg, punct, dialect))
           continue;
         break;
       }
@@ -4923,22 +4941,22 @@ static void asm_body(Node *node) {
         char ofs[STRBUF_SZ];
         const char *ptr;
         if (is_memop(ap->arg, ofs, &ptr, true)) {
-          Printf("%s(%s)", ofs, alt_ptr(ptr));
+          AsmPrintf("%s(%s)", ofs, alt_ptr(ptr));
           continue;
         }
         if (ap->reg) {
-          Printf("(%s)", regs[ap->reg][3]);
+          AsmPrintf("(%s)", regs[ap->reg][3]);
           continue;
         }
         break;
       }
       case ASMOP_REG:
         if (is_xmm_reg(ap->reg)) {
-          Printf("%%xmm%d", ap->reg - REG_X64_XMM0);
+          AsmPrintf("%%xmm%d", ap->reg - REG_X64_XMM0);
           continue;
         }
         if (is_x87_reg(ap->reg)) {
-          Printf("%%st(%d)", ap->reg - REG_X64_X87_ST0);
+          AsmPrintf("%%st(%d)", ap->reg - REG_X64_X87_ST0);
           continue;
         }
         if (is_gp_reg(ap->reg)) {
@@ -4951,7 +4969,7 @@ static void asm_body(Node *node) {
           case 'q': regname = regs[ap->reg][3]; break;
           default:  regname = reg_sz(ap->reg, ap->arg->ty->size); break;
           }
-          Printf("%s", regname);
+          AsmPrintf("%s", regname);
           continue;
         }
       }

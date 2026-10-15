@@ -303,6 +303,17 @@ void x87(void) {
   ASSERT(1, 11 == f2);
 }
 
+int dialect_skip() {
+  int x;
+  __asm("{movl $31, %0| junk %} }" : "=r"(x));
+  ASSERT(31, x);
+  __asm("{|movl $22, %0}" : "=r"(x));
+  ASSERT(31, x);
+  __asm("{movl $17, %0" : "=r"(x));
+  ASSERT(17, x);
+  return 1;
+}
+
 int main(void) {
   mem_operand_triival();
   reg_label();
@@ -329,6 +340,7 @@ int main(void) {
   ASSERT(30, asm_goto_output(&(int){5}));
 
   ASSERT(11, asm_goto_local_label());
+  ASSERT(1, dialect_skip());
 
   printf("OK\n");
 }
