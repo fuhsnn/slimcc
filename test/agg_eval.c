@@ -62,6 +62,8 @@ int main(void) {
   ASSERT(11, static_ref_excess_cast());
   ASSERT(1, aggregate_eval());
 
+  ASSERT(42, ({ volatile struct S {int a;} x={42}; ((struct S)x).a; }));
+
   printf("OK\n");
   return 0;
 }

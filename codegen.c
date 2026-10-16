@@ -1066,9 +1066,9 @@ static void gen_addr(Node *node) {
     return;
   case ND_ASSIGN:
   case ND_COND:
+  case ND_CAST:
   case ND_FUNCALL:
   case ND_STMT_EXPR:
-  case ND_VA_ARG:
     if (node->ty->kind == TY_STRUCT || node->ty->kind == TY_UNION) {
       gen_expr(node);
       return;
@@ -3686,14 +3686,6 @@ static void gen_member_opt(Node *node, int64_t *ofs) {
   while (node->kind == ND_MEMBER) {
     *ofs += node->m.member->offset;
     node = node->m.lhs;
-  }
-
-  switch (node->kind) {
-  case ND_FUNCALL:
-  case ND_ASSIGN:
-  case ND_COND:
-  case ND_STMT_EXPR:
-  case ND_VA_ARG:    gen_expr(node); return;
   }
   gen_addr(node);
 }
