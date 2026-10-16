@@ -1,9 +1,6 @@
 set -u
 
 err_skips=(
- # '##' at start/end of never used macro
- error/0035-cpp.c
-
  # infinite #include recursion
  error/0003-junkinclude.c
 

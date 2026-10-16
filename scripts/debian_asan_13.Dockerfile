@@ -82,6 +82,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  libfuse-dev squashfs-tools \
  # pngquant
  libpng-dev liblcms2-dev \
+ # ooc
+ libgc-dev \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain

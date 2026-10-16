@@ -20,7 +20,7 @@ test_ag() {
 }
 
 test_apexmarkdown() {
- github_clone ApexMarkdown apex v1.1.38
+ github_clone ApexMarkdown apex v1.1.41
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
@@ -56,7 +56,7 @@ test_bash() {
 }
 
 test_bcgh() {
- git_fetch https://github.com/gavinhoward/bc 2084ed52a1b652666f299c130cc6f13175090a23 bcgh
+ git_fetch https://github.com/gavinhoward/bc 7d147fb847f889349fd93319da028823d55e61b7 bcgh
  ./configure
  make && make test_serial
 }
@@ -75,7 +75,7 @@ test_bfs() {
 }
 
 test_binn() {
- git_fetch https://github.com/liteserver/binn 301e7ad7670736f7f2623cc1b73adcbc91f7cc68 binn
+ git_fetch https://github.com/liteserver/binn 00f6a1edf9ce465d20617b3b7d2b9b06b0722e7d binn
  make test
 }
 
@@ -158,12 +158,18 @@ test_blosc2() {
 }
 
 test_box2d() {
- github_tar erincatto box2d v3.1.1
- use_stdbit '#include <stdint.h>' src/ctz.h
- use_stdatomic '#include <stdint.h>' src/atomic.h
- replace_line "#elif defined( __GNUC__ ) || defined( __clang__ )" "#elif 1" src/atomic.h
- sed -i 's|__atomic_compare_exchange_n( &a->value, &expected, desired, false,|atomic_compare_exchange_strong_explicit(\&a->value,\&expected,desired,|g' src/atomic.h
- cmake_init -DBOX2D_DISABLE_SIMD=ON
+ github_tar erincatto box2d v3.2.0
+ use_stdbit '#include <stdint.h>' src/platform.h
+
+ replace_line '#include <xmmintrin.h>' '' src/platform.h
+ sed -i 's|uint32_t csr = _mm_getcsr();|uint32_t csr; __asm("push %%rdx;stmxcsr (%%rsp);movl (%%rsp),%0;pop %%rdx;":"=r"(csr)::"rdx");|g' src/platform.h
+
+ perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b2Prefetch)/#elif 0\1/g' src/platform.h
+ replace_line "#elif defined( __GNUC__ ) || defined( __clang__ )" "#elif 1" src/platform.h
+ use_stdatomic '#include <stdint.h>' src/platform.h
+ sed -i 's|__atomic_compare_exchange_n( &a->value, &expected, desired, false,|atomic_compare_exchange_strong_explicit(\&a->value,\&expected,desired,|g' src/platform.h
+
+ cmake_init -DBOX2D_DISABLE_SIMD=ON -DBOX2D_AVX2=OFF
  make
  ./bin/test
 }
@@ -171,10 +177,10 @@ test_box2d() {
 test_box3d() {
  git_fetch https://github.com/erincatto/box3d efca0c184d40fd6a82016983f1601c4d23965867 box3d
  use_stdbit '#include <stdint.h>' src/ctz.h
- perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b3Prefetch)/#elif 0\1/g' src/platform.h
 
- use_stdatomic '#include <stdint.h>' src/platform.h
+ perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b3Prefetch)/#elif 0\1/g' src/platform.h
  replace_line "#elif defined( __GNUC__ ) || defined( __clang__ )" "#elif 1" src/platform.h
+ use_stdatomic '#include <stdint.h>' src/platform.h
  sed -i 's|__atomic_compare_exchange_n( &a->value, &expected, desired, false,|atomic_compare_exchange_strong_explicit(\&a->value,\&expected,desired,|g' src/platform.h
 
  cat << EOF >> shared/CMakeLists.txt
@@ -254,7 +260,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler 8ffab2240f0646c9b7b5446aeb52de9daeea2c30 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler f0d2a9465472e1b12ff61afc5c23faed7f7ea7fc c2compiler
  replace_line 'export CC=clang' '' env.sh
  . env.sh
  make CC="$CC" all test
@@ -300,7 +306,7 @@ test_cares() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 a6530f46914232c085c281c4bf84e87bd136596f cc65
+ git_fetch https://github.com/cc65/cc65 8d86ca7e7ed15300cc4bfaba61a40a3d00f3114d cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
 }
@@ -1133,7 +1139,7 @@ test_libjsonc() {
 }
 
 test_liblz4() {
- git_fetch https://github.com/lz4/lz4 48bfbfe351c5d6ea87d4af5557705e87755844e0 lz4
+ git_fetch https://github.com/lz4/lz4 779b3556802f61774ed7f03a72023775ffe7795a lz4
  make test
 }
 
@@ -1191,7 +1197,7 @@ test_libpcre2() {
 }
 
 test_libpkgconf() {
- github_tar pkgconf pkgconf pkgconf-3.0.9
+ github_tar pkgconf pkgconf pkgconf-3.0.10
  sh autogen.sh
  fix_and_configure
  make check
@@ -1558,7 +1564,7 @@ test_mjson() {
 }
 
 test_mlib() {
- git_fetch https://github.com/P-p-H-d/mlib 4acdfe4c12040150e2e531517a005a1aace6b794 mlib
+ git_fetch https://github.com/P-p-H-d/mlib 93cddfb56c32976d8aeefd45ef9094167f64b285 mlib
  make check CC="$CC -std=c23" CC99="$CC -std=c23" CC11="$CC -std=c23" CFLAGS=
 }
 
@@ -2119,7 +2125,7 @@ test_rvvm() {
 }
 
 test_s2ntls() {
- github_tar aws s2n-tls v1.7.11
+ github_tar aws s2n-tls v1.7.12
  cmake_init -DCMAKE_EXE_LINKER_FLAGS='-lz -lzstd'
  make && ctest
 }
@@ -2201,7 +2207,7 @@ test_soxr() {
 }
 
 test_sqlite() {
- github_tar sqlite sqlite version-3.54.0
+ github_tar sqlite sqlite version-3.54.1
  use_stdatomic '# define SQLITE_ATOMIC_INTRINSICS 1' src/sqliteInt.h
  sed -i 's|cannot open file: x|error in fread()|g' test/zipfile.test
  CC_FOR_BUILD="$CC" CFLAGS=-D_GNU_SOURCE ./configure
@@ -2219,7 +2225,7 @@ test_squashfuse() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC 236f0749e14da576f4012341a56015ed0b2315e4 stc
+ git_fetch https://github.com/stclib/STC 3f06aa183e8ab91432ba646891191bf23714c083 stc
  muon_init
  muon_build
  muon_test
@@ -2378,7 +2384,7 @@ test_uriparser() {
 }
 
 test_utf8h() {
- git_fetch https://github.com/sheredom/utf8.h ad7516ee84000bbb0f92d426bc8b52033e0d32f3 utf8h
+ git_fetch https://github.com/sheredom/utf8.h 02f7165b6eb20ef21e120b186ddaf7ea7eafdee6 utf8h
  replace_line "#elif defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)" "#elif 1" test/utest.h
  replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" utf8.h
  "$CC" test/main.c -I./ -o run_tests
@@ -2842,7 +2848,7 @@ build_liburing() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 2a8e017ef1ece6a95b983ffca073d30609dce7c4 luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d luajit
  sed -i 's|-O2 |-O2 -DLUAJIT_NO_UNWIND |g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -2906,7 +2912,7 @@ build_nanovg() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20261010
+ github_tar ThomasDickey ncurses-snapshots v6_6_20261017
  ./configure
  make V=1
 }
@@ -2960,9 +2966,24 @@ build_oksh() {
  ./oksh hello.sh | grep ^hello_world$
 }
 
+build_ooclang() {
+ git_fetch https://github.com/ooc-lang/rock 079f9b970e2bf33bfa613c670c3d88cea99ac26e ooc
+ echo sed -i ''\''s|comeBack = true|comeBack=(void*)1|g'\''' build/c-source/ooc/rock/rock/middle/ClassDecl.c >> utils/download-bootstrap.sh
+ echo sed -i ''\''s|"gcc", 3|"'$CC'", '$(echo $CC|wc -m)'-1|g'\''' build/c-source/ooc/rock/rock/frontend/drivers/CCompiler.c >> utils/download-bootstrap.sh
+ sed -i 's|comeBack=true|comeBack=1as Bool*|g' source/rock/middle/ClassDecl.ooc
+ sed -i 's|"gcc"|"'$CC'"|g' source/rock/frontend/drivers/CCompiler.ooc
+ sed -i 's| -j4||g' Makefile
+
+ make rescue CC=$CC GCC=$CC EXTERNAL_GC=1
+
+ echo '"hello_world" println()' > hello.ooc
+ bin/rock hello.ooc
+ ./hello | grep ^hello_world$
+}
+
 build_pcc() {
  local DIR=$PWD/pcc_install
- git_fetch https://github.com/PortableCC/pcc c4893a9d5dd3f2c1e04fc9bce0fcf51a18951363 pcc
+ git_fetch https://github.com/PortableCC/pcc 9a993a5f3feaa8e0ad37a5f089eba105e0c7ea59 pcc
  ./configure --prefix=$DIR
  make && make install
  cd ../
@@ -3398,7 +3419,7 @@ shared_binutils() {
 }
 
 shared_muon() {
- git_fetch https://github.com/muon-build/muon e3885901da7d55cee6991ff78147ddc71d453c18 muon
+ git_fetch https://github.com/muon-build/muon c9c8f7d51b063ed9a94af2878e8483c27c2ca618 muon
  cat << EOF >> src/script/runtime/toolchains.meson
 toolchain.register_compiler(
     'slimcc',
