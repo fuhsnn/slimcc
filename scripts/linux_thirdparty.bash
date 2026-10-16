@@ -2960,6 +2960,21 @@ build_oksh() {
  ./oksh hello.sh | grep ^hello_world$
 }
 
+build_ooclang() {
+ git_fetch https://github.com/ooc-lang/rock 079f9b970e2bf33bfa613c670c3d88cea99ac26e ooc
+ echo sed -i ''\''s|comeBack = true|comeBack=(void*)1|g'\''' build/c-source/ooc/rock/rock/middle/ClassDecl.c >> utils/download-bootstrap.sh
+ echo sed -i ''\''s|"gcc", 3|"'$CC'", '$(echo $CC|wc -m)'-1|g'\''' build/c-source/ooc/rock/rock/frontend/drivers/CCompiler.c >> utils/download-bootstrap.sh
+ sed -i 's|comeBack=true|comeBack=1as Bool*|g' source/rock/middle/ClassDecl.ooc
+ sed -i 's|"gcc"|"'$CC'"|g' source/rock/frontend/drivers/CCompiler.ooc
+ sed -i 's| -j4||g' Makefile
+
+ make rescue CC=$CC GCC=$CC EXTERNAL_GC=1
+
+ echo '"hello_world" println()' > hello.ooc
+ bin/rock hello.ooc
+ ./hello | grep ^hello_world$
+}
+
 build_pcc() {
  local DIR=$PWD/pcc_install
  git_fetch https://github.com/PortableCC/pcc c4893a9d5dd3f2c1e04fc9bce0fcf51a18951363 pcc

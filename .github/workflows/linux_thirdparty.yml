@@ -136,6 +136,7 @@ jobs:
           - { vm: main, proj: build_nano }
           - { vm: main, proj: build_nolibc }
           - { vm: main, proj: build_oksh }
+          - { vm: main, proj: build_ooclang }
           - { vm: main, proj: build_pcc }
           - { vm: main, proj: build_pngcrush }
           - { vm: main, proj: build_qoi }
@@ -221,7 +222,6 @@ jobs:
           - { vm: main, proj: test_gnuless }
           - { vm: main, proj: test_gnutls }
           - { vm: main, proj: test_go }
-          - { vm: main, proj: test_got }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -233,6 +233,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_got }
           - { vm: main, proj: test_gpatch }
           - { vm: main, proj: test_gravity }
           - { vm: main, proj: test_gsed }
