@@ -4130,8 +4130,8 @@ static long_double_t eval_double(Node *node) {
   case ND_COND: {
     bool cond = eval(node->ctrl.cond);
     if (eval_strict) {
-      long double lval = eval_double(node->ctrl.then);
-      long double rval = eval_double(node->ctrl.els);
+      long_double_t lval = eval_double(node->ctrl.then);
+      long_double_t rval = eval_double(node->ctrl.els);
       return cond ? lval : rval;
     }
     return cond ? eval_double(node->ctrl.then) : eval_double(node->ctrl.els);
