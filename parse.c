@@ -2973,30 +2973,28 @@ static Node *asm_stmt(Token **rest, Token *tok) {
   }
   node->gasm.str_tok = str_tok(&tok, skip_tk(tok, TK_LPAREN));
 
-  for (int progress = 0;;) {
-    Token *start = tok;
+  for (int colons = 0;;) {
+    if (tok->kind == TK_COLON)
+      colons += 1;
+    else if (tok->kind == TK_COLON2)
+      colons += 2;
+    else
+      break;
 
-    int inc = 0;
-    if (consume_tk(&tok, tok, TK_COLON))
-      inc = 1;
-    else if (consume_tk(&tok, tok, TK_COLON2))
-      inc = 2;
-
-    if (inc) {
-      switch (progress += inc) {
-      case 1: node->gasm.outputs = asm_params(&tok, tok); continue;
-      case 2: node->gasm.inputs = asm_params(&tok, tok); continue;
-      case 3: node->gasm.clobbers = asm_clobbers(&tok, tok); continue;
-      case 4:
-        if (is_asm_goto) {
-          node->gasm.labels = asm_labels(&tok, tok);
-          continue;
-        }
+    switch (colons) {
+    case 1: node->gasm.outputs = asm_params(&tok, tok->next); continue;
+    case 2: node->gasm.inputs = asm_params(&tok, tok->next); continue;
+    case 3: node->gasm.clobbers = asm_clobbers(&tok, tok->next); continue;
+    case 4:
+      if (is_asm_goto) {
+        node->gasm.labels = asm_labels(&tok, tok->next);
+        continue;
       }
     }
-    *rest = skip_tk(start, TK_RPAREN);
-    return node;
+    break;
   }
+  *rest = skip_tk(tok, TK_RPAREN);
+  return node;
 }
 
 static LocalLabel *find_local_label(Scope *sc, Token *tok) {
