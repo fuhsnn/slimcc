@@ -164,8 +164,8 @@ struct FuncObj {
   int32_t ref_capacity;
 };
 
-static void load2(Type *ty, int sofs, const char *sptr);
-static void store2(Type *ty, int dofs, const char *dptr);
+static void load2(Type *ty, int64_t sofs, const char *sptr);
+static void store2(Type *ty, int64_t dofs, const char *dptr);
 static void store_gp2(const char *const *r, int sz, int dofs, const char *dptr);
 
 static void gen_asm(Node *node);
@@ -1089,9 +1089,12 @@ static void load3(Type *ty, const char *sofs, const char *sptr) {
   load_extend_int(ty, sofs, sptr, regop_ax(ty));
 }
 
-static void load2(Type *ty, int sofs, const char *sptr) {
+static void load2(Type *ty, int64_t sofs, const char *sptr) {
+  if (!in_imm_range(sofs))
+    internal_error();
+
   char ofs_buf[STRBUF_SZ];
-  snprintf(ofs_buf, STRBUF_SZ, "%d", sofs);
+  snprintf(ofs_buf, STRBUF_SZ, "%" PRIi64, sofs);
   load3(ty, ofs_buf, sptr);
 }
 
@@ -1128,9 +1131,12 @@ static void store3(Type *ty, const char *dofs, const char *dptr) {
   Printftn("mov %s, %s(%s)", reg_ax(ty->size), dofs, dptr);
 }
 
-static void store2(Type *ty, int dofs, const char *dptr) {
+static void store2(Type *ty, int64_t dofs, const char *dptr) {
+  if (!in_imm_range(dofs))
+    internal_error();
+
   char ofs_buf[STRBUF_SZ];
-  snprintf(ofs_buf, STRBUF_SZ, "%d", dofs);
+  snprintf(ofs_buf, STRBUF_SZ, "%" PRIi64, dofs);
   store3(ty, ofs_buf, dptr);
 }
 
@@ -3659,7 +3665,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
   return false;
 }
 
-static void gen_deref_opt(Node *node, int64_t *ofs) {
+static bool gen_deref_opt(Node *node, int64_t *ofs) {
   for (;; node = node->m.lhs) {
     if (node->kind == ND_CAST && node->ty->base && node->m.lhs->ty->base)
       continue;
@@ -3679,7 +3685,11 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
     break;
   }
 
-  gen_expr(node);
+  if (in_imm_range(*ofs)) {
+    gen_expr(node);
+    return true;
+  }
+  return false;
 }
 
 static void gen_member_opt(Node *node, int64_t *ofs) {
@@ -3814,9 +3824,16 @@ static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
   int64_t val;
   if (is_const_expr(mul, &val)) {
     int64_t ofs = 0;
-    gen_deref_opt(lhs, &ofs);
-    load2(ty, ofs + val, "%rax");
-    return true;
+    if (gen_deref_opt(lhs, &ofs)) {
+      ofs += val;
+      if (in_imm_range(ofs)) {
+        load2(ty, ofs, "%rax");
+      } else {
+        imm_add("%rax", "%rdx", ofs);
+        load2(ty, 0, "%rax");
+      }
+      return true;
+    }
   }
 
   int sz = 0;
@@ -4021,9 +4038,10 @@ static bool gen_expr_opt(Node *node) {
     }
     if (lhs->kind == ND_DEREF && ty->size == lhs->ty->size && ty->kind != TY_BOOL) {
       int64_t ofs = 0;
-      gen_deref_opt(lhs->m.lhs, &ofs);
-      load2(ty, ofs, "%rax");
-      return true;
+      if (gen_deref_opt(lhs->m.lhs, &ofs)) {
+        load2(ty, ofs, "%rax");
+        return true;
+      }
     }
   }
 
@@ -4059,14 +4077,15 @@ static bool gen_expr_opt(Node *node) {
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
-    gen_deref_opt(node->m.lhs, &ofs);
-
-    if (is_scalar(ty)) {
-      load2(ty, ofs, "%rax");
+    if (gen_deref_opt(node->m.lhs, &ofs)) {
+      if (is_scalar(ty)) {
+        load2(ty, ofs, "%rax");
+        return true;
+      }
+      imm_add("%rax", "%rdx", ofs);
       return true;
     }
-    imm_add("%rax", "%rdx", ofs);
-    return true;
+    return false;
   }
 
   if (kind == ND_MEMBER) {
@@ -4099,9 +4118,11 @@ static bool gen_addr_opt(Node *node) {
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
-    gen_deref_opt(node->m.lhs, &ofs);
-    imm_add("%rax", "%rdx", ofs);
-    return true;
+    if (gen_deref_opt(node->m.lhs, &ofs)) {
+      imm_add("%rax", "%rdx", ofs);
+      return true;
+    }
+    return false;
   }
 
   if (kind == ND_MEMBER) {
