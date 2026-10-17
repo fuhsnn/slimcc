@@ -1968,7 +1968,7 @@ test_python() {
   test_os # https://github.com/python/cpython/issues/126112
  )
  CFLAGS=-std=c23 ./configure --disable-gil
- make -j3 && ./python -m test -j3 --exclude "${skip_tests[@]}"
+ make -j5 && ./python -m test -j5 --exclude "${skip_tests[@]}"
 }
 
 test_qbe_simplecc() {
