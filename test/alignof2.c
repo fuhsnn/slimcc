@@ -22,5 +22,9 @@ int main(int argc, char**argv) {
 
   EASSERT(1, _Alignof (char){1});
 
+  EASSERT(alignof(short), alignof(short[]));
+  EASSERT(alignof(long double), alignof(long double[][s.c]));
+  EASSERT(alignof(char), alignof(char[][1]));
+
   printf("OK\n");
 }

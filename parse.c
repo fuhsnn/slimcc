@@ -4842,10 +4842,9 @@ static Node *unary(Token **rest, Token *tok) {
       add_type(node);
       ty = node->ty;
     }
+    ty = get_elem(ty);
     if (ty->size < 0)
       error_tok(tok, "alignof applied to incomplete type");
-    while (is_array(ty))
-      ty = ty->base;
     return new_size_t(MAX(ty->align, attr_align), tok);
   }
 
