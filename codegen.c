@@ -4480,20 +4480,29 @@ static void asm_assign_operands(void) {
   }
 }
 
+static bool asm_is_goto_with_output(Node *node) {
+  return node->gasm.outputs && node->gasm.labels;
+}
+
 static void asm_prepare_args(Node *node, int *out_tmp) {
-  bool has_ptr_out = false;
-  bool has_bitfield_out = false;
+  int tmp_req = 0;
+
   for (AsmParam *ap = node->gasm.outputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG)
       ptr_convert(&ap->arg);
     if (has_memop(ap->arg))
       continue;
-    has_bitfield_out = is_bitfield(ap->arg);
-    has_ptr_out = true;
+
+    if (is_bitfield(ap->arg))
+      tmp_req = MAX(tmp_req, 2);
+    else
+      tmp_req = MAX(tmp_req, 1);
 
     ap->ptr = new_lvar(pointer_to(ap->arg->ty));
   }
-  *out_tmp = has_ptr_out + has_bitfield_out;
+  if (asm_is_goto_with_output(node))
+    tmp_req = MAX(tmp_req, 1);
+  *out_tmp = tmp_req;
 
   for (AsmParam *ap = node->gasm.inputs; ap; ap = ap->next) {
     if (ap->kind == ASMOP_REG)
@@ -5037,10 +5046,11 @@ static void gen_asm(Node *node) {
 
   int fallthrough_label = asm_ops_cnt;
   int meet_label = asm_ops_cnt + 1;
-  bool is_goto_with_output = node->gasm.outputs && node->gasm.labels;
-  if (is_goto_with_output) {
+
+  if (asm_is_goto_with_output(node)) {
     const char *tmp_gp = regs[node->gasm.ctx->output_tmp1][3];
     Printftn("lea %df(%%rip), %s; jmp %df", fallthrough_label, tmp_gp, meet_label);
+
     for (AsmParam *ap = node->gasm.labels; ap; ap = ap->next) {
       Printftn("%d:", ap->label_id);
       Printftn("lea .L.jmp.%" PRIi64 "(%%rip), %s", ap->arg->jmp.target->lbl.id, tmp_gp);
@@ -5058,7 +5068,7 @@ static void gen_asm(Node *node) {
   asm_pop_frame_ptr(node, prev_lvar_ptr);
   asm_pop_clobbers(node);
 
-  if (is_goto_with_output) {
+  if (asm_is_goto_with_output(node)) {
     Printstn("pop %%rax");
     Printstn("jmp *%%rax");
     Printftn("%d:", fallthrough_label);
