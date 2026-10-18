@@ -71,5 +71,16 @@ int main(void) {
 
   ASSERT(1, sizeof(tst_invalid) == sizeof(chk_invalid) && !memcmp(&tst_invalid, &chk_invalid, sizeof(chk_invalid)));
 
+#ifdef __CHAR_UNSIGNED__
+  ASSERT(255, '\x00FF');
+#else
+  ASSERT( -1, '\x00FF');
+#endif
+
+#ifdef NOTGCC
+  //SREJ (void)'\x0100';
+  //SREJ (void)'ÿ';
+#endif
+
   printf("OK\n");
 }

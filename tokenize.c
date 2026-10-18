@@ -693,29 +693,29 @@ static Token *read_utf32_string_literal(const char *start, const char *quote, Ty
 }
 
 static Token *read_char_literal(const char *start) {
-  uint64_t val = 0;
-  bool is_multi = false;
-  bool invalid = false;
   const char *p = start + 1;
   if (*p == '\'')
     error_at(p, "empty character literal");
 
+  uint64_t val = 0;
+  bool is_multi = false;
+  bool invalid = false;
   for (;;) {
     if (*p == '\0')
       error_at(start, "unclosed character literal");
 
-    uint32_t c;
-    if (*p == '\\')
+    uint32_t c, lim;
+    if (*p == '\\') {
       c = read_escape_seq(&p, p + 1, &invalid);
-    else
+      lim = 256;
+    } else {
       c = decode_utf8(&p, p);
-    if (c >> 8)
+      lim = 128;
+    }
+    val = (val << 8) | c;
+    if (val >> 32 || c >= lim)
       invalid = true;
 
-    val <<= 8;
-    val |= (uint8_t)c;
-    if (val >> 32)
-      invalid = true;
     if (*p == '\'')
       break;
     is_multi = true;

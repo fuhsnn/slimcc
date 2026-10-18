@@ -287,6 +287,9 @@ static void cli_macros(bool is_asm_pp) {
     define_macro("__PIE__", "2");
   }
 
+  if (ty_pchar->is_unsigned)
+    define_macro("__CHAR_UNSIGNED__", "1");
+
   for (int i = 0; i < macrodefs.len; i++) {
     MacroChange *m = &macrodefs.data[i];
     if (m->is_def)
