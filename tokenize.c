@@ -66,9 +66,9 @@ static void verror_at(const char *filename, const char *input, int line_no,
   fprintf(stderr, "\n");
 }
 
-static void print_display_file(Token *tok) {
+static void print_display_file(Token *tok, Token *tok2) {
   if (tok->display_line_no)
-    if (tok->file->file_no != tok->display_file_no || tok->line_no != tok->display_line_no)
+    if (tok2->file->file_no != tok->display_file_no || tok2->line_no != tok->display_line_no)
       fprintf(stderr, "%s:%d | ", display_files.data[tok->display_file_no],
               tok->display_line_no);
 }
@@ -78,12 +78,12 @@ void verror_at_tok(Token *tok, const char *fmt, va_list ap) {
     verror_at(tok->file->name, tok->loc, 1, tok->loc, fmt, ap);
   } else {
     if (!tok->origin)
-      print_display_file(tok);
+      print_display_file(tok, tok);
     verror_at(tok->file->name, tok->file->contents, tok->line_no, tok->loc, fmt, ap);
   }
 
   if (tok->origin) {
-    print_display_file(tok);
+    print_display_file(tok, tok->origin);
     notice_tok(tok->origin, "in expansion of macro");
   }
 }
