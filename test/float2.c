@@ -72,6 +72,27 @@ int main(void) {
     ASSERT(1, !(n <= n));
     ASSERT(1, !(n >= n));
   }
+  {
+#define ROUND_TEST(it, iv, ft, fv) \
+    static_assert(iv == fv); \
+    ASSERT(1, ({ volatile it I = iv; volatile ft F = fv; I == F; }));
+
+    ROUND_TEST( int32_t, 16777217, float, 16777216.0f);
+    ROUND_TEST(uint32_t, 16777217, float, 16777216.0f);
+    ROUND_TEST( int64_t, 16777217, float, 16777216.0f);
+    ROUND_TEST(uint64_t, 16777217, float, 16777216.0f);
+
+    ROUND_TEST( int32_t, 33554431, float, 33554432.0f);
+    ROUND_TEST(uint32_t, 33554431, float, 33554432.0f);
+    ROUND_TEST( int64_t, 33554431, float, 33554432.0f);
+    ROUND_TEST(uint64_t, 33554431, float, 33554432.0f);
+
+    ROUND_TEST( int64_t, 9007199254740993, double, 9007199254740992.0);
+    ROUND_TEST(uint64_t, 9007199254740993, double, 9007199254740992.0);
+
+    ROUND_TEST( int64_t, 18014398509481983, double, 18014398509481984.0);
+    ROUND_TEST(uint64_t, 18014398509481983, double, 18014398509481984.0);
+  }
 
   printf("OK\n");
 }

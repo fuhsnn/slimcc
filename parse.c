@@ -4137,10 +4137,14 @@ static long_double_t eval_double(Node *node) {
   case ND_CAST:
     if (is_flonum(lhs->ty))
       return eval_fp_cast(eval_double(lhs), ty);
-    if (lhs->ty->size == 8 && lhs->ty->is_unsigned)
-      return (uint64_t)eval(lhs);
-    if (is_integer(lhs->ty))
-      return eval(lhs);
+
+    if (is_integer(lhs->ty)) {
+      int64_t val = eval(lhs);
+      if (lhs->ty->size == 8 && lhs->ty->is_unsigned)
+        return eval_fp_cast((uint64_t)val, ty);
+      return eval_fp_cast(val, ty);
+    }
+
     error_tok(node->tok, "unimplemented cast");
   case ND_NUM:
     if (node->num.constant) {
