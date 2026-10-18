@@ -2073,12 +2073,25 @@ static Node *declaration(Token **rest, Token *tok) {
 
 static Token *skip_excess_element(Token *tok) {
   if (tok->kind == TK_LCURLY) {
-    tok = skip_excess_element(tok->next);
-    return skip_tk(tok, TK_RCURLY);
+    tok = tok->next;
+
+    bool first = true;
+    for (; braced_list(&tok, &tok, !first); first = false)
+      tok = skip_excess_element(tok);
+
+    return tok;
   }
 
   assign(&tok, tok);
   return tok;
+}
+
+static Token *skip_excess_scalar(Token *tok) {
+  while (consume_tk(&tok, tok, TK_COMMA)) {
+    if (tok->kind != TK_RCURLY)
+      tok = skip_excess_element(tok);
+  }
+  return skip_tk(tok, TK_RCURLY);
 }
 
 static void string_initializer(Token *tok, Initializer *init) {
@@ -2376,12 +2389,11 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
     init->expr = expr ? expr : assign(&tok, tok);
 
     while (cnt--)
-      tok = skip_tk(tok, TK_RCURLY);
+      tok = skip_excess_scalar(tok);
   }
-  if (has_brace) {
-    consume_tk(&tok, tok, TK_COMMA);
-    tok = skip_tk(tok, TK_RCURLY);
-  }
+  if (has_brace)
+    tok = skip_excess_scalar(tok);
+
   *rest = tok;
 }
 

@@ -262,6 +262,11 @@ int main(void) {
     ASSERT(3, arr[2][0]);
     ASSERT(0, arr[2][1]);
   }
+  {
+    int excess1 = {42, {1}, 2, {{3}, 4,},};
+    int excess2[1] = {42, {1}, 2, {{3}, 4,},};
+    ASSERT(1, excess1 == excess2[0]);
+  }
 #endif
 
   printf("OK\n");

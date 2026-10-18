@@ -33,6 +33,8 @@ chapter_14/invalid_types/pass_pointer_as_int.c
 chapter_14/invalid_types/return_wrong_pointer_type.c
 chapter_14/invalid_types/ternary_mixed_pointer_types.c
 chapter_15/invalid_types/compare_explicit_and_implict_addr.c
+chapter_15/invalid_types/compound_initializer_for_scalar.c
+chapter_15/invalid_types/compound_initializer_for_static_scalar.c
 chapter_15/invalid_types/assign_incompatible_pointer_types.c
 chapter_15/invalid_types/bad_arg_type.c
 chapter_16/invalid_types/implicit_conversion_pointers_to_different_size_arrays.c
