@@ -164,8 +164,7 @@ struct FuncObj {
   int32_t ref_capacity;
 };
 
-static void load2(Type *ty, int sofs, const char *sptr);
-static void store2(Type *ty, int dofs, const char *dptr);
+static void load_s(Type *ty, const char *sofs, const char *sptr);
 static void store_gp2(const char *const *r, int sz, int dofs, const char *dptr);
 
 static void gen_asm(Node *node);
@@ -849,13 +848,11 @@ static void gen_bitint_builtin_call(NodeKind kind) {
   gen_bitint_builtin_call2(fn[kind]);
 }
 
-static void gen_bitfield_load(Node *node, int ofs) {
+static void gen_bitfield_load(Node *node) {
   Member *mem = node->m.member;
 
   if (mem->ty->kind == TY_BITINT) {
     Printftn("mov %%rax, %s", argreg64[1]);
-    if (ofs)
-      Printftn("add $%d, %s", ofs, argreg64[1]);
     Printftn("movl $%" PRIi32 ", %s", (int32_t)mem->ty->bit_cnt, argreg32[0]);
     Printftn("lea %s(%s), %s", tmpbuf(mem->ty->size), lvar_ptr, argreg64[2]);
     load_val2(ty_int, mem->bit_width, argreg32[3], NULL);
@@ -868,7 +865,7 @@ static void gen_bitfield_load(Node *node, int ofs) {
 
   if (mem->is_aligned_bitfield) {
     int p2bits = next_pow_of_two(mem->bit_offset + mem->bit_width);
-    load2(bitwidth_to_ty(p2bits, mem->ty->is_unsigned), ofs, "%rax");
+    load_s(bitwidth_to_ty(p2bits, mem->ty->is_unsigned), "0", "%rax");
 
     if (mem->bit_width == p2bits)
       return;
@@ -886,11 +883,11 @@ static void gen_bitfield_load(Node *node, int ofs) {
   for (int start = pofs; pofs >= !!mem->bit_offset; pofs--) {
     if (pofs != start)
       Printstn("shlq $8, %%rax");
-    Printftn("movb %d(%%rdx), %%al", pofs + ofs);
+    Printftn("movb %d(%%rdx), %%al", pofs);
   }
   if (mem->bit_offset) {
     Printftn("shlq $%d, %%rax", 8 - mem->bit_offset);
-    Printftn("movb %d(%%rdx), %%dl", ofs);
+    Printstn("movb (%%rdx), %%dl");
     Printftn("shrb $%d, %%dl", mem->bit_offset);
     Printstn("orb %%dl, %%al");
   }
@@ -1078,7 +1075,7 @@ static void gen_addr(Node *node) {
   error_tok(node->tok, "not an lvalue");
 }
 
-static void load3(Type *ty, const char *sofs, const char *sptr) {
+static void load_s(Type *ty, const char *sofs, const char *sptr) {
   switch (ty->kind) {
   case TY_FLOAT:   Printftn("movss %s(%s), %%xmm0", sofs, sptr); return;
   case TY_DOUBLE:  Printftn("movsd %s(%s), %%xmm0", sofs, sptr); return;
@@ -1089,21 +1086,27 @@ static void load3(Type *ty, const char *sofs, const char *sptr) {
   load_extend_int(ty, sofs, sptr, regop_ax(ty));
 }
 
-static void load2(Type *ty, int sofs, const char *sptr) {
-  char ofs_buf[STRBUF_SZ];
-  snprintf(ofs_buf, STRBUF_SZ, "%d", sofs);
-  load3(ty, ofs_buf, sptr);
+static void imm_load(Type *ty, int64_t ofs) {
+  if (ofs && in_imm_range(ofs)) {
+    char ofs_buf[STRBUF_SZ];
+    snprintf(ofs_buf, STRBUF_SZ, "%" PRIi64, ofs);
+    load_s(ty, ofs_buf, "%rax");
+  } else {
+    imm_add("%rax", "%rdx", ofs);
+    load_s(ty, "0", "%rax");
+  }
 }
 
-static void load(Node *node, int ofs) {
-  if (is_bitfield(node)) {
-    gen_bitfield_load(node, ofs);
-    return;
-  }
+static void load(Node *node) {
   if (is_scalar(node->ty)) {
-    load2(node->ty, ofs, "%rax");
+    if (is_bitfield(node)) {
+      gen_bitfield_load(node);
+      return;
+    }
+    load_s(node->ty, "0", "%rax");
     return;
   }
+
   switch (node->ty->kind) {
   case TY_ARRAY:
   case TY_STRUCT:
@@ -1114,7 +1117,7 @@ static void load(Node *node, int ofs) {
   internal_error();
 }
 
-static void store3(Type *ty, const char *dofs, const char *dptr) {
+static void store_s(Type *ty, const char *dofs, const char *dptr) {
   switch (ty->kind) {
   case TY_ARRAY:
   case TY_STRUCT:
@@ -1128,19 +1131,13 @@ static void store3(Type *ty, const char *dofs, const char *dptr) {
   Printftn("mov %s, %s(%s)", reg_ax(ty->size), dofs, dptr);
 }
 
-static void store2(Type *ty, int dofs, const char *dptr) {
-  char ofs_buf[STRBUF_SZ];
-  snprintf(ofs_buf, STRBUF_SZ, "%d", dofs);
-  store3(ty, ofs_buf, dptr);
-}
-
 static void store(Node *node, bool is_void) {
   if (is_bitfield(node)) {
     gen_bitfield_store(node, is_void);
     return;
   }
   const char *reg = pop_inreg(tmpreg64[0]);
-  store2(node->ty, 0, reg);
+  store_s(node->ty, "0", reg);
 }
 
 static void load_val2(Type *ty, int64_t val, const char *gp32, const char *gp64) {
@@ -2382,16 +2379,16 @@ static void gen_expr2(Node *node, bool is_void) {
   }
   case ND_VAR:
     gen_addr(node);
-    load(node, 0);
+    load(node);
     return;
   case ND_MEMBER: {
     gen_addr(node);
-    load(node, 0);
+    load(node);
     return;
   }
   case ND_DEREF:
     gen_expr(node->m.lhs);
-    load(node, 0);
+    load(node);
     return;
   case ND_ADDR: {
     gen_addr(node->m.lhs);
@@ -2406,14 +2403,14 @@ static void gen_expr2(Node *node, bool is_void) {
   case ND_ARITH_ASSIGN:
     gen_addr(node->m.lhs);
     push();
-    load(node->m.lhs, 0);
+    load(node->m.lhs);
     gen_expr_null_lhs(node->arith_kind, node->m.lhs->ty, node->m.rhs);
     store(node->m.lhs, is_void);
     return;
   case ND_POST_INCDEC:
     gen_addr(node->m.lhs);
     Printstn("movq %%rax, %%rcx");
-    load(node->m.lhs, 0);
+    load(node->m.lhs);
     push_by_ty(node->m.lhs->ty);
     push_from("%rcx");
     gen_expr_null_lhs(ND_ADD, node->m.lhs->ty, node->m.rhs);
@@ -3037,7 +3034,7 @@ static void gen_void_arith_assign(Node *node) {
   }
   gen_addr(lhs);
   push();
-  load(lhs, 0);
+  load(lhs);
   gen_expr(new_cast(&expr, ty));
   store(lhs, true);
 }
@@ -3683,10 +3680,11 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
 }
 
 static void gen_member_opt(Node *node, int64_t *ofs) {
-  while (node->kind == ND_MEMBER) {
+  do {
     *ofs += node->m.member->offset;
     node = node->m.lhs;
-  }
+  } while (node->kind == ND_MEMBER);
+
   gen_addr(node);
 }
 
@@ -3815,7 +3813,7 @@ static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
   if (is_const_expr(mul, &val)) {
     int64_t ofs = 0;
     gen_deref_opt(lhs, &ofs);
-    load2(ty, ofs + val, "%rax");
+    imm_load(ty, ofs + val);
     return true;
   }
 
@@ -3981,13 +3979,13 @@ static bool gen_expr_opt(Node *node) {
     return true;
 
   if (is_scalar(ty) && is_memop(node, var_ofs, &var_ptr, true)) {
-    load3(ty, var_ofs, var_ptr);
+    load_s(ty, var_ofs, var_ptr);
     return true;
   }
 
   if (kind == ND_ASSIGN && is_memop(lhs, var_ofs, &var_ptr, false)) {
     gen_expr(rhs);
-    store3(lhs->ty, var_ofs, var_ptr);
+    store_s(lhs->ty, var_ofs, var_ptr);
     return true;
   }
 
@@ -4022,7 +4020,7 @@ static bool gen_expr_opt(Node *node) {
     if (lhs->kind == ND_DEREF && ty->size == lhs->ty->size && ty->kind != TY_BOOL) {
       int64_t ofs = 0;
       gen_deref_opt(lhs->m.lhs, &ofs);
-      load2(ty, ofs, "%rax");
+      imm_load(ty, ofs);
       return true;
     }
   }
@@ -4052,7 +4050,7 @@ static bool gen_expr_opt(Node *node) {
     if (is_memop_ptr(&addr_node, var_ofs, &var_ptr)) {
       Printftn("lea %s(%s), %%rax", var_ofs, var_ptr);
       if (is_bitfield(node))
-        load(node, 0);
+        gen_bitfield_load(node);
       return true;
     }
   }
@@ -4062,7 +4060,7 @@ static bool gen_expr_opt(Node *node) {
     gen_deref_opt(node->m.lhs, &ofs);
 
     if (is_scalar(ty)) {
-      load2(ty, ofs, "%rax");
+      imm_load(node->ty, ofs);
       return true;
     }
     imm_add("%rax", "%rdx", ofs);
@@ -4073,8 +4071,13 @@ static bool gen_expr_opt(Node *node) {
     int64_t ofs = 0;
     gen_member_opt(node, &ofs);
 
-    if (is_scalar(ty)) {
-      load(node, ofs);
+    if (is_scalar(node->ty)) {
+      if (is_bitfield(node)) {
+        imm_add("%rax", "%rdx", ofs);
+        gen_bitfield_load(node);
+        return true;
+      }
+      imm_load(node->ty, ofs);
       return true;
     }
     imm_add("%rax", "%rdx", ofs);
