@@ -173,7 +173,7 @@ static void gen_stmt(Node *node);
 static bool gen_block_stmt(Node *node, bool is_reach);
 static bool gen_if_stmt(Node *node, bool is_reach);
 static void gen_void_expr(Node *node);
-static void gen_void_assign(Node *node);
+static bool gen_void_expr2(Node *node);
 static bool gen_reachable_stmt(Node *node);
 static bool gen_unreachable_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
@@ -1224,7 +1224,7 @@ static void gen_var_assign(Obj *var, Node *expr) {
   Node var_node = {.kind = ND_VAR, .m.var = var, .tok = expr->tok};
   Node node = {.kind = ND_ASSIGN, .m.lhs = &var_node, .m.rhs = expr, .tok = expr->tok};
   add_type(&node);
-  gen_void_assign(&node);
+  gen_void_expr(&node);
 }
 
 static void gen_expr_null_lhs(NodeKind kind, Type *ty, Node *rhs) {
@@ -2354,6 +2354,10 @@ static void gen_expr2(Node *node, bool is_void) {
   if (opt_g)
     print_loc(node->tok);
 
+  if (is_void && !(node->ty->qual & (Q_VOLATILE | Q_ATOMIC)))
+    if (gen_void_expr2(node))
+      return;
+
   if (opt_optimize && gen_expr_opt(node))
     return;
 
@@ -2454,7 +2458,7 @@ static void gen_expr2(Node *node, bool is_void) {
     for (Node *n = node->blk.body; n != node->blk.result; n = n->next)
       gen_stmt(n);
     if (node->blk.result)
-      gen_expr(node->blk.result->m.lhs);
+      gen_expr2(node->blk.result->m.lhs, is_void);
     if (has_defr(node)) {
       push_by_ty(node->ty);
       gen_defr(node);
@@ -2473,7 +2477,7 @@ static void gen_expr2(Node *node, bool is_void) {
   case ND_INIT_SEQ:
     gen_mem_zero(node->m.var->ofs, node->m.var->ptr, node->m.var->ty->size);
     for (Node *n = node->m.lhs; n; n = n->next)
-      gen_void_assign(n);
+      gen_void_expr(n);
     return;
   case ND_COND: {
     int64_t c = count();
@@ -2481,10 +2485,10 @@ static void gen_expr2(Node *node, bool is_void) {
     snprintf(else_label, STRBUF_SZ, ".L.else.%" PRIi64, c);
 
     gen_cond(node->ctrl.cond, false, else_label);
-    gen_expr(node->ctrl.then);
+    gen_expr2(node->ctrl.then, is_void);
     Printftn("jmp .L.end.%" PRIi64, c);
     Printfsn("%s:", else_label);
-    gen_expr(node->ctrl.els);
+    gen_expr2(node->ctrl.els, is_void);
     Printfsn(".L.end.%" PRIi64 ":", c);
     return;
   }
@@ -2711,7 +2715,10 @@ static void gen_expr2(Node *node, bool is_void) {
 
 static void gen_expr(Node *node) {
   gen_expr2(node, false);
-  return;
+}
+
+static void gen_void_expr(Node *node) {
+  gen_expr2(node, true);
 }
 
 static void gen_stmt_naked(Node *node) {
@@ -3039,7 +3046,7 @@ static void gen_void_arith_assign(Node *node) {
   store(lhs, true);
 }
 
-static void gen_void_assign(Node *node) {
+static bool gen_void_assign2(Node *node) {
   Node *lhs = node->m.lhs;
   Node *rhs = node->m.rhs;
 
@@ -3047,7 +3054,7 @@ static void gen_void_assign(Node *node) {
       !is_bitfield(lhs) &&
       !(lhs->ty->qual & Q_ATOMIC) &&
       memop_arith_imm(lhs, rhs, "mov"))
-    return;
+    return true;
 
   char sofs[STRBUF_SZ];
   const char *sptr;
@@ -3059,12 +3066,12 @@ static void gen_void_assign(Node *node) {
     const char *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       gen_mem_copy(sofs, sptr, dofs, dptr, write_size(lhs->ty));
-      return;
+      return true;
     }
     if (!is_bitfield(lhs) && !(lhs->ty->qual & Q_ATOMIC)) {
       gen_addr(lhs);
       gen_mem_copy(sofs, sptr, "0", "%rax", write_size(lhs->ty));
-      return;
+      return true;
     }
   }
 
@@ -3073,30 +3080,25 @@ static void gen_void_assign(Node *node) {
     const char *dptr;
     if (is_memop(lhs, dofs, &dptr, false)) {
       Printftn("movq $%s, %s(%s)", sofs, dofs, dptr);
-      return;
+      return true;
     }
     if (!is_bitfield(lhs) && !(lhs->ty->qual & Q_ATOMIC)) {
       gen_addr(lhs);
       Printftn("movq $%s, (%%rax)", sofs);
-      return;
+      return true;
     }
   }
 
-  gen_expr2(node, true);
+  return false;
 }
 
-static void gen_void_expr(Node *node) {
-  if ((node->ty->qual & (Q_VOLATILE | Q_ATOMIC))) {
-    gen_expr2(node, true);
-    return;
-  }
-
+static bool gen_void_expr2(Node *node) {
   switch (node->kind) {
   case ND_NULL_EXPR:
   case ND_LABEL_VAL:
   case ND_VAR:
   case ND_NUM: {
-    return;
+    return true;
   }
   case ND_POS:
   case ND_NEG:
@@ -3107,7 +3109,7 @@ static void gen_void_expr(Node *node) {
   case ND_BITNOT:
   case ND_CAST: {
     gen_void_expr(node->m.lhs);
-    return;
+    return true;
   }
   case ND_ADD:
   case ND_SUB:
@@ -3130,18 +3132,17 @@ static void gen_void_expr(Node *node) {
   case ND_COMMA:
     gen_void_expr(node->m.lhs);
     gen_void_expr(node->m.rhs);
-    return;
+    return true;
   case ND_ASSIGN: {
-    gen_void_assign(node);
-    return;
+    return gen_void_assign2(node);
   }
   case ND_ARITH_ASSIGN:
   case ND_POST_INCDEC: {
     gen_void_arith_assign(node);
-    return;
+    return true;
   }
   }
-  gen_expr2(node, true);
+  return false;
 }
 
 static const char *arith_ins(NodeKind kind) {
