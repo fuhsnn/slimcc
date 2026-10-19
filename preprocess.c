@@ -713,7 +713,12 @@ static char *join_tokens(Token *tok, Token *end, bool is_stringize) {
   return buf;
 }
 
-static Token *stringize(Token *hash, Token *tok) {
+static Token *stringize(Token **rest, Token *start, MacroContext *ctx) {
+  MacroArg *arg = find_arg(rest, start->next, ctx);
+  if (!arg)
+    error_tok(start->next, "'#' is not followed by a macro parameter");
+
+  Token *tok = arg->tok;
   Token head = {0};
   Token *cur = &head;
   for (; tok->kind != TK_EOF; tok = tok->next)
@@ -721,7 +726,7 @@ static Token *stringize(Token *hash, Token *tok) {
       cur = cur->next = tok;
   cur->next = tok;
 
-  return make_token(join_tokens(head.next, tok, true), hash, hash->next);
+  return make_token(join_tokens(head.next, tok, true), start, start->next);
 }
 
 static void align_token(Token *tok1, Token *tok2) {
@@ -766,10 +771,7 @@ static Token *subst(Token *tok, MacroContext *ctx) {
     Token *start = tok;
 
     if (tok->kind == TK_HASH) {
-      MacroArg *arg = find_arg(&tok, tok->next, ctx);
-      if (!arg)
-        error_tok(tok->next, "'#' is not followed by a macro parameter");
-      cur = cur->next = stringize(start, arg->tok);
+      cur = cur->next = stringize(&tok, tok, ctx);
       align_token(cur, start);
       continue;
     }
@@ -787,13 +789,16 @@ static Token *subst(Token *tok, MacroContext *ctx) {
       }
     }
 
-    if (tok->kind == TK_HASH2) {
-      if (cur->kind == TK_PMARK) {
-        tok = tok->next;
+    if (consume_tk(&tok, tok, TK_HASH2)) {
+      if (cur->kind == TK_PMARK)
+        continue;
+
+      if (tok->kind == TK_HASH) {
+        cur = paste(cur, stringize(&tok, tok, ctx));
         continue;
       }
 
-      MacroArg *arg = find_arg(&tok, tok->next, ctx);
+      MacroArg *arg = find_arg(&tok, tok, ctx);
       if (arg) {
         if (arg->tok->kind == TK_EOF)
           continue;
@@ -805,8 +810,8 @@ static Token *subst(Token *tok, MacroContext *ctx) {
           cur = cur->next = copy_token(t);
         continue;
       }
-      cur = paste(cur, tok->next);
-      tok = tok->next->next;
+      cur = paste(cur, tok);
+      tok = tok->next;
       continue;
     }
 
