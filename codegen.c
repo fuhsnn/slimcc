@@ -4904,7 +4904,7 @@ static void asm_body(Node *node) {
 
     if (*p == 'l' && (p[1] == '[' || Isdigit(p[1]))) {
       AsmParam *ap = find_op(p + 1, &p, node->gasm.str_tok, true);
-      if (ap->arg->kind != ND_GOTO)
+      if (ap->arg->kind != ND_ASM_GOTO)
         error_tok(ap->arg->tok, "not a label");
 
       if (node->gasm.outputs)
