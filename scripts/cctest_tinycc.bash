@@ -7,6 +7,7 @@ skip_files=(
  95_bitfields_ms.c # [[gnu::ms_struct]]
  117_builtins.c
  136_atomic_gcc_style.c
+ 151_atomic_header.c
 
  # invalid C
  34_array_assignment.c
@@ -25,6 +26,12 @@ skip_files=(
  140_arm64_extasm.c
  141_riscv_asm.c
  145_winarm64_interlocked.c
+
+ # trivial error
+ 149_parameter_qualifier_errors.c
+
+ # run separately
+ 148_linker_symbols.c
 )
 
 dt_files=(
@@ -100,6 +107,7 @@ main_test() {
   for src in `find *.c | sort -n`; do
     if match_skip $src skip_files; then continue; fi
     if match_skip $src dt_files; then continue; fi
+    if [ $src == '148_linker_symbols.c' ]; then continue; fi
 
     echo $src
     FLG="-std=gnu99"
@@ -116,6 +124,11 @@ main_test() {
     if [ $src == '120+_alias.c' ]; then continue; fi
     if [ $src == '120_alias.c' ]; then
       FLG="-std=gnu99 120+_alias.c"
+    fi
+
+    if [ $src == '146_tls_extern.c' ]; then
+      $CC -E -DDEFS 146_tls_extern.c > _tmp.c
+      FLG="-std=gnu99 _tmp.c"
     fi
 
     $CC $src $FLG -lm -o ./_tst.exe 2>/dev/null
@@ -151,7 +164,13 @@ dt_test() {
    for def in `cat $exp | sed -En 's/^\[test_(.*)\]$/\1/p'`; do
     if match_skip $def skip_defs; then continue; fi
 
-    local testarg="$src -std=gnu89 -Dtest_$def"
+    local testarg
+    if [ $def == 'default_int_type' ]; then
+      testarg="$src -std=gnu89 -Dtest_$def"
+    else
+      testarg="$src -std=gnu99 -Dtest_$def"
+    fi
+
     echo "$testarg"
 
     gcc $testarg -c -o ./_ref.o 2>/dev/null
@@ -189,8 +208,27 @@ dt_test() {
   done
 }
 
+linker_symbols_test() {
+  echo 148_linker_symbols.c
+
+  rm -f ./result
+  for I in {1..6}; do
+    printf '\n--- TEST %d ---\n' $I >> ./result
+    "$CC" 148_linker_symbols.c -fcommon -DTEST=$I+100 -c -o _tmp.o
+    "$CC" 148_linker_symbols.c -fcommon -DTEST=$I+200 -shared -o _tmp.so -fPIC
+    "$CC" 148_linker_symbols.c -fcommon -DTEST=$I -Wl,-rpath=. -o _tmp.exe _tmp.o _tmp.so -no-pie
+    ./_tmp.exe >> ./result
+  done
+
+  diff -qZ ./result 148_linker_symbols.expect
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+}
+
 cd tests/tests2
 
 fix_up
 main_test
 dt_test
+linker_symbols_test
