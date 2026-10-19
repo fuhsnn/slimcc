@@ -653,6 +653,7 @@ typedef enum {
   ND_CONT,
   ND_GOTO,      // "goto"
   ND_GOTO_EXPR, // "goto" labels-as-values
+  ND_ASM_GOTO,
   ND_LABEL,     // Labeled statement
   ND_LABEL_VAL, // [GNU] Labels-as-values
   ND_FUNCALL,   // Function call

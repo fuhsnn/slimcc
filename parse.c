@@ -2959,8 +2959,9 @@ static AsmParam *asm_labels(Token **rest, Token *tok) {
     if (cur != &head)
       tok = skip_tk(tok, TK_COMMA);
 
-    Node *node = new_node(ND_GOTO, ident_tok(&tok, tok));
+    Node *node = new_node(ND_ASM_GOTO, ident_tok(&tok, tok));
     push_goto(node);
+
     cur = cur->next = arena_calloc(&ast_arena, sizeof(AsmParam));
     cur->arg = node;
   }
@@ -3026,6 +3027,8 @@ static void push_goto(Node *node) {
   }
   node->lbl.next = fnctx->gotos;
   fnctx->gotos = node;
+
+  node->dfr_from = fnctx->defr;
 }
 
 static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
@@ -3349,9 +3352,8 @@ static Node *stmt(Token **rest, Token *tok, Token *label_list) {
       return node;
     }
     Node *node = new_node(ND_GOTO, ident_tok(&tok, tok->next));
-    node->dfr_from = fnctx->defr;
-
     push_goto(node);
+
     *rest = skip_tk(tok, TK_SEMI);
     return node;
   }
@@ -4833,6 +4835,7 @@ static Node *unary(Token **rest, Token *tok) {
 
     Node *node = new_node(ND_LABEL_VAL, ident_tok(rest, tok->next));
     push_goto(node);
+
     fnctx->dont_dealloc_vla = true;
     return node;
   }
@@ -5934,18 +5937,30 @@ static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr
   return node;
 }
 
-static void resolve_goto_defer(Node *node, DeferStmt *dst_dfr) {
-  if (!dst_dfr)
+static void set_goto(Node *node, Node *dest) {
+  node->jmp.target = dest;
+
+  switch (node->kind) {
+  case ND_ASM_GOTO:
+    if (node->dfr_from != dest->dfr_from)
+      error_tok(node->tok, "asm goto with defer not supported");
+  case ND_LABEL_VAL: {
+    return;
+  }
+  }
+
+  if (!dest->dfr_from)
     return;
 
   DeferStmt *dfr = node->dfr_from;
   for (; dfr; dfr = dfr->next)
-    if (dfr == dst_dfr)
+    if (dfr == dest->dfr_from)
       break;
   if (!dfr)
     error_tok(node->tok->next, "illegal jump");
 
   node->dfr_dest = dfr;
+  return;
 }
 
 static void resolve_gotos(Node *fn_body) {
@@ -5974,8 +5989,8 @@ static void resolve_gotos(Node *fn_body) {
       cur->lbl.next = NULL;
       search_list = head.lbl.next;
     }
-    x->jmp.target = dest;
-    resolve_goto_defer(x, dest->dfr_from);
+
+    set_goto(x, dest);
   }
   free(label_cache.buckets);
 
@@ -5989,8 +6004,7 @@ static Node *resolve_local_gotos(void) {
     if (!ll || !ll->label)
       error_tok(x->tok, "use of undeclared local label");
 
-    x->jmp.target = ll->label;
-    resolve_goto_defer(x, ll->label->dfr_from);
+    set_goto(x, ll->label);
   }
 
   Node head = {0};
