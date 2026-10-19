@@ -2,7 +2,7 @@
 
 int main(void) {
   {
-    struct { int i; } s1, s2;
+    struct S { int i; } s1, s2;
     //SREJ (s1.i ? s1 : s2).i = 13;
     //SREJ (s1 = s2).i = 13;
     //SREJ (1, s2).i = 13;

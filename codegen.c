@@ -2468,7 +2468,7 @@ static void gen_expr2(Node *node, bool is_void) {
   case ND_CHAIN:
   case ND_COMMA:
     gen_void_expr(node->m.lhs);
-    gen_expr(node->m.rhs);
+    gen_expr2(node->m.rhs, is_void);
     return;
   case ND_CAST: {
     gen_cast(node);
@@ -3128,8 +3128,6 @@ static bool gen_void_expr2(Node *node) {
   case ND_LE:
   case ND_GT:
   case ND_GE:
-  case ND_CHAIN:
-  case ND_COMMA:
     gen_void_expr(node->m.lhs);
     gen_void_expr(node->m.rhs);
     return true;

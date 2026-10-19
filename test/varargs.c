@@ -11,6 +11,7 @@ int sum1(int x, ...) {
       return x;
     x += y;
   }
+  va_end(ap);
 }
 
 int sum2(int x, ...) {
@@ -26,6 +27,7 @@ int sum2(int x, ...) {
       return x;
     x += z;
   }
+  va_end(ap);
 }
 
 void fmt(char *buf, char *fmt, ...) {
@@ -35,7 +37,9 @@ void fmt(char *buf, char *fmt, ...) {
   va_list ap2;
   va_copy(ap2, ap);
   vsprintf(buf, fmt, ap2);
-  va_end(buf);
+
+  va_end(ap2);
+  va_end(ap);
 }
 
 int main() {
