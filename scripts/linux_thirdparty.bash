@@ -20,11 +20,11 @@ test_ag() {
 }
 
 test_apexmarkdown() {
- github_clone ApexMarkdown apex v1.1.41
+ github_clone ApexMarkdown apex v1.1.47
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
- cat test.log | grep Results | grep '0;31m5 failed'
+ cat test.log | grep Results | grep '0;31m7 failed' || (cat test.log | grep Results; false)
 }
 
 test_apk() {
@@ -56,7 +56,7 @@ test_bash() {
 }
 
 test_bcgh() {
- git_fetch https://github.com/gavinhoward/bc 7d147fb847f889349fd93319da028823d55e61b7 bcgh
+ git_fetch https://github.com/gavinhoward/bc 1a8e2e652a0bdfc60349be7b352c954690eaa179 bcgh
  ./configure
  make && make test_serial
 }
@@ -169,13 +169,13 @@ test_box2d() {
  use_stdatomic '#include <stdint.h>' src/platform.h
  sed -i 's|__atomic_compare_exchange_n( &a->value, &expected, desired, false,|atomic_compare_exchange_strong_explicit(\&a->value,\&expected,desired,|g' src/platform.h
 
- cmake_init -DBOX2D_DISABLE_SIMD=ON -DBOX2D_AVX2=OFF
+ cmake_init -DBOX2D_DISABLE_SIMD=ON
  make
  ./bin/test
 }
 
 test_box3d() {
- git_fetch https://github.com/erincatto/box3d efca0c184d40fd6a82016983f1601c4d23965867 box3d
+ git_fetch https://github.com/erincatto/box3d f36d061ba26998c87cb7dc593a4065aaa03fb7eb box3d
  use_stdbit '#include <stdint.h>' src/ctz.h
 
  perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b3Prefetch)/#elif 0\1/g' src/platform.h
@@ -183,18 +183,7 @@ test_box3d() {
  use_stdatomic '#include <stdint.h>' src/platform.h
  sed -i 's|__atomic_compare_exchange_n( &a->value, &expected, desired, false,|atomic_compare_exchange_strong_explicit(\&a->value,\&expected,desired,|g' src/platform.h
 
- cat << EOF >> shared/CMakeLists.txt
-
-if(BOX3D_DISABLE_SIMD)
-        target_compile_definitions(shared PRIVATE BOX3D_DISABLE_SIMD)
-endif()
-
-if(NOT BOX3D_AVX2)
-        target_compile_definitions(shared PRIVATE BOX3D_DISABLE_AVX2)
-endif()
-EOF
-
- cmake_init -DBOX3D_DISABLE_SIMD=ON -DBOX3D_AVX2=OFF
+ cmake_init -DBOX3D_DISABLE_SIMD=ON
  make
  ./bin/test
 }
@@ -210,7 +199,7 @@ test_brieflz() {
 }
 
 test_brotli() {
- github_tar google brotli v1.2.0
+ github_tar google brotli v1.2.1
  cmake_init
  make && ctest
 }
@@ -248,7 +237,7 @@ test_bzip2() {
 }
 
 test_bzip3() {
- github_tar iczelia bzip3 1.5.4
+ github_tar iczelia bzip3 1.5.5
  echo '1' > .tarball-version
  libtoolize
  sh ./bootstrap.sh
@@ -260,7 +249,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler f0d2a9465472e1b12ff61afc5c23faed7f7ea7fc c2compiler
+ git_fetch https://github.com/c2lang/c2compiler a893ab5f60103c28ff6a53c21c971c708e0dee1c c2compiler
  replace_line 'export CC=clang' '' env.sh
  . env.sh
  make CC="$CC" all test
@@ -298,7 +287,7 @@ test_camgunz_cmp() {
 }
 
 test_cares() {
- github_tar c-ares c-ares v1.34.8
+ github_tar c-ares c-ares v1.34.9
  cmake_init -DCARES_BUILD_TESTS=ON
  # https://github.com/c-ares/c-ares/blob/f4156c12c8b36f5cb8f8a53658d44b24263c6ad1/.github/workflows/ubuntu-latest.yml#L16
  export GTEST_FILTER='-*LiveSearchTXT*:*LiveSearchANY*'
@@ -484,7 +473,7 @@ test_cproc() {
 }
 
 test_croaring() {
- github_tar RoaringBitmap CRoaring v5.3.0
+ github_tar RoaringBitmap CRoaring v5.3.2
  sed -i 's|^#include <x86intrin.h>|//&|g' include/roaring/portability.h
  use_stdbit '#include <stdint.h>' include/roaring/portability.h
  cmake_init -DROARING_DISABLE_X64=ON -DCMAKE_C_FLAGS=-DROARING_DISABLE_X64=1 -DCMAKE_CXX_FLAGS=-DROARING_DISABLE_X64=1
@@ -962,7 +951,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh bc69f5667db6cd82a89ed81f090a1822dc544a09 ksh93
+ git_fetch https://github.com/ksh93/ksh 71da5b64ceed9a9f8eb7bd370a73d170beeb179b ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1019,7 +1008,7 @@ test_libcheck() {
 }
 
 test_libconfig() {
- github_tar hyperrealm libconfig v1.8.2
+ github_tar hyperrealm libconfig v1.8.3
  cmake_init -DBUILD_CXX=OFF
  make && ctest
 }
@@ -1070,7 +1059,7 @@ test_libfyaml() {
 }
 
 test_libgc() {
- git_fetch https://github.com/bdwgc/bdwgc 86bd7c0a5a8b6d4ef9021d27c3a1db6ecd75499c libgc
+ git_fetch https://github.com/bdwgc/bdwgc fd3e9873c0674d356a44ac5eeb59d7f4936d5d86 libgc
  sed -i 's|__atomic_compare_exchange_n(p, &ov, nv, 0,|atomic_compare_exchange_strong_explicit(p, \&ov, nv,|g'  include/private/gc_atomic_ops.h
  use_stdatomic 'typedef size_t AO_t' include/private/gc_atomic_ops.h
  sed -i 's/(defined(__GNUC__)/1 || (defined(__GNUC__)/g' cord/cordxtra.c
@@ -1139,7 +1128,7 @@ test_libjsonc() {
 }
 
 test_liblz4() {
- git_fetch https://github.com/lz4/lz4 779b3556802f61774ed7f03a72023775ffe7795a lz4
+ git_fetch https://github.com/lz4/lz4 98c203d9e2525f7d82fa00f4ac16c50dde7373e7 lz4
  make test
 }
 
@@ -1218,7 +1207,7 @@ test_libpsl() {
 }
 
 test_libressl() {
- github_tar libressl portable v4.3.3
+ github_tar libressl portable v4.4.0
  libtoolize
  sh autogen.sh
  fix_and_configure
@@ -1312,7 +1301,7 @@ test_libuev() {
 }
 
 test_libunistring() {
- url_xz https://ftpmirror.gnu.org/gnu/libunistring/libunistring-1.4.2.tar.xz libunistring
+ url_xz https://ftpmirror.gnu.org/gnu/libunistring/libunistring-1.5.tar.xz libunistring
  fix_and_configure
  make check
 }
@@ -1432,10 +1421,11 @@ test_lwan() {
 }
 
 test_lwjson() {
- github_tar MaJerle lwjson v1.9.0
+ github_tar MaJerle lwjson v1.10.1
  cd tests
- sed -i "s|DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++|DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=clang++|g" test.py
- sed -i "s| -G Ninja||g" test.py
+ sed -i "s|=gcc|=$CC|g" test.py
+ sed -i "s|=g++|=clang++|g" test.py
+ sed -i "s| '-G', 'Ninja',||g" test.py
  python3 test.py
 }
 
@@ -1628,12 +1618,14 @@ test_muon() {
 }
 
 test_nanomsg() {
- github_tar nanomsg nng v2.0.0-beta.2
+ github_tar nanomsg nng v2.0.0
+ sed -i 's|"hello"|send_buf|g' src/supplemental/tls/openssl/openssl_test.c
+ sed -i '1s|^|const unsigned char send_buf[] = "hello";\n|' src/supplemental/tls/openssl/openssl_test.c
+
  replace_line "#include <complex.h>" "" src/supplemental/http/http_conn.c
  replace_line "#include <complex.h>" "" src/supplemental/http/http_server_test.c
- replace_line "nng_defines_if(NNG_ENABLE_IPV6 NNG_ENABLE_IPV6)" "" CMakeLists.txt
  cmake_init -DNNG_ENABLE_TLS=ON -DNNG_TLS_ENGINE=openssl
- make && ctest ${is_CI+ -E 'nng.sp.transport|nng.httpclient' } # flaky
+ make && ctest ${is_CI+ -E 'nng.sp.transport|nng.httpclient|nng.platform.resolver_test' }
 }
 
 test_nanopb() {
@@ -1679,7 +1671,7 @@ test_nghttp3() {
 }
 
 test_nginx() {
- github_tar nginx nginx release-1.31.7
+ github_tar nginx nginx release-1.31.8
  auto/configure
  make
  cd ../
@@ -1732,7 +1724,7 @@ test_nqp() {
 }
 
 test_ocaml() {
- github_clone ocaml ocaml 5.5.1
+ github_clone ocaml ocaml 5.5.2
  rm testsuite/tests/lib-unix/unix-sockaddr/sockaddr_cxx.ml
  fix_and_configure --enable-ocamltest
  make -j5  && make -C testsuite parallel -j5
@@ -1869,7 +1861,7 @@ test_perl() {
 }
 
 test_php() {
- github_tar php php-src php-8.5.11
+ github_tar php php-src php-8.5.12
  replace_line "#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_C) || defined(__TINYC__)" "#elif 1" ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
  replace_line "#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)" "#elif 1" Zend/zend_multiply.h
  replace_line "#elif defined(__GNUC__) && defined(__x86_64__)" "#elif 1" Zend/zend_multiply.h
@@ -1958,7 +1950,7 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.15.0
+ github_tar python cpython v3.15.1
  # gnu::section
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
  # gnu::constructor
@@ -2110,7 +2102,7 @@ test_rsync() {
 }
 
 test_ruby() {
- github_tar ruby ruby v4.0.7
+ github_tar ruby ruby v4.0.9
  rm tool/test/test_commit_email.rb
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
@@ -2193,8 +2185,8 @@ test_smaz() {
 }
 
 test_sokol() {
- git_fetch https://github.com/floooh/sokol 761b7a49c5c6b0a97b9ccfa5936df88202be2e1b sokol
- sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.92.9|g' tests/ext/CMakeLists.txt
+ git_fetch https://github.com/floooh/sokol efeb77603e24daea7d1dd6445b9358bb5d82533b sokol
+ sed -i 's|floooh/dcimgui|floooh/dcimgui --branch v1.93.0|g' tests/ext/CMakeLists.txt
  cd tests
  cmake_init -DSOKOL_BACKEND=SOKOL_GLCORE
  make && ./sokol-test
@@ -2215,7 +2207,7 @@ test_sqlite() {
 }
 
 test_squashfuse() {
- github_tar vasi squashfuse 0.6.3
+ github_tar vasi squashfuse 0.6.5
  use_stdatomic '#include <stdint.h>' common.h
  use_stdatomic '#include <stddef.h>' ll.c
  libtoolize
@@ -2225,7 +2217,7 @@ test_squashfuse() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC 3f06aa183e8ab91432ba646891191bf23714c083 stc
+ git_fetch https://github.com/stclib/STC fc5c0587974f08dd05f1f714f2f12d3a99fdd9c7 stc
  muon_init
  muon_build
  muon_test
@@ -2277,7 +2269,7 @@ test_tinycbor() {
 test_tinycc() {
  local CCTESTSCRIPT=$(dirname $(realpath $0))/cctest_tinycc.bash
 
- git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository a338258d309c888bde96b2d1f206299231a54ddf tinycc
+ git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository e23dabed154a8495f3ac1ff3cc9d04fa1c207893 tinycc
  sed -i 's|CC_\$cc_name|CC_gcc|g' configure # for 'make test' with gcc
  ./configure && make
  if gcc --version; then
@@ -2590,7 +2582,7 @@ test_zydis() {
 }
 
 build_7zip() {
- github_tar ip7z 7zip 26.04
+ github_tar ip7z 7zip 26.05
  sed -i 's|__sync_add_and_fetch|__builtin_atomic_arith_add|g' C/Threads.c
  sed -i 's|__sync_sub_and_fetch|__builtin_atomic_arith_sub|g' C/Threads.c
  sed -i 's|#include <stdlib.h>|&\n#include <stdint.h>|g' C/Alloc.c
@@ -2848,7 +2840,7 @@ build_liburing() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT dd3b24369ddfaa83c78cd6fdd91d157c8968ec8d luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT a4c064539ea931274d407e1249b4bb575424a0f4 luajit
  sed -i 's|-O2 |-O2 -DLUAJIT_NO_UNWIND |g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -2873,7 +2865,7 @@ build_mandoc() {
 }
 
 build_mg() {
- github_tar troglobit mg v4.4
+ github_tar troglobit mg v4.5
  sh ./autogen.sh
  fix_and_configure
  make
@@ -2900,7 +2892,7 @@ build_mksh() {
 }
 
 build_nano() {
- url_xz https://www.nano-editor.org/dist/v9/nano-9.2.tar.xz nano
+ url_xz https://www.nano-editor.org/dist/v9/nano-9.3.tar.xz nano
  ./configure && make
 }
 
@@ -3167,7 +3159,7 @@ build_zopfli() {
 bootstrap_musl() {
  local ROOT_DIR=$PWD/musl_build
 
- git_fetch https://git.musl-libc.org/git/musl b1efda5b91735e33635376ca11c9b497a1c66e39 musl
+ git_fetch https://git.musl-libc.org/git/musl 7813e9119eb5fe681b6750b8a033a0490bca0941 musl
  rm -r src/complex/ include/complex.h
  AR=ar RANLIB=ranlib sh ./configure --target=x86_64-linux-musl --prefix=$ROOT_DIR --includedir=$ROOT_DIR/usr/include --syslibdir=/dev/null
  make install

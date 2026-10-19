@@ -2,6 +2,7 @@
 #include "slimcc.h"
 
 void platform_init_driver(void) {
+  dumpmachine_str = "x86_64-linux-uclibc";
 }
 
 void platform_init_cc1(void) {

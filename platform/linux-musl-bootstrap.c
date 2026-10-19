@@ -2,7 +2,7 @@
 #include "slimcc.h"
 
 void platform_init_driver(void) {
-  dumpmachine_str = "x86_64-alpine-linux-musl";
+  dumpmachine_str = "x86_64-linux-musl";
 
   opt_func_sections = opt_data_sections = true;
 }
