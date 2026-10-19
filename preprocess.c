@@ -222,17 +222,22 @@ static Token *copy_line(Token **rest, Token *tok) {
   return head.next;
 }
 
-// Split tokens before the next newline into an EOF-terminated list.
-static Token *split_line(Token **rest, Token *tok) {
+static Token *split_line2(Token **rest, Token *tok, Token **last) {
   Token head = {.next = tok};
   Token *cur = &head;
 
   while (!cur->next->at_bol)
     cur = cur->next;
 
+  if (last)
+    *last = cur;
   *rest = cur->next;
   cur->next = new_eof(tok);
   return head.next;
+}
+
+static Token *split_line(Token **rest, Token *tok) {
+  return split_line2(rest, tok, NULL);
 }
 
 static Token *split_paren2(Token **rest, Token *tok, Token *next) {
@@ -491,9 +496,21 @@ static Macro *read_macro_name(Token **rest, Token *tok) {
   return m;
 }
 
+static void chk_macro_startend(Token *first, Token *last) {
+  if (first->kind != TK_EOF) {
+    if (first->kind == TK_HASH2)
+      error_tok(first, "'##' cannot appear at start of macro");
+    if (last->kind == TK_HASH2)
+      error_tok(last, "'##' cannot appear at end of macro");
+  }
+}
+
 static void read_macro_definition(Token **rest, Token *tok) {
   Macro *m = read_macro_name(&tok, tok);
-  m->body = split_line(rest, tok);
+  Token *last;
+  m->body = split_line2(rest, tok, &last);
+
+  chk_macro_startend(m->body, last);
 }
 
 static void read_macro_definition2(Token **rest, Token *tok) {
@@ -514,6 +531,8 @@ static void read_macro_definition2(Token **rest, Token *tok) {
   cur->next = new_eof(start);
   m->body = head.next;
   *rest = skip_line(tok->next->next);
+
+  chk_macro_startend(m->body, cur);
 }
 
 static Token *read_macro_arg_one(Token **rest, Token *tok, bool read_rest) {
@@ -769,12 +788,6 @@ static Token *subst(Token *tok, MacroContext *ctx) {
     }
 
     if (tok->kind == TK_HASH2) {
-      if (cur == &head)
-        error_tok(tok, "'##' cannot appear at start of macro expansion");
-
-      if (tok->next->kind == TK_EOF)
-        error_tok(tok, "'##' cannot appear at end of macro expansion");
-
       if (cur->kind == TK_PMARK) {
         tok = tok->next;
         continue;
@@ -864,15 +877,11 @@ static Token *insert_objlike(Token *tok, Token *stop_tok, Token *orig) {
     orig = orig->origin;
 
   for (; tok->kind != TK_EOF; tok = tok->next) {
-    if (tok->kind == TK_HASH2) {
-      if (cur == &head || tok->next->kind == TK_EOF)
-        error_tok(tok, "'##' cannot appear at either end of macro expansion");
-
-      tok = tok->next;
+    if (consume_tk(&tok, tok, TK_HASH2))
       paste(cur, tok);
-    } else {
+    else
       cur = cur->next = copy_token(tok);
-    }
+
     cur->origin = orig;
     cur->is_root = true;
   }
