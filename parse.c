@@ -4902,9 +4902,10 @@ static Node *unary(Token **rest, Token *tok) {
 
   if (tok->kind == TK_LPAREN) {
     tok = tok->next;
-    Type *ty;
-    VarAttr attr = {0};
+
     if (is_typename(tok)) {
+      Type *ty;
+      VarAttr attr = {0};
       if (is_typename_paren2(&tok, tok, &ty, &attr)) {
         // Casts
         Node *calc = calc_vla2(ty, tok, &attr);
