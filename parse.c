@@ -228,8 +228,8 @@ static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 static Node *compound_literal(Token **rest, Token *tok);
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr);
-static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name);
-static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr);
+static Obj *func_prototype_implicit(Token *name);
+static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr, bool is_def);
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr);
 static Node *calc_vla(Type *ty, Token *tok);
 static Node *calc_vla2(Type *ty, Token *tok, VarAttr *attr);
@@ -1009,9 +1009,6 @@ static void func_attr(Token *name, Token *tok, VarAttr *attr, Obj *fn) {
 
   fn->is_always_inline |= attr->is_always_inline;
   DeclAttr(bool_attr, "always_inline", &fn->is_always_inline);
-
-  fn->is_gnu_inline |= attr->is_gnu_inline;
-  DeclAttr(bool_attr, "gnu_inline", &fn->is_gnu_inline);
 }
 
 static void mem_attr(Token *name, Token *tok, VarAttr *attr, Member *mem) {
@@ -1905,7 +1902,9 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
   Type *ty = declarator(&tok, tok, basety, &name);
 
   if (ty->kind == TY_FUNC) {
-    Obj *fn = func_prototype(tok, name, ty, attr);
+    if (attr->strg & SC_STATIC)
+      error_tok(tok, "static function not in file scope");
+    Obj *fn = func_prototype(tok, name, ty, attr, false);
     assembler_name(&tok, tok, fn);
     *rest = tok;
     return NULL;
@@ -5815,11 +5814,9 @@ static Node *primary(Token **rest, Token *tok) {
       if (node)
         return node;
 
-      if (opt_std < STD_C99) {
-        Type *ty = func_type(TY_FUNC, ty_int);
-        ty->is_oldstyle = true;
-        return new_var_node(func_prototype2(ty, &(VarAttr){0}, tok), tok);
-      }
+      if (opt_std < STD_C99)
+        return new_var_node(func_prototype_implicit(tok), tok);
+
       error_tok(tok, "implicit declaration of a function");
     }
     error_tok(tok, "undefined variable");
@@ -6015,33 +6012,6 @@ static Node *resolve_local_gotos(void) {
   return head.lbl.next;
 }
 
-static Obj *func_prototype2(Type *ty, VarAttr *attr, Token *name) {
-  if (scope->parent && (attr->strg & SC_STATIC))
-    error_tok(name, "static function not in file scope");
-
-  HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
-  Obj *fn = ent->val;
-  if (fn) {
-    if (!is_compatible(fn->ty, ty))
-      error_tok(name, "incompatible redeclaration");
-    if (!fn->is_static && (attr->strg & SC_STATIC))
-      error_tok(name, "static declaration follows a non-static declaration");
-    if (fn->ty->is_oldstyle && !ty->is_oldstyle)
-      fn->ty = ty;
-  } else {
-    fn = ent->val = new_gvar(get_ident(&cc1_arena, name), ty);
-    fn->is_static = attr->strg & SC_STATIC;
-
-    if (strstr(fn->name, "setjmp") ||
-        strstr(fn->name, "savectx") ||
-        strstr(fn->name, "vfork") ||
-        strstr(fn->name, "getcontext"))
-      fn->returns_twice = true;
-  }
-  push_gvar_name(name, fn);
-  return fn;
-}
-
 static void chk_param_ty(Type *fn, Type *ty, int idx, Token *tok) {
   int i = 0;
   for (Obj *p = fn->param_list; p; p = p->param_next, i++) {
@@ -6142,10 +6112,10 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
 }
 
 static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
+  if (scope->parent)
+    error_tok(tok, "nested function not supported");
   if (ty->return_ty->size < 0)
     error_tok(tok, "incomplete return type");
-  if (fn->is_definition)
-    error_tok(tok, "redefinition of %s", fn->name);
   fn->is_definition = true;
 
   Type *prot_ty = fn->ty;
@@ -6188,15 +6158,86 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
   fnctx = NULL;
 }
 
-static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr) {
+static void set_returns_twice(Obj *fn) {
+  if (strstr(fn->name, "setjmp") ||
+      strstr(fn->name, "savectx") ||
+      strstr(fn->name, "vfork") ||
+      strstr(fn->name, "getcontext"))
+    fn->returns_twice = true;
+}
+
+static Obj *func_prototype_implicit(Token *name) {
+  HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
+  Obj *fn = ent->val;
+  if (!fn) {
+    Type *ty = func_type(TY_FUNC, ty_int);
+    ty->is_oldstyle = true;
+
+    fn = ent->val = new_gvar(get_ident(&cc1_arena, name), ty);
+    set_returns_twice(fn);
+  }
+  push_gvar_name(name, fn);
+  return fn;
+}
+
+static void clear_fn_obj_state(Obj *fn) {
+  fn->dont_reuse_stk = false;
+  fn->dealloc_vla = false;
+}
+
+static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr, bool is_def) {
   if (!name)
     error_tok(tok, "function name omitted");
   if (is_vm_ty(ty->return_ty))
-    error_tok(tok, "cannot return variably-modified type");
+    error_tok(name, "cannot return variably-modified type");
   if (attr->strg & (SC_AUTO | SC_CONSTEXPR | SC_REGISTER | SC_THREAD))
-    error_tok(tok, "invalid storage class for function");
+    error_tok(name, "invalid storage class for function");
 
-  Obj *fn = func_prototype2(ty, attr, name);
+  bool is_gnu_inline = false;
+  if (attr->strg & SC_INLINE) {
+    is_gnu_inline = attr->is_gnu_inline || opt_gnu89_inline || opt_std < STD_C99;
+    DeclAttr(bool_attr, "gnu_inline", &is_gnu_inline);
+  }
+
+  HashEntry *ent = hashmap_get_or_insert(&symbols, name->loc, name->len);
+  Obj *fn = ent->val;
+  if (fn) {
+    if (!is_compatible(fn->ty, ty))
+      error_tok(name, "incompatible redeclaration");
+    if (fn->ty->is_oldstyle && !ty->is_oldstyle)
+      fn->ty = ty;
+
+    if (fn->is_gnu_inline && !fn->export_fn && !fn->is_static) {
+      if (attr->strg & SC_STATIC) {
+        fn->is_static = true;
+        fn->is_definition = false;
+
+        clear_fn_obj_state(fn);
+      } else if (is_def && fn->is_definition) {
+        if (is_gnu_inline && (attr->strg & SC_EXTERN))
+          error_tok(name, "redefinition of %s", fn->name);
+
+        clear_fn_obj_state(fn);
+      }
+    } else {
+      if (attr->strg & SC_STATIC && !fn->is_static)
+        error_tok(name, "static declaration follows a non-static declaration");
+      if (is_def && fn->is_definition)
+        error_tok(name, "redefinition of %s", fn->name);
+
+      if (!fn->is_definition && !fn->is_gnu_inline)
+        if (is_gnu_inline && (attr->strg & SC_EXTERN))
+          fn->export_fn = false;
+    }
+  } else {
+    fn = ent->val = new_gvar(get_ident(&cc1_arena, name), ty);
+    fn->is_static = attr->strg & SC_STATIC;
+    set_returns_twice(fn);
+  }
+  push_gvar_name(name, fn);
+
+  fn->is_gnu_inline |= is_gnu_inline;
+
   aligned_attr(name, tok, attr, &fn->alt_align);
   symbol_attr(name, tok, attr, fn);
   func_attr(name, tok, attr, fn);
@@ -6204,12 +6245,15 @@ static Obj *func_prototype(Token *tok, Token *name, Type *ty, VarAttr *attr) {
 }
 
 static void func_exportness(Obj *fn, VarAttr *attr, bool is_def) {
-  if (!fn->is_static && !scope->parent) {
-    fn->export_fn |= !((attr->strg & SC_INLINE) && !(attr->strg & SC_EXTERN));
-    if (is_def)
-      fn->export_fn_gnu |= !((attr->strg & SC_INLINE) && (attr->strg & SC_EXTERN));
-    else
-      fn->export_fn_gnu |= ((attr->strg & SC_INLINE) && !(attr->strg & SC_EXTERN));
+  if (!fn->is_static && !fn->export_fn && !scope->parent) {
+    if (fn->is_gnu_inline) {
+      if (is_def)
+        fn->export_fn = !(attr->strg & SC_INLINE) || !(attr->strg & SC_EXTERN);
+      else
+        fn->export_fn = (attr->strg & SC_INLINE) && !(attr->strg & SC_EXTERN);
+    } else {
+      fn->export_fn = !(attr->strg & SC_INLINE) || (attr->strg & SC_EXTERN);
+    }
   }
 }
 
@@ -6226,16 +6270,13 @@ static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *
     declarator3(basety, ty, false, is_fndef);
 
     if (ty->kind == TY_FUNC) {
-      Obj *fn = func_prototype(tok, name, ty, attr);
+      Obj *fn = func_prototype(tok, name, ty, attr, is_fndef);
+      func_exportness(fn, attr, is_fndef);
 
       if (is_fndef) {
-        if (scope->parent)
-          error_tok(tok, "nested function not supported");
-        func_exportness(fn, attr, true);
         func_definition(rest, tok, fn, ty);
         return;
       }
-      func_exportness(fn, attr, false);
       assembler_name(&tok, tok, fn);
       continue;
     }
