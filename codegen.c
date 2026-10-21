@@ -4269,22 +4269,22 @@ static void asm_set_use(AsmParam *ap) {
 }
 
 static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
-  static uint64_t reg_free, reg_highbyte, reg_legacy, reg_gp, reg_fp, reg_x87;
-  if (!reg_free) {
-    reg_free = 1ULL << REG_X64_AX | 1ULL << REG_X64_CX | 1ULL << REG_X64_DX;
-    reg_highbyte = reg_free | 1ULL << REG_X64_BX;
-    reg_free |= 1ULL << REG_X64_SI | 1ULL << REG_X64_DI;
-    reg_legacy = reg_free | 1ULL << REG_X64_BX | 1ULL << REG_X64_BP;
-    reg_free |= 1ULL << REG_X64_R8 | 1ULL << REG_X64_R9;
-    reg_free |= 1ULL << REG_X64_R10 | 1ULL << REG_X64_R11;
-
-    for (int i = REG_X64_AX; i <= REG_X64_BP; i++)
-      reg_gp |= 1ULL << i;
-    for (int i = REG_X64_XMM0; i <= REG_X64_XMM15; i++)
-      reg_fp |= 1ULL << i;
-    for (int i = REG_X64_X87_ST0; i <= REG_X64_X87_ST7; i++)
-      reg_x87 |= 1ULL << i;
-  }
+  static const uint64_t reg_gp = (1ULL << (REG_X64_BP + 1)) - (1ULL << REG_X64_AX);
+  static const uint64_t reg_fp = (1ULL << (REG_X64_XMM15 + 1)) - (1ULL << REG_X64_XMM0);
+  static const uint64_t reg_x87 = (1ULL << (REG_X64_X87_ST7 + 1)) -
+                                  (1ULL << REG_X64_X87_ST0);
+  static const uint64_t reg_free = (1ULL << (REG_X64_R11 + 1)) - (1ULL << REG_X64_AX);
+  static const uint64_t reg_highbyte = 1ULL << REG_X64_AX |
+                                       1ULL << REG_X64_CX |
+                                       1ULL << REG_X64_DX |
+                                       1ULL << REG_X64_BX;
+  static const uint64_t reg_legacy = 1ULL << REG_X64_AX |
+                                     1ULL << REG_X64_CX |
+                                     1ULL << REG_X64_DX |
+                                     1ULL << REG_X64_SI |
+                                     1ULL << REG_X64_DI |
+                                     1ULL << REG_X64_BX |
+                                     1ULL << REG_X64_BP;
 
   for (; ap; ap = ap->next) {
     uint64_t reg_msk = 0;
