@@ -4,7 +4,7 @@ typedef union {
   unsigned char as8;
 } __slimcc_bitbuf;
 
-static __inline int __slimcc_bitint_first_set(int bits, __slimcc_bitbuf *op) {
+static int __slimcc_bitint_first_set(int bits, __slimcc_bitbuf *op) {
   int idx = (bits - 1) / 64;
 
   int clr_shft = 63 - (bits - 1) % 64;
@@ -18,7 +18,7 @@ static __inline int __slimcc_bitint_first_set(int bits, __slimcc_bitbuf *op) {
   return 0;
 }
 
-static __inline _Bool __slimcc_bitint_overflow(int bits, __slimcc_bitbuf *src, int chk_bits, _Bool is_unsigned) {
+static _Bool __slimcc_bitint_overflow(int bits, __slimcc_bitbuf *src, int chk_bits, _Bool is_unsigned) {
   int idx = (chk_bits - 1) / 64;
   int shft = (chk_bits - 1) % 64;
 
@@ -35,7 +35,7 @@ static __inline _Bool __slimcc_bitint_overflow(int bits, __slimcc_bitbuf *src, i
   return 0;
 }
 
-static __inline _Bool __slimcc_bitint_to_bool(int bits, __slimcc_bitbuf *op) {
+static _Bool __slimcc_bitint_to_bool(int bits, __slimcc_bitbuf *op) {
   int idx = (bits - 1) / 64;
 
   int clr_shft = 63 - (bits - 1) % 64;
@@ -47,7 +47,7 @@ static __inline _Bool __slimcc_bitint_to_bool(int bits, __slimcc_bitbuf *op) {
   return 0;
 }
 
-static __inline int __slimcc_bitint_cmp(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh, _Bool is_unsigned) {
+static int __slimcc_bitint_cmp(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh, _Bool is_unsigned) {
   int idx = (bits - 1) / 64;
 
   int clr_shft = 63 - (bits - 1) % 64;
@@ -69,7 +69,7 @@ static __inline int __slimcc_bitint_cmp(int bits, __slimcc_bitbuf *lh, __slimcc_
   return 0;
 }
 
-static __inline void __slimcc_bitint_sign_ext(int bits, __slimcc_bitbuf *op, int bits2, _Bool is_unsigned) {
+static void __slimcc_bitint_sign_ext(int bits, __slimcc_bitbuf *op, int bits2, _Bool is_unsigned) {
   int idx = (bits - 1) / 64;
 
   unsigned long long fill = (&op->as64)[idx];
@@ -88,7 +88,7 @@ static __inline void __slimcc_bitint_sign_ext(int bits, __slimcc_bitbuf *op, int
     (&op->as64)[idx] = fill;
 }
 
-static __inline void __slimcc_bitint_neg(int bits, __slimcc_bitbuf *op) {
+static void __slimcc_bitint_neg(int bits, __slimcc_bitbuf *op) {
   int cnt = (bits + 63) / 64;
 
   unsigned long long borrow = 0;
@@ -99,35 +99,35 @@ static __inline void __slimcc_bitint_neg(int bits, __slimcc_bitbuf *op) {
   }
 }
 
-static __inline void __slimcc_bitint_bitnot(int bits, __slimcc_bitbuf *op) {
+static void __slimcc_bitint_bitnot(int bits, __slimcc_bitbuf *op) {
   int cnt = (bits + 63) / 64;
 
   for (int i = 0; i < cnt; i++)
     (&op->as64)[i] = ~(&op->as64)[i];
 }
 
-static __inline void __slimcc_bitint_bitand(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
+static void __slimcc_bitint_bitand(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
   int cnt = (bits + 63) / 64;
 
   for (int i = 0; i < cnt; i++)
     (&rh->as64)[i] &= (&lh->as64)[i];
 }
 
-static __inline void __slimcc_bitint_bitor(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
+static void __slimcc_bitint_bitor(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
   int cnt = (bits + 63) / 64;
 
   for (int i = 0; i < cnt; i++)
     (&rh->as64)[i] |= (&lh->as64)[i];
 }
 
-static __inline void __slimcc_bitint_bitxor(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
+static void __slimcc_bitint_bitxor(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
   int cnt = (bits + 63) / 64;
 
   for (int i = 0; i < cnt; i++)
     (&rh->as64)[i] ^= (&lh->as64)[i];
 }
 
-static __inline void __slimcc_bitint_shl(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int amount) {
+static void __slimcc_bitint_shl(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int amount) {
   if (amount < 0 || amount >= bits)
     return;
 
@@ -143,7 +143,7 @@ static __inline void __slimcc_bitint_shl(int bits, __slimcc_bitbuf *src, __slimc
   }
 }
 
-static __inline void __slimcc_bitint_shr(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int amount,
+static void __slimcc_bitint_shr(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int amount,
                      _Bool is_unsigned) {
   if (amount < 0 || amount >= bits)
     return;
@@ -162,7 +162,7 @@ static __inline void __slimcc_bitint_shr(int bits, __slimcc_bitbuf *src, __slimc
   __slimcc_bitint_sign_ext(bits - amount, dst, bits, is_unsigned);
 }
 
-static __inline void *__slimcc_bitint_bitfield_load(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int width,
+static void *__slimcc_bitint_bitfield_load(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int width,
                                 int ofs, _Bool is_unsigned) {
   int sz = (bits + 7) / 8;
 
@@ -174,7 +174,7 @@ static __inline void *__slimcc_bitint_bitfield_load(int bits, __slimcc_bitbuf *s
   return src;
 }
 
-static __inline void __slimcc_bitint_bitfield_save(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int width,
+static void __slimcc_bitint_bitfield_save(int bits, __slimcc_bitbuf *src, __slimcc_bitbuf *dst, int width,
                                int ofs) {
   int cnt = (bits + 63) / 64;
   int full_bits = cnt * 64;
@@ -197,7 +197,7 @@ static __inline void __slimcc_bitint_bitfield_save(int bits, __slimcc_bitbuf *sr
     (&dst->as8)[j] = ((&dst->as8)[j] & (&mb->as8)[j]) | (&sb->as8)[j];
 }
 
-static __inline void __slimcc_bitint_add(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
+static void __slimcc_bitint_add(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
   int cnt = (bits + 63) / 64;
 
   unsigned long long carry = 0;
@@ -208,7 +208,7 @@ static __inline void __slimcc_bitint_add(int bits, __slimcc_bitbuf *lh, __slimcc
   }
 }
 
-static __inline void __slimcc_bitint_sub(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
+static void __slimcc_bitint_sub(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
   int cnt = (bits + 63) / 64;
 
   unsigned long long borrow = 0;
@@ -219,7 +219,7 @@ static __inline void __slimcc_bitint_sub(int bits, __slimcc_bitbuf *lh, __slimcc
   }
 }
 
-static __inline void __slimcc_bitint_mul(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
+static void __slimcc_bitint_mul(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh) {
   int cnt = (bits + 31) / 32;
 
   unsigned buf[cnt];
@@ -238,7 +238,7 @@ static __inline void __slimcc_bitint_mul(int bits, __slimcc_bitbuf *lh, __slimcc
     (&rh->as32)[j] = buf[j];
 }
 
-static __inline void __slimcc_bitint_div(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh, _Bool is_unsigned, _Bool is_div) {
+static void __slimcc_bitint_div(int bits, __slimcc_bitbuf *lh, __slimcc_bitbuf *rh, _Bool is_unsigned, _Bool is_div) {
   int cnt64 = (bits + 63) / 64;
 
   __slimcc_bitbuf lb[cnt64 + 1];
