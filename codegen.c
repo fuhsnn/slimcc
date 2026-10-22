@@ -5576,29 +5576,27 @@ static void peep_redunt_jmp(char *p) {
   }
 }
 
-static void mark_live(Obj *var, bool is_ref) {
+static void mark_live(Obj *var) {
   if (var->is_live)
     return;
+  var->is_live = true;
 
   if (!var->is_definition) {
-    var->is_live = is_ref;
-
     if (var->alias_name) {
       Obj *alias = get_symbol_var(var->alias_name);
       if (alias && alias->is_definition)
-        mark_live(alias, true);
+        mark_live(alias);
     }
     return;
   }
-  var->is_live = true;
 
   if (var->ty->kind == TY_FUNC) {
     for (int i = 0; i < var->output->ref_cnt; i++)
-      mark_live(var->output->refs[i], true);
+      mark_live(var->output->refs[i]);
   } else {
     for (Relocation *rel = var->rel; rel; rel = rel->next)
       if (rel->var)
-        mark_live(rel->var, true);
+        mark_live(rel->var);
   }
 }
 
@@ -5627,14 +5625,12 @@ int codegen(Obj *prog, FILE *out) {
   }
 
   for (Obj *var = prog; var; var = var->next)
-    if (!var->is_static || var->is_used)
-      mark_live(var, false);
+    if ((!var->is_static || var->is_used) && (var->is_definition || var->alias_name))
+      mark_live(var);
 
   for (Obj *var = prog; var; var = var->next) {
     if (!var->is_definition) {
-      if ((var->is_weak && var->is_live) ||
-          (var->visibility && var->is_live) ||
-          (var->alias_name && (var->is_live || !var->is_static || var->is_used)))
+      if (var->is_live && (var->alias_name || var->visibility || var->is_weak))
         emit_symbol2(var, asm_name(var), var->visibility);
       continue;
     }
