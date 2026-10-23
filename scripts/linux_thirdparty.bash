@@ -670,7 +670,7 @@ test_giflib() {
 
 test_git() {
  github_tar git git v2.56.0
- make CC="$CC" NO_RUST=1 test -j2
+ make CC="$CC" NO_RUST=1 test
 }
 
 test_glib() {
@@ -700,9 +700,9 @@ test_gnutls() {
  url_xz https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz gnutls
  fix_configure
  CFLAGS=-DCRAU_MAYBE_UNUSED= ./configure --disable-hardware-acceleration
- make -j2
- make -C tests check -j2
- make -C fuzz check -j2
+ make
+ make -C tests check
+ make -C fuzz check
 }
 
 test_go() {
@@ -1026,7 +1026,7 @@ test_libevent() {
  libtoolize
  sh autogen.sh
  fix_and_configure
- make check -j2
+ make check
 }
 
 test_libexpat() {
@@ -1460,7 +1460,7 @@ test_mbedtls() {
  url_bz https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.2.0/mbedtls-4.2.0.tar.bz2 mbedtls
  replace_line "    (defined(__GNUC__) || defined(__clang__)) && defined(MBEDTLS_ARCH_IS_X64)" "1" tf-psa-crypto/drivers/builtin/src/aesni.h
  cmake_init
- make -j3 && ctest -j3
+ make -j2 && ctest -j2
 }
 
 test_md4c() {
@@ -1727,7 +1727,7 @@ test_ocaml() {
  github_clone ocaml ocaml 5.5.2
  rm testsuite/tests/lib-unix/unix-sockaddr/sockaddr_cxx.ml
  fix_and_configure --enable-ocamltest
- make -j5  && make -C testsuite parallel -j5
+ make -j4  && make -C testsuite parallel -j4
 }
 
 test_ogg_vorbis() {
@@ -1787,7 +1787,7 @@ test_openssl() {
  github_tar openssl openssl openssl-3.6.5
  replace_line "#if !defined(__DJGPP__)" "#if 0" test/rsa_complex.c
  ./Configure
- make -j2 && make test HARNESS_JOBS=2
+ make && make test HARNESS_JOBS=1
 }
 
 test_optparse() {
@@ -1857,7 +1857,7 @@ test_perl() {
  export NO_NETWORK_TESTING=1
  ./Configure -des -Dcc="$CC" -Accflags=-fPIC -Alibs="-lpthread -ldl -lm -lcrypt -lutil -lc" \
    -Alibpth="/usr/local/lib /lib /usr/lib /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu"
- make -j3 test_prep && HARNESS_OPTIONS=j3 make test_harness
+ make test_prep && HARNESS_OPTIONS=j1 make test_harness
 }
 
 test_php() {
@@ -2107,7 +2107,7 @@ test_ruby() {
  sh autogen.sh
  cflags=-fPIC cxxflags=-fPIC ./configure
  sed -i 's| 1000.times do| 500.times do|g' test/ruby/test_refinement.rb # flaky (timeout)
- make check -j4
+ make check -j2
 }
 
 test_rvvm() {
@@ -2130,7 +2130,7 @@ test_samba() {
  replace_line "#if defined(__clang__) || defined(__GNUC__) || defined(__SUNPRO_C)" "#if 1" third_party/heimdal/include/heim_threads.h
  sed -i 's/defined(_MSC_VER) && !defined(__clang__) &&/1||/g' third_party/ngtcp2/lib/ngtcp2_ringbuf.c
  wafsamba_fix_and_configure --without-json --without-ad-dc --enable-selftest --without-ldap --without-ldb-lmdb --without-ads --with-shared-modules='!vfs_snapper,!vfs_nfs4acl_xattr'
- LD_LIBRARY_PATH=$PWD/bin/default/lib/util:$PWD/bin/default/libcli/util:$PWD/bin/default/librpc:$PWD/bin/default/nsswitch/libwbclient:$PWD/bin/default/source3:$PWD/bin/default/source3/libsmb make quicktest -j4
+ LD_LIBRARY_PATH=$PWD/bin/default/lib/util:$PWD/bin/default/libcli/util:$PWD/bin/default/librpc:$PWD/bin/default/nsswitch/libwbclient:$PWD/bin/default/source3:$PWD/bin/default/source3/libsmb make quicktest -j2
 }
 
 test_scrapscript() {
