@@ -306,6 +306,9 @@ int main(int argc, char**argv) {
     volatile int *pv;
     static_assert(_Generic(typeof(*(0 ? ac : pv)), int const volatile: 1, default: 0));
   }
+  {
+    //SREJ void(*restrict invalid_restrict_to_fnptr)();
+  }
 
   printf("OK\n");
 }
