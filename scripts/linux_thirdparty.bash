@@ -249,7 +249,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler fafda90ba386689c888d0d219a8dc013999fd237 c2compiler
+ git_fetch https://github.com/c2lang/c2compiler a893ab5f60103c28ff6a53c21c971c708e0dee1c c2compiler
  replace_line 'export CC=clang' '' env.sh
  . env.sh
  make CC="$CC" all test
@@ -1724,7 +1724,7 @@ test_nqp() {
 }
 
 test_ocaml() {
- github_clone ocaml ocaml 5.5.1
+ github_clone ocaml ocaml 5.5.2
  rm testsuite/tests/lib-unix/unix-sockaddr/sockaddr_cxx.ml
  fix_and_configure --enable-ocamltest
  make -j5  && make -C testsuite parallel -j5
