@@ -3657,17 +3657,26 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
     if (node->kind == ND_CAST && node->ty->base && node->m.lhs->ty->base)
       continue;
 
-    if (node->kind == ND_DEREF && node->ty->kind == TY_ARRAY)
-      continue;
+    if (node->ty->kind == TY_ARRAY) {
+      if (node->kind == ND_DEREF)
+        continue;
 
-    int64_t val;
-    if (node->kind == ND_ADD && is_const_expr(node->m.rhs, &val)) {
-      accum += val;
-      continue;
+      if (node->kind == ND_MEMBER) {
+        accum += node->m.member->offset;
+        continue;
+      }
     }
-    if (node->kind == ND_SUB && is_const_expr(node->m.rhs, &val)) {
-      accum -= val;
-      continue;
+
+    if (node->ty->kind == TY_PTR) {
+      int64_t val;
+      if (node->kind == ND_ADD && is_const_expr(node->m.rhs, &val)) {
+        accum += val;
+        continue;
+      }
+      if (node->kind == ND_SUB && is_const_expr(node->m.rhs, &val)) {
+        accum -= val;
+        continue;
+      }
     }
     break;
   }
