@@ -178,6 +178,7 @@ static bool gen_reachable_stmt(Node *node);
 static bool gen_unreachable_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
+static bool gen_addr_ofs_opt(Node *node, int64_t *ofs);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
 static bool gen_load_opt_gp(Node *node, Reg r);
 static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void);
@@ -2950,7 +2951,18 @@ static void memop_arith_imm2(Node *lhs, int64_t val, const char *ins_sz) {
     imm_tmpl(ins_sz, memop, limit_imm(val, lhs->ty->size));
     return;
   }
-  gen_addr(lhs);
+
+  int64_t dofs;
+  if (gen_addr_ofs_opt(lhs, &dofs)) {
+    if (dofs && in_imm_range(dofs)) {
+      snprintf(ofs, STRBUF_SZ, "%" PRIi64 "(%%rax)", dofs);
+      imm_tmpl(ins_sz, ofs, limit_imm(val, lhs->ty->size));
+      return;
+    }
+    imm_add("%rax", "%rdx", dofs);
+  } else {
+    gen_addr(lhs);
+  }
   imm_tmpl(ins_sz, "(%rax)", limit_imm(val, lhs->ty->size));
 }
 
@@ -2960,17 +2972,7 @@ static bool memop_arith_imm(Node *lhs, Node *rhs, const char *ins) {
     char ins_sz[STRBUF_SZ];
     snprintf(ins_sz, STRBUF_SZ, "%s%s", ins, size_suffix(lhs->ty->size));
 
-    char ofs[STRBUF_SZ];
-    const char *ptr;
-
-    if (is_memop(lhs, ofs, &ptr, false)) {
-      char memop[STRBUF_SZ2];
-      snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
-      imm_tmpl(ins_sz, memop, limit_imm(rval, lhs->ty->size));
-      return true;
-    }
-    gen_addr(lhs);
-    imm_tmpl(ins_sz, "(%rax)", limit_imm(rval, lhs->ty->size));
+    memop_arith_imm2(lhs, rval, ins_sz);
     return true;
   }
   return false;
@@ -3650,6 +3652,7 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
 }
 
 static void gen_deref_opt(Node *node, int64_t *ofs) {
+  int64_t accum = 0;
   for (;; node = node->m.lhs) {
     if (node->kind == ND_CAST && node->ty->base && node->m.lhs->ty->base)
       continue;
@@ -3659,24 +3662,28 @@ static void gen_deref_opt(Node *node, int64_t *ofs) {
 
     int64_t val;
     if (node->kind == ND_ADD && is_const_expr(node->m.rhs, &val)) {
-      *ofs += val;
+      accum += val;
       continue;
     }
     if (node->kind == ND_SUB && is_const_expr(node->m.rhs, &val)) {
-      *ofs -= val;
+      accum -= val;
       continue;
     }
     break;
   }
+  *ofs = accum;
 
   gen_expr(node);
 }
 
 static void gen_member_opt(Node *node, int64_t *ofs) {
+  int64_t accum = 0;
   do {
-    *ofs += node->m.member->offset;
+    accum += node->m.member->offset;
     node = node->m.lhs;
   } while (node->kind == ND_MEMBER);
+
+  *ofs = accum;
 
   gen_addr(node);
 }
@@ -3804,7 +3811,7 @@ static bool gen_if_stmt_const(Node *node, bool cond, const char *else_label) {
 static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
   int64_t val;
   if (is_const_expr(mul, &val)) {
-    int64_t ofs = 0;
+    int64_t ofs;
     gen_deref_opt(lhs, &ofs);
     imm_load(ty, ofs + val);
     return true;
@@ -4011,7 +4018,7 @@ static bool gen_expr_opt(Node *node) {
       return true;
     }
     if (lhs->kind == ND_DEREF && ty->size == lhs->ty->size && ty->kind != TY_BOOL) {
-      int64_t ofs = 0;
+      int64_t ofs;
       gen_deref_opt(lhs->m.lhs, &ofs);
       imm_load(ty, ofs);
       return true;
@@ -4048,22 +4055,8 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (kind == ND_DEREF) {
-    int64_t ofs = 0;
-    gen_deref_opt(node->m.lhs, &ofs);
-
-    if (is_scalar(ty)) {
-      imm_load(node->ty, ofs);
-      return true;
-    }
-    imm_add("%rax", "%rdx", ofs);
-    return true;
-  }
-
-  if (kind == ND_MEMBER) {
-    int64_t ofs = 0;
-    gen_member_opt(node, &ofs);
-
+  int64_t ofs;
+  if (gen_addr_ofs_opt(node, &ofs)) {
     if (is_scalar(node->ty)) {
       if (is_bitfield(node)) {
         imm_add("%rax", "%rdx", ofs);
@@ -4080,9 +4073,21 @@ static bool gen_expr_opt(Node *node) {
   return false;
 }
 
-static bool gen_addr_opt(Node *node) {
-  NodeKind kind = node->kind;
+static bool gen_addr_ofs_opt(Node *node, int64_t *ofs) {
+  if (node->kind == ND_DEREF) {
+    gen_deref_opt(node->m.lhs, ofs);
+    return true;
+  }
 
+  if (node->kind == ND_MEMBER) {
+    gen_member_opt(node, ofs);
+    return true;
+  }
+
+  return false;
+}
+
+static bool gen_addr_opt(Node *node) {
   {
     char ofs[STRBUF_SZ];
     const char *ptr;
@@ -4093,16 +4098,8 @@ static bool gen_addr_opt(Node *node) {
     }
   }
 
-  if (kind == ND_DEREF) {
-    int64_t ofs = 0;
-    gen_deref_opt(node->m.lhs, &ofs);
-    imm_add("%rax", "%rdx", ofs);
-    return true;
-  }
-
-  if (kind == ND_MEMBER) {
-    int64_t ofs = 0;
-    gen_member_opt(node, &ofs);
+  int64_t ofs;
+  if (gen_addr_ofs_opt(node, &ofs)) {
     imm_add("%rax", "%rdx", ofs);
     return true;
   }
