@@ -235,7 +235,7 @@ bool chk_qual_type(QualMask qual, Type *ty) {
   if (ty->kind == TY_AUTO)
     return false;
   if (qual & Q_RESTRICT)
-    if (ty->kind != TY_PTR || ty->base->kind == TY_FUNC)
+    if (ty->kind != TY_PTR || ty->base->kind == TY_FUNC || ty->base->kind == TY_FUNC_INCMP)
       return true;
   if (qual & Q_ATOMIC)
     if (is_decay_ty(ty))
