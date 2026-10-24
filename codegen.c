@@ -4033,21 +4033,6 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (ty->kind == TY_ARRAY ||
-      ty->kind == TY_STRUCT ||
-      ty->kind == TY_UNION ||
-      is_bitfield(node)) {
-    char var_ofs[STRBUF_SZ];
-    const char *var_ptr;
-    Node addr_node = {.kind = ND_ADDR, .m.lhs = node, .tok = node->tok};
-    if (is_memop_ptr(&addr_node, var_ofs, &var_ptr)) {
-      Printftn("lea %s(%s), %%rax", var_ofs, var_ptr);
-      if (is_bitfield(node))
-        gen_bitfield_load(node);
-      return true;
-    }
-  }
-
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
     gen_deref_opt(node->m.lhs, &ofs);
@@ -4082,16 +4067,6 @@ static bool gen_expr_opt(Node *node) {
 
 static bool gen_addr_opt(Node *node) {
   NodeKind kind = node->kind;
-
-  {
-    char ofs[STRBUF_SZ];
-    const char *ptr;
-    Node addr_node = {.kind = ND_ADDR, .m.lhs = node, .tok = node->tok};
-    if (is_memop_ptr(&addr_node, ofs, &ptr)) {
-      Printftn("lea %s(%s), %%rax", ofs, ptr);
-      return true;
-    }
-  }
 
   if (kind == ND_DEREF) {
     int64_t ofs = 0;
