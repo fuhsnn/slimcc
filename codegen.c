@@ -2951,7 +2951,18 @@ static void memop_arith_imm2(Node *lhs, int64_t val, const char *ins_sz) {
     imm_tmpl(ins_sz, memop, limit_imm(val, lhs->ty->size));
     return;
   }
-  gen_addr(lhs);
+
+  int64_t dofs;
+  if (gen_addr_opt2(lhs, &dofs)) {
+    if (dofs && in_imm_range(dofs)) {
+      snprintf(ofs, STRBUF_SZ, "%" PRIi64 "(%%rax)", dofs);
+      imm_tmpl(ins_sz, ofs, limit_imm(val, lhs->ty->size));
+      return;
+    }
+    imm_add("%rax", "%rdx", dofs);
+  } else {
+    gen_addr(lhs);
+  }
   imm_tmpl(ins_sz, "(%rax)", limit_imm(val, lhs->ty->size));
 }
 
@@ -2961,17 +2972,7 @@ static bool memop_arith_imm(Node *lhs, Node *rhs, const char *ins) {
     char ins_sz[STRBUF_SZ];
     snprintf(ins_sz, STRBUF_SZ, "%s%s", ins, size_suffix(lhs->ty->size));
 
-    char ofs[STRBUF_SZ];
-    const char *ptr;
-
-    if (is_memop(lhs, ofs, &ptr, false)) {
-      char memop[STRBUF_SZ2];
-      snprintf(memop, STRBUF_SZ2, "%s(%s)", ofs, ptr);
-      imm_tmpl(ins_sz, memop, limit_imm(rval, lhs->ty->size));
-      return true;
-    }
-    gen_addr(lhs);
-    imm_tmpl(ins_sz, "(%rax)", limit_imm(rval, lhs->ty->size));
+    memop_arith_imm2(lhs, rval, ins_sz);
     return true;
   }
   return false;
