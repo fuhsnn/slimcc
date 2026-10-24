@@ -178,6 +178,7 @@ static bool gen_reachable_stmt(Node *node);
 static bool gen_unreachable_stmt(Node *node);
 static bool gen_expr_opt(Node *node);
 static bool gen_addr_opt(Node *node);
+static bool gen_addr_opt2(Node *node, int64_t *ofs);
 static bool gen_cmp_opt_gp(Node *node, NodeKind *kind);
 static bool gen_load_opt_gp(Node *node, Reg r);
 static Node *bool_expr_opt(Node *node, bool *flip, bool *is_void);
@@ -3650,33 +3651,47 @@ static bool gen_load_opt_gp(Node *node, Reg r) {
 }
 
 static void gen_deref_opt(Node *node, int64_t *ofs) {
+  int64_t accum = 0;
   for (;; node = node->m.lhs) {
     if (node->kind == ND_CAST && node->ty->base && node->m.lhs->ty->base)
       continue;
 
-    if (node->kind == ND_DEREF && node->ty->kind == TY_ARRAY)
-      continue;
+    if (node->ty->kind == TY_ARRAY) {
+      if (node->kind == ND_DEREF)
+        continue;
 
-    int64_t val;
-    if (node->kind == ND_ADD && is_const_expr(node->m.rhs, &val)) {
-      *ofs += val;
-      continue;
+      if (node->kind == ND_MEMBER) {
+        accum += node->m.member->offset;
+        continue;
+      }
     }
-    if (node->kind == ND_SUB && is_const_expr(node->m.rhs, &val)) {
-      *ofs -= val;
-      continue;
+
+    if (node->ty->kind == TY_PTR) {
+      int64_t val;
+      if (node->kind == ND_ADD && is_const_expr(node->m.rhs, &val)) {
+        accum += val;
+        continue;
+      }
+      if (node->kind == ND_SUB && is_const_expr(node->m.rhs, &val)) {
+        accum -= val;
+        continue;
+      }
     }
     break;
   }
+  *ofs = accum;
 
   gen_expr(node);
 }
 
 static void gen_member_opt(Node *node, int64_t *ofs) {
+  int64_t accum = 0;
   do {
-    *ofs += node->m.member->offset;
+    accum += node->m.member->offset;
     node = node->m.lhs;
   } while (node->kind == ND_MEMBER);
+
+  *ofs = accum;
 
   gen_addr(node);
 }
@@ -3804,7 +3819,7 @@ static bool gen_if_stmt_const(Node *node, bool cond, const char *else_label) {
 static bool gen_scaled_idx_load(Type *ty, Node *lhs, Node *mul) {
   int64_t val;
   if (is_const_expr(mul, &val)) {
-    int64_t ofs = 0;
+    int64_t ofs;
     gen_deref_opt(lhs, &ofs);
     imm_load(ty, ofs + val);
     return true;
@@ -4011,7 +4026,7 @@ static bool gen_expr_opt(Node *node) {
       return true;
     }
     if (lhs->kind == ND_DEREF && ty->size == lhs->ty->size && ty->kind != TY_BOOL) {
-      int64_t ofs = 0;
+      int64_t ofs;
       gen_deref_opt(lhs->m.lhs, &ofs);
       imm_load(ty, ofs);
       return true;
@@ -4033,22 +4048,8 @@ static bool gen_expr_opt(Node *node) {
     }
   }
 
-  if (kind == ND_DEREF) {
-    int64_t ofs = 0;
-    gen_deref_opt(node->m.lhs, &ofs);
-
-    if (is_scalar(ty)) {
-      imm_load(node->ty, ofs);
-      return true;
-    }
-    imm_add("%rax", "%rdx", ofs);
-    return true;
-  }
-
-  if (kind == ND_MEMBER) {
-    int64_t ofs = 0;
-    gen_member_opt(node, &ofs);
-
+  int64_t ofs;
+  if (gen_addr_opt2(node, &ofs)) {
     if (is_scalar(node->ty)) {
       if (is_bitfield(node)) {
         imm_add("%rax", "%rdx", ofs);
@@ -4065,19 +4066,23 @@ static bool gen_expr_opt(Node *node) {
   return false;
 }
 
-static bool gen_addr_opt(Node *node) {
-  NodeKind kind = node->kind;
-
-  if (kind == ND_DEREF) {
-    int64_t ofs = 0;
-    gen_deref_opt(node->m.lhs, &ofs);
-    imm_add("%rax", "%rdx", ofs);
+static bool gen_addr_opt2(Node *node, int64_t *ofs) {
+  if (node->kind == ND_DEREF) {
+    gen_deref_opt(node->m.lhs, ofs);
     return true;
   }
 
-  if (kind == ND_MEMBER) {
-    int64_t ofs = 0;
-    gen_member_opt(node, &ofs);
+  if (node->kind == ND_MEMBER) {
+    gen_member_opt(node, ofs);
+    return true;
+  }
+
+  return false;
+}
+
+static bool gen_addr_opt(Node *node) {
+  int64_t ofs;
+  if (gen_addr_opt2(node, &ofs)) {
     imm_add("%rax", "%rdx", ofs);
     return true;
   }
