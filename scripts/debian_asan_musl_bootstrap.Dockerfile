@@ -11,7 +11,7 @@ WORKDIR /work/
 
 RUN wget https://github.com/fuhsnn/slimcc-musl-bootstrap/archive/refs/heads/master.tar.gz
 RUN tar -xf master.tar.gz --strip-components=1
-RUN sed -i 's|$STAGE1_BUILD_CMD|gcc-14 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -DCHECK_MEMUSE -o slimcc \&\& apt-get -y autoremove gcc-14 libc6-dev|g' slimcc-musl-bootstrap.sh
+RUN sed -i 's|$STAGE1_BUILD_CMD|gcc-14 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment,float-cast-overflow -fno-sanitize-recover=undefined scripts/amalgamation.c -DCHECK_MEMUSE -lm -o slimcc \&\& apt-get -y autoremove gcc-14 libc6-dev|g' slimcc-musl-bootstrap.sh
 RUN sh slimcc-musl-bootstrap.sh
 
 RUN mkdir ./rfs/dev ./rfs/tmp

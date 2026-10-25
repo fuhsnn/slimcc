@@ -84,6 +84,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
  libpng-dev liblcms2-dev \
  # ooc
  libgc-dev \
+ # libseccomp
+ gperf \
  && apt-get clean
 
 FROM install-deps AS setup-toolchain
@@ -91,8 +93,7 @@ FROM install-deps AS setup-toolchain
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci-debian13.c platform.c \
- && gcc-14 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -DCHECK_MEMUSE -o slimcc
+RUN ln -s platform/linux-ci-debian13.c platform.c && make ci-san CC=gcc-14
 RUN apt-get -y autoremove gcc-14 && rm -rf /var/cache/apt/*
 
 RUN ! command -v cc

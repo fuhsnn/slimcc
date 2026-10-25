@@ -76,6 +76,7 @@ jobs:
           - { vm: interop, proj: test_hdiffpatch }
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_inih }
+          - { vm: interop, proj: test_klib }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_libflac }
@@ -164,6 +165,7 @@ jobs:
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_blake3 }
+          - { vm: main, proj: test_boxfort }
           - { vm: main, proj: test_brieflz }
           - { vm: main, proj: test_brotli }
           - { vm: main, proj: test_bubblewrap }
@@ -220,8 +222,6 @@ jobs:
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_gnuless }
-          - { vm: main, proj: test_gnutls }
-          - { vm: main, proj: test_go }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -233,6 +233,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_gnutls }
+          - { vm: main, proj: test_go }
           - { vm: main, proj: test_got }
           - { vm: main, proj: test_gpatch }
           - { vm: main, proj: test_gravity }
@@ -290,6 +292,7 @@ jobs:
           - { vm: main, proj: test_libpsl }
           - { vm: main, proj: test_libressl }
           - { vm: main, proj: test_libsamplerate }
+          - { vm: main, proj: test_libseccomp }
           - { vm: main, proj: test_libsir }
           - { vm: main, proj: test_libsixel }
           - { vm: main, proj: test_libsodium }
@@ -320,6 +323,7 @@ jobs:
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_micropython }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_mimick }
           - { vm: main, proj: test_minimp3 }
           - { vm: main, proj: test_minmea }
           - { vm: main, proj: test_minunit }
@@ -429,6 +433,17 @@ jobs:
           - { vm: main, proj: test_yyjson }
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zlibng }
+    uses: ./.github/workflows/docker_download_run.yml
+    with:
+      vm: ${{ matrix.vm }}
+      proj: ${{ matrix.proj }}
+
+  run2:
+    needs: build-docker
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: test_zuo_chezscheme }
