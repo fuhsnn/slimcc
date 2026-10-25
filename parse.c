@@ -175,6 +175,7 @@ static HashMap symbols;
 static FuncContext *fnctx;
 static bool *eval_recover;
 static bool eval_strict;
+static bool eval_fenv_on;
 
 static bool is_type_kw(TokenKind kind);
 static bool is_typename(Token *tok);
@@ -209,7 +210,9 @@ static int64_t eval2(Node *node, EvalContext *ctx);
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile);
 static bool is_static_const_var(Obj *var);
 static Node *assign(Token **rest, Token *tok);
+static int64_t eval_fp_int_cast(Node *node);
 static long_double_t eval_double(Node *node);
+static long_double_t eval_double2(Node *node);
 static BitBuf *eval_bitint(Node *node);
 static void clean_bitint(BitBuf *val, Type *ty);
 static bool is_const_bitint_strict(Node *node, BitBuf **result);
@@ -3787,13 +3790,8 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
       return eval_sign_extend(ty, ival);
     }
 
-    if (is_flonum(lhs->ty)) {
-      if (ty->kind == TY_BOOL)
-        return !!eval_double(lhs);
-      if (ty->size == 8 && ty->is_unsigned)
-        return (uint64_t)eval_double(lhs);
-      return eval_sign_extend(ty, eval_double(lhs));
-    }
+    if (is_flonum(lhs->ty))
+      return eval_fp_int_cast(node);
 
     if (ty->kind == TY_BOOL && !eval_strict) {
       Node *n = lhs;
@@ -4113,7 +4111,59 @@ void eval_fp(Node *node, FPVal *fval) {
   }
 }
 
+static int64_t eval_fp_int_cast(Node *node) {
+#ifndef BOOTSTRAP_NO_FENV
+  bool chk_fenv = false;
+  if (!eval_fenv_on && !is_const_context()) {
+    chk_fenv = eval_fenv_on = true;
+    feclearexcept(FE_ALL_EXCEPT);
+  }
+#endif
+
+  int64_t val;
+  if (node->ty->kind == TY_BOOL)
+    val = !!eval_double2(node->m.lhs);
+  else if (node->ty->size == 8 && node->ty->is_unsigned)
+    val = (uint64_t)eval_double2(node->m.lhs);
+  else
+    val = eval_sign_extend(node->ty, eval_double2(node->m.lhs));
+
+#ifndef BOOTSTRAP_NO_FENV
+  if (chk_fenv) {
+    eval_fenv_on = false;
+
+    int m = opt_rounding_math ? FE_ALL_EXCEPT : FE_ALL_EXCEPT - FE_INEXACT;
+    if (fetestexcept(m))
+      return eval_error(node);
+  }
+#endif
+  return val;
+}
+
 static long_double_t eval_double(Node *node) {
+#ifndef BOOTSTRAP_NO_FENV
+  bool chk_fenv = false;
+  if (!eval_fenv_on && !is_const_context()) {
+    chk_fenv = eval_fenv_on = true;
+    feclearexcept(FE_ALL_EXCEPT);
+  }
+#endif
+
+  long_double_t val = eval_double2(node);
+
+#ifndef BOOTSTRAP_NO_FENV
+  if (chk_fenv) {
+    eval_fenv_on = false;
+
+    int m = opt_rounding_math ? FE_ALL_EXCEPT : FE_ALL_EXCEPT - FE_INEXACT;
+    if (fetestexcept(m))
+      return eval_error(node);
+  }
+#endif
+  return val;
+}
+
+static long_double_t eval_double2(Node *node) {
   if (eval_recover && *eval_recover)
     return false;
 
@@ -4122,30 +4172,24 @@ static long_double_t eval_double(Node *node) {
   Node *rhs = node->m.rhs;
 
   switch (node->kind) {
-  case ND_ADD: return eval_fp_cast(eval_double(lhs) + eval_double(rhs), ty);
-  case ND_SUB: return eval_fp_cast(eval_double(lhs) - eval_double(rhs), ty);
-  case ND_MUL: return eval_fp_cast(eval_double(lhs) * eval_double(rhs), ty);
-  case ND_DIV: {
-    long_double_t lval = eval_double(lhs);
-    long_double_t rval = eval_double(rhs);
-    if (rval == 0 && !is_const_context())
-      break;
-    return eval_fp_cast(lval / rval, ty);
-  }
-  case ND_POS:  return eval_double(lhs);
-  case ND_NEG:  return -eval_double(lhs);
+  case ND_ADD:  return eval_fp_cast(eval_double2(lhs) + eval_double2(rhs), ty);
+  case ND_SUB:  return eval_fp_cast(eval_double2(lhs) - eval_double2(rhs), ty);
+  case ND_MUL:  return eval_fp_cast(eval_double2(lhs) * eval_double2(rhs), ty);
+  case ND_DIV:  return eval_fp_cast(eval_double2(lhs) / eval_double2(rhs), ty);
+  case ND_POS:  return eval_double2(lhs);
+  case ND_NEG:  return -eval_double2(lhs);
   case ND_COND: {
     bool cond = eval(node->ctrl.cond);
     if (eval_strict) {
-      long_double_t lval = eval_double(node->ctrl.then);
-      long_double_t rval = eval_double(node->ctrl.els);
+      long_double_t lval = eval_double2(node->ctrl.then);
+      long_double_t rval = eval_double2(node->ctrl.els);
       return cond ? lval : rval;
     }
-    return cond ? eval_double(node->ctrl.then) : eval_double(node->ctrl.els);
+    return cond ? eval_double2(node->ctrl.then) : eval_double2(node->ctrl.els);
   }
   case ND_CAST:
     if (is_flonum(lhs->ty))
-      return eval_fp_cast(eval_double(lhs), ty);
+      return eval_fp_cast(eval_double2(lhs), ty);
 
     if (is_integer(lhs->ty)) {
       int64_t val = eval(lhs);

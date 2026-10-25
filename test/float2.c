@@ -74,7 +74,7 @@ int main(void) {
   }
   {
 #define ROUND_TEST(it, iv, ft, fv) \
-    static_assert(iv == fv); \
+    ASSERT(1, ({ static int eq = (iv == fv); eq; })); \
     ASSERT(1, ({ volatile it I = iv; volatile ft F = fv; I == F; }));
 
     ROUND_TEST( int32_t, 16777217, float, 16777216.0f);

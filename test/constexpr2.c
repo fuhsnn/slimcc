@@ -101,13 +101,13 @@ int main(void) {
   SASSERT(13835058055282163711ULL == (unsigned long long) 13835058055282163711.0L);
   SASSERT(13835058055282163711.0L == (long double) 13835058055282163711ULL);
 
-  SASSERT( 16777217.0 != (float)16777217.0 );
-  SASSERT( 9007199254740993.0L != (double)9007199254740993.0L || sizeof(double) == sizeof(long double) );
+  ASSERT(1, ({ static int cmp = 16777217.0 != (float)16777217.0; cmp; }));
+  ASSERT(1, ({ static int cmp = 9007199254740993.0L != (double)9007199254740993.0L; cmp || sizeof(double) == sizeof(long double); }));
 
 #ifdef NOTGCC
   SASSERT( 127 == (unsigned char)511.0 >> 1 );
 #endif
-  SASSERT( (long long)(0.1f * 1e12f) == 99999997952LL );
+  ASSERT(1, ({ static int cmp = (long long)(0.1f * 1e12f) == 99999997952LL; cmp; }));
 
   ASSERT(1, ({ int i = 2; char arr[ (i++,3) ]; i == sizeof arr; }) );
 
