@@ -28,7 +28,11 @@ chapter_18/invalid_types/tag_resolution/address_of_wrong_type.c
 
 old_gcc_allow=(
 chapter_9/invalid_types/assign_fun_to_variable.c
+chapter_14/invalid_types/assign_int_to_pointer.c
+chapter_14/invalid_types/assign_int_var_to_pointer.c
 chapter_14/invalid_types/assign_wrong_pointer_type.c
+chapter_14/invalid_types/invalid_pointer_initializer.c
+chapter_14/invalid_types/invalid_static_initializer.c
 chapter_14/invalid_types/pass_pointer_as_int.c
 chapter_14/invalid_types/return_wrong_pointer_type.c
 chapter_14/invalid_types/ternary_mixed_pointer_types.c
@@ -37,7 +41,9 @@ chapter_15/invalid_types/compound_initializer_for_scalar.c
 chapter_15/invalid_types/compound_initializer_for_static_scalar.c
 chapter_15/invalid_types/assign_incompatible_pointer_types.c
 chapter_15/invalid_types/bad_arg_type.c
+chapter_16/invalid_types/compound_initializer_for_pointer.c
 chapter_16/invalid_types/implicit_conversion_pointers_to_different_size_arrays.c
+chapter_17/invalid_types/pointer_conversions/convert_ulong_to_void_ptr.c
 chapter_17/invalid_types/pointer_conversions/convert_void_ptr_to_int.c
 chapter_17/invalid_types/void/no_return_value.c
 chapter_17/invalid_types/void/non_void_return.c

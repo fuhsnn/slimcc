@@ -20,8 +20,7 @@ FROM install-deps AS setup-toolchain
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci.c platform.c \
- && gcc-12 -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -DCHECK_MEMUSE -o slimcc
+RUN ln -s platform/linux-ci.c platform.c && make ci-san CC=gcc-12
 RUN apt-get -y autoremove gcc-12 && rm -rf /var/cache/apt/*
 
 RUN ! command -v cc
