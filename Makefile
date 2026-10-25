@@ -4,7 +4,7 @@ TEST_SRCS!=ls test/*.c
 
 STG2_FLAGS=
 
-SAN_FLAGS=-fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined
+SAN_FLAGS=-fsanitize=address,undefined -fno-sanitize=alignment,float-cast-overflow -fno-sanitize-recover=undefined
 
 .SUFFIXES: .exe .stage2.o .stage2.exe .san.o .san.exe .filc.o .filc.exe
 
@@ -13,7 +13,7 @@ SAN_FLAGS=-fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-rec
 OBJS=$(SRCS:.c=.o)
 
 slimcc: $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -lm -o $@
 
 $(OBJS): slimcc.h
 
@@ -42,7 +42,7 @@ $(OBJS_S2): slimcc
 	./slimcc $(STG2_FLAGS) -o $@ -c $<
 
 slimcc-stage2: $(OBJS_S2)
-	./slimcc $(STG2_FLAGS) -o $@ $(OBJS_S2) $(LDFLAGS)
+	./slimcc $(STG2_FLAGS) $(OBJS_S2) $(LDFLAGS) -lm -o $@
 
 TESTS_S2=$(TEST_SRCS:.c=.stage2.exe)
 
@@ -66,7 +66,7 @@ $(OBJS_SAN): slimcc.h
 	$(CC) $(SAN_FLAGS) -g -fno-omit-frame-pointer -o $@ -c $<
 
 slimcc-san: $(OBJS_SAN)
-	$(CC) $(SAN_FLAGS) -g -fno-omit-frame-pointer -o $@ $(OBJS_SAN)
+	$(CC) $(SAN_FLAGS) $(OBJS_SAN) -g -fno-omit-frame-pointer -lm -o $@
 
 TESTS_SAN=$(TEST_SRCS:.c=.san.exe)
 
@@ -97,7 +97,7 @@ $(OBJS_FILC): slimcc.h
 	$(FILC) -g -o $@ -c $<
 
 slimcc-filc: $(OBJS_FILC)
-	$(FILC) -g -o $@ $(OBJS_FILC)
+	$(FILC) $(OBJS_FILC) -g -lm -o $@
 
 TESTS_FILC=$(TEST_SRCS:.c=.filc.exe)
 
@@ -115,6 +115,9 @@ test-filc: $(TESTS_FILC)
 # Misc.
 
 test-all: test test-stage2
+
+ci-san:
+	$(CC) $(SAN_FLAGS) -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 scripts/amalgamation.c -DCHECK_MEMUSE -lm -o slimcc
 
 format:
 	$(CLANG_FORMAT) -i $(SRCS) slimcc.h platform/*.c

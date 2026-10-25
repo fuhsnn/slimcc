@@ -23,6 +23,11 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef BOOTSTRAP_NO_FENV
+# include <fenv.h>
+# pragma STDC FENV_ACCESS ON
+#endif
+
 #if defined(__has_builtin)
 # define SLIMCC_HAS_BUILTIN(x) __has_builtin(x)
 #else
