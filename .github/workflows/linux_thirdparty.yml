@@ -76,6 +76,7 @@ jobs:
           - { vm: interop, proj: test_hdiffpatch }
           - { vm: interop, proj: test_imagemagick }
           - { vm: interop, proj: test_inih }
+          - { vm: interop, proj: test_klib }
           - { vm: interop, proj: test_liballegro5 }
           - { vm: interop, proj: test_libexpat }
           - { vm: interop, proj: test_libflac }
@@ -221,7 +222,6 @@ jobs:
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_gnuless }
           - { vm: main, proj: test_gnutls }
-          - { vm: main, proj: test_go }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -233,6 +233,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_go }
           - { vm: main, proj: test_got }
           - { vm: main, proj: test_gpatch }
           - { vm: main, proj: test_gravity }
@@ -290,6 +291,7 @@ jobs:
           - { vm: main, proj: test_libpsl }
           - { vm: main, proj: test_libressl }
           - { vm: main, proj: test_libsamplerate }
+          - { vm: main, proj: test_libseccomp }
           - { vm: main, proj: test_libsir }
           - { vm: main, proj: test_libsixel }
           - { vm: main, proj: test_libsodium }
@@ -431,6 +433,17 @@ jobs:
           - { vm: main, proj: test_zlibng }
           - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
+    uses: ./.github/workflows/docker_download_run.yml
+    with:
+      vm: ${{ matrix.vm }}
+      proj: ${{ matrix.proj }}
+
+  run2:
+    needs: build-docker
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - { vm: main, proj: test_zuo_chezscheme }
           - { vm: main, proj: test_zydis }
     uses: ./.github/workflows/docker_download_run.yml

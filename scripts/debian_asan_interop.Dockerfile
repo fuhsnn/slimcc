@@ -54,8 +54,7 @@ FROM install-deps AS setup-toolchain
 COPY . /work/slimcc
 WORKDIR /work/slimcc
 
-RUN ln -s platform/linux-ci-debian13.c platform.c \
- && clang -O3 -flto=auto -fvisibility=hidden -march=x86-64-v3 -mtune=znver3 -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=undefined scripts/amalgamation.c -DCHECK_MEMUSE -o slimcc
+RUN ln -s platform/linux-ci-debian13.c platform.c && make ci-san CC=clang
 
 ENV CC=/work/slimcc/slimcc
 ENV TERM=xterm
