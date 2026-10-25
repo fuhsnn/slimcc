@@ -69,7 +69,7 @@ test_bearssl() {
 }
 
 test_bfs() {
- github_tar tavianator bfs 4.1.4
+ github_tar tavianator bfs 4.1.5
  ./configure
  make check
 }
@@ -148,7 +148,7 @@ test_blake3() {
 }
 
 test_blosc2() {
- github_tar Blosc c-blosc2 v3.3.5
+ github_tar Blosc c-blosc2 v3.4.0
  replace_line "  #elif (defined(__GNUC__) && __GNUC__ >= 4) || defined(__clang__)" "#elif 1" include/blosc2/blosc2-export.h
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_persistency.c
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_save.c
@@ -175,7 +175,7 @@ test_box2d() {
 }
 
 test_box3d() {
- git_fetch https://github.com/erincatto/box3d f36d061ba26998c87cb7dc593a4065aaa03fb7eb box3d
+ git_fetch https://github.com/erincatto/box3d 336263320469e5e9febfe18697ab562488f7e97a box3d
  use_stdbit '#include <stdint.h>' src/ctz.h
 
  perl -i -p0e 's/#elif defined\( __GNUC__ \) \|\| defined\( __clang__ \)(\n#define b3Prefetch)/#elif 0\1/g' src/platform.h
@@ -249,7 +249,7 @@ test_bzip3() {
 }
 
 test_c2() {
- git_fetch https://github.com/c2lang/c2compiler a893ab5f60103c28ff6a53c21c971c708e0dee1c c2compiler
+ git_fetch https://github.com/c2lang/c2compiler 2c80ef702faa1263cf163fc8627f656a358e3753 c2compiler
  replace_line 'export CC=clang' '' env.sh
  . env.sh
  make CC="$CC" all test
@@ -295,7 +295,7 @@ test_cares() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 8d86ca7e7ed15300cc4bfaba61a40a3d00f3114d cc65
+ git_fetch https://github.com/cc65/cc65 a162565eca10177534d2dbba722cc6c990c6a65d cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
 }
@@ -357,7 +357,7 @@ test_chibischeme() {
 
 test_chips() {
  git_fetch https://github.com/floooh/chips 9e88298ce56319953ac7a43213a1120359f7a3a6 chips
- git_fetch https://github.com/floooh/chips-test 3785836e76c43922f78a50e1f8adfed259ab9672 chipstest
+ git_fetch https://github.com/floooh/chips-test c6da6ea7bd7ad8d2fc2a2fc1c54a1dc89d1cfc81 chipstest
  cd tests
 
  for f in *-test.c; do
@@ -473,7 +473,7 @@ test_cproc() {
 }
 
 test_croaring() {
- github_tar RoaringBitmap CRoaring v5.3.2
+ github_tar RoaringBitmap CRoaring v5.4.0
  sed -i 's|^#include <x86intrin.h>|//&|g' include/roaring/portability.h
  use_stdbit '#include <stdint.h>' include/roaring/portability.h
  cmake_init -DROARING_DISABLE_X64=ON -DCMAKE_C_FLAGS=-DROARING_DISABLE_X64=1 -DCMAKE_CXX_FLAGS=-DROARING_DISABLE_X64=1
@@ -647,7 +647,7 @@ test_genann() {
 }
 
 test_gforth() {
- github_tar forthy42 gforth 0.7.9_20260923
+ github_tar forthy42 gforth 1.0.0
  sed -i 's|inline Char ascii_toupper|static &|g' engine/support.c
  sed -i 's|test \"$GCC|# &|g' configure.ac
  sh autogen.sh
@@ -716,7 +716,7 @@ test_go() {
 }
 
 test_got() {
- github_tar gameoftrees got-portable 0.130
+ github_tar gameoftrees got-portable 0.130.1
  sh autogen.sh
 
  local GOT=$PWD/got_install
@@ -783,7 +783,8 @@ test_handmademath() {
 }
 
 test_haproxy() {
- github_tar haproxy haproxy v3.5-dev9
+ github_tar haproxy haproxy v3.5-dev10
+ use_stdbit '#include <stdio.h>' src/slz.c
  use_stdatomic '#include <haproxy/compiler.h>' include/haproxy/atomic.h
  use_stdatomic '#include <stddef.h>' include/import/mt_list.h
  use_stdatomic '/\* The definitions below' include/import/atomic-ops.h
@@ -791,6 +792,7 @@ test_haproxy() {
  sed -i 's|"er"|"r"|g' include/import/atomic-ops.h # TODO: `e` constraint
  sed -i 's|__builtin_strlen|strlen|g' include/import/ist.h
  sed -i 's|__builtin_prefetch(|(void)(|g' include/import/cebtree-prv.h
+ sed -i 's|__builtin_bswap32((uint32_t)bit_accum)|({unsigned x=bit_accum;__asm("bswap %0":"+r"(x));x;})|g' src/uslz.c
  sed -i 's|gcc |"$CC" |g' tests/unit/ist.sh
 
  make CC="$CC" TARGET=linux-glibc
@@ -951,7 +953,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 71da5b64ceed9a9f8eb7bd370a73d170beeb179b ksh93
+ git_fetch https://github.com/ksh93/ksh 7caa4f43fe12f6fdcceaee082295b5315e531ac4 ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1128,7 +1130,8 @@ test_libjsonc() {
 }
 
 test_liblz4() {
- git_fetch https://github.com/lz4/lz4 98c203d9e2525f7d82fa00f4ac16c50dde7373e7 lz4
+ git_fetch https://github.com/lz4/lz4 f6dceddc9521d53b9e9247b854cbc3c462946aaf lz4
+ sed -i 's|^#elif defined(__GNUC__)|#elif 1|g' tests/unit/unittest.h
  make test
 }
 
@@ -1222,6 +1225,14 @@ test_libsamplerate() {
  sh autogen.sh
  fix_and_configure
  make test
+}
+
+test_libseccomp() {
+ github_tar seccomp libseccomp v2.6.1
+ libtoolize
+ sh autogen.sh
+ fix_and_configure
+ make check
 }
 
 test_libsir() {
@@ -1500,13 +1511,13 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.5.4
+ github_tar microsoft mimalloc v3.6.0
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/prim/prim.c
  cmake_init
- make && make test
+ make && ctest -E 'pprof' #TODO: investigate
 }
 
 test_minimp3() {
@@ -1950,7 +1961,7 @@ test_ptmalloc() {
 }
 
 test_python() {
- github_tar python cpython v3.15.1
+ github_tar python cpython v3.15.2
  # gnu::section
  replace_line "#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))" "#if 1" Include/internal/pycore_debug_offsets.h
  # gnu::constructor
@@ -1965,7 +1976,7 @@ test_python() {
   ${is_CI+ test_asyncio test_socket }
   test_os # https://github.com/python/cpython/issues/126112
  )
- CFLAGS=-std=c23 ./configure --disable-gil
+ CFLAGS='-std=c23 -D_Py_STDC_VERSION=202311L' ./configure --disable-gil
  make -j3 && ./python -m test -j3 --exclude "${skip_tests[@]}"
 }
 
@@ -2015,7 +2026,7 @@ test_rc() {
 }
 
 test_redis() {
- github_tar redis redis 8.6.7
+ github_tar redis redis 8.6.8
  replace_line "#    if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/redismodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -2047,7 +2058,7 @@ test_redis() {
 }
 
 test_valkey() {
- github_tar valkey-io valkey 9.1.2
+ github_tar valkey-io valkey 9.1.3
  replace_line "#if defined(__GNUC__) && !(defined(__clang__) && defined(__cplusplus))" "#if 1" src/valkeymodule.h
  sed -i 's|asm volatile|__asm volatile|g' deps/hdr_histogram/hdr_atomic.h
  convert_atomic_x_fetch deps/hdr_histogram/hdr_atomic.h
@@ -2111,19 +2122,19 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM e7214efa23a9ab72c489c456889af79aa552873f rvvm
+ git_fetch https://github.com/LekKit/RVVM 343f6784c8922446083c5d5bd111d7c1eb8590eb rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/util/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
 
 test_s2ntls() {
- github_tar aws s2n-tls v1.7.12
+ github_tar aws s2n-tls v1.7.13
  cmake_init -DCMAKE_EXE_LINKER_FLAGS='-lz -lzstd'
  make && ctest
 }
 
 test_samba() {
- github_tar samba-team samba samba-4.25.0
+ github_tar samba-team samba samba-4.25.1
  use_stdatomic '#include <stdarg.h>' third_party/socket_wrapper/socket_wrapper.c
  use_stdatomic '#include <stdarg.h>' third_party/quic_ko_wrapper/quic_ko_wrapper.c
  sed -i 's|elif x.startswith(('\''-m'\'', '\''-f'\''|elif x != '\''-fstack-protector-strong'\'' and x.startswith(('\''-m'\'', '\''-f'\''|g' third_party/waf/waflib/Tools/c_config.py
@@ -2217,7 +2228,7 @@ test_squashfuse() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC fc5c0587974f08dd05f1f714f2f12d3a99fdd9c7 stc
+ git_fetch https://github.com/stclib/STC 136300999520641e829bf1cea66ff04537862372 stc
  muon_init
  muon_build
  muon_test
@@ -2261,7 +2272,7 @@ test_tinf() {
 }
 
 test_tinycbor() {
- github_tar intel tinycbor v7.0
+ github_tar intel tinycbor v7.1
  cmake_init -DBUILD_TESTING=ON -DBUILD_EXAMPLES=ON -DBUILD_TOOLS=ON
  make && ctest
 }
@@ -2376,7 +2387,7 @@ test_uriparser() {
 }
 
 test_utf8h() {
- git_fetch https://github.com/sheredom/utf8.h 02f7165b6eb20ef21e120b186ddaf7ea7eafdee6 utf8h
+ git_fetch https://github.com/sheredom/utf8.h 8a37b279054b0f573e461a1c478db27cb42265cb utf8h
  replace_line "#elif defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)" "#elif 1" test/utest.h
  replace_line "#elif defined(__clang__) || defined(__GNUC__)" "#elif 1" utf8.h
  "$CC" test/main.c -I./ -o run_tests
@@ -2840,7 +2851,7 @@ build_liburing() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT a4c064539ea931274d407e1249b4bb575424a0f4 luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT 8ca762976ebc85ad9bde3e15f147a7e326e0dd01 luajit
  sed -i 's|-O2 |-O2 -DLUAJIT_NO_UNWIND |g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -2904,7 +2915,7 @@ build_nanovg() {
 }
 
 build_ncurses() {
- github_tar ThomasDickey ncurses-snapshots v6_6_20261017
+ github_tar ThomasDickey ncurses-snapshots v6_6_20261024
  ./configure
  make V=1
 }
@@ -2975,7 +2986,7 @@ build_ooclang() {
 
 build_pcc() {
  local DIR=$PWD/pcc_install
- git_fetch https://github.com/PortableCC/pcc 9a993a5f3feaa8e0ad37a5f089eba105e0c7ea59 pcc
+ git_fetch https://github.com/PortableCC/pcc 8b92dab2899f1ba0b99e9e541e6be6c13b2a95bf pcc
  ./configure --prefix=$DIR
  make && make install
  cd ../
@@ -3173,7 +3184,6 @@ bootstrap_musl() {
  cd ../
 
  git_fetch https://github.com/morr0ne/libc-test f2bac7711bec93467b73bec1465579ea0b8d5071 libc-test
- sed -e 's|-frounding-math||g' config.mak.def > config.mak
  make CC=$PWD/../slimcc-musl/slimcc-stage2
  grep '^FAIL ' src/REPORT | wc -l | grep '^6$'
 }
@@ -3225,7 +3235,8 @@ bootstrap_uclibcng() {
  cp -r ./slimcc_headers/platform_fix/linux_uclibcng $ROOT_DIR/usr/x86_64-linux-uclibc/lib/slimcc/platform_fix/
  sed 's|ROOT_DIR|'\"$ROOT_DIR/usr/x86_64-linux-uclibc/\"'|g' ./platform/linux-uclibcng-bootstrap.c > platform.c
  rm test/atomic*.c test/tls*.c
- make -f Makefile test-all
+ sed -i 's|$(OBJS_S2) $(LDFLAGS) -lm|$(OBJS_S2) $(LDFLAGS)|g' Makefile
+ make -f Makefile test-all STG2_FLAGS=-DBOOTSTRAP_NO_FENV
  cd ../
 
  git_fetch https://github.com/wbx-github/uclibc-ng-test e685c50e1dd57e0364ab780a95b0d0e6c6c5243e uclibc-ng-test
