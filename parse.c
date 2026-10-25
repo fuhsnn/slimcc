@@ -2505,21 +2505,17 @@ static void create_lvar_init(Node **cur, Initializer *init, InitDesg *desg, Toke
     return;
   }
   case INIT_NUM_SEQ: {
-    Obj *var = new_anon_gvar(init->ty);
-    int64_t fill_sz = init->numseq.len * init->ty->base->size;
-    var->is_string_lit = true;
-    var->init_data = malloc(init->ty->size);
+    Initializer tmp = {.kind = INIT_TOK, .ty = init->ty->base};
 
-    write_gvar_data(NULL, init, var->init_data, 0, EV_CONST);
-
-    if (init->ty->size > fill_sz)
-      memset(var->init_data + fill_sz, 0, init->ty->size - fill_sz);
-
-    Node *n = new_binary(ND_ASSIGN, init_desg_expr(desg, tok), new_var_node(var, tok), tok);
-    add_type(n->m.lhs);
-    add_type(n->m.rhs);
-    n->ty = ty_void;
-    (*cur) = (*cur)->next = n;
+    int64_t idx = 0;
+    for (Token *t = init->numseq.start; braced_list(&t, &t, idx); t = t->next) {
+      if (idx >= init->ty->array_len)
+        break;
+      tmp.tok = t;
+      InitDesg desg2 = {.parent = desg, .idx = idx};
+      create_lvar_init(cur, &tmp, &desg2, tok);
+      idx++;
+    }
     return;
   }
   case INIT_LIST: {
@@ -2734,13 +2730,13 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
   case INIT_NUM_SEQ: {
     Initializer tmp = {.kind = INIT_TOK, .ty = init->ty->base};
     int sz = init->ty->base->size;
-    int64_t cnt = 0;
-    for (Token *t = init->numseq.start; braced_list(&t, &t, cnt); t = t->next) {
-      if (cnt >= init->ty->array_len)
+    int64_t idx = 0;
+    for (Token *t = init->numseq.start; braced_list(&t, &t, idx); t = t->next) {
+      if (idx >= init->ty->array_len)
         break;
       tmp.tok = t;
-      write_gvar_data(cur, &tmp, buf, offset + sz * cnt, ev_kind);
-      cnt++;
+      write_gvar_data(cur, &tmp, buf, offset + sz * idx, ev_kind);
+      idx++;
     }
     return;
   }
