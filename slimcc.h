@@ -23,6 +23,11 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef BOOTSTRAP_NO_FENV
+# include <fenv.h>
+# pragma FENV_ACCESS ON
+#endif
+
 #if defined(__has_builtin)
 # define SLIMCC_HAS_BUILTIN(x) __has_builtin(x)
 #else
@@ -1167,6 +1172,7 @@ extern const char *opt_visibility;
 extern bool opt_cc1_asm_pp;
 extern StdVer opt_std;
 extern bool is_iso_std;
+extern bool opt_rounding_math;
 extern bool opt_fdefer_ts;
 extern bool opt_short_enums;
 extern bool opt_gnu_keywords;

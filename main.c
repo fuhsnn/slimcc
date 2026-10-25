@@ -38,6 +38,7 @@ bool opt_cc1_asm_pp;
 const char *opt_visibility;
 StdVer opt_std = STD_C17;
 bool is_iso_std;
+bool opt_rounding_math;
 bool opt_fdefer_ts;
 bool opt_short_enums;
 bool opt_gnu_keywords;
@@ -661,7 +662,8 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
           set_bool(arg, b, "data-sections", &opt_data_sections) ||
           set_bool(arg, b, "emulated-tls", &opt_femulated_tls) ||
           set_bool(arg, b, "short-enums", &opt_short_enums) ||
-          set_bool(arg, b, "gnu89-inline", &opt_gnu89_inline))
+          set_bool(arg, b, "gnu89-inline", &opt_gnu89_inline) ||
+          set_bool(arg, b, "rounding-math", &opt_rounding_math))
         continue;
 
       if (set_bool(arg, b, "ms-anon-struct", &opt_ms_anon_struct) ||
