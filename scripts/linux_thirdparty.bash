@@ -20,7 +20,7 @@ test_ag() {
 }
 
 test_apexmarkdown() {
- github_clone ApexMarkdown apex v1.1.47
+ github_clone ApexMarkdown apex v1.1.49
  cmake_init
  make VERBOSE=1
  ctest --verbose > test.log || true
@@ -148,7 +148,7 @@ test_blake3() {
 }
 
 test_blosc2() {
- github_tar Blosc c-blosc2 v3.4.0
+ github_tar Blosc c-blosc2 v3.4.1
  replace_line "  #elif (defined(__GNUC__) && __GNUC__ >= 4) || defined(__clang__)" "#elif 1" include/blosc2/blosc2-export.h
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_persistency.c
  replace_line "#ifdef __GNUC__" "#if 1" tests/b2nd/test_b2nd_save.c
@@ -303,7 +303,7 @@ test_cares() {
 }
 
 test_cc65() {
- git_fetch https://github.com/cc65/cc65 a162565eca10177534d2dbba722cc6c990c6a65d cc65
+ git_fetch https://github.com/cc65/cc65 52727a5b407bfeac0dfac1fdd84be8cd2af4f814 cc65
  make QUIET=1 CC=$CC
  make QUIET=1 CC=gcc test
 }
@@ -613,7 +613,7 @@ test_flex() {
 }
 
 test_fribidi() {
- github_tar fribidi fribidi v1.0.17
+ github_tar fribidi fribidi v1.0.18
  export CC_FOR_BUILD=$CC
  libtoolize
  sh autogen.sh
@@ -961,7 +961,7 @@ test_kefir() {
 }
 
 test_ksh93() {
- git_fetch https://github.com/ksh93/ksh 7caa4f43fe12f6fdcceaee082295b5315e531ac4 ksh93
+ git_fetch https://github.com/ksh93/ksh d7bbfbc7e9f834273d212d6896466dea552776fb ksh93
  replace_line 'occ=cc' 'occ=$CC' src/cmd/INIT/iffe.sh
  # probe depends on -Wincompatible-pointer-types
  sed -i 's|$i (\*Sig_handler_t)($j)|void (*Sig_handler_t)(int)|g' src/lib/libast/features/sig.sh
@@ -1024,7 +1024,7 @@ test_liballegro5() {
 }
 
 test_libarchive() {
- github_tar libarchive libarchive v3.8.10
+ github_tar libarchive libarchive v3.8.11
  replace_line "#elif defined(__GNUC__)" "#elif 1" libarchive/archive_blake2.h
  replace_line "#if defined(__GNUC__)" "#if 1" libarchive/archive_write_set_format_cpio_binary.c
  libtoolize
@@ -1160,7 +1160,7 @@ test_libjsonc() {
 }
 
 test_liblz4() {
- git_fetch https://github.com/lz4/lz4 f6dceddc9521d53b9e9247b854cbc3c462946aaf lz4
+ git_fetch https://github.com/lz4/lz4 f756dbdb85c45f83713ff94929451e2bda1b8777 lz4
  sed -i 's|^#elif defined(__GNUC__)|#elif 1|g' tests/unit/unittest.h
  make test
 }
@@ -1328,7 +1328,7 @@ test_libtommath() {
 }
 
 test_libucl() {
- github_tar vstakhov libucl 0.9.4
+ github_tar vstakhov libucl 0.10.0
  cmake_init
  make && ctest
 }
@@ -1541,7 +1541,7 @@ test_micropython() {
 }
 
 test_mimalloc() {
- github_tar microsoft mimalloc v3.6.0
+ github_tar microsoft mimalloc v3.6.1
  replace_line "project(libmimalloc C CXX)" "project(libmimalloc C)" CMakeLists.txt
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
@@ -1806,7 +1806,7 @@ test_oniguruma() {
 }
 
 test_open62541() {
- github_tar open62541 open62541 v1.5.9
+ github_tar open62541 open62541 v1.5.10
  cmake_init -DUA_BUILD_UNIT_TESTS=ON
  make
  ctest -E "check_pubsub_publisherid|check_pubsub_subscribe|check_pubsub_connection"
@@ -2161,7 +2161,7 @@ test_ruby() {
 }
 
 test_rvvm() {
- git_fetch https://github.com/LekKit/RVVM 343f6784c8922446083c5d5bd111d7c1eb8590eb rvvm
+ git_fetch https://github.com/LekKit/RVVM abb3ace2cd5a8ed7be00394212551abd630745e1 rvvm
  sed -i 's|defined(__SSE2__) && defined(__SSE2_MATH__)|1|g' src/util/fpu_lib.c
  make test CC=$CC CFLAGS='-std=c23 -DSDL_DISABLE_IMMINTRIN_H' USE_SDL=2
 }
@@ -2267,7 +2267,7 @@ test_squashfuse() {
 }
 
 test_stc() {
- git_fetch https://github.com/stclib/STC 136300999520641e829bf1cea66ff04537862372 stc
+ git_fetch https://github.com/stclib/STC 0959b3a7970b48e36561fcabe8dff359ca1590e5 stc
  muon_init
  muon_build
  muon_test
@@ -2420,7 +2420,7 @@ test_unqlite() {
 }
 
 test_uriparser() {
- github_tar uriparser uriparser uriparser-1.0.2
+ github_tar uriparser uriparser uriparser-1.0.3
  cmake_init -DURIPARSER_BUILD_DOCS=OFF -DURIPARSER_BUILD_TESTS=ON
  make VERBOSE=1 && ctest
 }
@@ -2626,7 +2626,7 @@ EOF
 }
 
 test_zydis() {
- git_fetch https://github.com/zyantific/zydis a95bb71013436547f689fc0b380f48edf663066e zydis
+ git_fetch https://github.com/zyantific/zydis 8a961be89c74ed4fd285055e1f3900b757468d78 zydis
  cmake_init
  make && ctest
 }
@@ -2890,7 +2890,7 @@ build_liburing() {
 }
 
 build_luajit() {
- git_fetch https://github.com/LuaJIT/LuaJIT 8ca762976ebc85ad9bde3e15f147a7e326e0dd01 luajit
+ git_fetch https://github.com/LuaJIT/LuaJIT ea9eb7edb5eac4a9d175d74523db34fac0fa5180 luajit
  sed -i 's|-O2 |-O2 -DLUAJIT_NO_UNWIND |g' src/Makefile
  replace_line "#if defined(__GNUC__) || defined(__clang__) || defined(__psp2__)" "#if 1" src/lj_def.h
  use_stdbit "#include <stdlib.h>" src/lj_def.h
@@ -2929,7 +2929,7 @@ build_microui() {
 }
 
 build_miniaudio() {
- github_tar mackron miniaudio 0.11.25
+ github_tar mackron miniaudio 0.11.26
  cmake_init -DCMAKE_C_FLAGS=-DMA_DR_MP3_NO_SIMD
 }
 
