@@ -1550,6 +1550,15 @@ test_mimalloc() {
  make && ctest -E 'pprof' #TODO: investigate
 }
 
+test_mimick() {
+ git_fetch https://github.com/Snaipe/Mimick ec9d0dbf629357fc6832927cac71d520c847e2de mimick
+ sed -i 's|include <stdnoreturn.h>|define mmk_noreturn _Noreturn|g' src/common.h
+ sed -i 's|_Thread_Local|_Thread_local|g' src/threadlocal.h
+ sed -i 's|std=c99|std=c11|g' CMakeLists.txt
+ cmake_init
+ make && ctest
+}
+
 test_minimp3() {
  git_fetch https://github.com/lieff/minimp3 ea99364f61c14656440e8d77e9c233ccf3124633 minimp3
  "$CC" -o minimp3 minimp3_test.c -lm -DMINIMP3_NO_SIMD

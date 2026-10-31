@@ -323,6 +323,7 @@ jobs:
           - { vm: main, proj: test_metalang99 }
           - { vm: main, proj: test_micropython }
           - { vm: main, proj: test_mimalloc }
+          - { vm: main, proj: test_mimick }
           - { vm: main, proj: test_minimp3 }
           - { vm: main, proj: test_minmea }
           - { vm: main, proj: test_minunit }
@@ -432,7 +433,6 @@ jobs:
           - { vm: main, proj: test_yyjson }
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zlibng }
-          - { vm: main, proj: test_zsh }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -444,6 +444,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_zsh }
           - { vm: main, proj: test_zstd }
           - { vm: main, proj: test_zuo_chezscheme }
           - { vm: main, proj: test_zydis }
