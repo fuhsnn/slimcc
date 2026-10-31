@@ -165,6 +165,7 @@ jobs:
           - { vm: main, proj: test_bison }
           - { vm: main, proj: test_blake2 }
           - { vm: main, proj: test_blake3 }
+          - { vm: main, proj: test_boxfort }
           - { vm: main, proj: test_brieflz }
           - { vm: main, proj: test_brotli }
           - { vm: main, proj: test_bubblewrap }
@@ -221,7 +222,6 @@ jobs:
           - { vm: main, proj: test_git }
           - { vm: main, proj: test_gmake }
           - { vm: main, proj: test_gnuless }
-          - { vm: main, proj: test_gnutls }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -233,6 +233,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_gnutls }
           - { vm: main, proj: test_go }
           - { vm: main, proj: test_got }
           - { vm: main, proj: test_gpatch }
@@ -432,7 +433,6 @@ jobs:
           - { vm: main, proj: test_zlib }
           - { vm: main, proj: test_zlibng }
           - { vm: main, proj: test_zsh }
-          - { vm: main, proj: test_zstd }
     uses: ./.github/workflows/docker_download_run.yml
     with:
       vm: ${{ matrix.vm }}
@@ -444,6 +444,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { vm: main, proj: test_zstd }
           - { vm: main, proj: test_zuo_chezscheme }
           - { vm: main, proj: test_zydis }
     uses: ./.github/workflows/docker_download_run.yml

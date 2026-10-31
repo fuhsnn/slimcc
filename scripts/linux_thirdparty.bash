@@ -188,6 +188,14 @@ test_box3d() {
  ./bin/test
 }
 
+test_boxfort() {
+ github_tar Snaipe BoxFort v0.1.9
+ replace_line '#elif defined (__GNUC__)' '#elif 1' src/sandbox.h
+ muon_init
+ muon_build
+ muon_test
+}
+
 test_brieflz() {
  github_tar jibsen brieflz v1.3.0
  # they have functional fallback, this is just to speed up test
