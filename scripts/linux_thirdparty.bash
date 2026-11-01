@@ -1546,6 +1546,7 @@ test_mimalloc() {
  replace_line "set(CMAKE_CXX_STANDARD 17)" "" CMakeLists.txt
  replace_line "#include <immintrin.h>" "" include/mimalloc/bits.h
  replace_line "#if defined(__GNUC__) || defined(__clang__)" "#if 1" src/prim/prim.c
+ use_stdatomic '#include <stdint.h>' test/test-fork.c
  cmake_init
  make && ctest -E 'pprof' #TODO: investigate
 }
