@@ -1814,6 +1814,7 @@ static Token *has_extension_macro(Token *start) {
 
 void init_macros(void) {
   define_macro("__slimcc__", "1");
+  define_macro("__VERSION__", Tostr(SLIMCC_VERSTR));
 
   define_macro("__STDC_EMBED_EMPTY__", "2");
   define_macro("__STDC_EMBED_FOUND__", "1");

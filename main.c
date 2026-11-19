@@ -112,7 +112,7 @@ __attribute__((visibility("default"))) const char *__ubsan_default_options(void)
 #endif
 
 static void version(void) {
-  puts("slimcc version 0.0");
+  puts(SLIMCC_VERSTR);
 }
 
 static bool startswith(const char *arg, const char **p, const char *str) {
