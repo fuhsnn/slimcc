@@ -229,7 +229,7 @@ static Token *split_line2(Token **rest, Token *tok, Token **last) {
   while (!cur->next->at_bol)
     cur = cur->next;
 
-  if (last)
+  if (last && cur != &head)
     *last = cur;
   *rest = cur->next;
   cur->next = new_eof(tok);
