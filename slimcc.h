@@ -164,6 +164,13 @@ static inline int _ctz64_impl(uint64_t v) {
 # define ANON_UNION_END
 #endif
 
+#ifndef SLIMCC_VERSTR
+# define SLIMCC_VERSTR "slimcc version 0.0"
+#endif
+
+#define Tostr2(x) #x
+#define Tostr(x) Tostr2(x)
+
 #define MAX(x, y) ((x) < (y) ? (y) : (x))
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
