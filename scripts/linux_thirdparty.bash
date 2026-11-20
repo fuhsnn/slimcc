@@ -996,7 +996,7 @@ test_klib() {
 }
 
 test_lame() {
- url_tar https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download lame
+ url_tar https://sourceforge.net/projects/lame/files/lame/4.1beta1/lame-4.1beta1.tar.gz/download lame
  fix_and_configure
  make test
 }
