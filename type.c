@@ -644,19 +644,16 @@ Type *vla_of(Type *base, Node *len, int64_t arr_len) {
 Node *assign_cast(Type *to_ty, Node *expr) {
   add_type(expr);
 
-  if (is_ptr(to_ty)) {
-    ptr_convert(&expr);
-    if (is_ptr(expr->ty))
-      return expr;
-    if (is_null_ptr_constant(expr))
-      return new_cast(expr, to_ty);
-  } else if (is_compatible(to_ty, expr->ty)) {
-    if (to_ty->kind != TY_VOID && to_ty->size >= 0)
-      return expr;
-  } else if (is_numeric(to_ty)) {
-    return new_cast(expr, to_ty);
+  if (is_compatible(to_ty, expr->ty)) {
+    if (to_ty->kind == TY_VOID || to_ty->size < 0)
+      error_tok(expr->tok, "invalid assignment");
+    return expr;
   }
-  error_tok(expr->tok, "invalid assignment");
+  ptr_convert(&expr);
+
+  if (is_ptr(to_ty) && is_ptr(expr->ty))
+    return expr;
+  return new_cast(expr, to_ty);
 }
 
 static int int_rank(Type *t) {
