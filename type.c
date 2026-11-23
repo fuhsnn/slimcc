@@ -1028,7 +1028,7 @@ void _add_type(Node *node) {
     node->cas.new_val = assign_cast(node->cas.addr->ty->base, node->cas.new_val);
 
     if (node->cas.addr->ty->base->size != node->cas.old_val->ty->base->size)
-      error_tok(node->tok, "argument size match");
+      error_tok(node->tok, "CAS arguments size mismatch");
     node->ty = ty_bool;
     return;
   case ND_EXCH:
