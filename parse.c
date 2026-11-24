@@ -330,7 +330,7 @@ static VarScope *find_var(Token *tok) {
     if (sc2)
       return sc2;
   }
-  return NULL;
+  return nullptr;
 }
 
 static Type *find_tag(Token *tok) {
@@ -339,7 +339,7 @@ static Type *find_tag(Token *tok) {
     if (ty)
       return ty;
   }
-  return NULL;
+  return nullptr;
 }
 
 static Type *find_tag_in_scope(Token *tok) {
@@ -620,7 +620,7 @@ static VarScope *push_var_scope(const char *key, int keylen, Obj *var) {
     return vsc;
   vsc = ent->val = arena_calloc(fnctx ? &ast_arena : &cc1_arena, sizeof(VarScope));
   vsc->var = var;
-  return NULL;
+  return nullptr;
 }
 
 static void push_var_name2(const char *key, int keylen, Token *tok, Obj *var) {
@@ -726,7 +726,7 @@ static Type *find_typedef(Token *tok) {
     if (sc)
       return sc->type_def;
   }
-  return NULL;
+  return nullptr;
 }
 
 static Token *ident_tok(Token **rest, Token *tok) {
@@ -1094,7 +1094,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
     BITINT = 1 << 21,
   };
 
-  Type *ty = NULL;
+  Type *ty = nullptr;
   int32_t counter = 0;
   QualMask qual = 0;
 
@@ -1317,7 +1317,7 @@ static void func_params(Token *tok, Type *fn_ty, bool is_def) {
 
     Obj head = {0};
     Obj *cur = &head;
-    Node *expr = NULL;
+    Node *expr = nullptr;
 
     while (comma_list(&tok, &tok, TK_RPAREN, cur != &head)) {
       if (tok->kind == TK_DOT3) {
@@ -1331,14 +1331,14 @@ static void func_params(Token *tok, Type *fn_ty, bool is_def) {
       if (is_def)
         chain_expr(&expr, calc_vla2(basety, tok, &attr));
 
-      Token *name = NULL;
+      Token *name = nullptr;
       Type *raw_ty = declarator2(&tok, tok, basety, &name);
       Type *param_ty = param_declarator(basety, raw_ty, tok, is_def);
 
       if (is_def)
         chain_expr(&expr, calc_vla(raw_ty, tok));
 
-      cur = cur->param_next = new_param(NULL, param_ty);
+      cur = cur->param_next = new_param(nullptr, param_ty);
       if (name)
         push_var_name(name, cur);
     }
@@ -1363,7 +1363,7 @@ static void func_params(Token *tok, Type *fn_ty, bool is_def) {
     Obj *cur = &head;
     while (comma_list(&tok, &tok, TK_RPAREN, tok != start)) {
       Token *name = ident_tok(&tok, tok);
-      cur = cur->param_next = new_param(get_ident(&ast_arena, name), NULL);
+      cur = cur->param_next = new_param(get_ident(&ast_arena, name), nullptr);
     }
     fn_ty->param_list = head.param_next;
     leave_scope();
@@ -1375,7 +1375,7 @@ static void func_params(Token *tok, Type *fn_ty, bool is_def) {
 
 static Node *array_dimension(Token *tok, bool let_star) {
   if (consume_tk(&tok, tok, TK_RBRACK))
-    return NULL;
+    return nullptr;
 
   if (tok->kind == TK_MUL && tok->next->kind == TK_RBRACK) {
     if (!let_star)
@@ -1405,7 +1405,7 @@ static void array_dimension2(Type *ty, Token *tok, Node *expr) {
     if (array_len < 0)
       error_tok(expr->tok, "size of array is negative");
     if (basety->kind == TY_VLA) {
-      vla_setty(ty, NULL, array_len);
+      vla_setty(ty, nullptr, array_len);
       return;
     }
     array_setty(ty, basety, array_len);
@@ -1534,7 +1534,7 @@ static void declarator3(Type *basety, Type *ty, bool let_star, bool is_fndef) {
     }
     if (ty->kind == TY_FUNC_INCMP) {
       Token *tok = ty->tag;
-      ty->tag = NULL;
+      ty->tag = nullptr;
       func_params(tok, ty, is_fndef);
 
       declarator3(basety, ty->return_ty, let_star, false);
@@ -1544,7 +1544,7 @@ static void declarator3(Type *basety, Type *ty, bool let_star, bool is_fndef) {
     }
     if (ty->kind == TY_ARRAY_INCMP) {
       Token *tok = ty->tag;
-      ty->tag = NULL;
+      ty->tag = nullptr;
       Node *expr = array_dimension(tok, let_star);
 
       declarator3(basety, ty->base, let_star, false);
@@ -1564,7 +1564,7 @@ static Type *declarator(Token **rest, Token *tok, Type *basety, Token **name_tok
 
 static Type *typename2(Token **rest, Token *tok, VarAttr *attr) {
   Type *ty = declspec(&tok, tok, attr, SC_NONE);
-  return declarator(rest, tok, ty, NULL);
+  return declarator(rest, tok, ty, nullptr);
 }
 
 static Type *typename(Token **rest, Token *tok) {
@@ -1607,7 +1607,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   bool_attr(tok, TK_BATTR, "packed", &is_packed);
 
-  Token *tag = NULL;
+  Token *tag = nullptr;
   if (tok->kind == TK_IDENT) {
     tag = tok;
     tok = tok->next;
@@ -1615,7 +1615,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
 
   bool is_fixed = tok->kind == TK_COLON && is_typename(tok->next);
 
-  Type *tag_ty = NULL;
+  Type *tag_ty = nullptr;
   if (tag) {
     if (tok->kind != TK_LCURLY && !is_fixed) {
       *rest = tok;
@@ -1674,7 +1674,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   Type *dyn_ty;
   uint64_t ovf_val;
   if (ty->is_fixed_enum) {
-    dyn_ty = NULL;
+    dyn_ty = nullptr;
     ovf_val = enum_ovf_val(ty);
   } else {
     // assume 32-bit int
@@ -1754,7 +1754,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
         max_val = MAX(max_val, val);
     }
   }
-  cur->next = NULL;
+  cur->next = nullptr;
 
   bool_attr(tok, TK_ATTR, "packed", &is_packed);
   *rest = tok;
@@ -1834,7 +1834,7 @@ static Type *typeof_specifier(Token **rest, Token *tok, VarAttr *attr) {
   Type *ty;
   if (is_typename(tok)) {
     ty = declspec(&tok, tok, attr, SC_ALL | SC_INLINE);
-    ty = declarator(&tok, tok, ty, NULL);
+    ty = declarator(&tok, tok, ty, nullptr);
   } else {
     Node *node = expression(&tok, tok);
     add_type(node);
@@ -1874,7 +1874,7 @@ static Node *ptr_base_size(Type *ty, Token *tok) {
 }
 
 static Node *calc_vla(Type *ty, Token *tok) {
-  Node *n = NULL;
+  Node *n = nullptr;
   do {
     if (ty->kind == TY_VLA && ty->vla_len_expr && !ty->vla_len_val) {
       if (is_const_context()) {
@@ -1902,7 +1902,7 @@ static void chk_incomplete(Type *ty, Token *tok) {
 
 static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
                           Obj **cond_var) {
-  Token *name = NULL;
+  Token *name = nullptr;
   Type *ty = declarator(&tok, tok, basety, &name);
 
   if (ty->kind == TY_FUNC) {
@@ -1911,7 +1911,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
     Obj *fn = func_prototype(tok, name, ty, attr, false);
     assembler_name(&tok, tok, fn);
     *rest = tok;
-    return NULL;
+    return nullptr;
   }
 
   chk_vardecl(ty, name, tok);
@@ -1999,7 +1999,7 @@ static Node *declaration2(Token **rest, Token *tok, Type *basety, VarAttr *attr,
 }
 
 static Node *cond_declaration(Token **rest, Token *tok, TokenKind stopper, int clause) {
-  Node *n = NULL;
+  Node *n = nullptr;
 
   for (;; clause++) {
     if (!is_typename(tok)) {
@@ -2024,12 +2024,12 @@ static Node *cond_declaration(Token **rest, Token *tok, TokenKind stopper, int c
       continue;
     }
 
-    Obj *var = NULL;
+    Obj *var = nullptr;
     chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
 
     while (consume_tk(&tok, tok, TK_COMMA)) {
       chain_expr(&n, declaration2(&tok, tok, basety, &attr, &var));
-      var = NULL;
+      var = nullptr;
     }
 
     if (clause == 0 && consume_tk(&tok, tok, TK_SEMI))
@@ -2050,7 +2050,7 @@ static Node *declaration(Token **rest, Token *tok) {
 
   if (attr.strg & SC_EXTERN) {
     global_declaration(rest, tok, basety, &attr);
-    return NULL;
+    return nullptr;
   }
 
   Node *expr = calc_vla2(basety, tok, &attr);
@@ -2219,7 +2219,7 @@ static int count_array_init_elements(Token *tok, Type *ty, int i) {
       if (tok->kind == TK_DOT3)
         i = const_expr(&tok, tok->next);
       tok = skip_tk(tok, TK_RBRACK);
-      designation(&tok, tok, &dummy, true, NULL);
+      designation(&tok, tok, &dummy, true, nullptr);
     } else {
       initializer2(&tok, tok, &dummy);
     }
@@ -2242,7 +2242,7 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, N
     start = tok;
     list_initializer(&tok, tok, init, 0);
   } else {
-    start = NULL;
+    start = nullptr;
     initializer3(&tok, tok, &init->list.data[0], expr);
 
     if (init->ty->kind == TY_UNION)
@@ -2254,7 +2254,7 @@ static void aggregate_initializer(Token **rest, Token *tok, Initializer *init, N
   if (has_brace) {
     while (braced_list(&tok, &tok, start != tok)) {
       if (tok->kind == TK_DOT || tok->kind == TK_LBRACK) {
-        designation(&tok, tok, init, false, NULL);
+        designation(&tok, tok, init, false, nullptr);
         continue;
       }
       tok = skip_excess_element(tok);
@@ -2401,7 +2401,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
 }
 
 static void initializer2(Token **rest, Token *tok, Initializer *init) {
-  initializer3(rest, tok, init, NULL);
+  initializer3(rest, tok, init, nullptr);
 }
 
 static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
@@ -2434,7 +2434,7 @@ static void initializer(Token **rest, Token *tok, Initializer *init, Obj *var) {
   var->ty = init->ty;
 
   if (ty->is_flexible && init->kind == INIT_LIST) {
-    ty = new_derived_type(NULL, ty->qual, ty);
+    ty = new_derived_type(nullptr, ty->qual, ty);
 
     Initializer *i = &init->list.data[init->list.cnt - 1];
     if (i->ty->size > 0)
@@ -2583,9 +2583,9 @@ static bool promote_int_constexpr(Initializer *init, Type *ty) {
     add_type(exp);
 
     if (is_integer(exp->ty))
-      return is_const_expr_strict(exp, NULL);
+      return is_const_expr_strict(exp, nullptr);
     if (exp->ty->kind == TY_BITINT)
-      return is_const_bitint_strict(exp, NULL);
+      return is_const_bitint_strict(exp, nullptr);
   }
   }
   return false;
@@ -2662,7 +2662,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
     // Direct initialization with a const variable
     if (init->kind == INIT_EXPR) {
       int sofs;
-      Obj *var = NULL;
+      Obj *var = nullptr;
       if (is_compatible(init->ty, init->expr->ty))
         var = eval_var(init->expr, &sofs, false);
 
@@ -2942,7 +2942,7 @@ static AsmParam *asm_params(Token **rest, Token *tok) {
 }
 
 static Token *asm_clobbers(Token **rest, Token *tok) {
-  Token *first = NULL;
+  Token *first = nullptr;
 
   while (tok->kind != TK_COLON && tok->kind != TK_COLON2 && tok->kind != TK_RPAREN) {
     if (!first) {
@@ -3019,7 +3019,7 @@ static LocalLabel *find_local_label(Scope *sc, Token *tok) {
   for (LocalLabel *ll = sc->labels; ll; ll = ll->next)
     if (equal_tok(ll->name, tok))
       return ll;
-  return NULL;
+  return nullptr;
 }
 
 static void push_goto(Node *node) {
@@ -3063,8 +3063,8 @@ static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
 
   // Merge adjacent ranges
   if (opt_optimize) {
-    CaseRange *lo_adj = NULL;
-    CaseRange *hi_adj = NULL;
+    CaseRange *lo_adj = nullptr;
+    CaseRange *hi_adj = nullptr;
     for (CaseRange *cr = sw->ctrl.sw_cases; cr; cr = cr->next) {
       if (cr->label != case_node)
         break;
@@ -3100,7 +3100,7 @@ static void case_range(Token **rest, Token *tok, Node *sw, Node *case_node) {
 }
 
 static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
-  Node *case_node = NULL;
+  Node *case_node = nullptr;
 
   Token head = {0};
   Token *cur = &head;
@@ -3111,7 +3111,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
       cur = cur->label_next = tok;
       tok = tok->next->next;
 
-      LocalLabel *ll = NULL;
+      LocalLabel *ll = nullptr;
       for (Scope *sc = scope; sc; sc = sc->parent)
         if ((ll = find_local_label(sc, start)))
           break;
@@ -3164,7 +3164,7 @@ static Token *label_stmt(Token **rest, Token *tok, Node **stmt) {
 
   *rest = tok;
 
-  cur->label_next = NULL;
+  cur->label_next = nullptr;
   return head.label_next;
 }
 
@@ -3200,7 +3200,7 @@ static void loop_body(Token **rest, Token *tok, Node *node, Token *label_list) {
 static JumpContext *resolve_labeled_jump(Token **rest, Token *tok) {
   bool is_cont = tok->kind == TK_continue;
 
-  Token *name = NULL;
+  Token *name = nullptr;
   if (tok->next->kind == TK_IDENT)
     name = tok = tok->next;
   *rest = skip_tk(tok->next, TK_SEMI);
@@ -3407,7 +3407,7 @@ static Node *compound_stmt2(Token **rest, Token *tok, NodeKind kind) {
 
   Node head = {0};
   Node *cur = &head;
-  Node *result = NULL;
+  Node *result = nullptr;
   for (;;) {
     Token *label_list = label_stmt(&tok, tok, &cur);
 
@@ -3531,7 +3531,7 @@ static Obj *eval_var_ofs(Node *node, int *ofs, EvalVarSpec vspec) {
       *ofs = 0;
       return node->m.var;
     }
-    return NULL;
+    return nullptr;
   }
   if (node->kind == ND_MEMBER || node->kind == ND_DEREF) {
     int64_t offset;
@@ -3541,7 +3541,7 @@ static Obj *eval_var_ofs(Node *node, int *ofs, EvalVarSpec vspec) {
       return ctx.var;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 static Obj *eval_var(Node *node, int *ofs, bool let_volatile) {
@@ -3589,7 +3589,7 @@ static bool is_non_relo_read(Obj *var, int ofs, int read_sz) {
 
 static char *eval_constexpr_data(Node *node) {
   int32_t ofs = 0;
-  Obj *var = NULL;
+  Obj *var = nullptr;
 
   if (!is_constexpr_complit(node, &var))
     var = eval_var_ofs(node, &ofs, EV_CONSTEXPR);
@@ -3807,7 +3807,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
              (n->ty->kind == TY_PTR || is_integer(n->ty)))
         n = n->m.lhs;
 
-      Obj *var = NULL;
+      Obj *var = nullptr;
       if (n->kind == ND_ADDR && n->m.lhs->kind == ND_VAR)
         var = n->m.lhs->m.var;
       else if (n->kind == ND_VAR && is_decay_ty(n->ty))
@@ -3876,7 +3876,7 @@ static int64_t eval2(Node *node, EvalContext *ctx) {
     }
     if (!ctx->var) {
       int ofs;
-      Obj *var = NULL;
+      Obj *var = nullptr;
       if (node->kind == ND_ADDR)
         var = eval_var(lhs, &ofs, true);
       else if (node->ty->kind == TY_ARRAY || node->ty->kind == TY_FUNC)
@@ -3956,7 +3956,7 @@ static bool int_or_trunc_bitint(Node **node, bool chk_narrow) {
 
   if ((*node)->ty->kind == TY_BITINT) {
     if (chk_narrow && (*node)->ty->bit_cnt > 64) {
-      BitBuf *data = NULL;
+      BitBuf *data = nullptr;
       if (!is_const_bitint(*node, &data))
         error_tok((*node)->tok, "large _BitInt unsupported here");
 
@@ -4033,7 +4033,7 @@ static bool is_const_bitint_strict(Node *node, BitBuf **result) {
 }
 
 bool is_const_zero_bitint(Node *node) {
-  BitBuf *val = NULL;
+  BitBuf *val = nullptr;
   if (is_const_bitint_strict(node, &val)) {
     bool res = eval_bitint_to_bool(node->ty->bit_cnt, val);
     free(val);
@@ -4064,11 +4064,11 @@ static int64_t const_expr2(Token **rest, Token *tok, Type **ty) {
 }
 
 int64_t const_expr(Token **rest, Token *tok) {
-  return const_expr2(rest, tok, NULL);
+  return const_expr2(rest, tok, nullptr);
 }
 
 static int64_t align_expr(Token **rest, Token *tok) {
-  int64_t val = const_expr2(rest, tok, NULL);
+  int64_t val = const_expr2(rest, tok, nullptr);
   if (!is_pow_of_two(val))
     error_tok(tok, "alignment not power of two");
   return val;
@@ -4226,7 +4226,7 @@ static long_double_t eval_double2(Node *node) {
 
 static BitBuf *eval_bitint(Node *node) {
   if (eval_recover && *eval_recover)
-    return NULL;
+    return nullptr;
 
   Type *ty = node->ty;
   Node *lhs = node->m.lhs;
@@ -4244,7 +4244,7 @@ static BitBuf *eval_bitint(Node *node) {
     BitBuf *lval = eval_bitint(lhs);
     BitBuf *rval = eval_bitint(rhs);
     if (eval_recover && *eval_recover)
-      return free(lval), free(rval), NULL;
+      return free(lval), free(rval), nullptr;
 
     switch (node->kind) {
     case ND_BITAND: eval_bitint_bitand(ty->bit_cnt, lval, rval); break;
@@ -4270,7 +4270,7 @@ static BitBuf *eval_bitint(Node *node) {
     BitBuf *val = eval_bitint(lhs);
     uint64_t amount = eval(rhs);
     if (eval_recover && *eval_recover)
-      return free(val), NULL;
+      return free(val), nullptr;
 
     if (amount >= ty->bit_cnt)
       return (void *)eval_error2(rhs, "invalid shift amount");
@@ -4286,7 +4286,7 @@ static BitBuf *eval_bitint(Node *node) {
   case ND_NEG: {
     BitBuf *val = eval_bitint(lhs);
     if (eval_recover && *eval_recover)
-      return free(val), NULL;
+      return free(val), nullptr;
 
     switch (node->kind) {
     case ND_BITNOT: eval_bitint_bitnot(ty->bit_cnt, val); break;
@@ -4307,7 +4307,7 @@ static BitBuf *eval_bitint(Node *node) {
     if (lhs->ty->kind == TY_BITINT) {
       BitBuf *val = eval_bitint(lhs);
       if (eval_recover && *eval_recover)
-        return NULL;
+        return nullptr;
 
       val = realloc(val, bitint_buffer_size(ty));
       if (ty->bit_cnt > lhs->ty->bit_cnt)
@@ -4543,7 +4543,7 @@ static Node *assign(Token **rest, Token *tok) {
 
 static Node *vla_cond_result_len2(Type *ty) {
   if (!ty->vla_len_expr)
-    return NULL;
+    return nullptr;
   if (!ty->vla_len_val)
     internal_error();
   return new_var_node(ty->vla_len_val, ty->vla_len_expr->tok);
@@ -4906,12 +4906,12 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_Countof) {
-    Node *expr = NULL;
+    Node *expr = nullptr;
     Type *ty = sizeof_arg(rest, tok->next, &expr);
 
     if (ty->kind == TY_VLA) {
       if (!ty->vla_len_expr)
-        expr = NULL;
+        expr = nullptr;
       chain_expr(&expr, vla_count(ty, tok));
       return expr;
     }
@@ -4924,7 +4924,7 @@ static Node *unary(Token **rest, Token *tok) {
   }
 
   if (tok->kind == TK_sizeof) {
-    Node *expr = NULL;
+    Node *expr = nullptr;
     Type *ty = sizeof_arg(rest, tok->next, &expr);
 
     if (ty->kind == TY_VLA) {
@@ -5009,7 +5009,7 @@ static bool chk_bitfield_width(int64_t width, Member *mem) {
 static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {0};
   Member *cur = &head;
-  Token *flex_tok = NULL;
+  Token *flex_tok = nullptr;
   HashMap names = {0};
   bool has_const = false;
 
@@ -5124,13 +5124,13 @@ static Type *struct_union_decl(Token **rest, Token *tok, TypeKind kind) {
   attr_aligned(tok, TK_ATTR, &alt_align);
   attr_aligned(tok, TK_BATTR, &alt_align);
 
-  Token *tag = NULL;
+  Token *tag = nullptr;
   if (tok->kind == TK_IDENT) {
     tag = tok;
     tok = tok->next;
   }
 
-  Type *tag_ty = NULL;
+  Type *tag_ty = nullptr;
   if (tag) {
     if (tok->kind != TK_LCURLY) {
       if (tok->kind == TK_SEMI)
@@ -5306,7 +5306,7 @@ static Member *get_struct_member(Type *ty, Token *tok) {
         return mem;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 static Node *struct_ref(Node *node, Token *tok) {
@@ -5324,7 +5324,7 @@ static Node *struct_ref(Node *node, Token *tok) {
     node = new_unary(ND_MEMBER, node, tok);
     node->m.member = mem;
 
-    ty = node->ty = add_qual(ty->qual & (Q_CONST | Q_VOLATILE), mem->ty, NULL);
+    ty = node->ty = add_qual(ty->qual & (Q_CONST | Q_VOLATILE), mem->ty, nullptr);
 
     if (mem->name)
       break;
@@ -5386,7 +5386,7 @@ static Node *funcall(Token **rest, Token *tok, Node *fn) {
   if (fn->kind == ND_VAR && fn->m.var->returns_twice)
     fnctx->fn->dont_reuse_stk = true;
 
-  Obj *param = ty->is_oldstyle ? NULL : ty->param_list;
+  Obj *param = ty->is_oldstyle ? nullptr : ty->param_list;
 
   Obj head = {0};
   Obj *cur = &head;
@@ -5448,8 +5448,8 @@ static Node *generic_selection(Token **rest, Token *tok) {
     add_type(ctrl);
     t1 = unqual(ptr_decay(ctrl->ty));
   }
-  Node *ret = NULL;
-  Node *def = NULL;
+  Node *ret = nullptr;
+  Node *def = nullptr;
 
   struct {
     Type **data;
@@ -5469,7 +5469,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
 
     Token *ty_tok = tok;
     Type *basety = declspec(&tok, tok, &(VarAttr){0}, SC_NONE);
-    Type *t2 = declarator2(&tok, tok, basety, NULL);
+    Type *t2 = declarator2(&tok, tok, basety, nullptr);
     declarator3(basety, t2, true, false);
 
     for (int32_t i = 0; i < types.len; i++)
@@ -5509,7 +5509,7 @@ static Node *checked_arith(Token **rest, Token *tok, NodeKind kind) {
   *rest = skip_tk(tok, TK_RPAREN);
   add_type(node);
 
-  Token *bad_tok = NULL;
+  Token *bad_tok = nullptr;
   if (node->m.target->ty->kind != TY_PTR ||
       node->m.target->ty->base->kind == TY_BOOL ||
       !is_int_class(node->m.target->ty->base))
@@ -5529,7 +5529,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
   VarAttr attr = {0};
   Type *ty = declspec(&tok, tok, &attr, SC_CONSTEXPR | SC_REGISTER | SC_STATIC | SC_THREAD);
 
-  ty = declarator(&tok, tok, ty, NULL);
+  ty = declarator(&tok, tok, ty, nullptr);
 
   if (ty->kind == TY_VOID ||
       ty->kind == TY_FUNC ||
@@ -5539,7 +5539,7 @@ static Node *compound_literal(Token **rest, Token *tok) {
 
   ty = qual_constexpr(ty, &attr, tok);
 
-  Node *expr = NULL;
+  Node *expr = nullptr;
   chain_expr(&expr, calc_vla2(ty, tok, &attr));
 
   tok = skip_tk(tok, TK_RPAREN);
@@ -5640,9 +5640,9 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     Node *exp = conditional(&tok, tok);
     add_type(exp);
 
-    if (((is_integer(exp->ty) || is_ptr(exp->ty)) && is_const_expr(exp, NULL)) ||
-        (is_flonum(exp->ty) && is_const_fp(exp, NULL)) ||
-        (exp->ty->kind == TY_BITINT && is_const_bitint(exp, NULL)) ||
+    if (((is_integer(exp->ty) || is_ptr(exp->ty)) && is_const_expr(exp, nullptr)) ||
+        (is_flonum(exp->ty) && is_const_fp(exp, nullptr)) ||
+        (exp->ty->kind == TY_BITINT && is_const_bitint(exp, nullptr)) ||
         (exp->kind == ND_VAR && exp->m.var->is_string_lit))
       node->num.val = 1;
 
@@ -5822,7 +5822,7 @@ static Node *builtin_functions(Token **rest, Token *tok) {
     *rest = skip_tk(tok, TK_RPAREN);
     return node;
   }
-  return NULL;
+  return nullptr;
 }
 
 static Node *primary(Token **rest, Token *tok) {
@@ -5938,10 +5938,10 @@ static Node *primary(Token **rest, Token *tok) {
 }
 
 static Node *parse_typedef(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
-  Node *node = NULL;
+  Node *node = nullptr;
   bool first = true;
   for (; comma_list(rest, &tok, TK_SEMI, !first); first = false) {
-    Token *name = NULL;
+    Token *name = nullptr;
     Type *ty = declarator(&tok, tok, basety, &name);
 
     if (!name)
@@ -6024,7 +6024,7 @@ static void resolve_gotos(Node *fn_body) {
       }
       if (!dest)
         error_tok(x->tok, "use of undeclared label");
-      cur->lbl.next = NULL;
+      cur->lbl.next = nullptr;
       search_list = head.lbl.next;
     }
 
@@ -6079,7 +6079,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
       error_tok(tok, "parameter count mismatch");
   }
 
-  Node *expr = NULL;
+  Node *expr = nullptr;
   while (is_typename(tok)) {
     VarAttr attr = {0};
     Type *basety = declspec(&tok, tok, &attr, SC_REGISTER);
@@ -6087,7 +6087,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
     chain_expr(&expr, calc_vla2(basety, tok, &attr));
 
     do {
-      Token *name = NULL;
+      Token *name = nullptr;
       Type *raw_ty = declarator2(&tok, tok, basety, &name);
       Type *ty = param_declarator(basety, raw_ty, tok, true);
 
@@ -6113,7 +6113,7 @@ static Node *func_old_style_param(Token **rest, Token *tok, Type *prot_ty, Type 
         continue;
       }
 
-      Type *promoted = NULL;
+      Type *promoted = nullptr;
       if (is_integer(ty) && ty->size < ty_int->size)
         promoted = ty_int;
       else if (ty->kind == TY_FLOAT)
@@ -6164,7 +6164,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   fnctx = &(FuncContext){.fn = fn};
 
-  Node *precalc = NULL;
+  Node *precalc = nullptr;
 
   if (!ty->scopes) {
     enter_fn_scope(ty);
@@ -6196,7 +6196,7 @@ static void func_definition(Token **rest, Token *tok, Obj *fn, Type *ty) {
 
   emit_text(fn);
 
-  fnctx = NULL;
+  fnctx = nullptr;
 }
 
 static void set_returns_twice(Obj *fn) {
@@ -6301,7 +6301,7 @@ static void func_exportness(Obj *fn, VarAttr *attr, bool is_def) {
 static void global_declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) {
   bool first = true;
   for (; comma_list(&tok, &tok, TK_SEMI, !first); first = false) {
-    Token *name = NULL;
+    Token *name = nullptr;
     Type *ty = declarator2(&tok, tok, basety, &name);
 
     bool is_fndef = first &&
@@ -6416,7 +6416,7 @@ Obj *parse(Token *tok) {
 
     if (tok->kind == TK_asm) {
       static Type ty = {.kind = TY_ASM};
-      Obj *obj = new_gvar(NULL, &ty);
+      Obj *obj = new_gvar(nullptr, &ty);
       obj->asm_name = str_tok(&tok, skip_tk(tok->next, TK_LPAREN))->str;
       obj->is_definition = true;
       tok = skip_tk(tok, TK_RPAREN);

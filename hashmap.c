@@ -52,7 +52,7 @@ static void rehash(HashMap *map) {
 
 static HashEntry *get_entry(HashMap *map, const char *key, int keylen) {
   if (!map->buckets)
-    return NULL;
+    return nullptr;
 
   uint64_t hash = fnv_hash(key, keylen);
   uint64_t msk = map->capacity - 1;
@@ -63,7 +63,7 @@ static HashEntry *get_entry(HashMap *map, const char *key, int keylen) {
 
     switch ((uintptr_t)ent->key) {
     case 0: {
-      return NULL;
+      return nullptr;
     }
     default:
       if (ent->keylen == keylen && !memcmp(ent->key, key, keylen))
@@ -112,7 +112,7 @@ void *hashmap_get(HashMap *map, const char *key) {
 
 void *hashmap_get2(HashMap *map, const char *key, int keylen) {
   HashEntry *ent = get_entry(map, key, keylen);
-  return ent ? ent->val : NULL;
+  return ent ? ent->val : nullptr;
 }
 
 void hashmap_put(HashMap *map, const char *key, void *val) {
@@ -151,19 +151,19 @@ void hashmap_test(void) {
   for (int i = 0; i < 1000; i++)
     assert((size_t)hashmap_get(map, arena_format(&test_arena, "key %d", i)) == i);
   for (int i = 1000; i < 1500; i++)
-    assert(hashmap_get(map, "no such key") == NULL);
+    assert(hashmap_get(map, "no such key") == nullptr);
   for (int i = 1500; i < 1600; i++)
     assert((size_t)hashmap_get(map, arena_format(&test_arena, "key %d", i)) == i);
   for (int i = 1600; i < 2000; i++)
-    assert(hashmap_get(map, "no such key") == NULL);
+    assert(hashmap_get(map, "no such key") == nullptr);
   for (int i = 2000; i < 5000; i++)
     assert((size_t)hashmap_get(map, arena_format(&test_arena, "key %d", i)) == i);
   for (int i = 5000; i < 6000; i++)
-    assert(hashmap_get(map, "no such key") == NULL);
+    assert(hashmap_get(map, "no such key") == nullptr);
   for (int i = 6000; i < 7000; i++)
     hashmap_put(map, arena_format(&test_arena, "key %d", i), (void *)(size_t)i);
 
-  assert(hashmap_get(map, "no such key") == NULL);
+  assert(hashmap_get(map, "no such key") == nullptr);
 
   arena_off(&test_arena);
 

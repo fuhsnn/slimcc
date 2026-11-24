@@ -163,7 +163,7 @@ Type *tyof_unqual(Type *ty) {
 
   if (elem_ty->origin) {
     if (elem_ty->qual & Q_ATOMIC)
-      elem_ty = add_qual(Q_ATOMIC, elem_ty->origin, NULL);
+      elem_ty = add_qual(Q_ATOMIC, elem_ty->origin, nullptr);
     else
       elem_ty = elem_ty->origin;
   }
@@ -176,7 +176,7 @@ Type *tyof_unqual(Type *ty) {
 
 Type *new_derived_type(Type *newty, QualMask qual, Type *ty) {
   if (is_array(ty))
-    return copy_array_ty(new_derived_type(NULL, qual, get_elem(ty)), ty);
+    return copy_array_ty(new_derived_type(nullptr, qual, get_elem(ty)), ty);
 
   int align = ty->align;
   ty = unqual(ty);
@@ -197,7 +197,7 @@ Type *aligned_type(int align, Type *ty) {
     return ret;
   }
 
-  Type *ret = new_derived_type(NULL, ty->qual, ty);
+  Type *ret = new_derived_type(nullptr, ty->qual, ty);
   ret->align = align;
 
   if (ty->size < 0) {
@@ -213,7 +213,7 @@ static Type *add_qual2(QualMask msk, Type *ty, Token *tok) {
   if (tok && chk_qual_type(msk, ty))
     error_tok(tok, "invalid qualifier for type");
 
-  return new_derived_type(NULL, msk | ty->qual, ty);
+  return new_derived_type(nullptr, msk | ty->qual, ty);
 }
 
 Type *add_qual(QualMask msk, Type *ty, Token *tok) {
@@ -258,7 +258,7 @@ bool vmty_iter(Type **ty) {
   else if (t->kind == TY_FUNC)
     t = t->return_ty;
   else
-    t = NULL;
+    t = nullptr;
   *ty = t;
   return t;
 }
@@ -420,7 +420,7 @@ static int64_t *get_arr_len(Type *ty) {
   if ((ty->kind == TY_ARRAY && ty->array_len >= 0) ||
       (ty->kind == TY_VLA && !ty->vla_len_expr))
     return &ty->array_len;
-  return NULL;
+  return nullptr;
 }
 
 static bool is_tag_compat(Type *t1, Type *t2) {
@@ -535,7 +535,7 @@ bool is_compatible(Type *t1, Type *t2) {
     for (; p1 && p2; p1 = p1->param_next, p2 = p2->param_next)
       if (!is_compatible(p1->ty, p2->ty))
         return false;
-    return p1 == NULL && p2 == NULL;
+    return p1 == nullptr && p2 == nullptr;
   }
   case TY_STRUCT:
   case TY_UNION:  return is_tag_compat(t1, t2) && is_record_compat(t1, t2, false);
@@ -723,7 +723,7 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, Node **cond, Obj **cond_var) {
     int64_t *len;
     if ((len = get_arr_len(ty1)) || (len = get_arr_len(ty2))) {
       if (base->kind == TY_VLA)
-        return vla_of(base, NULL, *len);
+        return vla_of(base, nullptr, *len);
       return array_of(base, *len);
     }
     if (ty1->vla_len_expr || ty2->vla_len_expr)
@@ -741,7 +741,7 @@ static Type *cond_ptr_conv2(Type *ty1, Type *ty2, Node **cond, Obj **cond_var) {
     newty->return_ty = cond_ptr_conv2(ty1->return_ty, ty2->return_ty, cond, cond_var);
     return newty;
   }
-  return add_qual(ty2->qual, ty1, NULL);
+  return add_qual(ty2->qual, ty1, nullptr);
 }
 
 static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
@@ -758,7 +758,7 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
       return ty2;
 
     if (ty1->base->kind == TY_VOID || ty2->base->kind == TY_VOID)
-      return pointer_to(add_qual(ty1->base->qual | ty2->base->qual, ty_void, NULL));
+      return pointer_to(add_qual(ty1->base->qual | ty2->base->qual, ty_void, nullptr));
 
     if (is_compatible(ty1->base, ty2->base))
       return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, cond, &(Obj *){0}));
@@ -861,7 +861,7 @@ void _add_type(Node *node) {
     add_type(node->m.lhs);
     add_type(node->m.rhs);
     Node *ptr = node->m.lhs->ty->base ? node->m.lhs
-                                      : (node->m.rhs->ty->base ? node->m.rhs : NULL);
+                                      : (node->m.rhs->ty->base ? node->m.rhs : nullptr);
     if (ptr)
       node->ty = unqual(ptr->ty);
     else
