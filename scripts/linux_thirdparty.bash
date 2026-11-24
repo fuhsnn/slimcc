@@ -541,7 +541,8 @@ test_doom() {
  git_fetch https://github.com/Daivuk/PureDOOM 355cfbd16fac119718879239336ee2ea408886bd puredoom
  mkdir -p examples/Tests/build && cd "$_"
  replace_line "project(pd_tests)" "project(pd_tests C)" ../CMakeLists.txt
- cmake ../ && make
+ cmake_run ../
+ make
  cd ../../../ && examples/Tests/build/pd_tests
 }
 
@@ -963,7 +964,8 @@ test_kcgi() {
 
 test_kefir() {
  git_fetch https://github.com/sourcehut-mirrors/kefir 080078d9d6b2000c53f377be36398377a8d18cd6 kefir
- mkdir bin && CC=gcc scripts/detect-host-env.sh --header > bin/config.h
+ mkdir bin
+ CC=gcc scripts/detect-host-env.sh --header > bin/config.h
  make CC="$CC"
  LC_ALL=C.UTF-8 make CC=gcc test
 }
@@ -1177,7 +1179,8 @@ test_liblzw() {
  github_tar vapier liblzw v0.3
  libtoolize
  sh autogen.sh
- fix_and_configure && make && make check
+ fix_and_configure
+ make && make check
 }
 
 test_libmicrohttpd() {
@@ -1276,7 +1279,8 @@ test_libseccomp() {
 
 test_libsir() {
  github_tar aremmell libsir v2.2.6
- make tests && ./build/bin/sirtests
+ make tests
+ ./build/bin/sirtests
 }
 
 test_libsixel() {
@@ -1406,7 +1410,9 @@ test_libxo_chimerautils() {
  libtoolize
  autoreconf -fi
  fix_and_configure --prefix=$LIBXO
- make && make test && make install
+ make
+ make test
+ make install
  cd ../
 
  export PKG_CONFIG_PATH="$LIBXO/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
@@ -1449,9 +1455,13 @@ test_lmdb() {
 
 test_lua() {
  url_tar https://lua.org/ftp/lua-5.5.1.tar.gz lua
- cd src && make CC="$CC"
+ cd src
+ make CC="$CC"
+
  url_tar https://lua.org/tests/lua-5.5.1-tests.tar.gz luatests
- cd libs && make CC="$CC" && cd ../
+ cd libs
+ make CC="$CC"
+ cd ../
  ../lua -e"_port=true" all.lua
 }
 
@@ -1591,7 +1601,8 @@ test_minizipng() {
 
 test_minunit() {
  git_fetch https://github.com/siu/minunit 33e588452f52a2c79cf2fea363af676e1383c2b6 minunit
- cd ci && make && ./check_example.sh
+ cd ci
+ make && ./check_example.sh
 }
 
 test_minmea() {
@@ -1796,7 +1807,8 @@ test_ogg_vorbis() {
  libtoolize
  sh autogen.sh
  fix_and_configure --prefix=$LIBOGG
- make check && make install
+ make check
+ make install
  cd ../
 
  export PKG_CONFIG_PATH="$LIBOGG/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
@@ -2002,7 +2014,8 @@ test_postgres() {
  replace_line "#if defined(__x86_64__) || defined(_M_X64)" "#if 0" src/include/portability/instr_time.h
  replace_line "#if (defined(__x86_64__) || defined(_M_AMD64))" "#if 0" src/include/c.h
  sed -i 's|x86_feature_available(PG_POPCNT)|0|g' src/port/pg_popcount_x86.c
- ./configure && make && make check
+ ./configure
+ make && make check
 }
 
 test_protobufc() {
@@ -2352,7 +2365,9 @@ test_tinycc() {
 
  git_fetch https://github.com/Tiny-C-Compiler/tinycc-mirror-repository e23dabed154a8495f3ac1ff3cc9d04fa1c207893 tinycc
  sed -i 's|CC_\$cc_name|CC_gcc|g' configure # for 'make test' with gcc
- ./configure && make
+ ./configure
+ make
+
  if gcc --version; then
   make CC=gcc test
  else
@@ -2681,7 +2696,9 @@ build_7zip() {
 
 build_bc() {
  url_lz https://ftpmirror.gnu.org/gnu/bc/bc-1.08.2.tar.lz bc
- ./configure && make
+ ./configure
+ make
+
  echo "scale=4; 7/8" | bc/bc | grep '^.8750$'
 }
 
@@ -2741,7 +2758,8 @@ build_ellipsis() {
  git_fetch https://codeberg.org/gustedt/ellipsis d118cae1bdebb81af595bdb8a91eeafe70317c34 ellipsis
  cd sources
  sed -i "s|'-std=gnu2x'|-std=gnu23 -ffake-always-inline|g" Makefile-options
- make distclean && make
+ make distclean
+ make
 
  echo 'Rev(1,2,3)' | ./ellipsis -xc - -D'Rev(X,...)=__VA_TAIL__()__VA_OPT__(,)X' | grep '^3,2,1$'
 }
@@ -2863,7 +2881,8 @@ build_lacc() {
 
  git_fetch https://github.com/larmel/lacc 30839843daaff9d87574b5854854c9ee4610cdcd lacc
  ./configure --prefix=$PWD/install
- make && make install
+ make
+ make install
 
  echo 'int puts(const char*); int main(){ puts("hello_world"); return 0; }' > hello.c
  ./install/bin/lacc hello.c -o hello
@@ -3001,7 +3020,8 @@ build_nolibc() {
  make headers ARCH=x86_64 HOSTCC=$CC KBUILD_USERHOSTCFLAGS= >/dev/null
  cd ../
 
- git clone $SRC_DIR slimcc-nolibc && cd slimcc-nolibc
+ git clone $SRC_DIR slimcc-nolibc
+ cd slimcc-nolibc
  mkdir -p $LINUX_SRC/usr/lib/slimcc
  cp -r ./slimcc_headers/include $LINUX_SRC/usr/lib/slimcc/
  sed 's|LINUX_SRC|'\"$LINUX_SRC\"'|g' ./platform/linux-nolibc.c > platform.c
@@ -3056,12 +3076,14 @@ build_pcc() {
  local DIR=$PWD/pcc_install
  git_fetch https://github.com/PortableCC/pcc 5793c3e8f6b28da38bc25f057796d7c2b983f93f pcc
  ./configure --prefix=$DIR
- make && make install
+ make
+ make install
  cd ../
 
  git_fetch https://github.com/PortableCC/pcc-libs f2155b9a3c1c930c3470afa9d896013e07d68927 pcc-libs
  ./configure --prefix=$DIR
- make && make install
+ make
+ make install
 
 cat << EOF > hello.c
 #include <stdio.h>
@@ -3324,7 +3346,8 @@ bootstrap_uclibcng() {
  cd ../
  cp -r ./linuxhdr/include/* $ROOT_DIR/usr/x86_64-linux-uclibc/usr/include/
 
- git clone $SRC_DIR slimcc-uclibcng && cd slimcc-uclibcng
+ git clone $SRC_DIR slimcc-uclibcng
+ cd slimcc-uclibcng
  mkdir -p $ROOT_DIR/usr/x86_64-linux-uclibc/lib/slimcc
  cp -r ./slimcc_headers/include $ROOT_DIR/usr/x86_64-linux-uclibc/lib/slimcc/
  mkdir -p $ROOT_DIR/usr/x86_64-linux-uclibc/lib/slimcc/platform_fix/
@@ -3567,14 +3590,12 @@ ci_muon() {
 ci_libtool() {
  url_xz https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz __libtool
  fix_and_configure
- make install -j2
+ make install -j4
  cd ../ && rm -rf __libtool
 }
 
 ci_libtool_muon() {
- ci_libtool &
- ci_muon &
- wait
+ ci_libtool && ci_muon
 }
 
 use_stdatomic() {
