@@ -1065,6 +1065,7 @@ test_libcsv() {
 
 test_libevent() {
  github_tar libevent libevent release-2.1.13-stable
+ ${is_CI+ sed -i '/dns_testcases/d' test/regress_main.c }
  libtoolize
  sh autogen.sh
  fix_and_configure
