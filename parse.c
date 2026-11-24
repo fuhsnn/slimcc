@@ -1667,9 +1667,11 @@ static Type *enum_specifier(Token **rest, Token *tok) {
 
   int64_t min_val = 0;
   uint64_t max_val = 0;
-  HashMap redecl_map = {};
   EnumVal head = {};
   EnumVal *cur = &head;
+
+  HashMap redecl_map = {};
+  Defer(free(redecl_map.buckets););
 
   Type *dyn_ty;
   uint64_t ovf_val;
@@ -1760,8 +1762,6 @@ static Type *enum_specifier(Token **rest, Token *tok) {
   *rest = tok;
 
   if (is_redecl) {
-    free(redecl_map.buckets);
-
     int64_t cnt = 0;
     for (EnumVal *ev = ty->enums; ev; ev = ev->next)
       cnt++;
@@ -5010,8 +5010,10 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {};
   Member *cur = &head;
   Token *flex_tok = nullptr;
-  HashMap names = {};
   bool has_const = false;
+
+  HashMap names = {};
+  Defer(free(names.buckets););
 
   while (tok->kind != TK_RCURLY) {
     if (consume_tk(&tok, tok, TK_SEMI))
@@ -5089,7 +5091,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       }
     }
   }
-  free(names.buckets);
   *rest = tok->next;
 
   if (flex_tok) {
@@ -6005,7 +6006,10 @@ static void resolve_gotos(Node *fn_body) {
   Node *search_list = fnctx->labels;
   Node live_head = {};
   Node *live_cur = &live_head;
+
   HashMap label_cache = {};
+  Defer(free(label_cache.buckets););
+
   for (Node *x = fnctx->gotos; x; x = x->lbl.next) {
     HashEntry *ent = hashmap_get_or_insert(&label_cache, x->tok->loc, x->tok->len);
     Node *dest = ent->val;
@@ -6030,7 +6034,6 @@ static void resolve_gotos(Node *fn_body) {
 
     set_goto(x, dest);
   }
-  free(label_cache.buckets);
 
   live_cur->lbl.next = fn_body->blk.local_labels;
   fn_body->blk.local_labels = live_head.lbl.next;
