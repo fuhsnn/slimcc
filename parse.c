@@ -4256,8 +4256,10 @@ static BitBuf *eval_bitint(Node *node) {
     case ND_DIV:
     case ND_REM: {
       bool res = eval_bitint_to_bool(ty->bit_cnt, rval);
-      if (!res)
+      if (!res) {
+        free(lval), free(rval);
         return (void *)eval_error2(node, "division by zero during constant evaluation");
+      }
       eval_bitint_div(ty->bit_cnt, lval, rval, ty->is_unsigned, node->kind == ND_DIV);
       break;
     }
@@ -4273,7 +4275,7 @@ static BitBuf *eval_bitint(Node *node) {
       return free(val), NULL;
 
     if (amount >= ty->bit_cnt)
-      return (void *)eval_error2(rhs, "invalid shift amount");
+      return free(val), (void *)eval_error2(rhs, "invalid shift amount");
 
     if (node->kind == ND_SHL)
       eval_bitint_shl(ty->bit_cnt, val, val, amount);
@@ -4307,7 +4309,7 @@ static BitBuf *eval_bitint(Node *node) {
     if (lhs->ty->kind == TY_BITINT) {
       BitBuf *val = eval_bitint(lhs);
       if (eval_recover && *eval_recover)
-        return NULL;
+        return free(val), NULL;
 
       val = realloc(val, bitint_buffer_size(ty));
       if (ty->bit_cnt > lhs->ty->bit_cnt)
