@@ -1132,7 +1132,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr, StorageClass ctx)
       if (is_typename(tok)) {
         VarAttr attr2 = {0};
         Type *ty2 = typename2(&tok, tok, &attr2);
-        align = attr2.align ? attr2.align : ty2->align;
+        align = attr2.align ?: ty2->align;
       } else {
         align = align_expr(&tok, tok);
       }
@@ -1741,7 +1741,7 @@ static Type *enum_specifier(Token **rest, Token *tok) {
     } else {
       cur = cur->next = arena_malloc(&cc1_arena, sizeof(EnumVal));
       cur->val = val;
-      cur->ty = dyn_ty ? dyn_ty : ty;
+      cur->ty = dyn_ty ?: ty;
       cur->name = name;
       name->is_live = true;
 
@@ -2154,7 +2154,7 @@ static void designation(Token **rest, Token *tok, Initializer *init, bool post_b
       for (int i = begin; i <= end; i++)
         designation(&tok, start, &init->list.data[i], true, ctx);
     } else {
-      ctx = ctx ? ctx : &(DesgContext){0};
+      ctx = ctx ?: &(DesgContext){0};
       ctx->lvl++;
 
       for (int i = begin; i <= end; i++) {
@@ -2389,7 +2389,7 @@ static void initializer3(Token **rest, Token *tok, Initializer *init, Node *expr
       cnt++;
 
     init->kind = INIT_EXPR;
-    init->expr = expr ? expr : assign(&tok, tok);
+    init->expr = expr ?: assign(&tok, tok);
 
     while (cnt--)
       tok = skip_excess_scalar(tok);
@@ -2672,7 +2672,7 @@ static void write_gvar_data(Relocation **cur, Initializer *init, char *buf, int 
           srel = srel->next;
 
         int end = MIN(init->ty->size, var->ty->size - sofs);
-        char *data = var->init_data ? var->init_data : var->constexpr_data;
+        char *data = var->init_data ?: var->constexpr_data;
         for (int pos = 0; pos < end;) {
           if (srel && srel->offset == pos + sofs) {
             Relocation *rel = arena_calloc(fnctx ? &ast_arena : &cc1_arena,
@@ -3602,7 +3602,7 @@ static char *eval_constexpr_data(Node *node) {
     if (ofs < 0 || (var->ty->size < (ofs + access_sz)))
       return (char *)eval_error2(node, "constexpr access out of bounds");
 
-    char *data = var->init_data ? var->init_data : var->constexpr_data;
+    char *data = var->init_data ?: var->constexpr_data;
     return data + ofs;
   }
   return (char *)eval_error(node);
@@ -4557,7 +4557,7 @@ Type *vla_cond_result_len(Type *ty1, Type *ty2, Type *base, Node **cond, Obj **c
   Node *len2 = vla_cond_result_len2(ty2);
 
   if (!len1 + !len2 == 1)
-    return vla_of(base, len1 ? len1 : len2, 0);
+    return vla_of(base, len1 ?: len2, 0);
 
   if (!*cond_var) {
     int64_t val;
@@ -4894,9 +4894,7 @@ static Node *unary(Token **rest, Token *tok) {
       case ND_MEMBER:
         return new_size_t(MAX(node->m.member->ty->align, node->m.member->alt_align), tok);
       case ND_VAR:
-        return new_size_t(node->m.var->alt_align ? node->m.var->alt_align
-                                                 : node->m.var->ty->align,
-                          tok);
+        return new_size_t(node->m.var->alt_align ?: node->m.var->ty->align, tok);
       }
       add_type(node);
       ty = node->ty;
@@ -5087,7 +5085,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
           flex_tok = tok;
           continue;
         }
-        error_tok(flex_tok ? flex_tok : tok, "member has incomplete type");
+        error_tok(flex_tok ?: tok, "member has incomplete type");
       }
     }
   }

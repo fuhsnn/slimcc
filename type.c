@@ -144,7 +144,7 @@ bool is_const_var(Obj *var) {
 }
 
 Type *unqual(Type *ty) {
-  return ty->origin ? ty->origin : ty;
+  return ty->origin ?: ty;
 }
 
 Type *tyof_unqual(Type *ty) {

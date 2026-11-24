@@ -1104,8 +1104,8 @@ static const char *print_dep_outpath(const char *input) {
   if (opt_MF)
     return opt_MF;
   if (opt_MD)
-    return replace_extn(opt_o ? opt_o : input, ".d");
-  return opt_o ? opt_o : "-";
+    return replace_extn(opt_o ?: input, ".d");
+  return opt_o ?: "-";
 }
 
 static void print_dependencies(const char *input, FILE *out) {
@@ -1183,7 +1183,7 @@ static void cc1(const char *input, const char *output, bool is_asm_pp) {
 void run_assembler_gnustyle(StringArray *args, const char *input, const char *output) {
   StringArray arr = {0};
 
-  strarray_push(&arr, opt_use_as ? opt_use_as : default_as);
+  strarray_push(&arr, opt_use_as ?: default_as);
   strarray_push(&arr, input);
   strarray_push(&arr, "-o");
   strarray_push(&arr, output);
@@ -1238,7 +1238,7 @@ LinkType link_type_gnustyle(void) {
 }
 
 void ldarg_gnu_base(StringArray *arr, const char *output) {
-  strarray_push(arr, opt_use_ld ? opt_use_ld : default_ld);
+  strarray_push(arr, opt_use_ld ?: default_ld);
   strarray_push(arr, "-o");
   strarray_push(arr, output);
   strarray_push(arr, "-m");
@@ -1447,7 +1447,7 @@ int main(int argc, char **argv) {
       continue;
     }
 
-    FileType type = opt_x ? opt_x : get_file_type(input);
+    FileType type = opt_x ?: get_file_type(input);
 
     if (type == FILE_LDARG) {
       if (opt_M || opt_E || opt_S || opt_c) {
@@ -1466,7 +1466,7 @@ int main(int argc, char **argv) {
         continue;
 
       if (opt_c) {
-        run_assembler(&as_args, input, opt_o ? opt_o : replace_extn(input, ".o"));
+        run_assembler(&as_args, input, opt_o ?: replace_extn(input, ".o"));
         continue;
       }
       char *tmp = create_tmpfile();
@@ -1481,11 +1481,11 @@ int main(int argc, char **argv) {
         continue;
       }
       if (opt_E || opt_S) {
-        run_cc1(input, (opt_o ? opt_o : "-"), true);
+        run_cc1(input, (opt_o ?: "-"), true);
         continue;
       }
       if (opt_c) {
-        run_cc1_as(input, (opt_o ? opt_o : replace_extn(input, ".o")), true);
+        run_cc1_as(input, (opt_o ?: replace_extn(input, ".o")), true);
         continue;
       }
       char *tmp = create_tmpfile();
@@ -1499,15 +1499,15 @@ int main(int argc, char **argv) {
       continue;
     }
     if (opt_E) {
-      run_cc1(input, (opt_o ? opt_o : "-"), false);
+      run_cc1(input, (opt_o ?: "-"), false);
       continue;
     }
     if (opt_S) {
-      run_cc1(input, (opt_o ? opt_o : replace_extn(input, ".s")), false);
+      run_cc1(input, (opt_o ?: replace_extn(input, ".s")), false);
       continue;
     }
     if (opt_c) {
-      run_cc1_as(input, (opt_o ? opt_o : replace_extn(input, ".o")), false);
+      run_cc1_as(input, (opt_o ?: replace_extn(input, ".o")), false);
       continue;
     }
     char *tmp = create_tmpfile();
@@ -1517,7 +1517,7 @@ int main(int argc, char **argv) {
   }
 
   if (ld_args.len)
-    run_linker(&ld_paths, &ld_args, opt_o ? opt_o : "a.out");
+    run_linker(&ld_paths, &ld_args, opt_o ?: "a.out");
 
   cleanup_exit(0);
 }
