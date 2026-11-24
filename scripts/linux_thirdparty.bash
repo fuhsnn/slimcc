@@ -3061,6 +3061,7 @@ build_oksh() {
 
 build_ooclang() {
  git_fetch https://github.com/ooc-lang/rock 079f9b970e2bf33bfa613c670c3d88cea99ac26e ooc
+ sed -i 's|${URL}|https://github.com/ooc-lang/rock/releases/download/v0.9.10/rock-0.9.10-bootstrap-only.tar.bz2|g' utils/download-bootstrap.sh
  echo sed -i ''\''s|"gcc", 3|"'$CC'", '$(echo $CC|wc -m)'-1|g'\''' build/c-source/ooc/rock/rock/frontend/drivers/CCompiler.c >> utils/download-bootstrap.sh
  sed -i 's|"gcc"|"'$CC'"|g' source/rock/frontend/drivers/CCompiler.ooc
  sed -i 's| -j4||g' Makefile
