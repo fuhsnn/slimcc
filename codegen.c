@@ -4244,22 +4244,19 @@ static void asm_set_use(AsmParam *ap) {
 }
 
 static void asm_constraint(AsmParam *ap, bool is_input, int x87_clobber) {
-  static const uint64_t reg_gp = (1ULL << (REG_X64_BP + 1)) - (1ULL << REG_X64_AX);
-  static const uint64_t reg_fp = (1ULL << (REG_X64_XMM15 + 1)) - (1ULL << REG_X64_XMM0);
-  static const uint64_t reg_x87 = (1ULL << (REG_X64_X87_ST7 + 1)) -
-                                  (1ULL << REG_X64_X87_ST0);
-  static const uint64_t reg_free = (1ULL << (REG_X64_R11 + 1)) - (1ULL << REG_X64_AX);
-  static const uint64_t reg_highbyte = 1ULL << REG_X64_AX |
-                                       1ULL << REG_X64_CX |
-                                       1ULL << REG_X64_DX |
-                                       1ULL << REG_X64_BX;
-  static const uint64_t reg_legacy = 1ULL << REG_X64_AX |
-                                     1ULL << REG_X64_CX |
-                                     1ULL << REG_X64_DX |
-                                     1ULL << REG_X64_SI |
-                                     1ULL << REG_X64_DI |
-                                     1ULL << REG_X64_BX |
-                                     1ULL << REG_X64_BP;
+  static constexpr uint64_t reg_gp = (1ULL << (REG_X64_BP + 1)) - (1ULL << REG_X64_AX);
+  static constexpr uint64_t reg_fp = (1ULL << (REG_X64_XMM15 + 1)) - (1ULL << REG_X64_XMM0);
+  static constexpr uint64_t reg_x87 = (1ULL << (REG_X64_X87_ST7 + 1)) -
+                                      (1ULL << REG_X64_X87_ST0);
+  static constexpr uint64_t reg_free = (1ULL << (REG_X64_R11 + 1)) - (1ULL << REG_X64_AX);
+  static constexpr uint64_t reg_highbyte = 1ULL << REG_X64_AX |
+                                           1ULL << REG_X64_CX |
+                                           1ULL << REG_X64_DX |
+                                           1ULL << REG_X64_BX;
+  static constexpr uint64_t reg_legacy = reg_highbyte |
+                                         1ULL << REG_X64_SI |
+                                         1ULL << REG_X64_DI |
+                                         1ULL << REG_X64_BP;
 
   for (; ap; ap = ap->next) {
     uint64_t reg_msk = 0;
