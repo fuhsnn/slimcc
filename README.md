@@ -61,14 +61,16 @@ toolchain.register_compiler(
 ## How portable is the compiler?
  - It's written in C99 with several POSIX 2008 functions.
  - Host is assumed to be little-endian.
- - For compilers with more restricted feature set, preprocessor flags are provided to enable bootstrapping stage1 with unneeded features crippled, please don't use them outside of self-hosting.
+ - For toolchains with more restricted feature set, preprocessor flags are provided to enable bootstrapping stage1 with unneeded features crippled, please don't use them outside of self-hosting.
+ - - `BOOTSTRAP_NO_FENV` disables `fenv.h` usage.
  - - `BOOTSTRAP_NO_LDOUBLE` aliases `long double` to `double`.
  - - `BOOTSTRAP_NO_VLA` makes VLA-using functions no-op (only `_BitInt` evaluation affected).
  - As proof of portability and reproducibility, the following compilers are known to bootstrap identical stage2 of slimcc:
- - - `gcc`, `clang`, `tcc`, [`kefir`](https://sr.ht/~jprotopopov/kefir), [`antcc`](https://codeberg.org/lsof/antcc)
- - - `chibicc` with [backported patches](https://github.com/fuhsnn/chibicc/tree/minimum-fix), [`widcc`](https://github.com/fuhsnn/widcc)
+ - - `gcc`, `clang`, [`kefir`](https://sr.ht/~jprotopopov/kefir), [`antcc`](https://codeberg.org/lsof/antcc), [`DrC`](https://github.com/drpriver/DrC), [`rcc`](https://github.com/dstogov/rcc), [`widcc`](https://github.com/fuhsnn/widcc)
+ - - `chibicc` with [backported patches](https://github.com/fuhsnn/chibicc/tree/minimum-fix)
+ - - `tcc` with `-DBOOTSTRAP_NO_FENV`
  - - [`pcc`](https://github.com/portablecc/pcc) with `-std=c99`
- - - [`cproc`](https://sr.ht/~mcf/cproc) with `-DBOOTSTRAP_NO_LDOUBLE -U__has_builtin`
+ - - [`cproc`](https://sr.ht/~mcf/cproc) with `-DBOOTSTRAP_NO_LDOUBLE -U__has_builtin -D__SIZE_TYPE__='unsigned long'`
  - - [`cparser`](https://github.com/libfirm/cparser) with `-DBOOTSTRAP_NO_LDOUBLE`
  - - [`compcert`](https://github.com/AbsInt/CompCert) with `-DBOOTSTRAP_NO_LDOUBLE -DBOOTSTRAP_NO_VLA -U__has_builtin -fstruct-passing`
  - - [`dmd`](https://dlang.org/) with `-P=-DBOOTSTRAP_NO_VLA -P=-U__has_builtin`, without `-O`, after patching out file scope compound literals with `perl -i -pe 's|^([\w ]+) \*(\S+) = &\(\S+\)({.*};)$|\1 _\2 = \3\n\1 *\2 = &_\2;|g' *.c`
