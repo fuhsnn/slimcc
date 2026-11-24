@@ -35,7 +35,7 @@ static void rehash(HashMap *map) {
   }
 
   // Create a new hashmap and copy all key-values.
-  HashMap map2 = {0};
+  HashMap map2 = {};
   map2.buckets = calloc(cap, sizeof(HashEntry));
   map2.capacity = cap;
 
@@ -136,7 +136,7 @@ void hashmap_delete2(HashMap *map, const char *key, int keylen) {
 
 void hashmap_test(void) {
   HashMap *map = calloc(1, sizeof(HashMap));
-  Arena test_arena = {0};
+  Arena test_arena = {};
   arena_on(&test_arena);
 
   for (int i = 0; i < 5000; i++)

@@ -761,7 +761,7 @@ static Type *cond_ptr_conv(Node **lhs, Node **rhs, Node **cond) {
       return pointer_to(add_qual(ty1->base->qual | ty2->base->qual, ty_void, nullptr));
 
     if (is_compatible(ty1->base, ty2->base))
-      return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, cond, &(Obj *){0}));
+      return pointer_to(cond_ptr_conv2(ty1->base, ty2->base, cond, &(Obj *){}));
 
     return pointer_to(ty_void);
   }

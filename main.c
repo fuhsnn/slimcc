@@ -373,9 +373,9 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
   bool has_gnu_keywords_option = false;
   int non_input_cnt = 0;
 
-  StringArray libpaths = {0};
-  StringArray isystem = {0};
-  StringArray idirafter = {0};
+  StringArray libpaths = {};
+  StringArray isystem = {};
+  StringArray idirafter = {};
 
   const char *arg;
   for (int i = 1; i < argc; i++) {
@@ -416,7 +416,7 @@ static int parse_args(int argc, char **argv, StringArray *input_args) {
 
     if (!strcmp(argv[i], "-print-search-dirs") ||
         !strcmp(argv[i], "--print-search-dirs")) {
-      StringArray dirs = {0};
+      StringArray dirs = {};
       platform_search_dirs(&dirs);
       printf("libraries: =");
       for (int i = 0; i < dirs.len; i++)
@@ -1181,7 +1181,7 @@ static void cc1(const char *input, const char *output, bool is_asm_pp) {
 }
 
 void run_assembler_gnustyle(StringArray *args, const char *input, const char *output) {
-  StringArray arr = {0};
+  StringArray arr = {};
 
   strarray_push(&arr, opt_use_as ?: default_as);
   strarray_push(&arr, input);
@@ -1199,7 +1199,7 @@ void run_assembler_gnustyle(StringArray *args, const char *input, const char *ou
 
 static char *find_file(const char *pattern) {
   char *path = nullptr;
-  glob_t buf = {0};
+  glob_t buf = {};
   glob(pattern, 0, nullptr, &buf);
   if (buf.gl_pathc > 0)
     path = strdup(buf.gl_pathv[buf.gl_pathc - 1]);
@@ -1353,7 +1353,7 @@ void ldarg_gnu_crtend(StringArray *arr, LinkType lt, const char *gcc_libpath) {
 void run_linker_gnustyle(StringArray *paths, StringArray *args, const char *output,
                          const char *ldso_path, const char *libpath,
                          const char *gcc_libpath) {
-  StringArray arr = {0};
+  StringArray arr = {};
 
   ldarg_gnu_base(&arr, output);
 
@@ -1414,7 +1414,7 @@ int main(int argc, char **argv) {
   argv0 = argv[0];
   platform_init_driver();
 
-  StringArray input_args = {0};
+  StringArray input_args = {};
   int input_cnt = parse_args(argc, argv, &input_args);
 
   if (opt_verbose)
@@ -1429,7 +1429,7 @@ int main(int argc, char **argv) {
   if (input_cnt == 1 && (opt_M || opt_E || opt_S))
     nofork = true;
 
-  StringArray ld_args = {0};
+  StringArray ld_args = {};
   FileType opt_x = FILE_NONE;
   for (int i = 0; i < input_args.len; i++) {
     const char *input = input_args.data[i];
