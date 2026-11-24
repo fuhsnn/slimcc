@@ -5457,6 +5457,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
     int32_t cap;
     int32_t len;
   } types = {};
+  Defer(free(types.data););
 
   while (comma_list(rest, &tok, TK_RPAREN, true)) {
     if (tok->kind == TK_default) {
@@ -5488,8 +5489,6 @@ static Node *generic_selection(Token **rest, Token *tok) {
       ret = node;
     }
   }
-
-  free(types.data);
 
   if (ret)
     return ret;
